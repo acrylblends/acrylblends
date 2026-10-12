@@ -14,5 +14,5 @@ Each task is a branch of ACRYL. A task closes when its evidence exists on that b
   Local only: not pushed, not on `main`. Open: Windows and Linux runs, router mention, no network isolation.
 - [x] T303 Compare `tasks` with Harness `jobs`; decided, see `t303-jobs-comparison.md`: not ported as a second concept; the durable part,
   if ever wanted, is a second provider of the `JobRegistry` seam; deferred until a consumer needs cross-restart jobs.
-- [ ] T304 Extension `check` and approval gate, designed with ACRYL's extension manifest.
+- [x] T304 Extension `check` and approval gate: ACRYL already has each part; no port. Two small open items (install-aware prompt text, hosted pending-install queue) in `t304-extension-gate-comparison.md`.
 - [ ] T305 Retire aimbrace: README pointer, archive note.
