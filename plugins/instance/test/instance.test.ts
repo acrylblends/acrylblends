@@ -40,6 +40,12 @@ test('the environment pins the home and the port; nothing else reads it', () => 
   assert.equal(selectInstance({ projectRoot: '/work/shop' }).kind, 'project')
 })
 
+test('the interface is loopback unless the environment names one (a container sets it)', () => {
+  assert.equal(selectInstance({ projectRoot: '/work/shop', env: {} }).host, undefined)
+  const chosen = selectInstance({ projectRoot: '/work/shop', env: { AIMBRACE_HOST: '0.0.0.0' } })
+  assert.equal(chosen.host, '0.0.0.0')
+})
+
 test('an invalid port is refused', () => {
   assert.throws(() => withPort(projectInstance('/x'), 70_000), /port must be/)
 })

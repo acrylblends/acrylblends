@@ -31,6 +31,8 @@ export interface AppInstance {
   /** The app's own data: settings, installed extensions, the extension ledger. Never shared with another app. */
   readonly home: string
   readonly port: PortPreference
+  /** The interface to listen on. Absent means loopback only; a container sets `0.0.0.0` so its published port reaches the app. */
+  readonly host?: string
   /** Records the one live process of this instance. */
   readonly runLockFile: string
 }
@@ -41,6 +43,7 @@ export const PORT_BASE = 3100
 export const PORT_SPAN = 900
 export const HOME_ENV = 'AIMBRACE_HOME'
 export const PORT_ENV = 'AIMBRACE_PORT'
+export const HOST_ENV = 'AIMBRACE_HOST'
 
 export class AppInstanceError extends Error {
   override name = 'AppInstanceError'
@@ -130,7 +133,7 @@ export function withPort(instance: AppInstance, start: number): AppInstance {
 }
 
 /**
- * Choose the instance. The only place that reads the environment: `AIMBRACE_HOME` pins the home, `AIMBRACE_PORT` sets the start port;
+ * Choose the instance. The only place that reads the environment: `AIMBRACE_HOME` pins the home, `AIMBRACE_PORT` sets the start port, `AIMBRACE_HOST` the interface;
  * otherwise the project folder decides.
  */
 export function selectInstance(options: {
@@ -144,6 +147,8 @@ export function selectInstance(options: {
     : projectInstance(options.projectRoot)
   const port = env[PORT_ENV]?.trim()
   if (port) instance = withPort(instance, Number(port))
+  const host = env[HOST_ENV]?.trim()
+  if (host) instance = Object.freeze({ ...instance, host })
   return instance
 }
 

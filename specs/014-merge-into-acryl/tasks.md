@@ -16,3 +16,5 @@ Each task is a branch of ACRYL. A task closes when its evidence exists on that b
   if ever wanted, is a second provider of the `JobRegistry` seam; deferred until a consumer needs cross-restart jobs.
 - [x] T304 Extension `check` and approval gate: ACRYL already has each part; no port. Two small open items (install-aware prompt text, hosted pending-install queue) in `t304-extension-gate-comparison.md`.
 - [ ] T305 Retire aimbrace: README pointer, archive note.
+
+- [x] T306 Container starter pack: `aimbrace init --agent` now writes a `Dockerfile` and `.dockerignore`; `AIMBRACE_HOST` sets the interface (default loopback). Verified in a real container (OrbStack): the agent built and installed a plugin through `/ask`, it survived `docker restart`, and a recreated container on the same volume still served it. See `specs/014-merge-into-acryl/t306-container-starter-pack.md`.

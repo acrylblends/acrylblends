@@ -56,8 +56,11 @@ export function copyTemplate(source: string, target: string, name: string): stri
       if (entry.name === 'node_modules' || (prefix === '' && entry.name === TEMPLATE_MANIFEST))
         continue
       const sourcePath = join(from, entry.name)
-      // npm and git treat a file named .gitignore specially, so templates keep it as `gitignore`.
-      const targetName = prefix === '' && entry.name === 'gitignore' ? '.gitignore' : entry.name
+      // npm and git treat a file named .gitignore specially, so templates keep it as `gitignore` (and `dockerignore`).
+      const targetName =
+        prefix === '' && (entry.name === 'gitignore' || entry.name === 'dockerignore')
+          ? `.${entry.name}`
+          : entry.name
       const targetPath = join(to, targetName)
       if (entry.isDirectory()) {
         mkdirSync(targetPath, { recursive: true })

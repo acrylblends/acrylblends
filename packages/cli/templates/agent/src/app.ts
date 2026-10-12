@@ -85,7 +85,7 @@ export async function createApp(
       // The `approval` parameter in blend.yaml (the extensions row) turns this source into one that asks.
       extensions: { sources: [{ dir: extensionsDir, trust: 'install' }] },
       builder: { dir: extensionsDir },
-      server: { port: chosen.port.start, scan: chosen.port.scan },
+      server: { port: chosen.port.start, scan: chosen.port.scan, hostname: chosen.host },
     })),
   ]
   return {
