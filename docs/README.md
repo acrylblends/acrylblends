@@ -1,9 +1,9 @@
-# AIMBRACE documentation
+# ACRYLBLENDS documentation
 
-AIMBRACE is a framework for apps built on [Cordis](https://www.npmjs.com/package/@deepseek-ai/cordis), the plugin system
-ACRYL runs on. Cordis does the composing: plugins, services, dependencies, lifecycle, cleanup and events. AIMBRACE adds a
+ACRYLBLENDS is a framework for apps built on [Cordis](https://www.npmjs.com/package/@deepseek-ai/cordis), the plugin system
+ACRYL runs on. Cordis does the composing: plugins, services, dependencies, lifecycle, cleanup and events. ACRYLBLENDS adds a
 library of plugins extracted from ACRYL, and a command that copies them into your app. You own every copied line; there
-is no AIMBRACE runtime to import.
+is no ACRYLBLENDS runtime to import.
 
 ## Documentation
 

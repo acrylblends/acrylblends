@@ -65,7 +65,7 @@ test('with a real model, the agent writes a new Cordis plugin and the running ap
   const api = await modelApi()
   const project = await mkdtemp(join(tmpdir(), 'model-project-'))
   const app = await createApp(
-    withPort(pinnedInstance(join(project, '.aimbrace'), { root: project }), 0),
+    withPort(pinnedInstance(join(project, '.acrylblends'), { root: project }), 0),
     {
       model: { baseUrl: api.url, model: 'test' },
     },

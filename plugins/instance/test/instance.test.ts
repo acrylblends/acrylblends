@@ -16,7 +16,7 @@ test('a project keeps its data in its own folder, with a stable port in the app 
   const chosen = projectInstance('/work/My Shop')
   assert.equal(chosen.kind, 'project')
   assert.equal(chosen.name, 'my-shop')
-  assert.equal(chosen.home, join('/work/My Shop', '.aimbrace'))
+  assert.equal(chosen.home, join('/work/My Shop', '.acrylblends'))
   assert.equal(chosen.root, '/work/My Shop')
   assert.equal(chosen.port.start, stablePort(chosen.id))
   assert.ok(chosen.port.start >= PORT_BASE && chosen.port.start < PORT_BASE + PORT_SPAN)
@@ -30,7 +30,7 @@ test('two folders with the same name are different apps', () => {
 test('the environment pins the home and the port; nothing else reads it', () => {
   const chosen = selectInstance({
     projectRoot: '/work/shop',
-    env: { AIMBRACE_HOME: '/tmp/isolated', AIMBRACE_PORT: '0' },
+    env: { ACRYLBLENDS_HOME: '/tmp/isolated', ACRYLBLENDS_PORT: '0' },
   })
   assert.equal(chosen.kind, 'pinned')
   assert.equal(chosen.home, '/tmp/isolated')
@@ -42,7 +42,7 @@ test('the environment pins the home and the port; nothing else reads it', () => 
 
 test('the interface is loopback unless the environment names one (a container sets it)', () => {
   assert.equal(selectInstance({ projectRoot: '/work/shop', env: {} }).host, undefined)
-  const chosen = selectInstance({ projectRoot: '/work/shop', env: { AIMBRACE_HOST: '0.0.0.0' } })
+  const chosen = selectInstance({ projectRoot: '/work/shop', env: { ACRYLBLENDS_HOST: '0.0.0.0' } })
   assert.equal(chosen.host, '0.0.0.0')
 })
 

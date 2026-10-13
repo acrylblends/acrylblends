@@ -21,7 +21,7 @@ export function templatesRoot(): string {
     const candidate = join(dir, 'templates')
     if (existsSync(join(candidate, 'app'))) return candidate
     const parent = dirname(dir)
-    if (parent === dir) throw new Error('aimbrace cannot find its templates folder')
+    if (parent === dir) throw new Error('acrylblends cannot find its templates folder')
     dir = parent
   }
 }

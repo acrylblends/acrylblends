@@ -2,7 +2,7 @@
 /**
  * Prove each template works the way a user runs it:
  *
- *  1. build the CLI and run `aimbrace init` for real into an empty temp directory
+ *  1. build the CLI and run `acrylblends init` for real into an empty temp directory
  *  2. a second `init` into the same directory must refuse and change nothing
  *  3. the generated package.json depends at run time only on the named packages (constitution III)
  *  4. npm install, `npm run check` (types), `npm test`, boot it with `npm start` in a throwaway home, request its routes,
@@ -25,7 +25,7 @@ import { join, resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const cliDir = join(root, 'packages', 'cli')
-const cli = join(cliDir, 'bin', 'aimbrace.js')
+const cli = join(cliDir, 'bin', 'acrylblends.js')
 const scratch = mkdtempSync(join(tmpdir(), 'verify-scaffolder-'))
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const TEMPLATES = { app: ['--no-agent'], agent: ['--agent'] }
@@ -88,7 +88,7 @@ async function json(response, what) {
 }
 
 try {
-  log('building the aimbrace CLI')
+  log('building the acrylblends CLI')
   capture('pnpm', ['run', 'build'], { cwd: cliDir })
   const present = readdirSync(join(cliDir, 'templates')).sort()
   if (present.join(',') !== Object.keys(TEMPLATES).sort().join(','))
@@ -122,7 +122,7 @@ try {
     capture(npm, ['run', 'check'], { cwd: dir })
     capture(npm, ['test'], { cwd: dir })
     capture(npm, ['run', 'lock'], { cwd: dir })
-    const locked = JSON.parse(readFileSync(join(dir, 'aimbrace.lock.json'), 'utf8'))
+    const locked = JSON.parse(readFileSync(join(dir, 'acrylblends.lock.json'), 'utf8'))
     if (!/^sha256:[0-9a-f]{64}$/.test(locked.manifest?.digest ?? '') || !locked.sources?.manifest) {
       fail(`${template}: npm run lock wrote ${JSON.stringify(locked).slice(0, 200)}`)
     }
@@ -132,7 +132,7 @@ try {
     const start = () =>
       spawn(npm, ['start'], {
         cwd: dir,
-        env: { ...process.env, AIMBRACE_HOME: home, AIMBRACE_PORT: '0' },
+        env: { ...process.env, ACRYLBLENDS_HOME: home, ACRYLBLENDS_PORT: '0' },
         shell: process.platform === 'win32',
         // Its own process group, so stopCleanly can interrupt npm and everything it started together.
         detached: process.platform !== 'win32',
@@ -258,7 +258,7 @@ try {
         const otherHome = mkdtempSync(join(tmpdir(), 'verify-home-other-'))
         const otherChild = spawn(npm, ['start'], {
           cwd: other,
-          env: { ...process.env, AIMBRACE_HOME: otherHome, AIMBRACE_PORT: '0' },
+          env: { ...process.env, ACRYLBLENDS_HOME: otherHome, ACRYLBLENDS_PORT: '0' },
           shell: process.platform === 'win32',
           detached: process.platform !== 'win32',
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -281,9 +281,9 @@ try {
     } finally {
       await stopCleanly(child)
     }
-    // AIMBRACE_HOME pinned the data elsewhere, so the project folder must not have grown its own data folder.
-    if (existsSync(join(dir, '.aimbrace')))
-      fail(`${template}: wrote .aimbrace into the project despite AIMBRACE_HOME`)
+    // ACRYLBLENDS_HOME pinned the data elsewhere, so the project folder must not have grown its own data folder.
+    if (existsSync(join(dir, '.acrylblends')))
+      fail(`${template}: wrote .acrylblends into the project despite ACRYLBLENDS_HOME`)
     rmSync(home, { recursive: true, force: true })
     log(`${template}: stopped cleanly; data stayed in the pinned home`)
   }
@@ -313,7 +313,7 @@ try {
   // and an upgrade that would break the Blend is refused with the file untouched.
   const blended = join(scratch, 'blended')
   capture(process.execPath, [cli, 'init', blended, '--name', 'verify-blend', '--yes', '--no-agent'])
-  const blueprintId = 'aimbrace.verify-blend'
+  const blueprintId = 'acrylblends.verify-blend'
   const blueprintText = readFileSync(join(blended, 'blend.yaml'), 'utf8')
   mkdirSync(join(blended, 'blueprints'))
   writeFileSync(join(blended, 'blueprints', `${blueprintId}.yaml`), blueprintText)
@@ -333,7 +333,7 @@ spec:
   const blendHome = mkdtempSync(join(tmpdir(), 'verify-home-blend-'))
   const blendChild = spawn(npm, ['start'], {
     cwd: blended,
-    env: { ...process.env, AIMBRACE_HOME: blendHome, AIMBRACE_PORT: '0' },
+    env: { ...process.env, ACRYLBLENDS_HOME: blendHome, ACRYLBLENDS_PORT: '0' },
     shell: process.platform === 'win32',
     detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -385,7 +385,7 @@ spec:
   if (upgraded !== blendText.replace('blueprintVersion: 0.1.0', 'blueprintVersion: 0.2.0'))
     fail(`blend: the upgrade changed more than the lineage version:\n${upgraded}`)
   capture(npm, ['run', 'lock'], { cwd: blended })
-  const locked = JSON.parse(readFileSync(join(blended, 'aimbrace.lock.json'), 'utf8'))
+  const locked = JSON.parse(readFileSync(join(blended, 'acrylblends.lock.json'), 'utf8'))
   if (
     locked.lineage?.blueprintVersion !== '0.2.0' ||
     !/^sha256:/.test(locked.lineage?.digest ?? '')
@@ -395,7 +395,7 @@ spec:
   log(
     'blend: booted from its Blueprint, refused an upgrade that removes an overridden row, applied a safe one (only the lineage moved), and the lock records the Blueprint',
   )
-  // `aimbrace add` in a real app: the plugin, what it requires and its npm packages arrive, and the app still type-checks.
+  // `acrylblends add` in a real app: the plugin, what it requires and its npm packages arrive, and the app still type-checks.
   const grown = join(scratch, 'grown')
   capture(process.execPath, [cli, 'init', grown, '--name', 'verify-grown', '--yes', '--no-agent'])
   capture(process.execPath, [cli, 'add', 'settings', '--dir', grown])

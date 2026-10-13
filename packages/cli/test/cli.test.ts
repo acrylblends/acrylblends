@@ -24,7 +24,7 @@ import {
   VERSION,
 } from '../src/index'
 
-const scratch = mkdtempSync(join(tmpdir(), 'aimbrace-cli-test-'))
+const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-cli-test-'))
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
 /** A test Io: captures output, answers prompts from a list, and records install calls. */
@@ -102,7 +102,7 @@ describe('command line', () => {
   it('prints help and version', async () => {
     const help = fakeIo()
     expect(await runCli(['--help'], help.io)).toBe(0)
-    expect(help.out()).toContain('aimbrace init [dir]')
+    expect(help.out()).toContain('acrylblends init [dir]')
     const version = fakeIo()
     expect(await runCli(['--version'], version.io)).toBe(0)
     expect(version.out()).toBe(`${VERSION}\n`)

@@ -22,10 +22,10 @@ export interface OpenAIConfig {
 export function modelConfigFrom(
   env: Readonly<Record<string, string | undefined>>,
 ): OpenAIConfig | undefined {
-  const baseUrl = env.AIMBRACE_MODEL_URL?.trim()
-  const model = env.AIMBRACE_MODEL?.trim()
+  const baseUrl = env.ACRYLBLENDS_MODEL_URL?.trim()
+  const model = env.ACRYLBLENDS_MODEL?.trim()
   if (!baseUrl || !model) return undefined
-  const apiKey = env.AIMBRACE_MODEL_KEY?.trim()
+  const apiKey = env.ACRYLBLENDS_MODEL_KEY?.trim()
   return { baseUrl, model, ...(apiKey ? { apiKey } : {}) }
 }
 

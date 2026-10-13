@@ -1,6 +1,6 @@
 # The plugin library
 
-Each plugin is plain Cordis code in `plugins/<name>/` of this repository. `aimbrace init` and `aimbrace add` copy it into
+Each plugin is plain Cordis code in `plugins/<name>/` of this repository. `acrylblends init` and `acrylblends add` copy it into
 your app's `src/plugins/<name>/` with the plugins it requires. Every one is tested in this repository with `node:test`
 against a real Cordis context, including disposal.
 
@@ -23,9 +23,9 @@ against a real Cordis context, including disposal.
 ## instance
 
 Where the app keeps things, decided once. `selectInstance({ projectRoot, env })` is the only code that reads the
-environment; it returns a frozen `AppInstance` with `root` (the project folder), `home` (`<project>/.aimbrace`, or
-`AIMBRACE_HOME`), and a port preference: a stable port per app in 3100-3999 that moves to the next free one, or
-`AIMBRACE_PORT`. Two folders with the same name are different apps. Mount it first: `root.plugin(instance, chosen)`.
+environment; it returns a frozen `AppInstance` with `root` (the project folder), `home` (`<project>/.acrylblends`, or
+`ACRYLBLENDS_HOME`), and a port preference: a stable port per app in 3100-3999 that moves to the next free one, or
+`ACRYLBLENDS_PORT`. Two folders with the same name are different apps. Mount it first: `root.plugin(instance, chosen)`.
 
 ## http and server
 
@@ -73,8 +73,8 @@ toolResult })`.
 
 A real model for the agent: any OpenAI-compatible chat API (OpenAI, DeepSeek, Ollama, LM Studio) over `fetch`, with tool
 calls, and no SDK. It provides the same `model` service, so nothing else changes. Its system prompt teaches the model the
-extension contract. In the `agent` template, set `AIMBRACE_MODEL_URL`, `AIMBRACE_MODEL` and (for hosted APIs)
-`AIMBRACE_MODEL_KEY`; `main.ts` reads them and swaps the scripted model for this one.
+extension contract. In the `agent` template, set `ACRYLBLENDS_MODEL_URL`, `ACRYLBLENDS_MODEL` and (for hosted APIs)
+`ACRYLBLENDS_MODEL_KEY`; `main.ts` reads them and swaps the scripted model for this one.
 
 ## tasks
 

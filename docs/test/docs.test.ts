@@ -41,7 +41,7 @@ describe('docs', () => {
   it('mentions none of the removed runtime', () => {
     for (const { name, text } of markdown) {
       expect(text, name).not.toMatch(
-        /@aimbrace\/|hookable|unplugin|effect-ts|definePlugin|createApp\(\{ plugins/i,
+        /@acrylblends\/|hookable|unplugin|effect-ts|definePlugin|createApp\(\{ plugins/i,
       )
       expect(text, name).not.toContain(String.fromCharCode(0x2014)) // no em dash
     }
@@ -49,7 +49,7 @@ describe('docs', () => {
 })
 
 describe('docs: Cordis examples run', () => {
-  const scratch = mkdtempSync(join(tmpdir(), 'aimbrace-docs-'))
+  const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-docs-'))
   afterAll(() => rmSync(scratch, { recursive: true, force: true }))
   const snippets = [...read('cordis.md').matchAll(/```js\n([\s\S]*?)```/g)].map(
     (match) => match[1] as string,
@@ -76,14 +76,14 @@ describe('docs: the extension contract in extending-apps.md', () => {
       read('extending-apps.md'),
     )?.[1]
     expect(block).toBeTruthy()
-    const project = mkdtempSync(join(tmpdir(), 'aimbrace-docs-ext-'))
+    const project = mkdtempSync(join(tmpdir(), 'acrylblends-docs-ext-'))
     try {
       const folder = join(project, 'extensions', 'hello')
       mkdirSync(folder, { recursive: true })
       writeFileSync(join(folder, 'index.ts'), block as string)
       const app = new Context()
       app.provide('greeting', 'hi')
-      await app.plugin(instance, pinnedInstance(join(project, '.aimbrace'), { root })).await()
+      await app.plugin(instance, pinnedInstance(join(project, '.acrylblends'), { root })).await()
       const fiber = app.plugin(extensions, {
         sources: [{ dir: join(project, 'extensions'), trust: 'list' }],
       })

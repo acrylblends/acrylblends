@@ -9,7 +9,7 @@ import { pinnedInstance, withPort } from '../src/plugins/instance/index.ts'
 /** The agent extends the running app through POST /ask; a restart keeps what it built. */
 test('the agent builds, updates, protects and removes a plugin in the running app, and a restart keeps it', async () => {
   const project = await mkdtemp(join(tmpdir(), 'builder-project-'))
-  const chosen = withPort(pinnedInstance(join(project, '.aimbrace'), { root: project }), 0)
+  const chosen = withPort(pinnedInstance(join(project, '.acrylblends'), { root: project }), 0)
   let app = await createApp(chosen)
   const ask = async (question: string) => {
     const response = await fetch(`${app.url}/ask`, {
@@ -64,7 +64,7 @@ test('the agent builds, updates, protects and removes a plugin in the running ap
 
 test('with approval on, an install waits for the owner; approving it makes it live', async () => {
   const project = await mkdtemp(join(tmpdir(), 'approval-project-'))
-  const chosen = withPort(pinnedInstance(join(project, '.aimbrace'), { root: project }), 0)
+  const chosen = withPort(pinnedInstance(join(project, '.acrylblends'), { root: project }), 0)
   const app = await createApp(chosen, { values: { approval: true } })
   const post = async (path: string, body: unknown) =>
     (await (
@@ -104,7 +104,7 @@ test('with approval on, an install waits for the owner; approving it makes it li
 
 test('the agent builds a sandboxed tool, calls it, and the sandbox refuses a tool that reads outside its folder', async () => {
   const project = await mkdtemp(join(tmpdir(), 'tool-project-'))
-  const chosen = withPort(pinnedInstance(join(project, '.aimbrace'), { root: project }), 0)
+  const chosen = withPort(pinnedInstance(join(project, '.acrylblends'), { root: project }), 0)
   const app = await createApp(chosen)
   const ask = async (question: string) =>
     (
@@ -136,7 +136,7 @@ test('the agent builds a sandboxed tool, calls it, and the sandbox refuses a too
 
 test('GET /events streams what happens: the run as a task, and the install as an extension change', async () => {
   const project = await mkdtemp(join(tmpdir(), 'events-project-'))
-  const chosen = withPort(pinnedInstance(join(project, '.aimbrace'), { root: project }), 0)
+  const chosen = withPort(pinnedInstance(join(project, '.acrylblends'), { root: project }), 0)
   const app = await createApp(chosen)
   const controller = new AbortController()
   try {

@@ -79,9 +79,12 @@ test('messages carry each tool call and its result or error', () => {
 })
 
 test('the configuration comes from an environment-shaped object, and is absent when not set', () => {
-  assert.deepEqual(modelConfigFrom({ AIMBRACE_MODEL_URL: 'http://x/v1', AIMBRACE_MODEL: 'm' }), {
-    baseUrl: 'http://x/v1',
-    model: 'm',
-  })
+  assert.deepEqual(
+    modelConfigFrom({ ACRYLBLENDS_MODEL_URL: 'http://x/v1', ACRYLBLENDS_MODEL: 'm' }),
+    {
+      baseUrl: 'http://x/v1',
+      model: 'm',
+    },
+  )
   assert.equal(modelConfigFrom({}), undefined)
 })

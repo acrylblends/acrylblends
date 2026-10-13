@@ -50,13 +50,13 @@ export function run(input: { what: string; path: string }) {
   const write = await sandbox.run(entry, { what: 'write', path: secret })
   assert.equal(!write.ok && write.kind, 'denied')
   // Nothing of the parent's environment arrives (Node may add one variable of its own).
-  process.env.AIMBRACE_TEST_SECRET = 'leaks?'
+  process.env.ACRYLBLENDS_TEST_SECRET = 'leaks?'
   const env = await sandbox.run(entry, { what: 'env' })
-  delete process.env.AIMBRACE_TEST_SECRET
+  delete process.env.ACRYLBLENDS_TEST_SECRET
   const seen = env.ok ? (env.output as { home: unknown; path: unknown; keys: string[] }) : undefined
   console.log('env keys inside the sandbox:', JSON.stringify(seen?.keys))
   assert.deepEqual([seen?.home, seen?.path], [null, null])
-  assert.ok((seen?.keys.length ?? 9) <= 1 && !seen?.keys.includes('AIMBRACE_TEST_SECRET'))
+  assert.ok((seen?.keys.length ?? 9) <= 1 && !seen?.keys.includes('ACRYLBLENDS_TEST_SECRET'))
 })
 
 test('a tool that loops forever is killed at the time limit; one that floods output is cut off; one that throws is an error result', async () => {

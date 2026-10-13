@@ -5,7 +5,7 @@ import { modelConfigFrom } from './plugins/openai/index.ts'
 import { APP_NAME } from './routes.ts'
 
 // The composition root: the one place that reads the environment. selectInstance chooses where the app lives;
-// modelConfigFrom picks a real model when AIMBRACE_MODEL_URL and AIMBRACE_MODEL are set (AIMBRACE_MODEL_KEY for hosted APIs).
+// modelConfigFrom picks a real model when ACRYLBLENDS_MODEL_URL and ACRYLBLENDS_MODEL are set (ACRYLBLENDS_MODEL_KEY for hosted APIs).
 const chosen = selectInstance({
   projectRoot: fileURLToPath(new URL('..', import.meta.url)),
   env: process.env,

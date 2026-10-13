@@ -1,13 +1,13 @@
 {
-  "name": "aimbrace",
+  "name": "acrylblends",
   "version": "0.2.0",
-  "description": "Scaffold Cordis apps: aimbrace init.",
+  "description": "Scaffold Cordis apps: acrylblends init.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "aimbrace": "./bin/aimbrace.js"
+    "acrylblends": "./bin/acrylblends.js"
   },
   "exports": {
     ".": {
@@ -31,10 +31,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aimbrace/aimbrace.git",
+    "url": "git+https://github.com/acrylblends/acrylblends.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://aimbrace.github.io",
+  "homepage": "https://acrylblends.github.io",
   "keywords": [
     "cordis",
     "scaffold"

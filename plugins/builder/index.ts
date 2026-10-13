@@ -32,7 +32,7 @@ export function packageManifest(name: string, description: string): Record<strin
     // ACRYL measured it: a host package listed under dependencies brings a second copy of the framework, and its services stop
     // matching after a restart. A peer names the version and installs nothing.
     peerDependencies: { '@deepseek-ai/cordis': '4.0.4' },
-    keywords: ['cordis', 'cordis-plugin', 'aimbrace'],
+    keywords: ['cordis', 'cordis-plugin', 'acrylblends'],
   }
 }
 
@@ -180,7 +180,7 @@ export const builder = {
         if (!existsSync(join(target, 'README.md'))) {
           writeFileSync(
             join(target, 'README.md'),
-            `# ${name}\n\n${description}\n\nA Cordis plugin. In an AIMBRACE app: \`aimbrace add <this folder>\`.\n`,
+            `# ${name}\n\n${description}\n\nA Cordis plugin. In an ACRYLBLENDS app: \`acrylblends add <this folder>\`.\n`,
           )
         }
         return { ok: true, name, dir: target }

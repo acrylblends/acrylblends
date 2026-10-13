@@ -1,5 +1,5 @@
 /**
- * `npm run lock`: write `aimbrace.lock.json` next to the manifest, recording what the app is built from: the manifest's digest, its
+ * `npm run lock`: write `acrylblends.lock.json` next to the manifest, recording what the app is built from: the manifest's digest, its
  * resolved rows and parameter values, and a content digest of every plugin folder in `src/plugins/`. Commit it; a diff of the lock is a
  * review of what changed.
  */
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { digestFolder } from '../digest/index.ts'
 import { blueprintsIn, type Lock, loadManifest, lock, parentIdOf } from './index.ts'
 
-export const LOCK_FILE = 'aimbrace.lock.json'
+export const LOCK_FILE = 'acrylblends.lock.json'
 
 export function writeLock(appRoot: string): Lock {
   const getBlueprint = blueprintsIn(join(appRoot, 'blueprints'))

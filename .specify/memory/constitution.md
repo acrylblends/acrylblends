@@ -1,4 +1,4 @@
-# AIMBRACE Constitution
+# ACRYLBLENDS Constitution
 
 This constitution governs every spec, plan, task and package in this repository. If another document conflicts with
 it, this file wins until it is deliberately amended (with a version bump below).
@@ -8,7 +8,7 @@ keeps Node and adds a library of Cordis plugins that the command copies into app
 
 **Version 3.1.0 (amended 2026-10-07).** 3.1.0 names the Cordis package: the one ACRYL runs on (research R2).
 
-**Version 3.0.0 (amended 2026-10-06).** Version 1 defined AIMBRACE as a composition runtime on Cordis plus five
+**Version 3.0.0 (amended 2026-10-06).** Version 1 defined ACRYLBLENDS as a composition runtime on Cordis plus five
 libraries; version 2 as a scaffolder with Hono and Fastify templates. Both re-did what Cordis already provides and were
 removed. The reason is in `specs/000-roadmap/research.md` (R1).
 
@@ -16,13 +16,13 @@ removed. The reason is in `specs/000-roadmap/research.md` (R1).
 
 ### I. Cordis is the framework
 
-Plugins, services, dependencies, lifecycle, cleanup, events and isolation come from Cordis. AIMBRACE never adds a
+Plugins, services, dependencies, lifecycle, cleanup, events and isolation come from Cordis. ACRYLBLENDS never adds a
 wrapper, kernel, registry, graph, lifecycle or event layer around it, and never adds a library that duplicates a Cordis
 capability.
 
 ### II. The product is a command, its templates and a plugin library
 
-The `aimbrace` command copies a template, and the library plugins it lists, into an app; `aimbrace add` copies more.
+The `acrylblends` command copies a template, and the library plugins it lists, into an app; `acrylblends add` copies more.
 Library plugins are plain Cordis plugins in `plugins/<name>/`. The app owns every copied line. There is no runtime
 package for apps to import.
 

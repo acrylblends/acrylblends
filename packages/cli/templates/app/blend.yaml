@@ -3,7 +3,7 @@
 apiVersion: blends.acryl.dev/v1alpha1
 kind: Blueprint
 metadata:
-  id: aimbrace.__APP_NAME__
+  id: acrylblends.__APP_NAME__
   name: __APP_NAME__
   version: 0.1.0
   visibility: private # `npm run save` never pushes a private app to a public remote

@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { findSecrets, type GitPort, saveApp, saveFolder } from '../index.ts'
 
 const PRIVATE =
-  'apiVersion: blends.acryl.dev/v1alpha1\nkind: Blueprint\nmetadata: { id: aimbrace.shop, name: shop, version: 1.0.0 }\nspec: { runtime: cordis }\n'
+  'apiVersion: blends.acryl.dev/v1alpha1\nkind: Blueprint\nmetadata: { id: acrylblends.shop, name: shop, version: 1.0.0 }\nspec: { runtime: cordis }\n'
 const PUBLIC = PRIVATE.replace('version: 1.0.0', 'version: 1.0.0, visibility: public')
 
 test('finds keys, secret files and assigned secrets, and leaves ordinary text alone', () => {

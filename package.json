@@ -1,8 +1,8 @@
 {
-  "name": "aimbrace-monorepo",
+  "name": "acrylblends-monorepo",
   "private": true,
   "type": "module",
-  "description": "AIMBRACE - scaffold apps built on Cordis. Cordis is the framework.",
+  "description": "ACRYLBLENDS - scaffold apps built on Cordis. Cordis is the framework.",
   "packageManager": "pnpm@12.4.2",
   "engines": {
     "node": ">=22.18.0"

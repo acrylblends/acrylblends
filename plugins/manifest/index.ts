@@ -196,7 +196,7 @@ export function validate(document: unknown, known?: Iterable<string>): Diagnosti
       if (!METADATA_FIELDS.has(key))
         add('schema-error', `metadata.${key}`, `unknown field '${key}'`)
     if (typeof metadata.id !== 'string' || !DEFINITION_ID.test(metadata.id))
-      add('schema-error', 'metadata.id', "must be a dotted id such as 'aimbrace.my-app'")
+      add('schema-error', 'metadata.id', "must be a dotted id such as 'acrylblends.my-app'")
     if (typeof metadata.name !== 'string' || metadata.name === '')
       add('schema-error', 'metadata.name', 'missing required field name')
     if (typeof metadata.version !== 'string' || !SEMVER.test(metadata.version))
@@ -626,7 +626,7 @@ export async function compose(
   return fibers
 }
 
-/** What `aimbrace lock` writes: the manifest's digest, its resolved rows, and a digest of each copied library plugin's source. */
+/** What `acrylblends lock` writes: the manifest's digest, its resolved rows, and a digest of each copied library plugin's source. */
 export interface Lock {
   readonly manifest: { readonly name: string; readonly version: string; readonly digest: string }
   readonly values: Readonly<Record<string, ParameterValue>>

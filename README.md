@@ -1,21 +1,21 @@
 <p align="center">
-  <img src="docs/assets/aimbrace-logo.png" alt="AIMBRACE" width="120">
+  <img src="docs/assets/acrylblends-logo.png" alt="ACRYLBLENDS" width="120">
 </p>
 
-<h1 align="center">AIMBRACE</h1>
+<h1 align="center">ACRYLBLENDS</h1>
 
 <p align="center"><strong>A framework for Cordis apps, built from ACRYL's best parts.</strong><br>
-Cordis is the framework. AIMBRACE gives you the plugins ACRYL proved, as code you own.</p>
+Cordis is the framework. ACRYLBLENDS gives you the plugins ACRYL proved, as code you own.</p>
 
 <p align="center"><a href="docs/README.md">Documentation</a> · <a href="docs/getting-started.md">Getting started</a> · <a href="docs/plugins.md">Plugin library</a> · <a href="docs/extending-apps.md">Extending a running app</a></p>
 
 ---
 
-AIMBRACE is a prototype of the ACRYL Blends framework: a fast experiment on which of ACRYL's features make a good base for
+ACRYLBLENDS is a prototype of the ACRYL Blends framework: a fast experiment on which of ACRYL's features make a good base for
 building agentic apps ([what it showed and what comes next](specs/013-acryl-extraction/handoff-to-blends.md)).
 
 [Cordis](https://www.npmjs.com/package/@deepseek-ai/cordis) (the fork ACRYL runs on) already has what an app framework
-needs: plugins, services, `inject`, lifecycle, effects that clean up after themselves, and events. AIMBRACE adds no runtime
+needs: plugins, services, `inject`, lifecycle, effects that clean up after themselves, and events. ACRYLBLENDS adds no runtime
 on top. It is a library of Cordis plugins extracted from ACRYL, and a command that copies them into your app:
 
 - **instance**: one place decides where an app keeps its data and which port it uses
@@ -28,7 +28,7 @@ on top. It is a library of Cordis plugins extracted from ACRYL, and a command th
 
 ```sh
 pnpm install && pnpm run build
-node packages/cli/bin/aimbrace.js init ../my-app --agent -y
+node packages/cli/bin/acrylblends.js init ../my-app --agent -y
 cd ../my-app && npm install && npm run dev
 ```
 
@@ -40,12 +40,12 @@ time on `@deepseek-ai/cordis` and `yaml`.
 | Path | What |
 |---|---|
 | `plugins/` | the plugin library: each plugin's source, `plugin.json` and tests |
-| `packages/cli` | the `aimbrace` command (`init`, `add`, `plugins`) and the `app` and `agent` templates |
+| `packages/cli` | the `acrylblends` command (`init`, `add`, `plugins`) and the `app` and `agent` templates |
 | `scripts/verify-scaffolder.mjs` | scaffolds both templates, installs, type-checks, tests, boots them, drives the agent, saves |
 | `docs/` | the documentation; its examples are executed by the tests |
 | `specs/` | specs and ledgers ([roadmap](specs/000-roadmap/spec.md), [013](specs/013-acryl-extraction/spec.md)) |
 
-`pnpm run verify:model` (opt-in, needs `AIMBRACE_MODEL_URL`, `AIMBRACE_MODEL` and a key) proves the agent builds a plugin with a real model.
+`pnpm run verify:model` (opt-in, needs `ACRYLBLENDS_MODEL_URL`, `ACRYLBLENDS_MODEL` and a key) proves the agent builds a plugin with a real model.
 `pnpm run check` runs lint, build, both type checks, the tests and the scaffolder verification. A Deno version of the
 runtime lives on the branch `012-deno-runtime-experiment`.
 

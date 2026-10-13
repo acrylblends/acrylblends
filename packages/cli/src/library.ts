@@ -10,7 +10,7 @@ export interface LibraryPlugin {
   readonly requires: readonly string[]
   /** npm packages an app needs at run time for this plugin. */
   readonly dependencies: Readonly<Record<string, string>>
-  /** How to mount it, shown after `aimbrace add`. */
+  /** How to mount it, shown after `acrylblends add`. */
   readonly mount?: string
 }
 
@@ -28,7 +28,8 @@ export function libraryRoot(): string {
     const candidate = join(dir, 'plugins')
     if (existsSync(join(candidate, 'http', 'plugin.json'))) return candidate
     const parent = dirname(dir)
-    if (parent === dir) throw new LibraryError('aimbrace cannot find its plugin library (plugins/)')
+    if (parent === dir)
+      throw new LibraryError('acrylblends cannot find its plugin library (plugins/)')
     dir = parent
   }
 }

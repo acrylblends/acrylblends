@@ -1,11 +1,11 @@
 # __APP_NAME__
 
-A Cordis app on Node, scaffolded by `aimbrace init`. TypeScript, run by Node with no build step. Every part is a
+A Cordis app on Node, scaffolded by `acrylblends init`. TypeScript, run by Node with no build step. Every part is a
 Cordis plugin.
 
 ```sh
 npm install
-npm run dev        # prints its URL; data lives in .aimbrace/
+npm run dev        # prints its URL; data lives in .acrylblends/
 npm test
 npm run check      # type-check
 
@@ -15,7 +15,7 @@ curl -X POST <url>/ask -H 'content-type: application/json' -d '{"question":"add 
 
 - `src/main.ts` chooses where the app lives (`src/plugins/instance`) and starts it.
 - `blend.yaml` is the app as data: which plugins it mounts, in what order, with what config and parameters. Switch
-  one off with `disabled: true`. `npm run lock` writes `aimbrace.lock.json`: the manifest's digest and a digest of
+  one off with `disabled: true`. `npm run lock` writes `acrylblends.lock.json`: the manifest's digest and a digest of
   every plugin folder, so a diff of the lock shows what changed.
 - `src/app.ts` holds the registry of plugins the code provides, and mounts the manifest's rows.
 - `src/plugins/agent` is the offline agent: a scripted model, a tool registry, memory, and one child fiber per run.
@@ -25,8 +25,8 @@ curl -X POST <url>/ask -H 'content-type: application/json' -d '{"question":"add 
 Give it a real model and it builds any Cordis plugin you describe (any OpenAI-compatible API; nothing is installed):
 
 ```sh
-AIMBRACE_MODEL_URL=https://api.deepseek.com/v1 AIMBRACE_MODEL=deepseek-chat AIMBRACE_MODEL_KEY=sk-... npm run dev
-AIMBRACE_MODEL_URL=http://127.0.0.1:11434/v1 AIMBRACE_MODEL=qwen2.5-coder npm run dev     # Ollama, no key
+ACRYLBLENDS_MODEL_URL=https://api.deepseek.com/v1 ACRYLBLENDS_MODEL=deepseek-chat ACRYLBLENDS_MODEL_KEY=sk-... npm run dev
+ACRYLBLENDS_MODEL_URL=http://127.0.0.1:11434/v1 ACRYLBLENDS_MODEL=qwen2.5-coder npm run dev     # Ollama, no key
 curl -X POST <url>/ask -H 'content-type: application/json' -d '{"question":"add a GET /time route that returns the current time"}'
 ```
 
@@ -42,11 +42,11 @@ curl <url>/tasks              # every run as a durable task, with the tool calls
 Other commands: `update route <name> <path> <text>`, `break plugin <name>` (shows the rollback), `remove plugin <name>`,
 `list plugins`. What the agent writes lands in `extensions/`, is part of your app, and starts again at the next start.
 - `src/routes.ts` is your own plugin: routes added inside `ctx.effect`.
-- `src/plugins/` holds the plugins copied from the AIMBRACE library. They are yours now; edit them freely.
-  Add more with `aimbrace add <plugin>`.
+- `src/plugins/` holds the plugins copied from the ACRYLBLENDS library. They are yours now; edit them freely.
+  Add more with `acrylblends add <plugin>`.
 
 `npm run save -- "message"` commits the app with git (and pushes when it has a remote). It refuses a file that looks like
 it holds a secret, and refuses to push a private app (anything but `visibility: public` in `blend.yaml`) to a public
 remote.
 
-Set `AIMBRACE_HOME` to keep data elsewhere, and `AIMBRACE_PORT` to choose the first port tried.
+Set `ACRYLBLENDS_HOME` to keep data elsewhere, and `ACRYLBLENDS_PORT` to choose the first port tried.

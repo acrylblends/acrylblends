@@ -20,7 +20,7 @@ export function parseAddOptions(argv: readonly string[]): AddOptions {
     throw new UsageError((error as Error).message)
   }
   if (parsed.positionals.length === 0)
-    throw new UsageError('add needs at least one plugin name (see "aimbrace plugins")')
+    throw new UsageError('add needs at least one plugin name (see "acrylblends plugins")')
   return { names: parsed.positionals, directory: parsed.values.dir }
 }
 
@@ -42,7 +42,7 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
   const appDir = resolve(io.cwd, options.directory ?? '.')
   if (!existsSync(join(appDir, 'package.json')) || !existsSync(join(appDir, 'src'))) {
     io.stderr.write(
-      `error: ${appDir} is not an app (no package.json and src/); run "aimbrace init" first\n`,
+      `error: ${appDir} is not an app (no package.json and src/); run "acrylblends init" first\n`,
     )
     return 1
   }
@@ -130,7 +130,7 @@ function addExternal(folder: string, appDir: string, io: Io): number {
   return 0
 }
 
-/** `aimbrace plugins`: the library, one line per plugin. */
+/** `acrylblends plugins`: the library, one line per plugin. */
 export function listPlugins(io: Io): number {
   for (const plugin of readLibrary().values()) {
     const requires = plugin.requires.length > 0 ? ` (requires ${plugin.requires.join(', ')})` : ''

@@ -18,7 +18,7 @@ afterEach(async () => {
 /** An app with the builder: its project folder and its home are throwaway folders. */
 async function boot() {
   const root = mkdtempSync(join(tmpdir(), 'builder-root-'))
-  const home = join(root, '.aimbrace')
+  const home = join(root, '.acrylblends')
   const app = new Context()
   const fibers = [
     app.plugin(instance, pinnedInstance(home, { root })),
@@ -100,7 +100,7 @@ test('the builder refuses to write anywhere that is not an extensions source', a
   cleanup.push(() => rmSync(root, { recursive: true, force: true }))
   const app = new Context()
   for (const plugin of [model, tools, memory, agent]) await app.plugin(plugin).await()
-  await app.plugin(instance, pinnedInstance(join(root, '.aimbrace'), { root })).await()
+  await app.plugin(instance, pinnedInstance(join(root, '.acrylblends'), { root })).await()
   await app
     .plugin(extensions, { sources: [{ dir: join(root, 'elsewhere'), trust: 'install' }] })
     .await()

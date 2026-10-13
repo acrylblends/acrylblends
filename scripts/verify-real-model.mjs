@@ -2,7 +2,7 @@
 /**
  * Opt-in: prove the agent builds a plugin with a REAL model, end to end. Not part of `pnpm run check` (it needs a key and the network).
  *
- *   AIMBRACE_MODEL_URL=https://api.deepseek.com/v1 AIMBRACE_MODEL=deepseek-flash AIMBRACE_MODEL_KEY=... pnpm run verify:model
+ *   ACRYLBLENDS_MODEL_URL=https://api.deepseek.com/v1 ACRYLBLENDS_MODEL=deepseek-flash ACRYLBLENDS_MODEL_KEY=... pnpm run verify:model
  *
  * Any OpenAI-compatible API works (a local Ollama needs no key, but small models may not call tools). Scaffolds a fresh agent app, starts
  * it in a throwaway home on a free port, asks for a plugin in plain words, and requires the route to answer. The key stays in the
@@ -13,14 +13,14 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-const { AIMBRACE_MODEL_URL: url, AIMBRACE_MODEL: model } = process.env
+const { ACRYLBLENDS_MODEL_URL: url, ACRYLBLENDS_MODEL: model } = process.env
 if (!url || !model) {
   console.error(
-    'set AIMBRACE_MODEL_URL and AIMBRACE_MODEL (and AIMBRACE_MODEL_KEY for hosted APIs)',
+    'set ACRYLBLENDS_MODEL_URL and ACRYLBLENDS_MODEL (and ACRYLBLENDS_MODEL_KEY for hosted APIs)',
   )
   process.exit(2)
 }
-const cli = resolve(import.meta.dirname, '..', 'packages', 'cli', 'bin', 'aimbrace.js')
+const cli = resolve(import.meta.dirname, '..', 'packages', 'cli', 'bin', 'acrylblends.js')
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const scratch = mkdtempSync(join(tmpdir(), 'verify-model-'))
 const app = join(scratch, 'app')
@@ -33,7 +33,7 @@ try {
   execFileSync(npm, ['install', '--no-audit', '--no-fund'], { cwd: app, stdio: 'ignore' })
   child = spawn(npm, ['start'], {
     cwd: app,
-    env: { ...process.env, AIMBRACE_HOME: join(scratch, 'home'), AIMBRACE_PORT: '0' },
+    env: { ...process.env, ACRYLBLENDS_HOME: join(scratch, 'home'), ACRYLBLENDS_PORT: '0' },
     detached: process.platform !== 'win32',
     shell: process.platform === 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],

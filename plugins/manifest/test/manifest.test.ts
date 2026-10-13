@@ -24,7 +24,7 @@ function file(text: string) {
 
 const GOOD = `apiVersion: blends.acryl.dev/v1alpha1
 kind: Blueprint
-metadata: { id: aimbrace.shop, name: shop, version: 1.0.0 }
+metadata: { id: acrylblends.shop, name: shop, version: 1.0.0 }
 spec:
   runtime: cordis
   parameters:

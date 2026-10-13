@@ -37,13 +37,13 @@ export interface AppInstance {
   readonly runLockFile: string
 }
 
-export const HOME_DIR_NAME = '.aimbrace'
+export const HOME_DIR_NAME = '.acrylblends'
 export const RUN_LOCK_FILE = 'instance.json'
 export const PORT_BASE = 3100
 export const PORT_SPAN = 900
-export const HOME_ENV = 'AIMBRACE_HOME'
-export const PORT_ENV = 'AIMBRACE_PORT'
-export const HOST_ENV = 'AIMBRACE_HOST'
+export const HOME_ENV = 'ACRYLBLENDS_HOME'
+export const PORT_ENV = 'ACRYLBLENDS_PORT'
+export const HOST_ENV = 'ACRYLBLENDS_HOST'
 
 export class AppInstanceError extends Error {
   override name = 'AppInstanceError'
@@ -86,7 +86,7 @@ function family(input: {
   })
 }
 
-/** The default: the project folder owns its data in `<project>/.aimbrace`. Two folders with one name get different ids. */
+/** The default: the project folder owns its data in `<project>/.acrylblends`. Two folders with one name get different ids. */
 export function projectInstance(projectRoot: string): AppInstance {
   const root = resolve(projectRoot)
   const name = plainName(root)
@@ -102,7 +102,7 @@ export function projectInstance(projectRoot: string): AppInstance {
 }
 
 /**
- * A home the caller pinned (AIMBRACE_HOME): honoured as given. Tests and second copies of an app use it to stay apart. `root` is the
+ * A home the caller pinned (ACRYLBLENDS_HOME): honoured as given. Tests and second copies of an app use it to stay apart. `root` is the
  * project folder (where its packages are installed); it defaults to the current directory.
  */
 export function pinnedInstance(
@@ -133,7 +133,7 @@ export function withPort(instance: AppInstance, start: number): AppInstance {
 }
 
 /**
- * Choose the instance. The only place that reads the environment: `AIMBRACE_HOME` pins the home, `AIMBRACE_PORT` sets the start port, `AIMBRACE_HOST` the interface;
+ * Choose the instance. The only place that reads the environment: `ACRYLBLENDS_HOME` pins the home, `ACRYLBLENDS_PORT` sets the start port, `ACRYLBLENDS_HOST` the interface;
  * otherwise the project folder decides.
  */
 export function selectInstance(options: {

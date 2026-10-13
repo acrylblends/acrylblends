@@ -9,7 +9,7 @@ orders, configures and switches those plugins.
 apiVersion: blends.acryl.dev/v1alpha1
 kind: Blueprint
 metadata:
-  id: aimbrace.my-app          # dotted id
+  id: acrylblends.my-app          # dotted id
   name: my-app
   version: 0.1.0
   visibility: private          # anything but public is private; save refuses a public remote
@@ -42,7 +42,7 @@ spec:
 ## Compatible with ACRYL
 
 A test checks both templates' manifests, and a Blend, against ACRYL's own JSON schema (copied from `runtime/blends-core`), so what
-this plugin accepts is a valid `blend.yaml`. ACRYL's lock format differs from ours: `npm run lock` writes `aimbrace.lock.json`
+this plugin accepts is a valid `blend.yaml`. ACRYL's lock format differs from ours: `npm run lock` writes `acrylblends.lock.json`
 (below), not a Blend lock.
 
 ## Blueprints and Blends
@@ -121,5 +121,5 @@ Codes: `parse-error`, `schema-error`, `unsupported`, `duplicate-row-id`, `unknow
 
 ## The lock
 
-`npm run lock` writes `aimbrace.lock.json`: the manifest's sha256, its resolved rows and parameter values, and a content digest of
+`npm run lock` writes `acrylblends.lock.json`: the manifest's sha256, its resolved rows and parameter values, and a content digest of
 every folder in `src/plugins/`. Commit it. A diff of the lock is a review of what the app is built from.

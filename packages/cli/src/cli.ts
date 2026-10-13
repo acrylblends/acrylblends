@@ -8,13 +8,13 @@ export const VERSION: string = (
   createRequire(import.meta.url)('../package.json') as { version: string }
 ).version
 
-export const HELP = `aimbrace ${VERSION} - scaffold Cordis apps
+export const HELP = `acrylblends ${VERSION} - scaffold Cordis apps
 
 Usage:
-  aimbrace init [dir] [options]       Create a Cordis app in an empty or new directory
-  aimbrace add <plugin...> [--dir d]  Copy library plugins (and what they require) into an app;
+  acrylblends init [dir] [options]       Create a Cordis app in an empty or new directory
+  acrylblends add <plugin...> [--dir d]  Copy library plugins (and what they require) into an app;
                                       a folder path brings an external plugin into its extensions/
-  aimbrace plugins                    List the plugin library
+  acrylblends plugins                    List the plugin library
 
 Options for init:
   --agent / --no-agent   include the offline agent (asked when not given)

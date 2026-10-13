@@ -1,6 +1,6 @@
 # Extending a running app
 
-An AIMBRACE app with the `agent` template can be extended while it runs, by you or by its agent. This is ACRYL's
+An ACRYLBLENDS app with the `agent` template can be extended while it runs, by you or by its agent. This is ACRYL's
 self-extension, extracted: in ACRYL's packaged app an agent-written plugin installs, runs, updates and is removed live
 on macOS, Windows and Linux.
 
@@ -105,7 +105,7 @@ reads the tool descriptions; the offline scripted model knows these commands:
 A plugin the agent builds lives in the app's own `extensions/` (internal). To share it, ask the agent to package it
 (`package_plugin { name }`, or the scripted command `package plugin <name>`): it becomes a standalone package in
 `plugin-packages/<name>/`, with `@deepseek-ai/cordis` as a peer dependency (never a second installed copy). Any app takes an
-external plugin in with `aimbrace add <folder>`, which copies it into that app's `extensions/`, where it installs at the
+external plugin in with `acrylblends add <folder>`, which copies it into that app's `extensions/`, where it installs at the
 next start through the same checks.
 
 ## What to look at
