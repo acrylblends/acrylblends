@@ -15,7 +15,7 @@ curl -X POST <url>/ask -H 'content-type: application/json' -d '{"question":"add 
 
 - `src/main.ts` chooses where the app lives (`src/plugins/instance`) and starts it.
 - `blend.yaml` is the app as data: which plugins it mounts, in what order, with what config and parameters. Switch
-  one off with `disabled: true`. `npm run lock` writes `acrylblends.lock.json`: the manifest's digest and a digest of
+  one off with `disabled: true`. `npm run lock` writes `blend.lock.json`: the manifest's digest and a digest of
   every plugin folder, so a diff of the lock shows what changed.
 - `src/app.ts` holds the registry of plugins the code provides, and mounts the manifest's rows.
 - `src/plugins/agent` is the offline agent: a scripted model, a tool registry, memory, and one child fiber per run.

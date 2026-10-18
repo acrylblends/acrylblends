@@ -18,7 +18,6 @@ against a real Cordis context, including disposal.
 | [events](#events) | a route | idea from Pi Durable |
 | [manifest](#manifest) | functions, no service | `runtime/blends-core` |
 | [save](#save) | a tool for the agent | `runtime/app-persistence` |
-| [digest](#digest) | a function | - |
 
 ## instance
 
@@ -106,7 +105,3 @@ Reads and validates `blend.yaml`, ACRYL's Blend format: Blueprints, and Blends t
 
 `saveApp` over two ports (git and the hosting service), the secret scan, `npm run save`, and a `save_app` tool when the app
 has a tool registry. It never reads, stores or asks for a token: git and gh use your own credential helpers.
-
-## digest
-
-`digestFolder(dir)`: the one definition of a folder's content digest, shared by extension staging and the lock.

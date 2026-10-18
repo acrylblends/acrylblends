@@ -3,4 +3,4 @@ packages:
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
-  - '@webboxes/blends-core@0.2.0'
+  - '@webboxes/blends-core@0.2.0 || 0.3.0'

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { Ajv2020 } from 'ajv/dist/2020.js'
 import { parse } from 'yaml'
-import { compose, loadManifest, lock, ManifestError, validate } from '../index.ts'
+import { compose, loadManifest, ManifestError, validate } from '../index.ts'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -290,17 +290,6 @@ test('compose mounts enabled rows in order with their config, and runtime overri
   assert.equal(fibers.length, 1)
   assert.deepEqual(seen, [['greeter', { text: 'hello, world', port: 0 }]])
   for (const fiber of fibers) await fiber.dispose()
-})
-
-test('the lock records the manifest digest, resolved values, rows and source digests', () => {
-  const manifest = loadManifest(file(GOOD), { known: ['greeter'] })
-  const locked = lock(manifest, { greeter: 'abc', apple: 'def' })
-  assert.equal(locked.manifest.digest, `sha256:${manifest.digest}`)
-  assert.deepEqual(locked.plugins, [
-    { id: 'greeter', use: 'greeter', disabled: false },
-    { id: 'second-greeter', use: 'greeter', disabled: true },
-  ])
-  assert.deepEqual(Object.keys(locked.sources), ['apple', 'greeter'])
 })
 
 /** The proof that a manifest is a Blend: ACRYL's own JSON schema (copied from runtime/blends-core, MIT) accepts it. */

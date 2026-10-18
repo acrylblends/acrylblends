@@ -56,7 +56,7 @@ Then mount it: add it to the registry in `src/app.ts` and a row in `blend.yaml`.
 ## Lock and save
 
 ```sh
-npm run lock                 # acrylblends.lock.json: what the app is built from, with digests
+npm run lock                 # blend.lock.json: what the app is built from, with digests
 npm run save -- "add hello"  # git commit (and push, if there is a remote)
 ```
 

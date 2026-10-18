@@ -1,8 +1,0 @@
-{
-  "name": "digest",
-  "description": "A content digest of a folder (file names and bytes), shared by extensions (staging) and manifest (the lock).",
-  "requires": [],
-  "inject": [],
-  "provides": [],
-  "dependencies": {}
-}

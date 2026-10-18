@@ -7,7 +7,7 @@
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import { digestFolder, SKIPPED } from '../digest/index.ts'
+import { digestFolder, FOLDER_DIGEST_SKIPPED } from '@webboxes/blends-core'
 
 /** A short content digest of a folder, so an unchanged source keeps its version. */
 export const hashFolder = (dir: string, length = 12): string => digestFolder(dir, length)
@@ -22,7 +22,10 @@ export function stage(
   const stamp = String(Date.now()).padStart(15, '0')
   const dir = join(stageRoot, name, `${stamp}-${version}`)
   mkdirSync(dir, { recursive: true })
-  cpSync(source, dir, { recursive: true, filter: (path) => !SKIPPED.has(basename(path)) })
+  cpSync(source, dir, {
+    recursive: true,
+    filter: (path) => !FOLDER_DIGEST_SKIPPED.has(basename(path)),
+  })
   return { dir, version }
 }
 

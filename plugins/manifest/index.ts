@@ -626,53 +626,6 @@ export async function compose(
   return fibers
 }
 
-/** What `acrylblends lock` writes: the manifest's digest, its resolved rows, and a digest of each copied library plugin's source. */
-export interface Lock {
-  readonly manifest: { readonly name: string; readonly version: string; readonly digest: string }
-  readonly values: Readonly<Record<string, ParameterValue>>
-  readonly plugins: ReadonlyArray<{
-    readonly id: string
-    readonly use: string
-    readonly disabled: boolean
-  }>
-  readonly sources: Readonly<Record<string, string>>
-  /** For a Blend: the Blueprint it was resolved over, with the digest of the Blueprint file, so a lock diff shows an upgrade. */
-  readonly lineage?: {
-    readonly blueprint: string
-    readonly blueprintVersion: string
-    readonly digest?: string
-  }
-}
-
-export function lock(
-  manifest: ResolvedManifest,
-  sources: Readonly<Record<string, string>>,
-  blueprintDigest?: string,
-): Lock {
-  return {
-    ...(manifest.spec.lineage
-      ? {
-          lineage: {
-            ...manifest.spec.lineage,
-            ...(blueprintDigest ? { digest: blueprintDigest } : {}),
-          },
-        }
-      : {}),
-    manifest: {
-      name: manifest.metadata.name,
-      version: manifest.metadata.version,
-      digest: `sha256:${manifest.digest}`,
-    },
-    values: manifest.values,
-    plugins: manifest.plugins.map((row) => ({
-      id: row.id,
-      use: row.use,
-      disabled: row.disabled === true,
-    })),
-    sources: Object.fromEntries(Object.entries(sources).sort(([a], [b]) => a.localeCompare(b))),
-  }
-}
-
 /** The usual place for Blueprints: a folder with one `<definition id>.yaml` per Blueprint (for example `blueprints/acme.shop.yaml`). */
 export function blueprintsIn(directory: string): (id: string) => string | undefined {
   return (id) => {

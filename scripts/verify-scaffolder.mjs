@@ -128,8 +128,12 @@ try {
     capture(npm, ['run', 'check'], { cwd: dir })
     capture(npm, ['test'], { cwd: dir })
     capture(npm, ['run', 'lock'], { cwd: dir })
-    const locked = JSON.parse(readFileSync(join(dir, 'acrylblends.lock.json'), 'utf8'))
-    if (!/^sha256:[0-9a-f]{64}$/.test(locked.manifest?.digest ?? '') || !locked.sources?.manifest) {
+    const locked = JSON.parse(readFileSync(join(dir, 'blend.lock.json'), 'utf8'))
+    if (
+      locked.formatVersion !== 3 ||
+      !/^sha256:[0-9a-f]{64}$/.test(locked.origin?.digest ?? '') ||
+      !locked.modules?.some((module) => module.name === 'manifest' && module.origin === 'local')
+    ) {
       fail(`${template}: npm run lock wrote ${JSON.stringify(locked).slice(0, 200)}`)
     }
     log(`${template}: installed, project tests pass`)
@@ -391,7 +395,7 @@ spec:
   if (upgraded !== blendText.replace('blueprintVersion: 0.1.0', 'blueprintVersion: 0.2.0'))
     fail(`blend: the upgrade changed more than the lineage version:\n${upgraded}`)
   capture(npm, ['run', 'lock'], { cwd: blended })
-  const locked = JSON.parse(readFileSync(join(blended, 'acrylblends.lock.json'), 'utf8'))
+  const locked = JSON.parse(readFileSync(join(blended, 'blend.lock.json'), 'utf8'))
   if (
     locked.lineage?.blueprintVersion !== '0.2.0' ||
     !/^sha256:/.test(locked.lineage?.digest ?? '')

@@ -182,8 +182,8 @@ importers:
         specifier: 0.1.0
         version: 0.1.0
       '@webboxes/blends-core':
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.3.0
+        version: 0.3.0
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
@@ -588,8 +588,8 @@ packages:
     engines: {node: ^22.19.0 || >=24.0.0}
     hasBin: true
 
-  '@webboxes/blends-core@0.2.0':
-    resolution: {integrity: sha512-Gbmd1x1e35XDaT61M1n6HilL27gfVN7P6C/+EaLz4AcKOVkV5QIvkPytBZoUNYdEpWH8Ne+EVB8+RPX4Pbm+Gg==}
+  '@webboxes/blends-core@0.3.0':
+    resolution: {integrity: sha512-G6BmkfmHC2gus6k7dvkCNj87NbxbnLsxEbHEhbw14iry7gVPdKUtDyMZZJ81bKDRVphHyZhMgLLZukEe1G4m8A==}
     engines: {node: ^22.19.0 || >=24.0.0}
     hasBin: true
 
@@ -1368,7 +1368,7 @@ snapshots:
     dependencies:
       yaml: 2.9.0
 
-  '@webboxes/blends-core@0.2.0':
+  '@webboxes/blends-core@0.3.0':
     dependencies:
       ajv: 8.20.0
       yaml: 2.9.0

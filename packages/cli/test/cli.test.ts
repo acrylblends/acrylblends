@@ -158,7 +158,7 @@ describe('init', () => {
     expect(manifest(dir).dependencies).toEqual({
       '@deepseek-ai/cordis': '4.0.4',
       '@webboxes/app-persistence': '0.1.0',
-      '@webboxes/blends-core': '0.2.0',
+      '@webboxes/blends-core': '0.3.0',
       yaml: '2.9.0',
     })
     expect(existsSync(join(dir, 'blend.yaml'))).toBe(true)
