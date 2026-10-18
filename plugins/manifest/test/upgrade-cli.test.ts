@@ -53,7 +53,10 @@ spec:
   )
   writeFileSync(
     join(app, 'v2.yaml'),
-    blueprint('2.0.0', '').replace('    - id: http\n      name: http\n', ''),
+    blueprint('2.0.0', '').replace(
+      '    - id: http\n      name: http\n',
+      '    - id: other\n      name: other\n',
+    ),
   )
   const output: string[] = []
   const say = (text: string) => void output.push(text)

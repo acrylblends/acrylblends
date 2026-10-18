@@ -32,7 +32,7 @@ node packages/cli/bin/acrylblends.js init ../my-app --agent -y
 cd ../my-app && npm install && npm run dev
 ```
 
-Generated apps are TypeScript, run by Node 22.18 or newer with no build step, tested with `node:test`, and depend at run
+Generated apps are TypeScript, run by Node 22.19 or newer with no build step, tested with `node:test`, and depend at run
 time on `@deepseek-ai/cordis` and `yaml`.
 
 ## Repository

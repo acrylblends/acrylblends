@@ -2,3 +2,5 @@ packages:
   - packages/*
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@webboxes/blends-core@0.2.0'

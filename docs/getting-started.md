@@ -1,6 +1,6 @@
 # Getting started
 
-You need Node 22.18 or newer (Node runs the TypeScript directly, with no build step) and npm. Git, to save your app.
+You need Node 22.19 or newer (Node runs the TypeScript directly, with no build step) and npm. Git, to save your app.
 
 ## Create an app
 

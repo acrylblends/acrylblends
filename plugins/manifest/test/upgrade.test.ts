@@ -126,7 +126,10 @@ test('applying a safe plan moves only the lineage version, keeps the comments, a
   const after = readFileSync(files.blendFile, 'utf8')
   assert.equal(after, BLEND.replace('blueprintVersion: 1.0.0', 'blueprintVersion: 1.1.0'))
   assert.match(after, /# my shop: a Blend of acme\.shop/)
-  assert.throws(() => applyUpgrade(files.blendFile, plan), /no longer says it is at 1\.0\.0/)
+  assert.throws(
+    () => applyUpgrade(files.blendFile, plan),
+    /the Blend says 1\.1\.0 but the plan was made from 1\.0\.0/,
+  )
   // The Blend now resolves over the new Blueprint, found by id.
   writeFileSync(join(files.dir, 'acme.shop.yaml'), readFileSync(files.newBlueprint, 'utf8'))
   const resolved = loadManifest(files.blendFile, { getBlueprint: blueprintsIn(files.dir) })
@@ -145,11 +148,11 @@ test('input that is not an upgrade is refused with a reason: a Blueprint, the wr
   writeFileSync(files.newBlueprint, blueprint('1.1.0', V1_ROWS).replace('acme.shop', 'acme.other'))
   assert.throws(
     () => planUpgrade(files),
-    /new Blueprint is 'acme\.other' but this Blend is made from 'acme\.shop'/,
+    /newBlueprint is 'acme\.other' but the Blend is made from 'acme\.shop'/,
   )
   writeFileSync(files.oldBlueprint, blueprint('0.9.0', V1_ROWS))
   assert.throws(
     () => planUpgrade({ ...files, newBlueprint: files.oldBlueprint }),
-    /old Blueprint is version 0\.9\.0 but this Blend's lineage says 1\.0\.0/,
+    /oldBlueprint is version 0\.9\.0 but the Blend's lineage says 1\.0\.0/,
   )
 })

@@ -111,7 +111,12 @@ try {
 
     const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
     const deps = Object.keys(manifest.dependencies ?? {})
-    const allowed = new Set(['@deepseek-ai/cordis', '@deepseek-ai/schemastery', 'yaml'])
+    const allowed = new Set([
+      '@deepseek-ai/cordis',
+      '@deepseek-ai/schemastery',
+      '@webboxes/blends-core',
+      'yaml',
+    ])
     if (!deps.includes('@deepseek-ai/cordis') || deps.some((name) => !allowed.has(name)))
       fail(
         `${template}: runtime dependencies are ${deps.join(', ')}; allowed: ${[...allowed].join(', ')}`,
