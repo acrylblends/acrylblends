@@ -17,7 +17,7 @@ import {
   parseDefinition,
   resolveDefinition,
 } from '@webboxes/blends-core'
-import { blueprintsIn, loadManifest } from './index.ts'
+import { blueprintsIn } from './index.ts'
 
 export const LOCK_FILE = 'blend.lock.json'
 
@@ -80,7 +80,6 @@ export function writeLock(appRoot: string): LockV3 {
           },
         }
       : {}),
-    parameters: loadManifest(blendFile, { getBlueprint }).values,
   })
   writeFileSync(join(appRoot, LOCK_FILE), `${JSON.stringify(lock, null, 2)}\n`)
   return lock as LockV3
