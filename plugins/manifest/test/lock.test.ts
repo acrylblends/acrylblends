@@ -49,7 +49,7 @@ test('the lock is blend.lock.json formatVersion 3: origin digest, resolved param
     { id: locked.origin.id, kind: locked.origin.kind, version: locked.origin.version },
     { id: 'acme.shop', kind: 'Blueprint', version: '1.0.0' },
   )
-  assert.match(locked.origin.digest, /^sha256:[0-9a-f]{64}$/)
+  assert.match(locked.origin.digest, /^[0-9a-f]{64}$/)
   assert.deepEqual(locked.parameters, { title: 'Shop' })
   assert.deepEqual(
     locked.rows.map((row) => row.id),

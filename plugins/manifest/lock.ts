@@ -23,8 +23,6 @@ export const LOCK_FILE = 'blend.lock.json'
 
 type LockV3 = Extract<BlendLock, { formatVersion: 3 }>
 
-const sha256 = (text: string) => `sha256:${manifestDigest(text)}`
-
 function read(file: string): { text: string; document: BlendDocument } {
   const text = readFileSync(file, 'utf8')
   const { document, diagnostics } = parseDefinition(text)
@@ -69,14 +67,16 @@ export function writeLock(appRoot: string): LockV3 {
       id: document.metadata.id,
       kind: document.kind,
       version: document.metadata.version,
-      digest: sha256(text),
+      digest: manifestDigest(text),
     },
     modules: [...localModules(appRoot, 'src/plugins'), ...localModules(appRoot, 'extensions')],
     ...(lineage
       ? {
           lineage: {
             ...lineage,
-            ...(blueprintFile ? { digest: sha256(readFileSync(blueprintFile, 'utf8')) } : {}),
+            ...(blueprintFile
+              ? { digest: manifestDigest(readFileSync(blueprintFile, 'utf8')) }
+              : {}),
           },
         }
       : {}),

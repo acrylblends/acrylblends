@@ -131,7 +131,7 @@ try {
     const locked = JSON.parse(readFileSync(join(dir, 'blend.lock.json'), 'utf8'))
     if (
       locked.formatVersion !== 3 ||
-      !/^sha256:[0-9a-f]{64}$/.test(locked.origin?.digest ?? '') ||
+      !/^[0-9a-f]{64}$/.test(locked.origin?.digest ?? '') ||
       !locked.modules?.some((module) => module.name === 'manifest' && module.origin === 'local')
     ) {
       fail(`${template}: npm run lock wrote ${JSON.stringify(locked).slice(0, 200)}`)
@@ -398,7 +398,7 @@ spec:
   const locked = JSON.parse(readFileSync(join(blended, 'blend.lock.json'), 'utf8'))
   if (
     locked.lineage?.blueprintVersion !== '0.2.0' ||
-    !/^sha256:/.test(locked.lineage?.digest ?? '')
+    !/^[0-9a-f]{64}$/.test(locked.lineage?.digest ?? '')
   )
     fail(`blend: the lock does not record the Blueprint: ${JSON.stringify(locked.lineage)}`)
   capture(npm, ['test'], { cwd: blended })
