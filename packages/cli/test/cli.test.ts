@@ -91,7 +91,13 @@ describe('library', () => {
   })
 
   it('every plugin depends only on the named run-time packages', () => {
-    const allowed = new Set(['@deepseek-ai/cordis', '@deepseek-ai/schemastery', 'yaml'])
+    const allowed = new Set([
+      '@deepseek-ai/cordis',
+      '@deepseek-ai/schemastery',
+      '@webboxes/app-persistence',
+      '@webboxes/blends-core',
+      'yaml',
+    ])
     for (const plugin of readLibrary().values()) {
       for (const name of Object.keys(plugin.dependencies)) expect(allowed.has(name)).toBe(true)
     }
@@ -149,7 +155,12 @@ describe('init', () => {
     expect(existsSync(join(dir, 'src/plugins/http/test'))).toBe(false)
     expect(existsSync(join(dir, '.gitignore'))).toBe(true)
     expect(existsSync(join(dir, 'template.json'))).toBe(false)
-    expect(manifest(dir).dependencies).toEqual({ '@deepseek-ai/cordis': '4.0.4', yaml: '2.9.0' })
+    expect(manifest(dir).dependencies).toEqual({
+      '@deepseek-ai/cordis': '4.0.4',
+      '@webboxes/app-persistence': '0.1.0',
+      '@webboxes/blends-core': '0.2.0',
+      yaml: '2.9.0',
+    })
     expect(existsSync(join(dir, 'blend.yaml'))).toBe(true)
     expect(session.out()).toContain('created plain (app)')
     expect(session.out()).toContain('cd plain\n  npm install\n  npm run dev')

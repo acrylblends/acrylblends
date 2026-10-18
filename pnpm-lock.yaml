@@ -178,6 +178,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.1
+      '@webboxes/app-persistence':
+        specifier: 0.1.0
+        version: 0.1.0
       '@webboxes/blends-core':
         specifier: 0.2.0
         version: 0.2.0
@@ -579,6 +582,11 @@ packages:
 
   '@vitest/spy@5.0.3':
     resolution: {integrity: sha512-XhFysQTB8AZ+P4gMi+Lpo99vg2AZi0qKpaB9yXQl37+CaMEAPO3iH/wGVnSyL5MPERiLezpqTVtrR6UZH5GCXg==}
+
+  '@webboxes/app-persistence@0.1.0':
+    resolution: {integrity: sha512-O2ivsZ2W3hvnGizeXkTULbeY6B7xhPuHUmfTY7DjnC5sKbl9nZ/D2ac+ZCesoXPllXCI/VtHWVlpcL19sUB74g==}
+    engines: {node: ^22.19.0 || >=24.0.0}
+    hasBin: true
 
   '@webboxes/blends-core@0.2.0':
     resolution: {integrity: sha512-Gbmd1x1e35XDaT61M1n6HilL27gfVN7P6C/+EaLz4AcKOVkV5QIvkPytBZoUNYdEpWH8Ne+EVB8+RPX4Pbm+Gg==}
@@ -1355,6 +1363,10 @@ snapshots:
       vite: 8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(yaml@2.9.0)
 
   '@vitest/spy@5.0.3': {}
+
+  '@webboxes/app-persistence@0.1.0':
+    dependencies:
+      yaml: 2.9.0
 
   '@webboxes/blends-core@0.2.0':
     dependencies:

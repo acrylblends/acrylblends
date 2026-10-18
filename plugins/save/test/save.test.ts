@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { findSecrets, type GitPort, saveApp, saveFolder } from '../index.ts'
+import { findSecrets, type GitPort, type HostingPort, saveApp, saveFolder } from '../index.ts'
 
 const PRIVATE =
   'apiVersion: blends.acryl.dev/v1alpha1\nkind: Blueprint\nmetadata: { id: acrylblends.shop, name: shop, version: 1.0.0 }\nspec: { runtime: cordis }\n'
@@ -24,6 +24,11 @@ test('finds keys, secret files and assigned secrets, and leaves ordinary text al
   )
 })
 
+const hosting = (visibility: 'public' | 'private' | 'unknown'): HostingPort => ({
+  visibilityOf: () => visibility,
+  create: () => 'git@github.com:me/created.git',
+})
+
 function fakeGit(files: Record<string, string>, remote?: string): GitPort & { calls: string[] } {
   const calls: string[] = []
   return {
@@ -40,6 +45,7 @@ function fakeGit(files: Record<string, string>, remote?: string): GitPort & { ca
       return 'abc123'
     },
     remoteUrl: () => remote,
+    addRemote: () => void calls.push('addRemote'),
     push: () => void calls.push('push'),
   }
 }
@@ -49,32 +55,26 @@ test('a private app never goes to a public remote; a public one does', () => {
   const refused = saveApp(
     { manifestText: PRIVATE, message: 'm' },
     fakeGit({ 'a.ts': 'x' }, remote),
-    { visibilityOf: () => 'public' },
+    hosting('public'),
   )
   assert.equal(refused.status, 'refused')
   const git = fakeGit({ 'a.ts': 'x' }, remote)
-  assert.deepEqual(
-    saveApp({ manifestText: PUBLIC, message: 'm' }, git, { visibilityOf: () => 'public' }),
-    {
-      status: 'saved',
-      commit: 'abc123',
-      pushed: true,
-      remote,
-    },
-  )
+  assert.deepEqual(saveApp({ manifestText: PUBLIC, message: 'm' }, git, hosting('public')), {
+    status: 'saved',
+    commit: 'abc123',
+    pushed: true,
+    remote,
+  })
   assert.deepEqual(git.calls, ['stage', 'commit', 'push'])
 })
 
 test('a secret stops the save and everything is unstaged; nothing staged means nothing to save', () => {
   const git = fakeGit({ 'key.ts': 'export const k = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"' })
-  const result = saveApp({ manifestText: PRIVATE, message: 'm' }, git, {
-    visibilityOf: () => 'unknown',
-  })
+  const result = saveApp({ manifestText: PRIVATE, message: 'm' }, git, hosting('unknown'))
   assert.equal(result.status === 'refused' && result.secrets?.[0]?.kind, 'GitHub token')
   assert.deepEqual(git.calls, ['stage', 'unstage'])
   assert.equal(
-    saveApp({ manifestText: PRIVATE, message: 'm' }, fakeGit({}), { visibilityOf: () => 'unknown' })
-      .status,
+    saveApp({ manifestText: PRIVATE, message: 'm' }, fakeGit({}), hosting('unknown')).status,
     'nothing-to-save',
   )
 })

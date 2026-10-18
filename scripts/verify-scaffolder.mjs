@@ -114,6 +114,7 @@ try {
     const allowed = new Set([
       '@deepseek-ai/cordis',
       '@deepseek-ai/schemastery',
+      '@webboxes/app-persistence',
       '@webboxes/blends-core',
       'yaml',
     ])

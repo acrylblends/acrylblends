@@ -1,23 +1,25 @@
 /**
- * The save plugin: gives an agent a `save_app` tool when the app has a tool registry. Saving itself is `saveApp` (save.ts) over the
- * user's own git (git.ts); `npm run save` runs the same use case from a terminal (cli.ts).
+ * The save plugin: gives an agent a `save_app` tool when the app has a tool registry. Saving itself is `saveApp` from
+ * `@webboxes/app-persistence` (ACRYL's own) over the user's own git; `npm run save` runs the same use case from a terminal (cli.ts).
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { gitCli, githubHosting } from './git.ts'
-import { type SaveResult, saveApp } from './save.ts'
+import { gitCli, githubHosting, type SaveResult, saveApp } from '@webboxes/app-persistence'
 
-export { gitCli, githubHosting, SaveError } from './git.ts'
 export {
+  findSecrets,
   type GitPort,
+  gitCli,
+  githubHosting,
   type HostingPort,
+  PersistenceError,
+  readAppIdentity,
   type SaveResult,
+  type SecretFinding,
   saveApp,
   type Visibility,
-  visibilityOf,
-} from './save.ts'
-export { findSecrets, type SecretFinding } from './secrets.ts'
+} from '@webboxes/app-persistence'
 
 /** Save the app folder: its blend.yaml decides the visibility. */
 export function saveFolder(appRoot: string, message: string): SaveResult {
