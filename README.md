@@ -27,9 +27,8 @@ on top. It is a library of Cordis plugins extracted from ACRYL, and a command th
 - **save**: commit the app, refusing secrets and public remotes for private apps
 
 ```sh
-pnpm install && pnpm run build
-node packages/cli/bin/acrylblends.js init ../my-app --agent -y
-cd ../my-app && npm install && npm run dev
+npx acrylblends init my-app --agent -y
+cd my-app && npm install && npm run dev
 ```
 
 Generated apps are TypeScript, run by Node 22.19 or newer with no build step, tested with `node:test`, and depend at run

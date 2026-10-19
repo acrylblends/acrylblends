@@ -4,12 +4,11 @@ You need Node 22.19 or newer (Node runs the TypeScript directly, with no build s
 
 ## Create an app
 
-From a checkout of this repository:
+Nothing to install first: `npx` runs the `acrylblends` package from npm (to work on the framework itself, clone this repository, run `pnpm install && pnpm run build`, and use `node packages/cli/bin/acrylblends.js` in its place).
 
 ```sh
-pnpm install && pnpm run build        # once: the acrylblends command itself
-node packages/cli/bin/acrylblends.js init ../my-app --agent -y
-cd ../my-app
+npx acrylblends init my-app --agent -y
+cd my-app
 npm install
 npm run dev                           # prints its URL; the app's data lives in .acrylblends/
 ```
@@ -46,8 +45,8 @@ answers before reporting it live. See [Extending a running app](extending-apps.m
 ## Add plugins
 
 ```sh
-node <acrylblends>/packages/cli/bin/acrylblends.js plugins             # the library
-node <acrylblends>/packages/cli/bin/acrylblends.js add settings        # copy one into this app, with what it requires
+npx acrylblends plugins             # the library
+npx acrylblends add settings        # copy one into this app, with what it requires
 npm install                                                       # new dependencies, if it added any
 ```
 
