@@ -19,15 +19,18 @@
   "files": [
     "bin",
     "dist",
-    "templates"
+    "templates",
+    "plugins"
   ],
   "scripts": {
     "build": "tsdown",
     "clean": "rm -rf dist",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepack": "pnpm run build && node scripts-pack.mjs copy",
+    "postpack": "node scripts-pack.mjs remove"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.19.0"
   },
   "repository": {
     "type": "git",
@@ -39,8 +42,11 @@
     "cordis",
     "scaffold"
   ],
-  "private": true,
+  "private": false,
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
