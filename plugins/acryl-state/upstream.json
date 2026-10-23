@@ -4,11 +4,19 @@
     "path": "plugins/acryl-state",
     "commit": "878a0550162c0dcc63845554d1bab94087aaffc5"
   },
-  "vendored": ["src", "tests", "LICENSE", "NOTICE"],
+  "vendored": [
+    "src",
+    "tests",
+    "LICENSE",
+    "NOTICE"
+  ],
   "rewrittenSpecifiers": 4,
   "digest": "sha256:dc4370cd430bfa1612c731053435b5ceb974dc09bb7949b1d14999c018a37986",
   "testsNotRun": {
     "tests/react.spec.ts": "needs react and @testing-library/react, which generated apps do not install"
   },
-  "notice": ["LICENSE", "NOTICE"]
+  "notice": [
+    "LICENSE",
+    "NOTICE"
+  ]
 }

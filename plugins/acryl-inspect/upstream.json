@@ -4,9 +4,17 @@
     "path": "plugins/acryl-inspect",
     "commit": "878a0550162c0dcc63845554d1bab94087aaffc5"
   },
-  "vendored": ["src", "tests", "LICENSE", "NOTICE"],
+  "vendored": [
+    "src",
+    "tests",
+    "LICENSE",
+    "NOTICE"
+  ],
   "rewrittenSpecifiers": 3,
   "digest": "sha256:ff5ae74b6e51c5f6d5cf3c36199c2bcc406cd2f46e2a7b2652849c64c3f1694a",
   "testsNotRun": {},
-  "notice": ["LICENSE", "NOTICE"]
+  "notice": [
+    "LICENSE",
+    "NOTICE"
+  ]
 }

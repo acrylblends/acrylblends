@@ -4,7 +4,12 @@
     "path": "plugins/acryl-router-http",
     "commit": "878a0550162c0dcc63845554d1bab94087aaffc5"
   },
-  "vendored": ["src", "tests", "LICENSE", "NOTICE"],
+  "vendored": [
+    "src",
+    "tests",
+    "LICENSE",
+    "NOTICE"
+  ],
   "rewrittenSpecifiers": 6,
   "digest": "sha256:e5592258bbe85edc146c3c3dd0e7c06c003e97136465dc68f3f47a0fecc88c91",
   "testsNotRun": {
@@ -12,5 +17,8 @@
     "tests/stream.spec.ts": "needs @deepseek-ai/dsh-host-webserver (the DSH web server)",
     "tests/surfaces.spec.ts": "needs @deepseek-ai/dsh-host-webserver (the DSH web server)"
   },
-  "notice": ["LICENSE", "NOTICE"]
+  "notice": [
+    "LICENSE",
+    "NOTICE"
+  ]
 }
