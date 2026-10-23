@@ -1,0 +1,6 @@
+export { Router, Config, apply, name, type RouterHttpService } from './service.ts'
+export { RouteTable, type RouteTableOptions } from './table.ts'
+export { compose } from './compose.ts'
+export { HttpError } from './http-error.ts'
+export type { Registrar, RouteHandlers, UseArguments } from './registrar.ts'
+export type { ConnectionInfo, ErrorHandler, NotFoundHandler, ResponseBody, Handler, Method, Middleware, Next, RouteContext, RouteMethod, TrailingSlash } from './types.ts'

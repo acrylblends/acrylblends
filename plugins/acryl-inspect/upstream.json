@@ -1,0 +1,12 @@
+{
+  "source": {
+    "repo": "acryldev/acryl",
+    "path": "plugins/acryl-inspect",
+    "commit": "89fe50bc4a351335718a7ae62952f1d2edfad831"
+  },
+  "vendored": ["src", "tests"],
+  "rewrittenSpecifiers": 3,
+  "digest": "sha256:7b18c23e38233dcf5c0f17ec5f4eb181851674ed7b9ef14dfa5dcd10bc7c21f3",
+  "testsNotRun": {},
+  "notice": null
+}

@@ -12,10 +12,12 @@ export interface LibraryPlugin {
   readonly dependencies: Readonly<Record<string, string>>
   /** How to mount it, shown after `acrylblends add`. */
   readonly mount?: string
+  /** Paths inside the plugin folder that are not copied into an app (for example a React hook an app without React cannot type-check). */
+  readonly omit?: readonly string[]
 }
 
 /** Files of a library plugin that stay in the repository: its manifest and its tests. */
-const LIBRARY_ONLY = new Set(['plugin.json', 'test'])
+const LIBRARY_ONLY = new Set(['plugin.json', 'test', 'tests'])
 
 export class LibraryError extends Error {
   override name = 'LibraryError'
@@ -26,7 +28,7 @@ export function libraryRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url))
   for (;;) {
     const candidate = join(dir, 'plugins')
-    if (existsSync(join(candidate, 'http', 'plugin.json'))) return candidate
+    if (existsSync(join(candidate, 'instance', 'plugin.json'))) return candidate
     const parent = dirname(dir)
     if (parent === dir)
       throw new LibraryError('acrylblends cannot find its plugin library (plugins/)')
@@ -93,8 +95,12 @@ export function copyPlugin(
   const source = join(root, plugin.name)
   cpSync(source, target, {
     recursive: true,
-    filter: (path) =>
-      !(dirname(path) === source && LIBRARY_ONLY.has(path.slice(source.length + 1))),
+    filter: (path) => {
+      const inside = path.slice(source.length + 1)
+      return (
+        !(dirname(path) === source && LIBRARY_ONLY.has(inside)) && !plugin.omit?.includes(inside)
+      )
+    },
   })
   return target
 }

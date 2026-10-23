@@ -1,7 +1,22 @@
 # 015: Adopt the ACRYL framework core
 
-Status: proposal, 2026-10-23. Nothing is implemented. Waiting for the coordinator and the owner. Written against acrylblends `main` at `55867be` and ACRYL
+Status: approved 2026-10-23 by the coordinator; implementation in progress on branch `015-framework-core` (not pushed, not published). Written against acrylblends `main` at `55867be` and ACRYL
 branch `046-acryl-framework` at `1fdd2115` (read only).
+
+## Decisions (coordinator, 2026-10-23)
+
+1. The standalone listener is a separate ACRYL plugin, `acryl-node-server` (the equivalent of `@hono/node-server`), built by ACRYL, not a mode of `acryl-router-http`. It must keep everything `server` does today (port scan of 20, loopback default, 400 on bad JSON, 15 s keepalive, clean close). It is vendored like the others; `server` goes away once it lands. acrylblends builds no `webServer`-shaped port.
+2. A clean 0.3.0 with no `http` compatibility plugin.
+3. Templates `blank`, `todo`, `agent`; `--agent` stays as an alias of `--template agent`.
+4. Vendoring as described in section 5. A needed change goes upstream to ACRYL first, then is re-synced here; a vendored file is never edited in this repository.
+5. Nothing is pushed or published until the coordinator confirms the release; publishing 0.3.0 is the owner's call.
+
+Findings while implementing (2026-10-23):
+
+- `acryl-router-http` is not vendored. It serves through the DSH `webServer`, which a generated app does not have, and `acryl-node-server` replaces it. The vendored set is `acryl-router`, `acryl-state`, `acryl-inspect` (and `acryl-node-server` when it exists).
+- Upstream tests that need packages a generated app lacks are copied but not run here, each with its reason recorded in `upstream.json` (`testsNotRun`): the real-Loader test (it loads a built `lib/` entry) and the React test. `src/react.ts` is vendored but not copied into apps (`omit` in `plugin.json`), because an app without React could not type-check it.
+- The framework plugins carry no LICENSE or NOTICE file upstream yet, although they rewrite Hono's design (MIT). The sync copies one when it appears; until then `pnpm run check` prints a note. Needed upstream: Hono's MIT notice.
+- The digest is `digestFolder`'s algorithm over the vendored paths only (a plugin folder also holds `plugin.json` and `upstream.json`, which are ours).
 
 ## Goal
 
@@ -74,7 +89,7 @@ Position: the source lives in ACRYL `plugins/` (as Fork3 built it), and the acry
 Mechanism, the same extraction pattern with a drift check:
 
 - `scripts/sync-framework.mjs <acryl checkout>` copies `src/` and `tests/` of the four plugins into `plugins/<name>/`, plus the todo example and `docs/framework/`. It rewrites exactly one thing: package specifiers between the vendored plugins (`acryl-router`, `acryl-router/middleware`, `acryl-router/helpers`, six imports in all) become relative paths, because the vendored plugins sit side by side in `src/plugins/` of an app. It writes `plugins/<name>/upstream.json` with the ACRYL repository, commit and a digest of what it wrote.
-- `scripts/verify-framework-sync.mjs` recomputes that digest with the shared `digestFolder` of `@webboxes/blends-core` and fails when a vendored file differs from the recorded digest (someone edited a copy). With `--against <checkout>` it also fails when the checkout has moved ahead of the recorded commit. It runs inside `pnpm run check` and in CI.
+- `scripts/verify-framework-sync.mjs` recomputes that digest (the algorithm of `digestFolder` in `@webboxes/blends-core`, over the vendored paths) and fails when a vendored file differs from the recorded digest (someone edited a copy). With `--against <checkout>` it also fails when the checkout has moved ahead of the recorded commit. It runs inside `pnpm run check` and in CI.
 - Rule: a vendored file is never edited here. A fix is made upstream and re-synced. The app's `blend.lock.json` already records each copied plugin as a `local` module with its digest, so an app can tell which framework version it was made from.
 
 The alternative I considered and do not recommend: install the four packages from npm like `@webboxes/blends-core`. For libraries nobody edits (a parser, a lock writer) npm is right and we use it. The framework plugins are different: they are the app's own structure, the builder agent reads them to write plugins, and ACRYL ships them as `lib/` builds only (`files: ["lib/**"]`), so an agent in a generated app could not read their source. If the owner prefers npm anyway, the cost is publishing four packages and shipping `src/`; the spec would change in sections 3 and 5 only.

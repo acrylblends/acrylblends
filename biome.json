@@ -6,7 +6,16 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/node_modules", "!.specify", "!.claude", "!**/*.md"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!.specify",
+      "!.claude",
+      "!**/*.md",
+      "!plugins/acryl-*/src",
+      "!plugins/acryl-*/tests"
+    ]
   },
   "formatter": {
     "enabled": true,

@@ -15,5 +15,10 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["*/**/*.ts"]
+  "include": ["*/**/*.ts"],
+  "exclude": [
+    "acryl-router/tests/loader.spec.ts",
+    "acryl-state/src/react.ts",
+    "acryl-state/tests/react.spec.ts"
+  ]
 }

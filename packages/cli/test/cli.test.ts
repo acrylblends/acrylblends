@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
   closure,
+  copyPlugin,
   type Io,
   nameFrom,
   parseInitOptions,
@@ -100,6 +101,27 @@ describe('library', () => {
     ])
     for (const plugin of readLibrary().values()) {
       for (const name of Object.keys(plugin.dependencies)) expect(allowed.has(name)).toBe(true)
+    }
+  })
+})
+
+describe('vendored framework plugins', () => {
+  it('copy their source with the plugins they require, and leave out tests and what an app cannot type-check', () => {
+    const library = readLibrary()
+    const names = closure(['acryl-state'], library).map((plugin) => plugin.name)
+    expect(names).toEqual(['acryl-router', 'acryl-state'])
+    const app = mkdtempSync(join(tmpdir(), 'vendored-copy-'))
+    try {
+      for (const plugin of closure(['acryl-state'], library)) copyPlugin(plugin, app)
+      const copied = (path: string) => existsSync(join(app, 'src', 'plugins', path))
+      expect(copied('acryl-router/src/index.ts')).toBe(true)
+      expect(copied('acryl-state/src/index.ts')).toBe(true)
+      expect(copied('acryl-state/upstream.json')).toBe(true)
+      expect(copied('acryl-state/src/react.ts')).toBe(false)
+      expect(copied('acryl-state/tests')).toBe(false)
+      expect(copied('acryl-state/plugin.json')).toBe(false)
+    } finally {
+      rmSync(app, { recursive: true, force: true })
     }
   })
 })

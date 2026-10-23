@@ -1,0 +1,12 @@
+{
+  "name": "acryl-state",
+  "description": "Observable cells and derived cells, shared state with JSON and server-sent event routes on the router. Vendored from ACRYL.",
+  "requires": ["acryl-router"],
+  "inject": ["router"],
+  "provides": ["state"],
+  "dependencies": {
+    "@deepseek-ai/cordis": "4.0.4"
+  },
+  "mount": "root.plugin(state); ctx.state.cell('todos.count', 0), then count.update((n) => n + 1)",
+  "omit": ["src/react.ts"]
+}
