@@ -326,7 +326,16 @@ try {
   // A Blend over a Blueprint, in a real app: it boots from its parent, an upgrade is planned and applied with the real npm scripts,
   // and an upgrade that would break the Blend is refused with the file untouched.
   const blended = join(scratch, 'blended')
-  capture(process.execPath, [cli, 'init', blended, '--name', 'verify-blend', '--yes', '--template', 'blank'])
+  capture(process.execPath, [
+    cli,
+    'init',
+    blended,
+    '--name',
+    'verify-blend',
+    '--yes',
+    '--template',
+    'blank',
+  ])
   const blueprintId = 'acrylblends.verify-blend'
   const blueprintText = readFileSync(join(blended, 'blend.yaml'), 'utf8')
   mkdirSync(join(blended, 'blueprints'))
@@ -411,7 +420,16 @@ spec:
   )
   // `acrylblends add` in a real app: the plugin, what it requires and its npm packages arrive, and the app still type-checks.
   const grown = join(scratch, 'grown')
-  capture(process.execPath, [cli, 'init', grown, '--name', 'verify-grown', '--yes', '--template', 'blank'])
+  capture(process.execPath, [
+    cli,
+    'init',
+    grown,
+    '--name',
+    'verify-grown',
+    '--yes',
+    '--template',
+    'blank',
+  ])
   capture(process.execPath, [cli, 'add', 'settings', '--dir', grown])
   const grownDeps = Object.keys(
     JSON.parse(readFileSync(join(grown, 'package.json'), 'utf8')).dependencies,
