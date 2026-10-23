@@ -12,15 +12,14 @@ npm run dev          # prints the URL, for example http://127.0.0.1:3100
 
 ```sh
 URL=http://127.0.0.1:3100   # the address `npm run dev` printed
-curl -X POST $URL/todo/api -H "Origin: $URL" -H 'content-type: application/json' -d '{"title":"write the docs"}'   # {"id":1,"title":"write the docs","done":false}
-curl $URL/todo/api                                                                                                    # the list
-curl -X PATCH $URL/todo/api/1 -H "Origin: $URL" -H 'content-type: application/json' -d '{"done":true}'
-curl -X DELETE $URL/todo/api/1 -H "Origin: $URL"
-curl -N $URL/todo/events                                                                                              # the list now, then again on every change
+curl -X POST $URL/todo/api -H 'content-type: application/json' -d '{"title":"write the docs"}'   # {"id":1,"title":"write the docs","done":false}
+curl $URL/todo/api                                                                                  # the list
+curl -X PATCH $URL/todo/api/1 -H 'content-type: application/json' -d '{"done":true}'
+curl -X DELETE $URL/todo/api/1
+curl -N $URL/todo/events                                                                            # the list now, then again on every change
 ```
 
-A change (POST, PATCH, DELETE) must name the app's own address in an `Origin` header: that is what stops another web page from driving a local app. The page at
-`/todo` does it by itself; curl needs the `-H "Origin: $URL"` shown above, and without it the answer is `403`.
+The routes only answer a caller on this machine: a request from another site's page (a foreign `Origin`, or `Origin: null`) or addressed to another host name gets `403`.
 
 Open `$URL/todo` for the page. Stop the app and start it again: the list is still there (`<home>/todo.json`, `.acrylblends/` unless `ACRYLBLENDS_HOME` says otherwise).
 

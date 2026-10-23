@@ -186,7 +186,7 @@ assert.deepEqual(await response.json(), { ok: true })
 for (const fiber of fibers.reverse()) await fiber.dispose()
 ```
 
-If an app outgrows this, put Hono or Fastify inside the `server` plugin. Nothing else changes: routes still come from
+If an app outgrows this, put a full web framework inside the server plugin. Nothing else changes: routes still come from
 the `http` service.
 
 ## Testing

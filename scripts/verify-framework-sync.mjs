@@ -50,10 +50,6 @@ for (const name of Object.keys(PLUGINS)) {
       `${name}: the vendored files differ from the recorded digest (${record.digest.slice(0, 19)} recorded, ${actual.slice(0, 19)} found). Someone edited a copy: make the change in ACRYL (${record.source.repo}, ${record.source.path}) and run scripts/sync-framework.mjs again.`,
     )
   }
-  if (record.notice === null)
-    notes.push(
-      `${name}: upstream has no LICENSE or NOTICE file yet (the framework rewrites Hono's design, whose MIT notice must travel with it)`,
-    )
   if (against !== undefined) {
     const upstream = readUpstream(resolve(against), name)
     const expected = digestOf(upstream.files)

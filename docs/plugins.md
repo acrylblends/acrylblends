@@ -27,7 +27,7 @@ environment; it returns a frozen `AppInstance` with `root` (the project folder),
 
 ## The framework plugins
 
-`acryl-router` (`ctx.router`: Hono-shaped routes, middleware, helpers, an in-process `request()`), `acryl-node-server` (one `node:http` listener that sends every
+`acryl-router` (`ctx.router`: routes, groups, middleware, helpers, an in-process `request()`), `acryl-node-server` (one `node:http` listener that sends every
 request to the router; config `{ port, hostname, scan }`, provides `ctx.nodeServer.url`), `acryl-state` (observable cells, read as JSON and streamed as server-sent
 events at `/api/state/<key>` and `/api/state/<key>/events`), `acryl-inspect` (what every plugin requires, provides and registers) and `acryl-router-http` (the
 `serve()` that `acryl-node-server` uses) are ACRYL's framework, vendored here as they are. Their text is in [framework/](framework/README.md); their source is

@@ -1,11 +1,9 @@
 # ACRYLBLENDS documentation
 
 ACRYLBLENDS is the public ACRYL framework: apps built from [Cordis](https://www.npmjs.com/package/@deepseek-ai/cordis) plugins, with ACRYL's router,
-shared state and inspector (Hono's design rewritten as Cordis plugins), and a library of plugins extracted from ACRYL (instance, settings, live
+shared state and inspector (all Cordis plugins), and a library of plugins extracted from ACRYL (instance, settings, live
 extensions, an agent that extends the app it runs in, tasks, the app manifest, save). `acrylblends init` copies what you pick into your app. You own
 every copied line; there is no ACRYLBLENDS runtime to import.
-
-The structure follows Hono's docs, so a Hono reader knows where to look.
 
 ## Start here
 
@@ -16,7 +14,6 @@ The structure follows Hono's docs, so a Hono reader knows where to look.
 | Look up a call | [API](framework/api/README.md) |
 | Copy a pattern | [Guides](framework/guides/README.md) |
 | See what ships in the box | [Middleware and helpers](framework/middleware/README.md) |
-| Compare with Hono | [Hono parity](framework/hono-parity.md) |
 | Let an agent extend my running app | [Extending a running app](agent/extending-apps.md) |
 | Describe my app as data | [The app manifest](blends/manifest.md) |
 | See every plugin in the library | [The plugin library](plugins.md) |

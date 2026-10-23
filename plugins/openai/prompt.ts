@@ -21,7 +21,7 @@ A plugin's index.ts is TypeScript that Node runs directly (erasable syntax only:
     if (!reply.ok) throw new Error('GET /hello failed')
   }
 
-The router is Hono-shaped: router.get/post/put/delete(path, handler), a path parameter is :id and is read with c.param('id'), c.json(body, status)
+The router: router.get/post/put/delete(path, handler), a path parameter is :id and is read with c.param('id'), c.json(body, status)
 answers JSON, c.text(...) answers text, c.req.json() reads a JSON body, and router.request('/path', { method: 'POST', body: ... }) calls a route in
 process (use it in check). Every registration made from a plugin's own context goes away when the plugin is unloaded.
 

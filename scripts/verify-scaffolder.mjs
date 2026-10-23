@@ -160,7 +160,7 @@ try {
         const call = async (method, path, body) =>
           fetch(`${url}${path}`, {
             method,
-            headers: { 'content-type': 'application/json', origin: new URL(url).origin },
+            headers: { 'content-type': 'application/json' },
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           })
         const created = await call('POST', '/todo/api', { title: 'write the spec' })
@@ -173,6 +173,15 @@ try {
           fail('todo: an empty title was not refused with 400')
         if ((await call('DELETE', '/todo/api/9')).status !== 404)
           fail('todo: deleting an unknown id was not a 404')
+        for (const origin of ['http://evil.example', 'null']) {
+          const refused = await fetch(`${url}/todo/api`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', origin },
+            body: JSON.stringify({ title: 'from another origin' }),
+          })
+          if (refused.status !== 403)
+            fail(`todo: a change with Origin ${origin} answered ${refused.status}, not 403`)
+        }
         const page = await (await call('GET', '/todo')).text()
         if (!/<title>Todo<\/title>/.test(page)) fail('todo: GET /todo is not the page')
         await stopCleanly(child)

@@ -28,11 +28,10 @@ async function withHome(run: (home: string) => Promise<void>) {
   }
 }
 
-/** A change must name the app's own address as its Origin (the router's loopbackOnly guard); a browser page of the app does it by itself, curl needs -H "Origin: $URL". */
 const send = (app: App, method: string, path: string, body?: unknown) =>
   fetch(`${app.url}${path}`, {
     method,
-    headers: { 'content-type': 'application/json', origin: new URL(app.url).origin },
+    headers: { 'content-type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
 
@@ -54,7 +53,7 @@ test('creates, completes, lists and deletes', () =>
     }),
   ))
 
-test('a change from another origin, or with none, is refused', () =>
+test('a change from a foreign origin is refused; a plain request from this machine works', () =>
   withHome((home) =>
     withApp(home, async (app) => {
       const post = (headers: Record<string, string>) =>
@@ -63,8 +62,9 @@ test('a change from another origin, or with none, is refused', () =>
           headers: { 'content-type': 'application/json', ...headers },
           body: JSON.stringify({ title: 'x' }),
         })
-      assert.equal((await post({})).status, 403)
       assert.equal((await post({ origin: 'http://evil.example' })).status, 403)
+      assert.equal((await post({ origin: 'null' })).status, 403)
+      assert.equal((await post({})).status, 201)
       assert.equal((await post({ origin: new URL(app.url).origin })).status, 201)
     }),
   ))

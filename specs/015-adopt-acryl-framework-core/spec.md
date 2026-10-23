@@ -5,7 +5,7 @@ branch `046-acryl-framework` at `1fdd2115` (read only).
 
 ## Decisions (coordinator, 2026-10-23)
 
-1. The standalone listener is a separate ACRYL plugin, `acryl-node-server` (the equivalent of `@hono/node-server`), built by ACRYL, not a mode of `acryl-router-http`. It must keep everything `server` does today (port scan of 20, loopback default, 400 on bad JSON, 15 s keepalive, clean close). It is vendored like the others; `server` goes away once it lands. acrylblends builds no `webServer`-shaped port.
+1. The standalone listener is a separate ACRYL plugin, `acryl-node-server` (the standalone server that puts the router on `node:http`), built by ACRYL, not a mode of `acryl-router-http`. It must keep everything `server` does today (port scan of 20, loopback default, 400 on bad JSON, 15 s keepalive, clean close). It is vendored like the others; `server` goes away once it lands. acrylblends builds no `webServer`-shaped port.
 2. A clean 0.3.0 with no `http` compatibility plugin.
 3. Templates `blank`, `todo`, `agent`; `--agent` stays as an alias of `--template agent`.
 4. Vendoring as described in section 5. A needed change goes upstream to ACRYL first, then is re-synced here; a vendored file is never edited in this repository.
@@ -15,13 +15,13 @@ Findings while implementing (2026-10-23):
 
 - `acryl-router-http` is not vendored. It serves through the DSH `webServer`, which a generated app does not have, and `acryl-node-server` replaces it. The vendored set is `acryl-router`, `acryl-state`, `acryl-inspect` (and `acryl-node-server` when it exists).
 - Upstream tests that need packages a generated app lacks are copied but not run here, each with its reason recorded in `upstream.json` (`testsNotRun`): the real-Loader test (it loads a built `lib/` entry) and the React test. `src/react.ts` is vendored but not copied into apps (`omit` in `plugin.json`), because an app without React could not type-check it.
-- The framework plugins carry no LICENSE or NOTICE file upstream yet, although they rewrite Hono's design (MIT). The sync copies one when it appears; until then `pnpm run check` prints a note. Needed upstream: Hono's MIT notice.
+- Notices: the sync copies a LICENSE or NOTICE file when a framework plugin has one (today `acryl-state` carries a notice for the design its cells follow); the framework is otherwise ACRYL's own.
 - The digest is `digestFolder`'s algorithm over the vendored paths only (a plugin folder also holds `plugin.json` and `upstream.json`, which are ours).
 
 ## Goal
 
-ACRYLBLENDS becomes the public ACRYL framework: `npx acrylblends init` gives a stranger an app built on ACRYL's router, state and inspector (Hono's design
-rewritten as Cordis plugins, spec 046 in ACRYL), plus what acrylblends already has (instance, settings, live extensions, agent, tasks, manifest, save).
+ACRYLBLENDS becomes the public ACRYL framework: `npx acrylblends init` gives a stranger an app built on ACRYL's router, state and inspector (written as
+Cordis plugins, spec 046 in ACRYL), plus what acrylblends already has (instance, settings, live extensions, agent, tasks, manifest, save).
 
 ## 1. What acrylblends serves HTTP with today, and what the router replaces
 
@@ -76,7 +76,7 @@ Both `blank` and `todo` depend at run time only on `@deepseek-ai/cordis`, `yaml`
 
 ## 4. Docs
 
-`docs/` takes Hono's shape: `README`, `getting-started`, `concepts/`, `api/`, `guides/`, `middleware/`, plus two sections of our own: `agent/` (extending a running app, the builder, tasks) and `blends/` (the manifest, the lock, the registries). The framework pages (concepts, api, guides, middleware, hono-parity) are ACRYL's `docs/framework/` text, copied by the sync script into `docs/framework/` and marked generated (never edited here), so there is one text. Our pages link into it. `docs/test/docs.test.ts` (it executes every example) keeps running over the copied pages, which turns ACRYL's examples into a test on our side too. The site docs on acrylblends.github.io are rebuilt from this tree; no page is written twice.
+`docs/` takes a conventional shape: `README`, `getting-started`, `concepts/`, `api/`, `guides/`, `middleware/`, plus two sections of our own: `agent/` (extending a running app, the builder, tasks) and `blends/` (the manifest, the lock, the registries). The framework pages (concepts, api, guides, middleware) are ACRYL's `docs/framework/` text, copied by the sync script into `docs/framework/` and marked generated (never edited here), so there is one text. Our pages link into it. `docs/test/docs.test.ts` (it executes every example) keeps running over the copied pages, which turns ACRYL's examples into a test on our side too. The site docs on acrylblends.github.io are rebuilt from this tree; no page is written twice.
 
 ## 5. One source of truth
 
@@ -120,7 +120,7 @@ Replacing `settings` with a published package, React or Vite in templates, the M
 
 ## Listener shape (coordinator, final)
 
-`acryl-node-server` is shaped like Hono's `serve({ fetch })`: `inject = ['router']`, one `node:http` listener, every request goes to `router.fetch`, it provides `nodeServer` `{ url, port, hostname }`, config `{ port, hostname = '127.0.0.1', scan = 20 }`, it serves the whole router (no prefix mounting). The bad-JSON 400 lives in `readJson` and `validate`, the SSE keepalive in `streamSSE`. Fork3 adds the Hono MIT notices first, then builds it and messages the first commit and the mount line.
+`acryl-node-server` is a standalone server over `router.fetch`: `inject = ['router']`, one `node:http` listener, every request goes to `router.fetch`, it provides `nodeServer` `{ url, port, hostname }`, config `{ port, hostname = '127.0.0.1', scan = 20 }`, it serves the whole router (no prefix mounting). The bad-JSON 400 lives in `readJson` and `validate`, the SSE keepalive in `streamSSE`. Fork3 builds it and messages the first commit and the mount line.
 
 ## Tasks
 
@@ -129,12 +129,12 @@ Replacing `settings` with a published package, React or Vite in templates, the M
 | T1 | Vendor router, state, inspect with a sync script and a drift check | done |
 | T2 | Builder script and model prompt write router plugins, tested in process | done |
 | T3 | `tasks` publishes a state cell | done |
-| T4 | Docs in Hono's shape, framework pages generated from ACRYL | done |
+| T4 | Docs in one tree, framework pages generated from ACRYL | done |
 | T5 | `init --template blank\|agent` (the `app` template is now `blank`); `--agent` and `--no-agent` stay as aliases | done |
 | T6 | Vendor `acryl-node-server`; re-base `blank` and `agent` on router, state and the listener; remove `http`, `server`, `events`; `verify:scaffolder` green again | waiting for the listener |
 | T7 | `todo` template: ACRYL's `examples/acryl-todo` copied by the sync script (specifiers rewritten for the app layout), our own `node:test` file for CRUD and the restart | waiting for the listener |
 | T8 | When Fork3 fixes `ctx.router` in a plugin installed live (a fresh install currently throws "cannot get property router without inject" while `ctx.get('router')` works), switch the generated code and the model prompt back to `ctx.router` so the docs and the code agree | waiting for the upstream fix |
-| T9 | Copy Hono's MIT notice when the framework plugins carry it (the sync does it by itself; the note in `pnpm run check` goes away) | waiting for upstream |
+| T9 | Notices travel with the vendored plugins (the sync copies them; `acryl-state` carries one) | done |
 | T10 | Site docs: rebuild the framework pages from this tree; 0.3.0 release notes; the stranger gate of section 6 | after T6 and T7 |
 
 ## Order of work (each step ends in a gate)

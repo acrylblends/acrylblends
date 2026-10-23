@@ -159,7 +159,7 @@ describe('command line', () => {
     expect(() => parseInitOptions(['--template', 'wiki'])).toThrow(/unknown template "wiki"/)
     expect(() => parseInitOptions(['--template', 'blank', '--agent'])).toThrow(/contradicts/)
     expect(() => parseInitOptions(['a', 'b'])).toThrow(UsageError)
-    expect(() => parseInitOptions(['--host', 'hono'])).toThrow(UsageError)
+    expect(() => parseInitOptions(['--host', 'x'])).toThrow(UsageError)
   })
 
   it('derives a valid name from a directory', () => {
@@ -181,7 +181,7 @@ describe('init', () => {
     expect(existsSync(join(dir, 'src/plugins/agent'))).toBe(false)
     expect(existsSync(join(dir, 'src/plugins/acryl-router/plugin.json'))).toBe(false)
     expect(existsSync(join(dir, 'src/plugins/acryl-router/tests'))).toBe(false)
-    expect(existsSync(join(dir, 'src/plugins/acryl-router/NOTICE'))).toBe(true)
+    expect(existsSync(join(dir, 'src/plugins/acryl-router/upstream.json'))).toBe(true)
     expect(existsSync(join(dir, '.gitignore'))).toBe(true)
     expect(existsSync(join(dir, 'template.json'))).toBe(false)
     expect(manifest(dir).dependencies).toEqual({
