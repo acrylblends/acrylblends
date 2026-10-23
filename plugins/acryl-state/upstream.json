@@ -2,21 +2,19 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-state",
-    "commit": "99f5c58fbcc575cb60d3cb6e22447e8955a53a2b"
+    "commit": "11fed295161c0282d144b5ac62616988b58d8189"
   },
   "vendored": [
     "src",
     "tests",
-    "LICENSE",
-    "NOTICE"
+    "LICENSE"
   ],
   "rewrittenSpecifiers": 4,
-  "digest": "sha256:e63093c39361ebadcd7496d185f230c86097e2e37ecbc97b891961eb3bfad7b6",
+  "digest": "sha256:528bdc35dbbe22dfae8822fe054cfbfccae9554b9e06089dd7e269f44e27add4",
   "testsNotRun": {
     "tests/react.spec.ts": "needs react and @testing-library/react, which generated apps do not install"
   },
   "notice": [
-    "LICENSE",
-    "NOTICE"
+    "LICENSE"
   ]
 }

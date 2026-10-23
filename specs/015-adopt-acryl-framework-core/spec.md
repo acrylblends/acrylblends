@@ -1,6 +1,6 @@
 # 015: Adopt the ACRYL framework core
 
-Status: approved 2026-10-23 by the coordinator; implementation in progress on branch `015-framework-core` (not pushed, not published). Written against acrylblends `main` at `55867be` and ACRYL
+Status: implemented on branch `015-framework-core`; release 0.3.0 prepared (see docs/release-notes/0.3.0.md). Written against acrylblends `main` at `55867be` and ACRYL
 branch `046-acryl-framework` at `1fdd2115` (read only).
 
 ## Decisions (coordinator, 2026-10-23)
@@ -15,7 +15,7 @@ Findings while implementing (2026-10-23):
 
 - `acryl-router-http` is not vendored. It serves through the DSH `webServer`, which a generated app does not have, and `acryl-node-server` replaces it. The vendored set is `acryl-router`, `acryl-state`, `acryl-inspect` (and `acryl-node-server` when it exists).
 - Upstream tests that need packages a generated app lacks are copied but not run here, each with its reason recorded in `upstream.json` (`testsNotRun`): the real-Loader test (it loads a built `lib/` entry) and the React test. `src/react.ts` is vendored but not copied into apps (`omit` in `plugin.json`), because an app without React could not type-check it.
-- Notices: the sync copies a LICENSE or NOTICE file when a framework plugin has one (today `acryl-state` carries a notice for the design its cells follow); the framework is otherwise ACRYL's own.
+- Notices: the sync copies a LICENSE or NOTICE file when a framework plugin has one. At ACRYL 11fed295 the plugins carry only their own LICENSE; the framework is ACRYL's own code.
 - The digest is `digestFolder`'s algorithm over the vendored paths only (a plugin folder also holds `plugin.json` and `upstream.json`, which are ours).
 
 ## Goal
@@ -134,7 +134,7 @@ Replacing `settings` with a published package, React or Vite in templates, the M
 | T6 | Vendor `acryl-node-server`; re-base `blank` and `agent` on router, state and the listener; remove `http`, `server`, `events`; `verify:scaffolder` green again | waiting for the listener |
 | T7 | `todo` template: ACRYL's `examples/acryl-todo` copied by the sync script (specifiers rewritten for the app layout), our own `node:test` file for CRUD and the restart | waiting for the listener |
 | T8 | When Fork3 fixes `ctx.router` in a plugin installed live (a fresh install currently throws "cannot get property router without inject" while `ctx.get('router')` works), switch the generated code and the model prompt back to `ctx.router` so the docs and the code agree | waiting for the upstream fix |
-| T9 | Notices travel with the vendored plugins (the sync copies them; `acryl-state` carries one) | done |
+| T9 | Notices travel with the vendored plugins (the sync copies them; none is owed today) | done |
 | T10 | Site docs: rebuild the framework pages from this tree; 0.3.0 release notes; the stranger gate of section 6 | after T6 and T7 |
 
 ## Order of work (each step ends in a gate)
