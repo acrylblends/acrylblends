@@ -28,9 +28,8 @@ interface Router {
   request(path: string): Promise<Response>
 }
 export function apply(ctx: Context) {
-  const router = ctx.get('router') as Router
   // A route registered through this plugin's context is removed when the plugin is unloaded.
-  router.get(${JSON.stringify(path)}, (c) => c.json({ text: ${JSON.stringify(text)} }))
+  (ctx as unknown as { router: Router }).router.get(${JSON.stringify(path)}, (c) => c.json({ text: ${JSON.stringify(text)} }))
 }
 
 export async function check(ctx: Context) {

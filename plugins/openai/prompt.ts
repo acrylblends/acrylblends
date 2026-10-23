@@ -14,8 +14,7 @@ A plugin's index.ts is TypeScript that Node runs directly (erasable syntax only:
   export const inject = ['router']        // services it needs; it waits (pending) until they exist
   interface Router { get(path: string, handler: (c: { json(body: unknown, status?: number): Response }) => Response): unknown; request(path: string): Promise<Response> }
   export function apply(ctx: Context) {
-    const router = ctx.get('router') as Router          // read services with ctx.get, not ctx.router
-    router.get('/hello', (c) => c.json({ text: 'Hello' }))   // removed when the plugin is unloaded
+    ;(ctx as unknown as { router: Router }).router.get('/hello', (c) => c.json({ text: 'Hello' }))   // removed when the plugin is unloaded
   }
   export async function check(ctx: Context) {   // optional: must pass, or the install is rolled back
     const reply = await (ctx.get('router') as Router).request('/hello')

@@ -195,9 +195,15 @@ export class Extensions extends Service {
   private readonly requests = new Map<string, { dir: string; version: string }>()
   private tail: Promise<unknown> = Promise.resolve()
   private disposed = false
+  /**
+   * The context the service was constructed with. Inside a service method `this.ctx` is Cordis's shadow context, which resolves services as the
+   * service's own fiber, so a plugin mounted from it would read `ctx.router` from the installer's fiber and fail. Extensions mount from this one.
+   */
+  private readonly owner: Context
 
   constructor(ctx: Context, config: ExtensionsConfig = {}) {
     super(ctx, 'extensions')
+    this.owner = ctx
     const { home, root } = ctx.appInstance
     this.sources = (config.sources ?? [{ dir: join(home, 'extensions'), trust: 'install' }]).map(
       (source) => ({
@@ -512,7 +518,7 @@ export class Extensions extends Service {
   /** Mount a module as a child fiber and wait until it settles. */
   private async mount(module: PluginModule): Promise<{ fiber: Fiber; error?: unknown }> {
     // An extension is a plugin module whose config, if any, comes from its own defaults.
-    const fiber = this.ctx.plugin(module as unknown as Parameters<Context['plugin']>[0])
+    const fiber = this.owner.plugin(module as unknown as Parameters<Context['plugin']>[0])
     try {
       await fiber.await()
       return { fiber }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
@@ -108,4 +108,24 @@ test('the builder refuses to write anywhere that is not an extensions source', a
     .plugin(extensions, { sources: [{ dir: join(root, 'elsewhere'), trust: 'install' }] })
     .await()
   await assert.rejects(app.plugin(builder, {}).await(), /not an extensions source/)
+})
+
+test('a plugin installed live reads a service as a property (ctx.router), not only with ctx.get', async () => {
+  const { app, root } = await boot()
+  const dir = join(root, 'extensions', 'probe')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    join(dir, 'index.ts'),
+    `export const name = 'probe'
+export const inject = ['router']
+export function apply(ctx) {
+  ctx.router.get('/probe', (c) => c.json({ ok: true }))
+}
+`,
+  )
+  const installed = (await app.extensions.install(dir)) as { ok: boolean; errors?: string[] }
+  assert.equal(installed.ok, true, installed.errors?.join('; '))
+  assert.equal((await app.router.request('/probe')).status, 200)
+  await app.extensions.remove('probe')
+  assert.equal((await app.router.request('/probe')).status, 404)
 })
