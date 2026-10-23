@@ -10,7 +10,7 @@ import {
   readTemplatePlugins,
   TargetNotEmptyError,
 } from './project'
-import { templateDir, templateFor } from './templates'
+import { isTemplate, TEMPLATES, type Template, templateDir } from './templates'
 
 /** A command line mistake. The CLI prints it with the help text and exits 2. */
 export class UsageError extends Error {
@@ -21,12 +21,12 @@ export class UsageError extends Error {
 export interface InitOptions {
   directory: string | undefined
   name: string | undefined
-  agent: boolean | undefined
+  template: Template | undefined
   install: boolean | undefined
   yes: boolean
 }
 
-/** Parse `init [dir] [--agent|--no-agent] [--name n] [--install] [-y]`. */
+/** Parse `init [dir] [--template t] [--agent|--no-agent] [--name n] [--install] [-y]`. `--agent` means `--template agent`, `--no-agent` means `--template blank`. */
 export function parseInitOptions(argv: readonly string[]): InitOptions {
   let parsed: ReturnType<typeof parse>
   try {
@@ -38,10 +38,21 @@ export function parseInitOptions(argv: readonly string[]): InitOptions {
   if (positionals.length > 1) throw new UsageError('init takes at most one directory')
   if (values.agent && values['no-agent'])
     throw new UsageError('use --agent or --no-agent, not both')
+  if (values.template !== undefined && !isTemplate(values.template))
+    throw new UsageError(`unknown template "${values.template}" (${TEMPLATES.join(', ')})`)
+  const alias: Template | undefined = values.agent
+    ? 'agent'
+    : values['no-agent']
+      ? 'blank'
+      : undefined
+  if (values.template !== undefined && alias !== undefined && values.template !== alias)
+    throw new UsageError(
+      `--template ${values.template} contradicts --${alias === 'agent' ? 'agent' : 'no-agent'}`,
+    )
   return {
     directory: positionals[0],
     name: values.name,
-    agent: values.agent ? true : values['no-agent'] ? false : undefined,
+    template: (values.template as Template | undefined) ?? alias,
     install: values.install,
     yes: values.yes === true,
   }
@@ -54,6 +65,7 @@ const parse = (argv: readonly string[]) =>
     strict: true,
     options: {
       name: { type: 'string' },
+      template: { type: 'string' },
       agent: { type: 'boolean' },
       'no-agent': { type: 'boolean' },
       install: { type: 'boolean' },
@@ -62,6 +74,13 @@ const parse = (argv: readonly string[]) =>
   })
 
 const yes = (answer: string) => ['y', 'yes'].includes(answer.trim().toLowerCase())
+
+async function askTemplate(ask: (question: string) => Promise<string>): Promise<Template> {
+  const answer = (await ask(`Template (${TEMPLATES.join(', ')}) [blank]: `)).trim().toLowerCase()
+  if (answer === '') return 'blank'
+  if (isTemplate(answer)) return answer
+  throw new UsageError(`unknown template "${answer}" (${TEMPLATES.join(', ')})`)
+}
 
 /** Scaffold a Cordis app. Returns the exit code: 0 done, 1 refused or failed. Never overwrites anything. */
 export async function init(options: InitOptions, io: Io): Promise<number> {
@@ -77,12 +96,10 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
       `"${name}" is not a valid project name (lower case letters, digits and dashes, starting with a letter)`,
     )
   }
-  const agent =
-    options.agent ?? (ask ? yes(await ask('Include the offline agent? (y/N): ')) : false)
+  const template = options.template ?? (ask ? await askTemplate(ask) : 'blank')
   const install =
     options.install ?? (ask ? yes(await ask('Install dependencies with npm now? (y/N): ')) : false)
 
-  const template = templateFor(agent)
   let files: string[]
   try {
     files = copyTemplate(templateDir(template), directory, name)

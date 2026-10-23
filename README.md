@@ -39,7 +39,7 @@ time on `@deepseek-ai/cordis` and `yaml`.
 | Path | What |
 |---|---|
 | `plugins/` | the plugin library: each plugin's source, `plugin.json` and tests |
-| `packages/cli` | the `acrylblends` command (`init`, `add`, `plugins`) and the `app` and `agent` templates |
+| `packages/cli` | the `acrylblends` command (`init`, `add`, `plugins`) and the `blank` and `agent` templates |
 | `scripts/verify-scaffolder.mjs` | scaffolds both templates, installs, type-checks, tests, boots them, drives the agent, saves |
 | `docs/` | the documentation; its examples are executed by the tests |
 | `specs/` | specs and ledgers ([roadmap](specs/000-roadmap/spec.md), [013](specs/013-acryl-extraction/spec.md)) |

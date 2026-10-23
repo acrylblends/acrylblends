@@ -118,6 +118,25 @@ and the CRUD is complete (create, list, get one, update, delete, a 400 or 422 on
 
 Replacing `settings` with a published package, React or Vite in templates, the Market, anything in WebBoxes.
 
+## Listener shape (coordinator, final)
+
+`acryl-node-server` is shaped like Hono's `serve({ fetch })`: `inject = ['router']`, one `node:http` listener, every request goes to `router.fetch`, it provides `nodeServer` `{ url, port, hostname }`, config `{ port, hostname = '127.0.0.1', scan = 20 }`, it serves the whole router (no prefix mounting). The bad-JSON 400 lives in `readJson` and `validate`, the SSE keepalive in `streamSSE`. Fork3 adds the Hono MIT notices first, then builds it and messages the first commit and the mount line.
+
+## Tasks
+
+| # | Task | State |
+|---|---|---|
+| T1 | Vendor router, state, inspect with a sync script and a drift check | done |
+| T2 | Builder script and model prompt write router plugins, tested in process | done |
+| T3 | `tasks` publishes a state cell | done |
+| T4 | Docs in Hono's shape, framework pages generated from ACRYL | done |
+| T5 | `init --template blank\|agent` (the `app` template is now `blank`); `--agent` and `--no-agent` stay as aliases | done |
+| T6 | Vendor `acryl-node-server`; re-base `blank` and `agent` on router, state and the listener; remove `http`, `server`, `events`; `verify:scaffolder` green again | waiting for the listener |
+| T7 | `todo` template: ACRYL's `examples/acryl-todo` copied by the sync script (specifiers rewritten for the app layout), our own `node:test` file for CRUD and the restart | waiting for the listener |
+| T8 | When Fork3 fixes `ctx.router` in a plugin installed live (a fresh install currently throws "cannot get property router without inject" while `ctx.get('router')` works), switch the generated code and the model prompt back to `ctx.router` so the docs and the code agree | waiting for the upstream fix |
+| T9 | Copy Hono's MIT notice when the framework plugins carry it (the sync does it by itself; the note in `pnpm run check` goes away) | waiting for upstream |
+| T10 | Site docs: rebuild the framework pages from this tree; 0.3.0 release notes; the stranger gate of section 6 | after T6 and T7 |
+
 ## Order of work (each step ends in a gate)
 
 1. Vendoring: sync and verify scripts, the four plugins in the library, library tests green on the copies.

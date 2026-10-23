@@ -28,7 +28,7 @@ const cliDir = join(root, 'packages', 'cli')
 const cli = join(cliDir, 'bin', 'acrylblends.js')
 const scratch = mkdtempSync(join(tmpdir(), 'verify-scaffolder-'))
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-const TEMPLATES = { app: ['--no-agent'], agent: ['--agent'] }
+const TEMPLATES = { blank: ['--template', 'blank'], agent: ['--template', 'agent'] }
 
 const log = (message) => console.log(`verify-scaffolder: ${message}`)
 const fail = (message) => {

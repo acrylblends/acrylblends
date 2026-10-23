@@ -2,24 +2,23 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** The two templates: a Cordis app, and the same app with the offline agent. Both depend on `cordis` only. */
-export const TEMPLATES = ['app', 'agent'] as const
+/** The templates: a blank Cordis app on the router, and the same app with the offline agent. */
+export const TEMPLATES = ['blank', 'agent'] as const
 export type Template = (typeof TEMPLATES)[number]
 
-/** The template for an agent choice. */
-export function templateFor(agent: boolean): Template {
-  return agent ? 'agent' : 'app'
+export function isTemplate(value: string): value is Template {
+  return (TEMPLATES as readonly string[]).includes(value)
 }
 
 /**
  * The `templates/` folder of this package. The module sits at different depths in source (`src/`) and in the build
- * (`dist/`), so walk up until a `templates` folder holds the `app` template.
+ * (`dist/`), so walk up until a `templates` folder holds the `blank` template.
  */
 export function templatesRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url))
   for (;;) {
     const candidate = join(dir, 'templates')
-    if (existsSync(join(candidate, 'app'))) return candidate
+    if (existsSync(join(candidate, 'blank'))) return candidate
     const parent = dirname(dir)
     if (parent === dir) throw new Error('acrylblends cannot find its templates folder')
     dir = parent

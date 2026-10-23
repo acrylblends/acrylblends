@@ -12,4 +12,4 @@ export {
   readTemplatePlugins,
   TargetNotEmptyError,
 } from './project'
-export { TEMPLATES, type Template, templateDir, templateFor, templatesRoot } from './templates'
+export { isTemplate, TEMPLATES, type Template, templateDir, templatesRoot } from './templates'

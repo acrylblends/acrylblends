@@ -50,7 +50,7 @@ function fakeIo(options: { answers?: string[]; installCode?: number } = {}) {
 const manifest = (dir: string) => JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
 
 describe('templates', () => {
-  it('are exactly app and agent', () => {
+  it('are exactly blank and agent', () => {
     expect(readdirSync(templatesRoot()).sort()).toEqual([...TEMPLATES].sort())
   })
 
@@ -147,12 +147,17 @@ describe('command line', () => {
     expect(parseInitOptions(['shop', '--agent', '--name', 'my-shop', '-y'])).toEqual({
       directory: 'shop',
       name: 'my-shop',
-      agent: true,
+      template: 'agent',
       install: undefined,
       yes: true,
     })
-    expect(parseInitOptions(['--no-agent']).agent).toBe(false)
+    expect(parseInitOptions(['--no-agent']).template).toBe('blank')
+    expect(parseInitOptions(['x', '--template', 'blank']).template).toBe('blank')
+    expect(parseInitOptions(['x', '--template', 'agent', '--agent']).template).toBe('agent')
+    expect(parseInitOptions(['x']).template).toBeUndefined()
     expect(() => parseInitOptions(['--agent', '--no-agent'])).toThrow(/not both/)
+    expect(() => parseInitOptions(['--template', 'wiki'])).toThrow(/unknown template "wiki"/)
+    expect(() => parseInitOptions(['--template', 'blank', '--agent'])).toThrow(/contradicts/)
     expect(() => parseInitOptions(['a', 'b'])).toThrow(UsageError)
     expect(() => parseInitOptions(['--host', 'hono'])).toThrow(UsageError)
   })
@@ -164,7 +169,7 @@ describe('command line', () => {
 })
 
 describe('init', () => {
-  it('copies the app template with the name filled in', async () => {
+  it('copies the blank template with the name filled in', async () => {
     const session = fakeIo()
     expect(await runCli(['init', 'plain', '-y'], session.io)).toBe(0)
     const dir = join(scratch, 'plain')
@@ -184,13 +189,20 @@ describe('init', () => {
       yaml: '2.9.0',
     })
     expect(existsSync(join(dir, 'blend.yaml'))).toBe(true)
-    expect(session.out()).toContain('created plain (app)')
+    expect(session.out()).toContain('created plain (blank)')
     expect(session.out()).toContain('cd plain\n  npm install\n  npm run dev')
     expect(session.installed).toEqual([])
   })
 
+  it('copies the template named on the terminal, and refuses an unknown one', async () => {
+    const unknown = fakeIo({ answers: ['', 'wiki', 'n'] })
+    expect(await runCli(['init', 'nope'], unknown.io)).toBe(2)
+    expect(unknown.err()).toContain('unknown template "wiki"')
+    expect(existsSync(join(scratch, 'nope'))).toBe(false)
+  })
+
   it('copies the agent template when asked on the terminal', async () => {
-    const session = fakeIo({ answers: ['', 'y', 'n'] })
+    const session = fakeIo({ answers: ['', 'agent', 'n'] })
     expect(await runCli(['init', 'asked'], session.io)).toBe(0)
     expect(existsSync(join(scratch, 'asked/src/plugins/agent/agent.ts'))).toBe(true)
     expect(session.out()).toContain('created asked (agent)')

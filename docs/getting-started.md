@@ -13,11 +13,11 @@ npm install
 npm run dev                           # prints its URL; the app's data lives in .acrylblends/
 ```
 
-`init` never writes into a directory that is not empty. Without `--agent` you get the smaller `app` template.
+`init` never writes into a directory that is not empty. `--template blank` (the default) is the smaller app and `--template agent` (or `--agent`) adds the offline agent.
 
 | Template | Plugins | What it is |
 |---|---|---|
-| `app` | `instance`, `http`, `server`, `manifest`, `save` | a Cordis app that serves routes |
+| `blank` | `instance`, `http`, `server`, `manifest`, `save` | a Cordis app that serves routes |
 | `agent` | the above plus `tasks`, `agent`, `extensions`, `builder` | the same, with an offline agent that can extend the app while it runs |
 
 Every generated app is TypeScript, has `npm test` (`node:test`) and `npm run check` (types), and depends at run time on
