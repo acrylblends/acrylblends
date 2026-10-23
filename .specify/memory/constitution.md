@@ -9,7 +9,7 @@ keeps Node and adds a library of Cordis plugins that the command copies into app
 **Version 3.1.0 (amended 2026-10-07).** 3.1.0 names the Cordis package: the one ACRYL runs on (research R2).
 
 **Version 3.0.0 (amended 2026-10-06).** Version 1 defined ACRYLBLENDS as a composition runtime on Cordis plus five
-libraries; version 2 as a scaffolder with Hono and Fastify templates. Both re-did what Cordis already provides and were
+libraries; version 2 as a scaffolder with templates for two HTTP libraries. Both re-did what Cordis already provides and were
 removed. The reason is in `specs/000-roadmap/research.md` (R1).
 
 ## Core Principles
