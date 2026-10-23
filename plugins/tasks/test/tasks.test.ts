@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
+import * as router from '../../acryl-router/src/index.ts'
+import * as state from '../../acryl-state/src/index.ts'
 import { instance, pinnedInstance } from '../../instance/index.ts'
 import { tasks } from '../index.ts'
 import { openStore, type StoreKind } from '../store.ts'
@@ -111,4 +113,40 @@ test('every task carries the digest of the manifest the app was composed from', 
   )
   task.complete('ok')
   for (const fiber of [...fibers].reverse()) await fiber.dispose()
+})
+
+test('with the state service mounted, the latest tasks are a cell that follows every change and is readable on the router', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'tasks-test-'))
+  const root = new Context()
+  const fibers = [
+    root.plugin(instance, pinnedInstance(home)),
+    root.plugin(router),
+    root.plugin(state),
+    root.plugin(tasks, { store: KIND }),
+  ]
+  for (const fiber of fibers) await fiber.await()
+  cleanup.push(async () => {
+    for (const fiber of [...fibers].reverse()) await fiber.dispose()
+    rmSync(home, { recursive: true, force: true })
+  })
+  const cell = root.state.find<Array<{ id: string; status: string }>>('tasks')
+  assert.ok(cell, 'the tasks cell exists')
+  assert.deepEqual(cell.get(), [])
+
+  const handle = root.tasks.start('demo', { n: 1 })
+  assert.deepEqual(
+    cell.get().map((record) => record.status),
+    ['running'],
+  )
+  handle.complete({ done: true })
+  assert.deepEqual(
+    cell.get().map((record) => record.status),
+    ['completed'],
+  )
+
+  const reply = await root.router.request('/api/state/tasks')
+  assert.equal(reply.status, 200)
+  const body = (await reply.json()) as { key: string; value: Array<{ kind: string }> }
+  assert.equal(body.key, 'tasks')
+  assert.equal(body.value[0]?.kind, 'demo')
 })

@@ -69,6 +69,14 @@ declare module '@deepseek-ai/cordis' {
 type Change = Partial<TaskRecord> & { readonly id: string }
 const changeOf = (change: TaskChange) => change as unknown as Change
 
+/** The slice of the state service the tasks plugin uses, by name, so it imports nothing from acryl-state. */
+interface StateService {
+  cell<T>(key: string, initial: T): { set(value: T): void }
+}
+
+/** How many of the newest tasks the state cell holds. */
+const STATE_LIMIT = 100
+
 const FINAL: ReadonlySet<TaskStatus> = new Set(['completed', 'failed', 'cancelled', 'interrupted'])
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -111,6 +119,12 @@ export class Tasks extends Service {
       },
       'tasks: cancel running work',
     )
+    // With the state service mounted, the latest tasks are also a cell: any surface reads them as JSON or streams their changes (`/api/state/tasks`).
+    ctx.inject(['state'], (inner) => {
+      const state = (inner as unknown as { state: StateService }).state
+      const cell = state.cell('tasks', this.list().slice(0, STATE_LIMIT))
+      inner.on('tasks/changed', () => cell.set(this.list().slice(0, STATE_LIMIT)))
+    })
   }
 
   /** Start a task. The record is written before this returns. */
