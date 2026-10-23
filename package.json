@@ -10,7 +10,7 @@
   "scripts": {
     "build": "pnpm -r run build",
     "typecheck": "tsc -p tsconfig.json && tsc -p plugins/tsconfig.json",
-    "test": "vitest run && node --test \"plugins/*/test/*.test.ts\"",
+    "test": "vitest run && node --test \"plugins/*/test/*.test.ts\" && node --test scripts/lib/*.test.mjs",
     "lint": "biome check .",
     "format": "biome check --write .",
     "verify:scaffolder": "node scripts/verify-scaffolder.mjs",

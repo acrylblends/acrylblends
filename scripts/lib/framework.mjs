@@ -87,13 +87,48 @@ function resolveSpecifier(specifier, fromFile, pluginsRoot) {
 const SPECIFIER =
   /(\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)(['"])(acryl-[A-Za-z0-9-]+(?:\/[A-Za-z0-9./-]+)?)\2/gu
 
+/** For every character of a TypeScript source: 0 = code, 1 = inside a comment, 2 = inside a string or template literal. */
+export function classify(source) {
+  const kind = new Uint8Array(source.length)
+  let i = 0
+  while (i < source.length) {
+    const c = source[i]
+    const next = source[i + 1]
+    if (c === '/' && next === '/') {
+      const end = source.indexOf('\n', i)
+      const stop = end === -1 ? source.length : end
+      kind.fill(1, i, stop)
+      i = stop
+    } else if (c === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2)
+      const stop = end === -1 ? source.length : end + 2
+      kind.fill(1, i, stop)
+      i = stop
+    } else if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1
+      while (j < source.length && source[j] !== c) {
+        if (source[j] === '\\') j += 1
+        else if (c !== '`' && source[j] === '\n') break
+        j += 1
+      }
+      kind.fill(2, i, Math.min(j + 1, source.length))
+      i = j + 1
+    } else i += 1
+  }
+  return kind
+}
+
 /**
  * Rewrite the specifiers that name another vendored plugin to relative paths. `file` is the path of the file inside `plugins/` (for example
- * `acryl-state/src/service.ts`). Any other `acryl-*` specifier is an error: the vendored plugins may depend only on each other and on public packages.
+ * `acryl-state/src/service.ts`). Only real import and export statements are touched: a specifier named in a comment or in a string (a documentation
+ * example) is text, not a dependency. Any other `acryl-*` specifier in code is an error: the vendored plugins may depend only on each other and on
+ * public packages.
  */
 export function rewriteSpecifiers(source, file, pluginsRoot = '') {
+  const kind = classify(source)
   let count = 0
-  const rewritten = source.replace(SPECIFIER, (_match, lead, quote, specifier) => {
+  const rewritten = source.replace(SPECIFIER, (match, lead, quote, specifier, offset) => {
+    if (kind[offset] !== 0) return match
     const path = resolveSpecifier(specifier, file, pluginsRoot)
     if (path === undefined)
       throw new Error(
