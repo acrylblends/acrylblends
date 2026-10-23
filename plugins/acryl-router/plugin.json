@@ -8,5 +8,6 @@
     "@deepseek-ai/cordis": "4.0.4",
     "@deepseek-ai/schemastery": "3.18.4"
   },
-  "mount": "root.plugin(router); then in your own plugin: inject: ['router'] and ctx.router.get('/path', (c) => c.json({ ok: true }))"
+  "mount": "root.plugin(router); then in your own plugin: inject: ['router'] and ctx.router.get('/path', (c) => c.json({ ok: true }))",
+  "omit": ["**/*.test.*", "**/*.case.ts"]
 }

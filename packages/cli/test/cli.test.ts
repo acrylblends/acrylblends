@@ -14,6 +14,7 @@ import {
   closure,
   copyPlugin,
   type Io,
+  isOmitted,
   nameFrom,
   parseInitOptions,
   readLibrary,
@@ -121,6 +122,70 @@ describe('vendored framework plugins', () => {
       expect(copied('acryl-state/tests')).toBe(false)
       expect(copied('acryl-state/plugin.json')).toBe(false)
     } finally {
+      rmSync(app, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('omit patterns', () => {
+  it('match exact paths and globs: * within a folder name, ** across folders', () => {
+    const omit = ['src/react.ts', '**/*.test.*', '**/*.case.ts', 'fixtures/**']
+    for (const path of [
+      'src/react.ts',
+      'a.test.ts',
+      'src/core/app.test.ts',
+      'src/core/helper/streaming/sse.test.tsx',
+      'src/core/router/common.case.ts',
+      'fixtures/data.json',
+      'fixtures/deep/er/data.json',
+    ])
+      expect(isOmitted(path, omit), path).toBe(true)
+    for (const path of [
+      'src/index.ts',
+      'src/core/app.ts',
+      'src/core/latest.tsx',
+      'src/core/testing.ts',
+      'src/core/test/helper.ts',
+      'src/react.tsx',
+      'fixtures.ts',
+    ])
+      expect(isOmitted(path, omit), path).toBe(false)
+    expect(isOmitted('anything', undefined)).toBe(false)
+    expect(isOmitted('a.b', ['a.b'])).toBe(true)
+    expect(isOmitted('axb', ['a.b'])).toBe(false)
+  })
+
+  it('keep colocated test files out of an app while the sources arrive', () => {
+    const library = mkdtempSync(join(tmpdir(), 'omit-lib-'))
+    const app = mkdtempSync(join(tmpdir(), 'omit-app-'))
+    try {
+      const folder = join(library, 'demo')
+      mkdirSync(join(folder, 'src', 'core'), { recursive: true })
+      writeFileSync(join(folder, 'plugin.json'), '{}')
+      writeFileSync(join(folder, 'src', 'index.ts'), 'export {}')
+      writeFileSync(join(folder, 'src', 'core', 'app.ts'), 'export {}')
+      writeFileSync(join(folder, 'src', 'core', 'app.test.ts'), 'export {}')
+      writeFileSync(join(folder, 'src', 'core', 'view.test.tsx'), 'export {}')
+      writeFileSync(join(folder, 'src', 'core', 'router.case.ts'), 'export {}')
+      copyPlugin(
+        {
+          name: 'demo',
+          description: '',
+          requires: [],
+          dependencies: {},
+          omit: ['**/*.test.*', '**/*.case.ts'],
+        },
+        app,
+        library,
+      )
+      const copied = (path: string) => existsSync(join(app, 'src', 'plugins', 'demo', path))
+      expect(copied('src/index.ts')).toBe(true)
+      expect(copied('src/core/app.ts')).toBe(true)
+      expect(copied('src/core/app.test.ts')).toBe(false)
+      expect(copied('src/core/view.test.tsx')).toBe(false)
+      expect(copied('src/core/router.case.ts')).toBe(false)
+    } finally {
+      rmSync(library, { recursive: true, force: true })
       rmSync(app, { recursive: true, force: true })
     }
   })
