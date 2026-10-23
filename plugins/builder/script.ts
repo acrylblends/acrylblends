@@ -21,21 +21,21 @@ export function routeSource(name: string, path: string, text: string): string {
 
 /** Written by the builder: answers GET ${path}, and checks that it does before the install counts. */
 export const name = '${name}'
-export const inject = ['http']
+export const inject = ['router']
 
-interface Http {
-  route(method: string, path: string, handler: () => { body: unknown }): () => void
-  handle(request: { method: string; path: string; body: unknown }): Promise<{ status: number; body: unknown }>
+interface Router {
+  get(path: string, handler: (c: { json(body: unknown, status?: number): Response }) => Response): unknown
+  request(path: string): Promise<Response>
 }
-
 export function apply(ctx: Context) {
-  const http = ctx.get('http') as Http
-  ctx.effect(() => http.route('GET', ${JSON.stringify(path)}, () => ({ body: { text: ${JSON.stringify(text)} } })))
+  const router = ctx.get('router') as Router
+  // A route registered through this plugin's context is removed when the plugin is unloaded.
+  router.get(${JSON.stringify(path)}, (c) => c.json({ text: ${JSON.stringify(text)} }))
 }
 
 export async function check(ctx: Context) {
-  const reply = await (ctx.get('http') as Http).handle({ method: 'GET', path: ${JSON.stringify(path)}, body: undefined })
-  if (reply.status !== 200) throw new Error(\`GET ${path} answered \${reply.status}\`)
+  const reply = await (ctx.get('router') as Router).request(${JSON.stringify(path)})
+  if (!reply.ok) throw new Error(\`GET ${path} answered \${reply.status}\`)
 }
 `
 }

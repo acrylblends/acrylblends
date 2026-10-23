@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
+import * as router from '../../acryl-router/src/index.ts'
 import { agent, memory, model, tools } from '../../agent/index.ts'
 import { extensions } from '../../extensions/index.ts'
-import { http } from '../../http/index.ts'
 import { instance, pinnedInstance } from '../../instance/index.ts'
 import { builder } from '../index.ts'
 
@@ -22,7 +22,7 @@ async function boot() {
   const app = new Context()
   const fibers = [
     app.plugin(instance, pinnedInstance(home, { root })),
-    app.plugin(http),
+    app.plugin(router),
     app.plugin(extensions, { sources: [{ dir: join(root, 'extensions'), trust: 'install' }] }),
     app.plugin(model),
     app.plugin(tools),
@@ -41,7 +41,10 @@ async function boot() {
       ? result.output
       : `budget exceeded after ${result.steps} steps`
   }
-  const get = (path: string) => app.http.handle({ method: 'GET', path, body: undefined })
+  const get = async (path: string) => {
+    const response = await app.router.request(path)
+    return { status: response.status, body: response.ok ? await response.json() : undefined }
+  }
   return { app, root, ask, get }
 }
 

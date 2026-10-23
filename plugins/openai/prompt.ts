@@ -11,15 +11,20 @@ A plugin's index.ts is TypeScript that Node runs directly (erasable syntax only:
 
   import type { Context } from '@deepseek-ai/cordis'
   export const name = 'hello'            // must equal the folder name
-  export const inject = ['http']          // services it needs; it waits (pending) until they exist
+  export const inject = ['router']        // services it needs; it waits (pending) until they exist
+  interface Router { get(path: string, handler: (c: { json(body: unknown, status?: number): Response }) => Response): unknown; request(path: string): Promise<Response> }
   export function apply(ctx: Context) {
-    const http = ctx.get('http') as { route(method: string, path: string, handler: (request: { body: unknown }) => { status?: number; body: unknown }): () => void }
-    ctx.effect(() => http.route('GET', '/hello', () => ({ body: { text: 'Hello' } })))   // in ctx.effect: removed when the plugin is
+    const router = ctx.get('router') as Router          // read services with ctx.get, not ctx.router
+    router.get('/hello', (c) => c.json({ text: 'Hello' }))   // removed when the plugin is unloaded
   }
   export async function check(ctx: Context) {   // optional: must pass, or the install is rolled back
-    const http = ctx.get('http') as { handle(r: { method: string; path: string; body: unknown }): Promise<{ status: number }> }
-    if ((await http.handle({ method: 'GET', path: '/hello', body: undefined })).status !== 200) throw new Error('GET /hello failed')
+    const reply = await (ctx.get('router') as Router).request('/hello')
+    if (!reply.ok) throw new Error('GET /hello failed')
   }
+
+The router is Hono-shaped: router.get/post/put/delete(path, handler), a path parameter is :id and is read with c.req.param('id'), c.json(body, status)
+answers JSON, c.text(...) answers text, c.req.json() reads a JSON body, and router.request('/path', { method: 'POST', body: ... }) calls a route in
+process (use it in check). Every registration made from a plugin's own context goes away when the plugin is unloaded.
 
 For a capability that is a pure function of data (parse, convert, compute), write a sandboxed TOOL instead of a plugin. It cannot touch the
 host: it runs in a separate process that can read only its own folder. Files: index.ts exporting  run(input)  and  tool.json:
