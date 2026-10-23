@@ -58,7 +58,7 @@ for (const [name, config] of Object.entries(PLUGINS)) {
   const { files, rewritten, notice } = readUpstream(resolve(checkout), name)
   const upstream = {
     source: { repo: SOURCE_REPO, path: `plugins/${name}`, commit },
-    vendored: [...VENDORED_DIRS, ...(notice ? [notice] : [])],
+    vendored: [...VENDORED_DIRS, ...(notice ?? [])],
     rewrittenSpecifiers: rewritten,
     digest: digestOf(files),
     testsNotRun: config.testsNotRun,

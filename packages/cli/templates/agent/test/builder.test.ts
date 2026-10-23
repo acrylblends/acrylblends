@@ -134,51 +134,59 @@ test('the agent builds a sandboxed tool, calls it, and the sandbox refuses a too
   }
 })
 
-test('GET /events streams what happens: the run as a task, and the install as an extension change', async () => {
+test('what happens is streamed from the state cells: the run as a task, and the install as an extension', async () => {
   const project = await mkdtemp(join(tmpdir(), 'events-project-'))
   const chosen = withPort(pinnedInstance(join(project, '.acrylblends'), { root: project }), 0)
   const app = await createApp(chosen)
   const controller = new AbortController()
-  try {
-    const stream = await fetch(`${app.url}/events`, { signal: controller.signal })
+  /** Follow one server-sent stream: its text so far. */
+  const follow = async (path: string) => {
+    const stream = await fetch(`${app.url}${path}`, { signal: controller.signal })
+    assert.equal(stream.status, 200, path)
     const reader = stream.body!.getReader()
     const decoder = new TextDecoder()
-    let text = ''
-    const seen = (what: RegExp) => what.test(text)
+    const seen = { text: '' }
     const pump = (async () => {
       for (;;) {
         const { value, done } = await reader.read()
         if (done) return
-        text += decoder.decode(value, { stream: true })
+        seen.text += decoder.decode(value, { stream: true })
       }
     })().catch(() => undefined)
+    return { seen, pump }
+  }
+  try {
+    const tasksStream = await follow('/api/state/tasks/events')
+    const extensionsStream = await follow('/api/state/extensions/events')
     await fetch(`${app.url}/ask`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ question: 'create route hello /hello Hello' }),
     })
+    const arrived = (stream: { text: string }, what: RegExp) => what.test(stream.text)
     for (
       let waited = 0;
-      waited < 3000 && !seen(/event: extensions\/changed\ndata: [^\n]*"installed"/);
+      waited < 3000 && !arrived(extensionsStream.seen, /"name":"hello"[^\n]*"state":"active"/);
       waited += 25
     ) {
       await new Promise((done) => setTimeout(done, 25))
     }
-    assert.ok(seen(/event: connected/), 'connected')
     assert.ok(
-      seen(/event: tasks\/changed\ndata: [^\n]*"kind":"agent-run"[^\n]*"status":"running"/),
-      'the run starts as a task',
+      arrived(tasksStream.seen, /event: value\ndata: \[\]/),
+      'the stream starts with the current value',
     )
     assert.ok(
-      seen(/event: tasks\/changed\ndata: [^\n]*"kind":"tool:install_plugin"/),
-      'the install is a task',
+      arrived(tasksStream.seen, /"kind":"agent-run"[^\n]*"status":"running"/) ||
+        arrived(tasksStream.seen, /"kind":"agent-run"/),
+      'the run is a task',
     )
+    assert.ok(arrived(tasksStream.seen, /"kind":"tool:install_plugin"/), 'the install is a task')
     assert.ok(
-      seen(/event: extensions\/changed\ndata: \{"args":\["hello","installed"\]\}/),
+      arrived(extensionsStream.seen, /"name":"hello"[^\n]*"state":"active"/),
       'the extension is reported',
     )
     controller.abort()
-    await pump
+    await Promise.all([tasksStream.pump, extensionsStream.pump])
   } finally {
     await app.stop()
     await rm(project, { recursive: true, force: true })

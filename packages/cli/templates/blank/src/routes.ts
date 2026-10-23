@@ -1,14 +1,14 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from './plugins/http/index.ts'
+import type {} from './plugins/acryl-router/src/index.ts'
 
 export const APP_NAME = '__APP_NAME__'
 
-/** The app's own routes. Each one lives in a `ctx.effect`, so it is removed when this plugin is disposed. */
+/** The app's own routes on the router. A route registered from this plugin's context is removed when the plugin is disposed. */
 export const routes = {
   name: 'routes',
-  inject: ['http'],
+  inject: ['router'],
   apply(ctx: Context) {
-    ctx.effect(() => ctx.http.route('GET', '/', () => ({ body: { app: APP_NAME, ok: true } })))
-    ctx.effect(() => ctx.http.route('GET', '/health', () => ({ body: { ok: true } })))
+    ctx.router.get('/', (c) => c.json({ app: APP_NAME, ok: true }))
+    ctx.router.get('/health', (c) => c.json({ ok: true }))
   },
 }

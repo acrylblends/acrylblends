@@ -204,25 +204,19 @@ try {
             `agent: task records after a restart: ${JSON.stringify(records.map((record) => [record.kind, record.status]))}`,
           )
         }
-        // One place to observe: the event stream reported the run and the install above, as they happened.
-        const stream = await fetch(`${url}/events`, { signal: AbortSignal.timeout(20_000) })
+        // One place to observe: the state cells stream the install as it happens, and hold the run as a task.
+        const stream = await fetch(`${url}/api/state/extensions/events`, {
+          signal: AbortSignal.timeout(20_000),
+        })
         const reader = stream.body.getReader()
         const watching = (async () => {
           let text = ''
-          for await (const chunk of (async function* () {
-            for (;;) {
-              const { value, done } = await reader.read()
-              if (done) return
-              yield new TextDecoder().decode(value)
-            }
-          })()) {
-            text += chunk
-            if (
-              /event: extensions\/changed\ndata: \{"args":\["observed","installed"\]\}/.test(text)
-            )
-              return text
+          for (;;) {
+            const { value, done } = await reader.read()
+            if (done) return text
+            text += new TextDecoder().decode(value)
+            if (/"name":"observed"[^\n]*"state":"active"/.test(text)) return text
           }
-          return text
         })()
         expect(
           await ask('create route observed /observed Seen'),
@@ -231,10 +225,20 @@ try {
         )
         const streamed = await watching
         await reader.cancel().catch(() => undefined)
-        if (!/event: tasks\/changed/.test(streamed))
-          fail(`GET /events did not report the task: ${streamed.slice(0, 300)}`)
+        if (!/"name":"observed"[^\n]*"state":"active"/.test(streamed))
+          fail(
+            `GET /api/state/extensions/events did not report the install: ${streamed.slice(0, 300)}`,
+          )
+        const tasksCell = await json(
+          await fetch(`${url}/api/state/tasks`),
+          'agent: GET /api/state/tasks',
+        )
+        if (!tasksCell.value.some((record) => record.kind === 'agent-run'))
+          fail(
+            `agent: the tasks cell holds no agent run: ${JSON.stringify(tasksCell).slice(0, 300)}`,
+          )
         await ask('remove plugin observed')
-        log('agent: GET /events streamed the task and the install as they happened')
+        log('agent: the state cells streamed the install as it happened and hold the run as a task')
         // Untrusted code: the agent writes a tool, it runs in the sandbox, and a tool that reaches outside its folder is refused.
         expect(await ask('create tool triple 3'), 'triple: installed, active.', 'create tool')
         expect(await ask('run tool triple 14'), '{"n":42}', 'run tool')
@@ -298,7 +302,7 @@ try {
     log(`${template}: stopped cleanly; data stayed in the pinned home`)
   }
   // npm run save in a real app: a first save commits; a file that holds a secret is refused and nothing is staged.
-  const saved = join(scratch, 'app')
+  const saved = join(scratch, 'blank')
   for (const args of [
     ['init', '--quiet'],
     ['config', 'user.email', 'verify@example.com'],
@@ -322,7 +326,7 @@ try {
   // A Blend over a Blueprint, in a real app: it boots from its parent, an upgrade is planned and applied with the real npm scripts,
   // and an upgrade that would break the Blend is refused with the file untouched.
   const blended = join(scratch, 'blended')
-  capture(process.execPath, [cli, 'init', blended, '--name', 'verify-blend', '--yes', '--no-agent'])
+  capture(process.execPath, [cli, 'init', blended, '--name', 'verify-blend', '--yes', '--template', 'blank'])
   const blueprintId = 'acrylblends.verify-blend'
   const blueprintText = readFileSync(join(blended, 'blend.yaml'), 'utf8')
   mkdirSync(join(blended, 'blueprints'))
@@ -363,7 +367,7 @@ spec:
   const withoutServer = blueprintText
     .replace('version: 0.1.0', 'version: 0.3.0')
     .replace(
-      / {4}- id: server\n {6}name: server\n {6}config:\n {8}hostname: "\{\{parameters\.hostname\}\}"\n/,
+      / {4}- id: server\n {6}name: acryl-node-server\n {6}config:\n {8}hostname: "\{\{parameters\.hostname\}\}"\n/,
       '',
     )
     // The server row was the only user of the hostname parameter, and an unused parameter makes a Blueprint invalid.
@@ -407,7 +411,7 @@ spec:
   )
   // `acrylblends add` in a real app: the plugin, what it requires and its npm packages arrive, and the app still type-checks.
   const grown = join(scratch, 'grown')
-  capture(process.execPath, [cli, 'init', grown, '--name', 'verify-grown', '--yes', '--no-agent'])
+  capture(process.execPath, [cli, 'init', grown, '--name', 'verify-grown', '--yes', '--template', 'blank'])
   capture(process.execPath, [cli, 'add', 'settings', '--dir', grown])
   const grownDeps = Object.keys(
     JSON.parse(readFileSync(join(grown, 'package.json'), 'utf8')).dependencies,

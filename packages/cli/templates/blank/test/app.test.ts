@@ -50,7 +50,7 @@ test('the manifest decides what is mounted: a parameter changes the server, an u
   const manifest = readManifest()
   assert.deepEqual(
     manifest.plugins.map((row) => row.id),
-    ['http', 'routes', 'server'],
+    ['router', 'routes', 'server'],
   )
   assert.throws(() => readManifest({ nothing: 1 }), /parameter-override-unknown/)
 })

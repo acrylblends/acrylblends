@@ -11,11 +11,10 @@ import { pinnedInstance, withPort } from '../src/plugins/instance/index.ts'
 /** A plugin no scripted command knows: the model writes it from scratch. */
 const COUNTER = `import type { Context } from '@deepseek-ai/cordis'
 export const name = 'counter'
-export const inject = ['http']
+export const inject = ['router']
 export function apply(ctx: Context) {
   let count = 0
-  const http = ctx.get('http') as { route(m: string, p: string, h: () => { body: unknown }): () => void }
-  ctx.effect(() => http.route('GET', '/count', () => ({ body: { count: ++count } })))
+  ctx.router.get('/count', (c) => c.json({ count: ++count }))
 }
 `
 

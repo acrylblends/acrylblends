@@ -34,12 +34,10 @@ spec:
       name: agent
       config:
         steps: "{{parameters.steps}}"
-    - id: http
-      name: http
-    - id: events
-      name: events
-      config:
-        topics: [tasks/changed, extensions/changed]
+    - id: router
+      name: acryl-router
+    - id: state
+      name: acryl-state
     - id: sandbox
       name: sandbox
     - id: extensions
@@ -53,6 +51,6 @@ spec:
     - id: routes
       name: routes
     - id: server
-      name: server
+      name: acryl-node-server
       config:
         hostname: "{{parameters.hostname}}"

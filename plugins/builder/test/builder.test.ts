@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import * as router from '../../acryl-router/src/index.ts'
+import * as state from '../../acryl-state/src/index.ts'
 import { agent, memory, model, tools } from '../../agent/index.ts'
 import { extensions } from '../../extensions/index.ts'
 import { instance, pinnedInstance } from '../../instance/index.ts'
@@ -23,6 +24,7 @@ async function boot() {
   const fibers = [
     app.plugin(instance, pinnedInstance(home, { root })),
     app.plugin(router),
+    app.plugin(state),
     app.plugin(extensions, { sources: [{ dir: join(root, 'extensions'), trust: 'install' }] }),
     app.plugin(model),
     app.plugin(tools),
@@ -128,4 +130,18 @@ export function apply(ctx) {
   assert.equal((await app.router.request('/probe')).status, 200)
   await app.extensions.remove('probe')
   assert.equal((await app.router.request('/probe')).status, 404)
+})
+
+test('with the state service mounted, what is installed is a cell that follows every install and removal', async () => {
+  const { app, ask } = await boot()
+  const cell = app.state.find<Array<{ name: string; state: string }>>('extensions')
+  assert.ok(cell, 'the extensions cell exists')
+  assert.deepEqual(cell.get(), [])
+  await ask('create route hello /hello Hello')
+  assert.deepEqual(
+    cell.get().map((entry) => [entry.name, entry.state]),
+    [['hello', 'active']],
+  )
+  await ask('remove plugin hello')
+  assert.deepEqual(cell.get(), [])
 })

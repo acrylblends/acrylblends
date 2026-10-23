@@ -1,7 +1,8 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
-import { http } from './plugins/http/index.ts'
+import * as nodeServer from './plugins/acryl-node-server/src/index.ts'
+import * as router from './plugins/acryl-router/src/index.ts'
 import { type AppInstance, instance } from './plugins/instance/index.ts'
 import {
   blueprintsIn,
@@ -9,11 +10,10 @@ import {
   loadManifest,
   type ParameterValue,
 } from './plugins/manifest/index.ts'
-import { server } from './plugins/server/index.ts'
 import { routes } from './routes.ts'
 
 /** The plugins this app's code provides. `blend.yaml` chooses, orders and configures them. */
-export const registry = { http, routes, server }
+export const registry = { 'acryl-router': router, 'acryl-node-server': nodeServer, routes }
 
 /** The manifest next to this app's source. */
 export const MANIFEST = join(fileURLToPath(new URL('..', import.meta.url)), 'blend.yaml')
@@ -48,12 +48,12 @@ export async function createApp(
   const fibers: Fiber[] = [
     first,
     ...(await compose(root, manifest, registry, {
-      server: { port: chosen.port.start, scan: chosen.port.scan },
+      server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 },
     })),
   ]
   return {
     root,
-    url: root.server.url,
+    url: root.nodeServer.url,
     async stop() {
       for (const fiber of [...fibers].reverse()) await fiber.dispose()
     },

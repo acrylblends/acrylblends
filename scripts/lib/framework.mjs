@@ -5,7 +5,7 @@ import { dirname, join, relative, sep } from 'node:path'
 
 export const SOURCE_REPO = 'acryldev/acryl'
 
-/** The framework plugins (acryl-router-http is not among them: it needs the DSH web server, which acryl-node-server replaces). `entries` maps each importable subpath to the upstream file it resolves to. */
+/** The framework plugins, in dependency order. `entries` maps each importable subpath to the upstream file it resolves to. */
 export const PLUGINS = {
   'acryl-router': {
     entries: {
@@ -18,6 +18,16 @@ export const PLUGINS = {
         'loads the built lib/ entry through the real Loader; the library ships source and has no build',
     },
   },
+  'acryl-router-http': {
+    entries: { '': 'src/index.ts' },
+    testsNotRun: {
+      'tests/adapter.spec.ts':
+        'needs @deepseek-ai/dsh-host-webserver (the DSH web server); acryl-node-server has its own tests',
+      'tests/stream.spec.ts': 'needs @deepseek-ai/dsh-host-webserver (the DSH web server)',
+      'tests/surfaces.spec.ts': 'needs @deepseek-ai/dsh-host-webserver (the DSH web server)',
+    },
+  },
+  'acryl-node-server': { entries: { '': 'src/index.ts' }, testsNotRun: {} },
   'acryl-state': {
     entries: { '': 'src/index.ts', '/react': 'src/react.ts' },
     testsNotRun: {
@@ -110,14 +120,14 @@ export function readUpstream(checkout, plugin) {
   }
   for (const dir of VENDORED_DIRS)
     for (const file of listFiles(join(root, dir))) add(`${dir}/${file}`)
-  let notice = null
+  const notices = []
   for (const name of NOTICE_FILES) {
     if (existsSync(join(root, name))) {
       add(name)
-      notice = name
-      break
+      notices.push(name)
     }
   }
+  const notice = notices.length > 0 ? notices : null
   for (const entry of Object.values(PLUGINS[plugin].entries)) {
     if (!files.has(entry))
       throw new Error(`${plugin}: the entry ${entry} is not in the vendored files`)

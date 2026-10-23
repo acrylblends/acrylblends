@@ -1,9 +1,9 @@
 {
   "plugins": [
     "instance",
-    "http",
-    "events",
-    "server",
+    "acryl-router",
+    "acryl-state",
+    "acryl-node-server",
     "tasks",
     "agent",
     "openai",

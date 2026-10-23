@@ -1,11 +1,12 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
+import * as nodeServer from './plugins/acryl-node-server/src/index.ts'
+import * as router from './plugins/acryl-router/src/index.ts'
+import * as state from './plugins/acryl-state/src/index.ts'
 import { agent, memory, model, tools } from './plugins/agent/index.ts'
 import { builder } from './plugins/builder/index.ts'
-import { events } from './plugins/events/index.ts'
 import { extensions } from './plugins/extensions/index.ts'
-import { http } from './plugins/http/index.ts'
 import { type AppInstance, instance } from './plugins/instance/index.ts'
 import {
   blueprintsIn,
@@ -16,7 +17,6 @@ import {
 import { type OpenAIConfig, openai } from './plugins/openai/index.ts'
 import { sandboxPlugin } from './plugins/sandbox/index.ts'
 import { save } from './plugins/save/index.ts'
-import { server } from './plugins/server/index.ts'
 import { tasks } from './plugins/tasks/index.ts'
 import { routes } from './routes.ts'
 
@@ -27,14 +27,14 @@ export const registry = {
   tools,
   memory,
   agent,
-  http,
-  events,
+  'acryl-router': router,
+  'acryl-state': state,
   extensions,
   builder,
   save,
   sandbox: sandboxPlugin,
   routes,
-  server,
+  'acryl-node-server': nodeServer,
 }
 
 /** The manifest next to this app's source. */
@@ -85,12 +85,12 @@ export async function createApp(
       // The `approval` parameter in blend.yaml (the extensions row) turns this source into one that asks.
       extensions: { sources: [{ dir: extensionsDir, trust: 'install' }] },
       builder: { dir: extensionsDir },
-      server: { port: chosen.port.start, scan: chosen.port.scan, hostname: chosen.host },
+      server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0, hostname: chosen.host },
     })),
   ]
   return {
     root,
-    url: root.server.url,
+    url: root.nodeServer.url,
     async stop() {
       for (const fiber of [...fibers].reverse()) await fiber.dispose()
     },

@@ -67,10 +67,10 @@ describe('templates', () => {
 
 describe('library', () => {
   it('orders each plugin after what it requires, without duplicates', () => {
-    const names = closure(['server', 'instance', 'http'], readLibrary()).map(
+    const names = closure(['acryl-node-server', 'instance', 'acryl-router'], readLibrary()).map(
       (plugin) => plugin.name,
     )
-    expect(names).toEqual(['http', 'server', 'instance'])
+    expect(names).toEqual(['acryl-router', 'acryl-router-http', 'acryl-node-server', 'instance'])
   })
 
   it('refuses an unknown plugin and names who required it', () => {
@@ -175,15 +175,18 @@ describe('init', () => {
     const dir = join(scratch, 'plain')
     expect(manifest(dir).name).toBe('plain')
     expect(readFileSync(join(dir, 'src/routes.ts'), 'utf8')).toContain("APP_NAME = 'plain'")
-    for (const plugin of ['instance', 'http', 'server'])
-      expect(existsSync(join(dir, 'src/plugins', plugin, 'index.ts'))).toBe(true)
+    expect(existsSync(join(dir, 'src/plugins/instance/index.ts'))).toBe(true)
+    for (const plugin of ['acryl-router', 'acryl-router-http', 'acryl-node-server'])
+      expect(existsSync(join(dir, 'src/plugins', plugin, 'src/index.ts'))).toBe(true)
     expect(existsSync(join(dir, 'src/plugins/agent'))).toBe(false)
-    expect(existsSync(join(dir, 'src/plugins/http/plugin.json'))).toBe(false)
-    expect(existsSync(join(dir, 'src/plugins/http/test'))).toBe(false)
+    expect(existsSync(join(dir, 'src/plugins/acryl-router/plugin.json'))).toBe(false)
+    expect(existsSync(join(dir, 'src/plugins/acryl-router/tests'))).toBe(false)
+    expect(existsSync(join(dir, 'src/plugins/acryl-router/NOTICE'))).toBe(true)
     expect(existsSync(join(dir, '.gitignore'))).toBe(true)
     expect(existsSync(join(dir, 'template.json'))).toBe(false)
     expect(manifest(dir).dependencies).toEqual({
       '@deepseek-ai/cordis': '4.0.4',
+      '@deepseek-ai/schemastery': '3.18.4',
       '@webboxes/app-persistence': '0.1.0',
       '@webboxes/blends-core': '0.4.0',
       yaml: '2.9.0',
@@ -280,6 +283,6 @@ describe('add and plugins', () => {
   it('lists the library', async () => {
     const session = fakeIo()
     expect(await runCli(['plugins'], session.io)).toBe(0)
-    expect(session.out()).toMatch(/^server .*requires http/m)
+    expect(session.out()).toMatch(/^acryl-node-server .*requires acryl-router, acryl-router-http/m)
   })
 })

@@ -13,11 +13,11 @@ spec:
     # The address the server listens on.
     hostname: { type: string, default: 127.0.0.1 }
   rows:
-    - id: http
-      name: http
+    - id: router
+      name: acryl-router
     - id: routes
       name: routes
     - id: server
-      name: server
+      name: acryl-node-server
       config:
         hostname: "{{parameters.hostname}}"

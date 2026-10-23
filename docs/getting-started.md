@@ -17,8 +17,8 @@ npm run dev                           # prints its URL; the app's data lives in 
 
 | Template | Plugins | What it is |
 |---|---|---|
-| `blank` | `instance`, `http`, `server`, `manifest`, `save` | a Cordis app that serves routes |
-| `agent` | the above plus `tasks`, `agent`, `extensions`, `builder` | the same, with an offline agent that can extend the app while it runs |
+| `blank` | `instance`, `acryl-router`, `acryl-node-server`, `manifest`, `save` | a Cordis app that serves routes on the router |
+| `agent` | the above plus `acryl-state`, `tasks`, `agent`, `extensions`, `builder` | the same, with an offline agent that can extend the app while it runs |
 
 Every generated app is TypeScript, has `npm test` (`node:test`) and `npm run check` (types), and depends at run time on
 `@deepseek-ai/cordis` and `yaml` (plus `@deepseek-ai/schemastery` if you add `settings`).

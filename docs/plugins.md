@@ -7,7 +7,7 @@ against a real Cordis context, including disposal.
 | Plugin | Service | From ACRYL |
 |---|---|---|
 | [instance](#instance) | `appInstance` | `runtime/acryl-harness-runtime/src/instance/` |
-| [http](#http-and-server), [server](#http-and-server) | `http`, `server` | - |
+| [acryl-router](#the-framework-plugins), [acryl-router-http](#the-framework-plugins), [acryl-node-server](#the-framework-plugins), [acryl-state](#the-framework-plugins), [acryl-inspect](#the-framework-plugins) | `router`, `nodeServer`, `state`, `inspect` | `plugins/acryl-*` (the ACRYL framework) |
 | [settings](#settings) | `settings` | `plugins/acryl-settings` |
 | [extensions](#extensions) | `extensions` | `plugins/acryl-extension-context` |
 | [builder](#builder) | tools for the agent | the agent's install tools |
@@ -15,7 +15,6 @@ against a real Cordis context, including disposal.
 | [agent](#agent) | `agent`, `model`, `tools`, `memory` | - |
 | [openai](#openai) | `model` (a real one) | - |
 | [tasks](#tasks) | `tasks` | idea from Pi Durable |
-| [events](#events) | a route | idea from Pi Durable |
 | [manifest](#manifest) | functions, no service | `runtime/blends-core` |
 | [save](#save) | a tool for the agent | `runtime/app-persistence` |
 
@@ -26,11 +25,13 @@ environment; it returns a frozen `AppInstance` with `root` (the project folder),
 `ACRYLBLENDS_HOME`), and a port preference: a stable port per app in 3100-3999 that moves to the next free one, or
 `ACRYLBLENDS_PORT`. Two folders with the same name are different apps. Mount it first: `root.plugin(instance, chosen)`.
 
-## http and server
+## The framework plugins
 
-`http` is a router service: `ctx.http.route(method, path, handler)` returns the function that removes the route, so a
-plugin adds routes inside `ctx.effect` and they leave with it. `server` serves the router with `node:http`, takes `{ port,
-hostname, scan }` as its Cordis config, provides `ctx.server.url`, and closes on dispose.
+`acryl-router` (`ctx.router`: Hono-shaped routes, middleware, helpers, an in-process `request()`), `acryl-node-server` (one `node:http` listener that sends every
+request to the router; config `{ port, hostname, scan }`, provides `ctx.nodeServer.url`), `acryl-state` (observable cells, read as JSON and streamed as server-sent
+events at `/api/state/<key>` and `/api/state/<key>/events`), `acryl-inspect` (what every plugin requires, provides and registers) and `acryl-router-http` (the
+`serve()` that `acryl-node-server` uses) are ACRYL's framework, vendored here as they are. Their text is in [framework/](framework/README.md); their source is
+`plugins/acryl-*/src`, never edited in this repository (see `scripts/sync-framework.mjs`).
 
 ## settings
 
@@ -85,14 +86,8 @@ Durable task records: `ctx.tasks.start(kind, input, { parent })` returns a handl
 an abort `signal`. Every change is appended to `<home>/tasks.jsonl` before the call returns. `cancel(id)` cancels the
 tasks it owns too. After a crash, a task that was running is marked `interrupted` and is never run again on its own,
 because a side effect may already have happened. When `tasks` is mounted, every agent run is a task owning one task per
-tool call.
-
-## events
-
-`GET /events` as a stream of server-sent events. Config: `{ topics: ['tasks/changed', 'extensions/changed'], path }`. The SSE event
-name is the Cordis event, the data is `{ "args": [...] }`, ids rise, a keepalive comment goes out every 15 s, and a connection's
-listeners are removed when the client leaves. Any route can answer with a stream: return `{ body: null, stream: (send) => cleanup }`
-from a route handler. A surface renders this stream instead of polling `GET /tasks`.
+tool call. With `acryl-state` mounted, the latest tasks are also the state cell `tasks`, and the installed extensions the cell `extensions`: read them at
+`/api/state/tasks` and stream them at `/api/state/tasks/events`.
 
 ## manifest
 

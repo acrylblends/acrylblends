@@ -1,9 +1,0 @@
-{
-  "name": "events",
-  "description": "A live stream of Cordis events over server-sent events, so a surface renders state instead of polling.",
-  "requires": ["http"],
-  "inject": ["http"],
-  "provides": [],
-  "dependencies": { "@deepseek-ai/cordis": "4.0.4" },
-  "mount": "add a row to blend.yaml: events, with config { topics: ['tasks/changed', 'extensions/changed'] }"
-}

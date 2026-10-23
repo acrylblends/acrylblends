@@ -181,6 +181,11 @@ function injected(module: PluginModule): string[] {
 }
 
 /** The service. One instance serves one app home. */
+/** The slice of the state service this plugin uses, by name, so it imports nothing from acryl-state. */
+interface StateService {
+  cell<T>(key: string, initial: T): { set(value: T): void }
+}
+
 export class Extensions extends Service {
   readonly sources: readonly ExtensionSource[]
   readonly stageRoot: string
@@ -234,6 +239,12 @@ export class Extensions extends Service {
       },
       'extensions: settle pending operations',
     )
+    // With the state service mounted, what is installed is also a cell: any surface reads it as JSON or streams its changes (`/api/state/extensions`).
+    ctx.inject(['state'], (inner) => {
+      const state = (inner as unknown as { state: StateService }).state
+      const cell = state.cell('extensions', this.list())
+      inner.on('extensions/changed', () => cell.set(this.list()))
+    })
     this.ready = this.serial(() => this.startup())
   }
 

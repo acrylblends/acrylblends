@@ -2,11 +2,11 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-inspect",
-    "commit": "89fe50bc4a351335718a7ae62952f1d2edfad831"
+    "commit": "878a0550162c0dcc63845554d1bab94087aaffc5"
   },
-  "vendored": ["src", "tests"],
+  "vendored": ["src", "tests", "LICENSE", "NOTICE"],
   "rewrittenSpecifiers": 3,
-  "digest": "sha256:7b18c23e38233dcf5c0f17ec5f4eb181851674ed7b9ef14dfa5dcd10bc7c21f3",
+  "digest": "sha256:ff5ae74b6e51c5f6d5cf3c36199c2bcc406cd2f46e2a7b2652849c64c3f1694a",
   "testsNotRun": {},
-  "notice": null
+  "notice": ["LICENSE", "NOTICE"]
 }

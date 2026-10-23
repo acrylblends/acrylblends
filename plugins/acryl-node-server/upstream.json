@@ -1,0 +1,12 @@
+{
+  "source": {
+    "repo": "acryldev/acryl",
+    "path": "plugins/acryl-node-server",
+    "commit": "878a0550162c0dcc63845554d1bab94087aaffc5"
+  },
+  "vendored": ["src", "tests", "LICENSE", "NOTICE"],
+  "rewrittenSpecifiers": 4,
+  "digest": "sha256:90405ed628e18d888e51c9258aa6cc5d4b73c1c1943724ec4cf93134b0ed28cb",
+  "testsNotRun": {},
+  "notice": ["LICENSE", "NOTICE"]
+}
