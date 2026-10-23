@@ -7,11 +7,27 @@ import { afterAll, describe, expect, it } from 'vitest'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const docs = join(root, 'docs')
-const pages = readdirSync(docs).filter((name) => name.endsWith('.md'))
+/** Every page under docs/, as a path like `agent/extending-apps.md`. docs/framework is a generated copy of ACRYL's text (see scripts/sync-framework.mjs). */
+const allPages = (dir = ''): string[] =>
+  readdirSync(join(docs, dir), { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? allPages(join(dir, entry.name))
+      : entry.name.endsWith('.md')
+        ? [join(dir, entry.name)]
+        : [],
+  )
+const everyPage = allPages()
+const pages = everyPage.filter((name) => !name.startsWith('framework'))
 const read = (name: string) => readFileSync(join(docs, name), 'utf8')
 const markdown = [
   ...pages.map((name) => ({ name, text: read(name) })),
   { name: '../README.md', text: readFileSync(join(root, 'README.md'), 'utf8') },
+]
+const linked = [
+  ...markdown,
+  ...everyPage
+    .filter((name) => name.startsWith('framework'))
+    .map((name) => ({ name, text: read(name) })),
 ]
 
 /** `cordis` as installed for the templates, so the snippets run against the version the templates pin. */
@@ -24,10 +40,11 @@ describe('docs', () => {
     const index = read('README.md')
     for (const page of pages.filter((name) => name !== 'README.md'))
       expect(index).toContain(`(${page})`)
+    expect(index).toContain('(framework/README.md)')
   })
 
   it('has no broken relative links', () => {
-    for (const { name, text } of markdown) {
+    for (const { name, text } of linked) {
       for (const [, target] of text.matchAll(/\]\(([^)#\s]+)(?:#[^)]*)?\)/g)) {
         if (/^[a-z]+:/.test(target as string)) continue
         expect(
@@ -67,13 +84,13 @@ describe('docs: Cordis examples run', () => {
   )
 })
 
-describe('docs: the extension contract in extending-apps.md', () => {
+describe('docs: the extension contract in agent/extending-apps.md', () => {
   it('installs through the real extensions plugin and passes its own check', async () => {
     const { Context } = await import('@deepseek-ai/cordis')
     const { instance, pinnedInstance } = await import('../../plugins/instance/index.ts')
     const { extensions } = await import('../../plugins/extensions/index.ts')
     const block = /<!-- extension: hello -->\n```ts\n([\s\S]*?)```/.exec(
-      read('extending-apps.md'),
+      read('agent/extending-apps.md'),
     )?.[1]
     expect(block).toBeTruthy()
     const project = mkdtempSync(join(tmpdir(), 'acrylblends-docs-ext-'))

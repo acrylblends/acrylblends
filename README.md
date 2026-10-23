@@ -7,7 +7,7 @@
 <p align="center"><strong>A framework for Cordis apps, built from ACRYL's best parts.</strong><br>
 Cordis is the framework. ACRYLBLENDS gives you the plugins ACRYL proved, as code you own.</p>
 
-<p align="center"><a href="docs/README.md">Documentation</a> · <a href="docs/getting-started.md">Getting started</a> · <a href="docs/plugins.md">Plugin library</a> · <a href="docs/extending-apps.md">Extending a running app</a></p>
+<p align="center"><a href="docs/README.md">Documentation</a> · <a href="docs/getting-started.md">Getting started</a> · <a href="docs/plugins.md">Plugin library</a> · <a href="docs/agent/extending-apps.md">Extending a running app</a></p>
 
 ---
 

@@ -43,7 +43,7 @@ them in order; an unchanged value notifies nobody; pending writes settle on disp
 
 Install, update, remove and reload Cordis plugins while the app runs: `ctx.extensions.install(folder)`, `remove(name)`,
 `reload()`, `list()`, `pending()`, `ledger()`. A failed update brings the previous version back. Config: `{ sources: [{
-dir, trust: 'install' | 'list' }] }`. Details in [Extending a running app](extending-apps.md).
+dir, trust: 'install' | 'list' }] }`. Details in [Extending a running app](agent/extending-apps.md).
 
 ## sandbox
 
@@ -99,7 +99,7 @@ from a route handler. A surface renders this stream instead of polling `GET /tas
 Reads and validates `blend.yaml`, ACRYL's Blend format: Blueprints, and Blends that resolve over them (`lineage`, `extends`, `overrides`), plus `planUpgrade` for moving a Blend to a newer Blueprint.
 
 `loadManifest(file, { known, values })`, `validate(document, known)`, `compose(root, manifest, registry, overrides)`,
-`lock(manifest, sources)`, and `npm run lock`. See [The app manifest](manifest.md).
+`lock(manifest, sources)`, and `npm run lock`. See [The app manifest](blends/manifest.md).
 
 ## save
 

@@ -128,3 +128,25 @@ export function readUpstream(checkout, plugin) {
 export function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
+
+/** ACRYL's framework docs are copied as they are into docs/framework/. These two files are ours and are not part of the digest. */
+export const DOCS_DIR = 'docs/framework'
+export const DOCS_OURS = new Set(['upstream.json', 'UPSTREAM.md'])
+
+/** The docs tree of an ACRYL checkout, verbatim: a Map of the path inside docs/framework to bytes. */
+export function readUpstreamDocs(checkout) {
+  const root = join(checkout, DOCS_DIR)
+  if (!existsSync(root)) throw new Error(`${root} does not exist in the ACRYL checkout`)
+  const files = new Map()
+  for (const file of listFiles(root)) files.set(file, readFileSync(join(root, file)))
+  return files
+}
+
+/** The docs already in this repository, without the files that are ours. */
+export function readVendoredDocs(repoRoot) {
+  const root = join(repoRoot, DOCS_DIR)
+  const files = new Map()
+  for (const file of listFiles(root))
+    if (!DOCS_OURS.has(file)) files.set(file, readFileSync(join(root, file)))
+  return files
+}

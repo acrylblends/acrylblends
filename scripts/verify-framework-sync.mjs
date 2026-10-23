@@ -7,12 +7,15 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  DOCS_DIR,
   digestOf,
   listFiles,
   NOTICE_FILES,
   PLUGINS,
   readJson,
   readUpstream,
+  readUpstreamDocs,
+  readVendoredDocs,
   VENDORED_DIRS,
 } from './lib/framework.mjs'
 
@@ -59,11 +62,27 @@ for (const name of Object.keys(PLUGINS)) {
   }
 }
 
+const docsRecordFile = join(root, DOCS_DIR, 'upstream.json')
+if (!existsSync(docsRecordFile))
+  problems.push(`${DOCS_DIR}/upstream.json is missing; run scripts/sync-framework.mjs`)
+else {
+  const record = readJson(docsRecordFile)
+  const actual = digestOf(readVendoredDocs(root))
+  if (actual !== record.digest)
+    problems.push(
+      `${DOCS_DIR}: a page differs from the recorded digest (${record.digest.slice(0, 19)} recorded, ${actual.slice(0, 19)} found). Change the text in ACRYL and run scripts/sync-framework.mjs again.`,
+    )
+  if (against !== undefined && digestOf(readUpstreamDocs(resolve(against))) !== record.digest)
+    problems.push(
+      `${DOCS_DIR}: the ACRYL checkout at ${against} has different docs than the recorded digest; run scripts/sync-framework.mjs`,
+    )
+}
+
 for (const note of notes) console.warn(`note: ${note}`)
 if (problems.length > 0) {
   for (const problem of problems) console.error(`verify-framework-sync: ${problem}`)
   process.exit(1)
 }
 console.log(
-  `verify-framework-sync: ${Object.keys(PLUGINS).length} plugins match their recorded digests${against ? ' and the ACRYL checkout' : ''}`,
+  `verify-framework-sync: ${Object.keys(PLUGINS).length} plugins and docs/framework match their recorded digests${against ? ' and the ACRYL checkout' : ''}`,
 )

@@ -40,7 +40,7 @@ curl -X POST <url>/ask -H 'content-type: application/json' -d '{"question":"add 
 ```
 
 Either way the agent wrote a Cordis plugin into `extensions/hello/`, installed it into the running app, and checked that its route
-answers before reporting it live. See [Extending a running app](extending-apps.md).
+answers before reporting it live. See [Extending a running app](agent/extending-apps.md).
 
 ## Add plugins
 
@@ -66,7 +66,7 @@ public remote. Nothing is committed when it refuses.
 
 | Path | What |
 |---|---|
-| `blend.yaml` | the app as data: plugin rows, config, parameters ([manifest](manifest.md)) |
+| `blend.yaml` | the app as data: plugin rows, config, parameters ([manifest](blends/manifest.md)) |
 | `src/app.ts` | the registry of plugins your code provides; mounts the manifest |
 | `src/routes.ts` | your own plugin |
 | `src/plugins/` | plugins copied from the library; yours to edit |
