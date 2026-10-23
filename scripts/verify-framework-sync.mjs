@@ -13,9 +13,11 @@ import {
   NOTICE_FILES,
   PLUGINS,
   readJson,
+  readTemplateSources,
   readUpstream,
   readUpstreamDocs,
   readVendoredDocs,
+  TEMPLATE_SOURCES,
   VENDORED_DIRS,
 } from './lib/framework.mjs'
 
@@ -60,6 +62,29 @@ for (const name of Object.keys(PLUGINS)) {
         `${name}: the ACRYL checkout at ${against} produces ${expected.slice(0, 19)}, not the recorded ${record.digest.slice(0, 19)}: ACRYL moved on or this copy is stale; run scripts/sync-framework.mjs`,
       )
   }
+}
+
+for (const [template, config] of Object.entries(TEMPLATE_SOURCES)) {
+  const recordFile = join(root, config.dir, 'upstream.json')
+  if (!existsSync(recordFile)) {
+    problems.push(`${config.dir}/upstream.json is missing; run scripts/sync-framework.mjs`)
+    continue
+  }
+  const record = readJson(recordFile)
+  const files = new Map(
+    Object.values(config.files).map((path) => [path, readFileSync(join(root, config.dir, path))]),
+  )
+  if (digestOf(files) !== record.digest)
+    problems.push(
+      `template ${template}: a synced file differs from the recorded digest. Change it in ACRYL and run scripts/sync-framework.mjs again.`,
+    )
+  if (
+    against !== undefined &&
+    digestOf(readTemplateSources(resolve(against), template).files) !== record.digest
+  )
+    problems.push(
+      `template ${template}: the ACRYL checkout at ${against} differs from the recorded digest; run scripts/sync-framework.mjs`,
+    )
 }
 
 const docsRecordFile = join(root, DOCS_DIR, 'upstream.json')

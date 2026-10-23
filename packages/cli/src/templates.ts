@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** The templates: a blank Cordis app on the router, and the same app with the offline agent. */
-export const TEMPLATES = ['blank', 'agent'] as const
+/** The templates: a blank Cordis app on the router, a todo list built only on the router and state, and the blank app with the offline agent. */
+export const TEMPLATES = ['blank', 'todo', 'agent'] as const
 export type Template = (typeof TEMPLATES)[number]
 
 export function isTemplate(value: string): value is Template {

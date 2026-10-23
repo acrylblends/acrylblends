@@ -1,0 +1,12 @@
+{
+  "source": {
+    "repo": "acryldev/acryl",
+    "files": {
+      "examples/acryl-todo/src/index.ts": "src/todo.ts",
+      "examples/acryl-todo/src/page.ts": "src/page.ts"
+    },
+    "commit": "878a0550162c0dcc63845554d1bab94087aaffc5"
+  },
+  "rewrittenSpecifiers": 4,
+  "digest": "sha256:5ca4e0883b7ff0fdec8cf18baac5271209ee27fcc8ce8decf298c9720256f92c"
+}

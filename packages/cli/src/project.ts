@@ -53,7 +53,10 @@ export function copyTemplate(source: string, target: string, name: string): stri
   const written: string[] = []
   const walk = (from: string, to: string, prefix: string) => {
     for (const entry of readdirSync(from, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || (prefix === '' && entry.name === TEMPLATE_MANIFEST))
+      if (
+        entry.name === 'node_modules' ||
+        (prefix === '' && (entry.name === TEMPLATE_MANIFEST || entry.name === 'upstream.json'))
+      )
         continue
       const sourcePath = join(from, entry.name)
       // npm and git treat a file named .gitignore specially, so templates keep it as `gitignore` (and `dockerignore`).
@@ -78,7 +81,7 @@ export function copyTemplate(source: string, target: string, name: string): stri
   return written
 }
 
-/** A template's own manifest, `template.json`: the library plugins it is built from. Never copied. */
+/** A template's own manifest, `template.json`: the library plugins it is built from. Never copied (nor is `upstream.json`, the record of what was synced from ACRYL). */
 export const TEMPLATE_MANIFEST = 'template.json'
 
 export function readTemplatePlugins(templateDir: string): string[] {

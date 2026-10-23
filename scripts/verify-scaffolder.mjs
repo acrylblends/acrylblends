@@ -28,7 +28,11 @@ const cliDir = join(root, 'packages', 'cli')
 const cli = join(cliDir, 'bin', 'acrylblends.js')
 const scratch = mkdtempSync(join(tmpdir(), 'verify-scaffolder-'))
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-const TEMPLATES = { blank: ['--template', 'blank'], agent: ['--template', 'agent'] }
+const TEMPLATES = {
+  blank: ['--template', 'blank'],
+  todo: ['--template', 'todo'],
+  agent: ['--template', 'agent'],
+}
 
 const log = (message) => console.log(`verify-scaffolder: ${message}`)
 const fail = (message) => {
@@ -151,10 +155,51 @@ try {
     let child = start()
     try {
       let url = await waitForUrl(child)
-      const index = await json(await fetch(`${url}/`), `${template}: GET /`)
-      if (index.app !== name || index.ok !== true)
-        fail(`${template}: GET / answered ${JSON.stringify(index)}`)
-      await json(await fetch(`${url}/health`), `${template}: GET /health`)
+      if (template === 'todo') {
+        // The CRUD works over HTTP, and the list is still there after the app stops and starts again.
+        const call = async (method, path, body) =>
+          fetch(`${url}${path}`, {
+            method,
+            headers: { 'content-type': 'application/json', origin: new URL(url).origin },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          })
+        const created = await call('POST', '/todo/api', { title: 'write the spec' })
+        if (created.status !== 201) fail(`todo: POST /todo/api answered ${created.status}`)
+        const second = await (await call('POST', '/todo/api', { title: 'ship it' })).json()
+        if (second.id !== 2) fail(`todo: the second todo got id ${second.id}`)
+        const done = await json(await call('PATCH', '/todo/api/1', { done: true }), 'todo: PATCH')
+        if (done.done !== true) fail(`todo: PATCH answered ${JSON.stringify(done)}`)
+        if ((await call('POST', '/todo/api', { title: '' })).status !== 400)
+          fail('todo: an empty title was not refused with 400')
+        if ((await call('DELETE', '/todo/api/9')).status !== 404)
+          fail('todo: deleting an unknown id was not a 404')
+        const page = await (await call('GET', '/todo')).text()
+        if (!/<title>Todo<\/title>/.test(page)) fail('todo: GET /todo is not the page')
+        await stopCleanly(child)
+        child = start()
+        url = await waitForUrl(child)
+        const kept = await json(await call('GET', '/todo/api'), 'todo: GET after a restart')
+        if (
+          kept.length !== 2 ||
+          kept[0].title !== 'write the spec' ||
+          kept[0].done !== true ||
+          kept[1].title !== 'ship it'
+        )
+          fail(`todo: the list after a restart is ${JSON.stringify(kept)}`)
+        if ((await call('DELETE', '/todo/api/1')).status !== 204)
+          fail('todo: DELETE did not answer 204')
+        const left = await json(await call('GET', '/todo/api'), 'todo: GET after a delete')
+        if (left.length !== 1 || left[0].id !== 2)
+          fail(`todo: after a delete the list is ${JSON.stringify(left)}`)
+        log(
+          'todo: CRUD works over HTTP, validation answers 400 and 404, the page is served, and the list is still there after a restart',
+        )
+      } else {
+        const index = await json(await fetch(`${url}/`), `${template}: GET /`)
+        if (index.app !== name || index.ok !== true)
+          fail(`${template}: GET / answered ${JSON.stringify(index)}`)
+        await json(await fetch(`${url}/health`), `${template}: GET /health`)
+      }
       if (template === 'agent') {
         const ask = async (question) =>
           (

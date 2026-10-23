@@ -69,11 +69,13 @@ export function digestOf(files) {
 }
 
 /** What a bare specifier names: `acryl-router`, `acryl-router/middleware` ... becomes the path of the vendored file, relative to the importing file. */
-function resolveSpecifier(specifier, fromFile) {
+function resolveSpecifier(specifier, fromFile, pluginsRoot) {
   for (const [plugin, { entries }] of Object.entries(PLUGINS)) {
     for (const [subpath, upstreamFile] of Object.entries(entries)) {
       if (specifier !== `${plugin}${subpath}`) continue
-      const target = `${plugin}/${upstreamFile}`
+      const target = pluginsRoot
+        ? `${pluginsRoot}/${plugin}/${upstreamFile}`
+        : `${plugin}/${upstreamFile}`
       let path = relative(dirname(fromFile), target).split(sep).join('/')
       if (!path.startsWith('.')) path = `./${path}`
       return path
@@ -89,10 +91,10 @@ const SPECIFIER =
  * Rewrite the specifiers that name another vendored plugin to relative paths. `file` is the path of the file inside `plugins/` (for example
  * `acryl-state/src/service.ts`). Any other `acryl-*` specifier is an error: the vendored plugins may depend only on each other and on public packages.
  */
-export function rewriteSpecifiers(source, file) {
+export function rewriteSpecifiers(source, file, pluginsRoot = '') {
   let count = 0
   const rewritten = source.replace(SPECIFIER, (_match, lead, quote, specifier) => {
-    const path = resolveSpecifier(specifier, file)
+    const path = resolveSpecifier(specifier, file, pluginsRoot)
     if (path === undefined)
       throw new Error(
         `${file}: imports "${specifier}", which is not one of the vendored framework plugins`,
@@ -159,4 +161,34 @@ export function readVendoredDocs(repoRoot) {
   for (const file of listFiles(root))
     if (!DOCS_OURS.has(file)) files.set(file, readFileSync(join(root, file)))
   return files
+}
+
+/** Files of an ACRYL checkout that become template files: upstream path to template path (the reference app, `examples/acryl-todo`). */
+export const TEMPLATE_SOURCES = {
+  todo: {
+    dir: 'packages/cli/templates/todo',
+    /** Where the framework plugins sit in a generated app, relative to the app folder. */
+    pluginsRoot: 'src/plugins',
+    files: {
+      'examples/acryl-todo/src/index.ts': 'src/todo.ts',
+      'examples/acryl-todo/src/page.ts': 'src/page.ts',
+    },
+  },
+}
+
+/** The template files of one template, read from an ACRYL checkout and rewritten for the app layout: a Map of template path to bytes. */
+export function readTemplateSources(checkout, template) {
+  const config = TEMPLATE_SOURCES[template]
+  const files = new Map()
+  let rewritten = 0
+  for (const [from, to] of Object.entries(config.files)) {
+    const result = rewriteSpecifiers(
+      readFileSync(join(checkout, from), 'utf8'),
+      to,
+      config.pluginsRoot,
+    )
+    rewritten += result.count
+    files.set(to, Buffer.from(result.source))
+  }
+  return { files, rewritten }
 }

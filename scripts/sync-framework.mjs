@@ -15,9 +15,11 @@ import {
   digestOf,
   NOTICE_FILES,
   PLUGINS,
+  readTemplateSources,
   readUpstream,
   readUpstreamDocs,
   SOURCE_REPO,
+  TEMPLATE_SOURCES,
   VENDORED_DIRS,
 } from './lib/framework.mjs'
 
@@ -75,6 +77,25 @@ for (const [name, config] of Object.entries(PLUGINS)) {
   }
   console.log(
     `${name}: ${files.size} files, ${rewritten} specifiers rewritten, ${upstream.digest.slice(0, 19)}${notice ? '' : ' (no upstream notice file)'}`,
+  )
+}
+
+for (const [template, config] of Object.entries(TEMPLATE_SOURCES)) {
+  const { files, rewritten } = readTemplateSources(resolve(checkout), template)
+  const record = {
+    source: { repo: SOURCE_REPO, files: config.files, commit },
+    rewrittenSpecifiers: rewritten,
+    digest: digestOf(files),
+  }
+  if (!dryRun) {
+    for (const [path, bytes] of files) {
+      mkdirSync(dirname(join(root, config.dir, path)), { recursive: true })
+      writeFileSync(join(root, config.dir, path), bytes)
+    }
+    writeFileSync(join(root, config.dir, 'upstream.json'), `${JSON.stringify(record, null, 2)}\n`)
+  }
+  console.log(
+    `template ${template}: ${files.size} files, ${rewritten} specifiers rewritten, ${record.digest.slice(0, 19)}`,
   )
 }
 

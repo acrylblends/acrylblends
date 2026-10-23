@@ -1,0 +1,23 @@
+{
+  "name": "__APP_NAME__",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "dev": "node --watch src/main.ts",
+    "test": "node --test",
+    "check": "tsc --noEmit",
+    "lock": "node src/plugins/manifest/lock.ts",
+    "save": "node src/plugins/save/cli.ts",
+    "upgrade": "node src/plugins/manifest/upgrade-cli.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "6.0.3"
+  }
+}
