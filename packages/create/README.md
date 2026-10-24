@@ -1,0 +1,62 @@
+# create-acrylblends
+
+Create an Acryl app with one command.
+
+```sh
+npm create acrylblends@latest my-app
+```
+
+It asks which template you want, creates `my-app`, and prints what to run next. Other package managers work the same way: `pnpm create acrylblends@latest`, `yarn create acrylblends`, `bun create acrylblends@latest`.
+
+## Templates
+
+| Template | What you get |
+| --- | --- |
+| `nodejs` | an Acryl app served with `serve()` from `acrylblends/node-server`, with a test; run with Node.js 22.19 or newer |
+| `bun` (experimental) | the same app for Bun, with `export default app` |
+| `acryl-app` | a Cordis app built from plugins, with an agent that can extend it while it runs (the same app `npx acrylblends init --template agent` creates) |
+
+Every template includes `AGENTS.md`, `CLAUDE.md` and a copy of the framework documentation in `docs/framework/`, so a coding agent working in the folder reads the API from the folder.
+
+## Non-interactive use
+
+Arguments for the initializer go after `--` with `npm create`:
+
+```sh
+npm create acrylblends@latest my-app -- --template nodejs --install --pm npm
+```
+
+| Option | |
+| --- | --- |
+| `--template <name>` | `nodejs`, `bun` or `acryl-app` |
+| `--install` | install the dependencies after creating the app |
+| `--pm <manager>` | `npm`, `pnpm`, `yarn` or `bun` (default: the one that ran the command) |
+| `-y`, `--yes` | ask nothing: template `nodejs`, directory `acrylblends-app` unless given |
+
+## Then
+
+```sh
+cd my-app
+npm install     # unless you passed --install
+npm run dev     # prints its URL; GET / answers "Acryl!"
+npm test
+```
+
+```ts
+import { Acryl } from 'acrylblends'
+
+const app = new Acryl()
+app.get('/', (c) => c.text('Acryl!'))
+
+export default app
+```
+
+## Links
+
+- Documentation: https://acrylblends.github.io/docs (mirrored at https://acryl.dev/docs)
+- The framework package: https://www.npmjs.com/package/acrylblends
+- Source and issues: https://github.com/acrylblends/acrylblends
+- Blends registry: https://acrylblends.github.io/blends
+- ACRYL: https://acryl.dev
+
+MIT license.
