@@ -221,6 +221,12 @@ importers:
         specifier: 4.0.4
         version: 4.0.4(@deepseek-ai/cordis-plugin-loader@1.0.5)
 
+  packages/create:
+    dependencies:
+      acrylblends:
+        specifier: workspace:^
+        version: link:../cli
+
 packages:
 
   '@biomejs/biome@2.5.15':
