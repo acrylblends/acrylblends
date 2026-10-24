@@ -210,6 +210,14 @@ export const TEMPLATE_SOURCES = {
       'examples/acryl-todo/src/page.ts': 'src/page.ts',
     },
   },
+  /** The package's own README (the npm page): ACRYL writes it with its examples type-checked against the packed framework, so it is synced and digest-checked, never edited here. */
+  cliReadme: {
+    dir: 'packages/cli',
+    pluginsRoot: 'src/plugins',
+    files: {
+      'distribution/acrylblends-framework/README.md': 'README.md',
+    },
+  },
 }
 
 /** The template files of one template, read from an ACRYL checkout and rewritten for the app layout: a Map of template path to bytes. */

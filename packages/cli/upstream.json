@@ -1,0 +1,11 @@
+{
+  "source": {
+    "repo": "acryldev/acryl",
+    "files": {
+      "distribution/acrylblends-framework/README.md": "README.md"
+    },
+    "commit": "5743482e4199ded676a77f594bce15fd4aa0ca2f"
+  },
+  "rewrittenSpecifiers": 0,
+  "digest": "sha256:274878495f7a427d345a279d9c12ebebadfab31778f62412a544f477d3c0f748"
+}
