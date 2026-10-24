@@ -1,6 +1,7 @@
 /**
- * The framework's standalone HTTP adapter (spec 046), the standalone counterpart of the Host adapter. It owns one
- * `node:http` listener and hands every request to `ctx.router.fetch`, with the socket's peer address and local port as connection facts.
+ * The framework's standalone HTTP adapter (spec 046, ported in spec 047), the standalone counterpart of the Host adapter. It owns one
+ * `node:http` server built by the ported adapter in `src/adapter/` and hands every request to `ctx.router.fetch`, with the socket's peer
+ * address and local port as connection facts.
  * Use it in an app that runs without the ACRYL Host; inside the Host, `acryl-router-http` mounts prefixes on the Host's own web server.
  * One adapter per runtime: a plugin keeps asking `ctx.inject(['routerHttp'], ...)` for a mount, which simply never fires here, because this
  * adapter serves the whole router.
@@ -9,12 +10,16 @@
  * open streams, closes every connection and returns once the port is free.
  */
 
-import { createServer, type Server } from 'node:http'
+import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { serve } from '../../acryl-router-http/src/index.ts'
 import type {} from '../../acryl-router/src/index.ts'
+import { Request as AdapterRequest } from './adapter/request.ts'
+import { createAdaptorServer } from './adapter/server.ts'
+
+export { serveStatic, type ServeStaticOptions } from './adapter/serve-static.ts'
+export { RequestError } from './adapter/request.ts'
 
 /** Stable Cordis plugin name, equal to the package name and the Loader row id. */
 export const name = 'acryl-node-server'
@@ -26,7 +31,8 @@ export interface Config {
   scan: number
 }
 
-export const Config: z<Config> = z.object({
+/** Every field has a default, so a caller passes only what it changes: `ctx.plugin(plugin, { ... })` takes the partial shape. */
+export const Config: z<Partial<Config>, Config> = z.object({
   hostname: z.string().default('127.0.0.1').description('Address to bind. Loopback by default; binding elsewhere exposes the app to the network.'),
   port: z.number().min(0).max(65535).default(0).description('Port to listen on; 0 lets the system choose. A taken port is followed by the next free one.'),
   scan: z.number().min(0).default(20).description('How many further ports to try when the configured one is taken.'),
@@ -49,7 +55,14 @@ export class NodeServer extends Service {
     this.config = config
     this.hostname = config.hostname
     const router = ctx.router
-    this.server = createServer((req, res) => { void serve(router, req, res) })
+    // The handler sees the router's bindings (`c.env.connection`), not the raw `incoming`/`outgoing` pair. The global `Request` and
+    // `Response` stay the platform's, because this adapter shares its process with the rest of the app; so the adapter's lightweight
+    // request is made a real one (its signal still aborts when the client goes away) before the router re-creates it with its own signal.
+    this.server = createAdaptorServer({
+      fetch: (request, { incoming }) => router.fetch(new AdapterRequest(request), { remoteAddress: incoming.socket.remoteAddress, localPort: incoming.socket.localPort }),
+      hostname: config.hostname,
+      overrideGlobalObjects: false,
+    }) as Server
     ctx.effect(() => async () => {
       this.server.closeAllConnections()
       if (this.server.listening) await new Promise<void>(resolve => { this.server.close(() => { resolve() }) })
