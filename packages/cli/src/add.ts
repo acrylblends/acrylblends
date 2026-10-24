@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util'
 import { UsageError } from './init'
 import type { Io } from './io'
 import { closure, copyPlugin, type LibraryPlugin, readLibrary } from './library'
-import { mergeDependencies } from './project'
+import { mergeDependencies, mergeTooling } from './project'
 
 export interface AddOptions {
   readonly names: readonly string[]
@@ -68,6 +68,12 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
   for (const plugin of toCopy) {
     copyPlugin(plugin, appDir)
     addedDependencies.push(...mergeDependencies(appDir, plugin.dependencies))
+    const tooling = mergeTooling(appDir, plugin)
+    addedDependencies.push(...tooling.devDependencies)
+    if (tooling.scripts.length > 0)
+      io.stdout.write(
+        `new scripts: ${tooling.scripts.map((name) => `npm run ${name}`).join(', ')}\n`,
+      )
   }
   io.stdout.write(`added ${toCopy.map((plugin) => plugin.name).join(', ')} to ${appDir}\n`)
   if (addedDependencies.length > 0)

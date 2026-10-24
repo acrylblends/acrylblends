@@ -21,7 +21,10 @@
       "!packages/cli/templates/todo/src/todo.ts",
       "!packages/cli/templates/todo/src/page.ts",
       "!packages/cli/templates/todo/upstream.json",
-      "!packages/cli/upstream.json"
+      "!packages/cli/upstream.json",
+      "!plugins/desktop/user-data.ts",
+      "!plugins/desktop/shutdown.ts",
+      "!plugins/desktop/upstream.json"
     ]
   },
   "formatter": {

@@ -20,6 +20,7 @@ Options for init:
   --template <name>      blank or agent (asked when not given); --agent means --template agent,
                          --no-agent means --template blank
   --name <name>          the project name (default: the directory name)
+  --desktop              also add the desktop shell: npm run desktop opens a window on the app
   --install              run npm install after copying
   -y, --yes              ask nothing; use defaults (the blank template, no install)
 

@@ -7,10 +7,13 @@ import {
   copyTemplate,
   isValidName,
   mergeDependencies,
+  mergeTooling,
   nameFrom,
+  readTemplateDesktopPath,
   readTemplatePlugins,
   TargetNotEmptyError,
   writeAgentFiles,
+  writeDesktopPath,
 } from './project'
 import {
   frameworkDocsRoot,
@@ -32,6 +35,8 @@ export interface InitOptions {
   name: string | undefined
   template: Template | undefined
   install: boolean | undefined
+  /** Also add the desktop shell (`add desktop`): an Electron window on the app's own server. */
+  desktop: boolean
   yes: boolean
 }
 
@@ -63,6 +68,7 @@ export function parseInitOptions(argv: readonly string[]): InitOptions {
     name: values.name,
     template: (values.template as Template | undefined) ?? alias,
     install: values.install,
+    desktop: values.desktop === true,
     yes: values.yes === true,
   }
 }
@@ -78,6 +84,7 @@ const parse = (argv: readonly string[]) =>
       agent: { type: 'boolean' },
       'no-agent': { type: 'boolean' },
       install: { type: 'boolean' },
+      desktop: { type: 'boolean' },
       yes: { type: 'boolean', short: 'y' },
     },
   })
@@ -119,11 +126,17 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
     io.stderr.write(`error: ${error.message}\n`)
     return 1
   }
-  const plugins = closure(readTemplatePlugins(templateDir(template)), readLibrary())
+  const plugins = closure(
+    [...readTemplatePlugins(templateDir(template)), ...(options.desktop ? ['desktop'] : [])],
+    readLibrary(),
+  )
   for (const plugin of plugins) {
     copyPlugin(plugin, directory)
     mergeDependencies(directory, plugin.dependencies)
+    mergeTooling(directory, plugin)
   }
+  const desktopPath = options.desktop ? readTemplateDesktopPath(templateDir(template)) : undefined
+  if (desktopPath !== undefined) writeDesktopPath(directory, desktopPath)
   io.stdout.write(
     `created ${name} (${template}) in ${directory}: ${files.length} files, plugins ${plugins.map((plugin) => plugin.name).join(', ')}\n`,
   )

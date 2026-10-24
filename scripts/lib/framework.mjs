@@ -218,6 +218,15 @@ export const TEMPLATE_SOURCES = {
       'distribution/acrylblends-framework/README.md': 'README.md',
     },
   },
+  /** Two pure pieces of ACRYL Desktop (spec 018): the isolated Electron user-data folder and the bounded, escalating shutdown. They import nothing but `node:path`. */
+  desktop: {
+    dir: 'plugins/desktop',
+    pluginsRoot: 'src/plugins',
+    files: {
+      'apps/acryl-desktop/src/shell/desktop-user-data.ts': 'user-data.ts',
+      'apps/acryl-desktop/src/shell/shutdown.ts': 'shutdown.ts',
+    },
+  },
 }
 
 /** The template files of one template, read from an ACRYL checkout and rewritten for the app layout: a Map of template path to bytes. */
