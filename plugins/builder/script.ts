@@ -18,22 +18,19 @@ const PATH = /^\/[a-z0-9/-]*$/
 
 export function routeSource(name: string, path: string, text: string): string {
   return `import type { Context } from '@deepseek-ai/cordis'
+import { App } from 'acryl-router'
 
 /** Written by the builder: answers GET ${path}, and checks that it does before the install counts. */
 export const name = '${name}'
 export const inject = ['router']
 
-interface Router {
-  get(path: string, handler: (c: { json(body: unknown, status?: number): Response }) => Response): unknown
-  request(path: string): Promise<Response>
-}
 export function apply(ctx: Context) {
-  // A route registered through this plugin's context is removed when the plugin is unloaded.
-  (ctx as unknown as { router: Router }).router.get(${JSON.stringify(path)}, (c) => c.json({ text: ${JSON.stringify(text)} }))
+  // The app is mounted through this plugin's context, so the route is removed when the plugin is unloaded.
+  ctx.router.route('/', new App().get(${JSON.stringify(path)}, (c) => c.json({ text: ${JSON.stringify(text)} })))
 }
 
 export async function check(ctx: Context) {
-  const reply = await (ctx.get('router') as Router).request(${JSON.stringify(path)})
+  const reply = await ctx.get('router')!.request(${JSON.stringify(path)})
   if (!reply.ok) throw new Error(\`GET ${path} answered \${reply.status}\`)
 }
 `

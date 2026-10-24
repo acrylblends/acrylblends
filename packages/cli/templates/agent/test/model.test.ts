@@ -10,11 +10,12 @@ import { pinnedInstance, withPort } from '../src/plugins/instance/index.ts'
 
 /** A plugin no scripted command knows: the model writes it from scratch. */
 const COUNTER = `import type { Context } from '@deepseek-ai/cordis'
+import { App } from 'acryl-router'
 export const name = 'counter'
 export const inject = ['router']
 export function apply(ctx: Context) {
   let count = 0
-  ctx.router.get('/count', (c) => c.json({ count: ++count }))
+  ctx.router.route('/', new App().get('/count', (c) => c.json({ count: ++count })))
 }
 `
 

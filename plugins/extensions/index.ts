@@ -32,7 +32,7 @@ import { type Context, type Fiber, Service } from '@deepseek-ai/cordis'
 import type {} from '../instance/index.ts'
 import type { Sandbox } from '../sandbox/index.ts'
 import { appendLedger, type LedgerEntry, readLedger } from './ledger.ts'
-import { resolveFromApp } from './resolve.ts'
+import { resolveFromApp, routerAliases } from './resolve.ts'
 import { hashFolder, prune, stage } from './stage.ts'
 
 /** A fiber's lifecycle state, by name (Cordis's own enum is a `const enum`, which does not exist at run time). */
@@ -221,7 +221,7 @@ export class Extensions extends Service {
     this.ledgerFile = join(home, 'extensions-ledger.jsonl')
     // Effects run their disposers newest first: settle pending operations, then dispose every mounted extension, then drop the hook.
     ctx.effect(
-      () => resolveFromApp(this.stageRoot, root),
+      () => resolveFromApp(this.stageRoot, root, routerAliases()),
       'extensions: resolve staged imports from the app',
     )
     ctx.effect(

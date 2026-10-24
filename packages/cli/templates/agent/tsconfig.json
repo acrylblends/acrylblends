@@ -11,7 +11,12 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "acryl-router": ["./src/plugins/acryl-router/src/index.ts"],
+      "acryl-router/middleware": ["./src/plugins/acryl-router/src/middleware/index.ts"],
+      "acryl-router/helpers": ["./src/plugins/acryl-router/src/helpers/index.ts"]
+    }
   },
   "include": ["src", "test", "extensions"]
 }
