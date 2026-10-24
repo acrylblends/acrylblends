@@ -21,7 +21,7 @@ Measured here, on this machine, before writing the proposal.
 - **What ACRYL proved that is small and reusable.** (1) `src/shell/desktop-user-data.ts` (38 lines, depends on `node:path` only): an isolated Electron `userData` folder, chosen before the single-instance
   lock, from an explicit override or from the selected instance's own folder, so a development or per-app run never shares window state, logs, crash evidence or the lock with another app.
   (2) The window security settings in `src/shell/window-options.ts`: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, `webSecurity: true`, a preload that exposes nothing but what it must,
-  window shown after `ready-to-show`. (3) The single-instance lock, quit and graceful-shutdown order (`src/shell/shutdown.ts`, 177 lines): stop the server, then exit.
+  window created with `show: false`. (3) The single-instance lock, quit and graceful-shutdown order (`src/shell/shutdown.ts`, 177 lines): stop the server, then exit.
 - **Packaging exists in ACRYL, and depends on its signing.** `electron-builder` 26.15.7 with hardened runtime, notarization for macOS (`mac.notarize`), NSIS for Windows and a Linux script; the mac target is
   `dir` and a separate release script makes the dmg. That needs the owner's signing identities and notarization credentials, which this repository does not have.
 - **Our server is already window-ready.** `createApp` serves on a loopback port (`port: 0` picks a free one), the pages the app serves are same-origin to the window, and `loopbackOnly({ callers: 'own-page' })`
