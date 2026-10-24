@@ -5,26 +5,33 @@ parameter properties). Every part of it is a Cordis plugin.
 
 ## The framework's API is in `docs/framework/`
 
-Start at `docs/framework/README.md`; `api-summary.md` is the one-page summary. Read before you write routes: `routing.md` (the `App`), `request.md` (`c.req`), `context.md` (`c`),
-`validation.md`, `helpers.md` (`streamSSE`), `middleware.md`, `plugin-lifecycle.md` (what a plugin owns and when it is unloaded) and
-`node-server.md`. The framework's source is vendored in `src/plugins/acryl-*/src`: read it, do not edit it (a change belongs in ACRYL, upstream).
-The docs write `from 'acryl-router'`; in this app that is `./plugins/acryl-router/src/index.ts` (relative to `src/`), `acryl-router/middleware`
-is `./plugins/acryl-router/src/middleware/index.ts` and `acryl-router/helpers` is `./plugins/acryl-router/src/helpers/index.ts`.
-A plugin written into `extensions/` while the app runs can import `acryl-router`, `acryl-router/middleware` and `acryl-router/helpers` by those names.
+Start at `docs/framework/README.md`; `api/summary.md` is the one-page summary. Read before you write routes: `api/routing.md` (the `Acryl` app), `api/request.md` (`c.req`),
+`api/context.md` (`c`), `cordis/validation.md` and `guides/validation.md`, `guides/helpers.md` (`streamSSE`), `concepts/middleware.md`, `cordis/plugin-lifecycle.md` (what a plugin
+owns and when it is unloaded), `cordis/mounting.md` and `cordis/node-server.md`. Pages marked "not yet available" describe parts that are not in this app.
+
+The docs write `import { Acryl } from 'acrylblends'` and `from 'acrylblends/<subpath>'`. In this app the framework is the vendored plugin source in `src/plugins/acryl-router/src`
+(read it, do not edit it: a change belongs in ACRYL, upstream), so from a file in `src/` import:
+
+- `./plugins/acryl-router/src/index.ts` for `Acryl`, `Context`, `HTTPException`, `connectionOf`, `getConnInfo` and the types;
+- `./plugins/acryl-router/src/middleware/index.ts` for every middleware (`cors`, `bodyLimit`, `trimTrailingSlash`, `loopbackOnly`, ...);
+- `./plugins/acryl-router/src/helpers/index.ts` for the helpers and validators (`streamSSE`, `schemaValidator`, `validator`, cookies, `testClient`, ...).
+
+A plugin written into `extensions/` while the app runs may use the docs' own names instead: `acrylblends` and `acrylblends/<subpath>` resolve to the same files. `App` is the
+deprecated name of `Acryl`.
 
 ## How a feature is built
 
-Routes are an ordinary `App` that a plugin mounts once with `ctx.router.route(prefix, app)`. The mount belongs to the plugin and goes away when it unloads.
+Routes are an ordinary `Acryl` app that a plugin mounts once with `ctx.router.route(prefix, app)`. The mount belongs to the plugin and goes away when it unloads.
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
-import { App, HTTPException } from './plugins/acryl-router/src/index.ts'
+import { Acryl, HTTPException } from './plugins/acryl-router/src/index.ts'
 import { schemaValidator, type StandardSchema } from './plugins/acryl-router/src/helpers/index.ts'
 
 export const name = 'notes'               // a plugin's name; blend.yaml refers to it
 export const inject = ['router']          // services it needs
 export function apply(ctx: Context) {
-  const app = new App()
+  const app = new Acryl()
     .get('/', (c) => c.json({ ok: true }))
     .get('/:id', (c) => c.json({ id: c.req.param('id') }))
     .post('/', schemaValidator('json', NewNote), (c) => c.json(c.req.valid('json'), 201))   // NewNote is a Standard Schema

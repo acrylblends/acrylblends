@@ -1,17 +1,15 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error plain module shared with the scripts
-import { writeShim } from '../../scripts/lib/framework-shim.mjs'
-// @ts-expect-error plain module shared with the scripts
 import { CLASS, NOT_YET_AVAILABLE, PACKAGE } from '../../scripts/lib/names.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 /** The framework docs: docs/framework, or another folder when a branch of the docs is being checked before it is synced. */
-const docsRoot = resolve(process.env.FRAMEWORK_DOCS ?? join(root, 'docs', 'framework'))
+const docsRoot = resolve(process.env.FRAMEWORK_DOCS || join(root, 'docs', 'framework'))
 const out = join(root, 'docs', '.generated', 'framework-code')
 
 const pagesIn = (dir: string): string[] =>
@@ -104,20 +102,54 @@ describe('framework docs: code', () => {
     const { checked, skipped } = extract()
     rmSync(out, { recursive: true, force: true })
     mkdirSync(join(out, 'blocks'), { recursive: true })
-    const paths = writeShim(join(out, 'shim'), root) as Record<string, string[]>
+    // The real package: the checked blocks resolve `acrylblends` through packages/cli's own exports map, as an installed app would.
+    mkdirSync(join(out, 'node_modules'), { recursive: true })
+    symlinkSync(join(root, 'packages', 'cli'), join(out, 'node_modules', PACKAGE), 'dir')
     for (const block of checked) writeFileSync(block.file, `${block.code}\nexport {}\n`)
     // Blocks that are not marked `twoslash` are fragments of a page (they use an `app` the text defines elsewhere): they are checked against ambient names, and the
     // errors that only say a placeholder is undefined are ignored. Everything else (a wrong import, a missing export, a method that does not exist) still fails.
     writeFileSync(
       join(out, 'blocks', 'ambient.d.ts'),
-      `declare global {\n  const app: import('${PACKAGE}').${CLASS}<any, any, any>\n}\nexport {}\n`,
+      `// The Cordis side of the docs (ctx.router, ctx.routerHttp) is the vendored acryl-router plugin's declaration of those services.\nimport type {} from '${join(root, 'plugins', 'acryl-router', 'src', 'index.ts')}'\ndeclare global {\n  const app: import('${PACKAGE}').${CLASS}<any, any, any>\n}\nexport {}\n`,
     )
     // A block that augments the package's interfaces (`declare module`) changes the types of every other block in the same program, so each one is checked alone.
     const augments = (block: Block) => /declare (module|global)/.test(block.code)
-    const programs = [
-      { name: 'main', blocks: checked.filter((b) => !augments(b)) },
-      ...checked.filter(augments).map((b) => ({ name: basename(b.file, '.ts'), blocks: [b] })),
-    ]
+    // The pages about Cordis describe an app where `acrylblends` is the vendored acryl-router plugin (the app's tsconfig `paths`, taken from the agent template); the others are the
+    // public package. The two classes are separate declarations, so a block is checked against the one its page is about.
+    const inCordis = (b: Block) =>
+      b.page.startsWith('cordis') ||
+      b.page === join('api', 'summary.md') ||
+      b.page.startsWith('agents')
+    const appPaths = JSON.parse(
+      readFileSync(join(root, 'packages', 'cli', 'templates', 'agent', 'tsconfig.json'), 'utf8'),
+    ).compilerOptions.paths as Record<string, string[]>
+    const pluginPaths = Object.fromEntries(
+      Object.entries(appPaths).map(([key, targets]) => [
+        key,
+        targets.map((t) =>
+          join(root, 'plugins', 'acryl-router', t.replace('./src/plugins/acryl-router/', '')),
+        ),
+      ]),
+    )
+    const programs: {
+      name: string
+      blocks: Block[]
+      paths: Record<string, string[]> | undefined
+    }[] = [
+      {
+        name: 'main',
+        blocks: checked.filter((b) => !augments(b) && !inCordis(b)),
+        paths: undefined,
+      },
+      {
+        name: 'cordis',
+        blocks: checked.filter((b) => !augments(b) && inCordis(b)),
+        paths: pluginPaths,
+      },
+      ...checked
+        .filter(augments)
+        .map((b) => ({ name: basename(b.file, '.ts'), blocks: [b], paths: undefined })),
+    ].filter((p) => p.blocks.length > 0)
     let output = ''
     for (const program of programs) {
       const config = join(out, `tsconfig.${program.name}.json`)
@@ -136,7 +168,7 @@ describe('framework docs: code', () => {
             esModuleInterop: true,
             types: ['node'],
             typeRoots: [join(root, 'node_modules', '@types')],
-            paths,
+            ...(program.paths ? { paths: program.paths } : {}),
           },
           files: [join(out, 'blocks', 'ambient.d.ts'), ...program.blocks.map((b) => b.file)],
         }),

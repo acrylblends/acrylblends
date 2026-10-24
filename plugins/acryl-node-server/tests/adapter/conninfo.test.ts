@@ -1,10 +1,10 @@
-import { App } from '../../../acryl-router/src/index.ts'
+import { Acryl } from '../../../acryl-router/src/index.ts'
 import type { AddressType, ConnInfo } from '../../../acryl-router/src/helpers/index.ts'
 import { getConnInfo } from '../../src/adapter/conninfo.ts'
 
 describe('ConnInfo', () => {
   it('Should works', async () => {
-    const app = new App().get('/', (c) => c.json(getConnInfo(c)))
+    const app = new Acryl().get('/', (c) => c.json(getConnInfo(c)))
 
     const socket = {
       remoteAddress: '0.0.0.0',

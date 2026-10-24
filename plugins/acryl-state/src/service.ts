@@ -6,7 +6,7 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import { App, type Context as RequestContext } from '../../acryl-router/src/index.ts'
+import { Acryl, type Context as RequestContext } from '../../acryl-router/src/index.ts'
 import { streamSSE } from '../../acryl-router/src/helpers/index.ts'
 import { loopbackOnly, methodNotAllowed } from '../../acryl-router/src/middleware/index.ts'
 import { createCell, createDerived, type Cell, type ReadonlyCell } from './cell.ts'
@@ -104,7 +104,7 @@ export function apply(ctx: Context): void {
   // The same cells on the router, read-only, for any surface; present only where a router is. A request over a socket must come from this machine to this
   // app; the terminal calls the router in process and is the host's own code.
   ctx.inject(['router'], inner => {
-    const api = new App()
+    const api = new Acryl()
     api.use(loopbackOnly({ inProcess: 'allow' }), methodNotAllowed({ app: api }))
       .get('/', c => c.json({ keys: state.keys() }))
       .get('/:key', c => {

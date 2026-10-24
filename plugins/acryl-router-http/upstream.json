@@ -2,7 +2,7 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-router-http",
-    "commit": "64e7c9d2e787f74b2da82492644fbbb46a601074"
+    "commit": "f5151e7f0c4de3b81bddb5cc686b5ef329e48e1c"
   },
   "vendored": [
     "src",
@@ -10,7 +10,7 @@
     "LICENSE"
   ],
   "rewrittenSpecifiers": 7,
-  "digest": "sha256:29ba7834cf9d29e9af2f4fac265c7e5e220e06da3346e65c29bcbae41fdfaf9e",
+  "digest": "sha256:394994528a104c8f788e2d911f8f940ff9f74e9c5a72835ea3ea751651aa9fbd",
   "testsNotRun": {
     "tests/adapter.spec.ts": "needs @deepseek-ai/dsh-host-webserver (the DSH web server); acryl-node-server has its own tests",
     "tests/stream.spec.ts": "needs @deepseek-ai/dsh-host-webserver (the DSH web server)",

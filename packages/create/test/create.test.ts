@@ -6,13 +6,12 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-// @ts-expect-error plain module shared with the scripts
-import { writeShim } from '../../../scripts/lib/framework-shim.mjs'
 // @ts-expect-error plain module shared with the scripts
 import * as shared from '../../../scripts/lib/names.mjs'
 import {
@@ -99,12 +98,13 @@ describe('create', () => {
     },
   )
 
-  it('nodejs: the generated app type-checks against the framework', async () => {
+  it('nodejs: the generated app type-checks against the real framework package', async () => {
     await runCreate(['typed', '--template', 'nodejs', '-y'], fakeIo().io)
     const dir = join(scratch, 'typed')
-    const paths = writeShim(join(dir, '.shim'), repo) as Record<string, string[]>
+    // The real package, resolved through its own exports map as an installed app would.
+    mkdirSync(join(dir, 'node_modules'), { recursive: true })
+    symlinkSync(join(repo, 'packages', 'cli'), join(dir, 'node_modules', PACKAGE), 'dir')
     const config = JSON.parse(readFileSync(join(dir, 'tsconfig.json'), 'utf8'))
-    config.compilerOptions.paths = paths
     config.compilerOptions.typeRoots = [join(repo, 'node_modules', '@types')]
     config.include = ['src', 'test']
     writeFileSync(join(dir, 'tsconfig.check.json'), JSON.stringify(config))

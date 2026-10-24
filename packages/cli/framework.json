@@ -1,0 +1,13 @@
+{
+  "source": {
+    "repo": "acryldev/acryl",
+    "path": "distribution/acrylblends-framework",
+    "commit": "618185b499da477d0c509c3f28dd3c38128c153a",
+    "packedAs": "acrylblends-framework@0.5.0"
+  },
+  "tarballSha256": "998053e504219a5b372ee3bf8341304165124b5ccc671520bb47efcc4224dab4",
+  "package": "acrylblends",
+  "subpaths": 75,
+  "files": 179,
+  "digest": "sha256:399e7f631b3fb750752a1e1fb5edda1e1f2480bdcb7cea916af8e944bba79cb9"
+}
