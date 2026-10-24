@@ -2,7 +2,7 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-inspect",
-    "commit": "8dfa56233ce81190c83a318c7b9681ac951c9d7a"
+    "commit": "f5151e7f0c4de3b81bddb5cc686b5ef329e48e1c"
   },
   "vendored": [
     "src",
