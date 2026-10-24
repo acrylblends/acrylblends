@@ -5,7 +5,7 @@ parameter properties). Every part of it is a Cordis plugin.
 
 ## The framework's API is in `docs/framework/`
 
-Start at `docs/framework/README.md`. Read before you write routes: `routing.md` (the `App`), `request.md` (`c.req`), `context.md` (`c`),
+Start at `docs/framework/README.md`; `api-summary.md` is the one-page summary. Read before you write routes: `routing.md` (the `App`), `request.md` (`c.req`), `context.md` (`c`),
 `validation.md`, `helpers.md` (`streamSSE`), `middleware.md`, `plugin-lifecycle.md` (what a plugin owns and when it is unloaded) and
 `node-server.md`. The framework's source is vendored in `src/plugins/acryl-*/src`: read it, do not edit it (a change belongs in ACRYL, upstream).
 The docs write `from 'acryl-router'`; in this app that is `./plugins/acryl-router/src/index.ts` (relative to `src/`), `acryl-router/middleware`
@@ -41,9 +41,9 @@ export function apply(ctx: Context) {
 
 ## Things that surprise people
 
-- A page mounted at `/x` answers `/x`, not `/x/` (trailing slashes are strict).
+- A page mounted at `/x` answers `/x`, not `/x/` (trailing slashes are strict); `trimTrailingSlash()` (middleware) redirects `/x/` to `/x` for GET and HEAD.
 - `schemaValidator('json', ...)` needs a JSON `Content-Type`; without it the schema sees `{}`. A failure answers 400 with
-  `{ "error": "invalid json", "issues": [{ "message", "path" }] }`: the human text is `issues[0].message`.
+  `{ "error": "invalid json", "issues": [{ "message", "path" }] }`: the human text is `issues[0].message`. A `jsonOnly` recipe in `docs/framework/validation.md` answers 415 instead.
 - Throw `new HTTPException(404, { message })` for an error response; the body is the message as plain text (use `c.json({ error }, status)` when a page expects JSON).
 - Handlers get the request as `c.req`: `c.req.param('id')`, `c.req.query('q')`, `await c.req.json()`, `c.req.raw` for the Web `Request`.
 - A server-sent stream is `streamSSE(c, async (stream) => { await stream.writeSSE({ data: JSON.stringify(x) }) ... })`; call `stream.onAbort(cleanup)`.
