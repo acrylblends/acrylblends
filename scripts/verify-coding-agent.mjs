@@ -70,6 +70,8 @@ const DRIVERS = {
       '--verbose',
       '--max-turns',
       '40',
+      '--setting-sources',
+      'project',
       '--permission-mode',
       'acceptEdits',
       '--allowedTools',
@@ -213,9 +215,13 @@ function attempt(name) {
     return { name, pass: false, note: "the fresh app's own tests fail" }
   const agentEnv = { ...env }
   const secrets = []
+  let isolation = 'scratch HOME, minimal environment, PATH scrubbed'
   if (name === 'claude') {
-    // Claude Code keeps its login in the operating system's keychain, which does not depend on HOME: nothing is copied. A key or token in the caller's
-    // environment (an API-key setup) is handed on to this one process only.
+    // Claude Code keeps its login in the operating system's keychain, bound to the real HOME: nothing is copied, so this agent runs with the real HOME
+    // for authentication only, user and local settings are not loaded (--setting-sources project), and its tools are limited (see DRIVERS).
+    agentEnv.HOME = homedir()
+    isolation =
+      'real HOME for login only, project settings only, tools npm/node/ls/cat + edits, PATH scrubbed'
     for (const key of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL'])
       if (process.env[key]) agentEnv[key] = process.env[key]
   }
@@ -273,7 +279,7 @@ function attempt(name) {
   return {
     name,
     pass,
-    note: `${driver.steps(result.stdout)}, ${seconds} s; agent exit ${result.status}${reason}; tests ${test.status === 0 ? 'pass' : 'FAIL'}, type-check ${check.status === 0 ? 'pass' : 'FAIL'}, test added ${touchedTests}, source changed ${touchedSource}, route ${route}`,
+    note: `${driver.steps(result.stdout)}, ${seconds} s; agent exit ${result.status}${reason}; isolation: ${isolation}; tests ${test.status === 0 ? 'pass' : 'FAIL'}, type-check ${check.status === 0 ? 'pass' : 'FAIL'}, test added ${touchedTests}, source changed ${touchedSource}, route ${route}`,
     app,
   }
 }
