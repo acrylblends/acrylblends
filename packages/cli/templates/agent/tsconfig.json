@@ -1,19 +1,22 @@
 {
   "compilerOptions": {
-    "target": "ES2023",
-    "lib": ["ES2023"],
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "acryl-router": ["./src/plugins/acryl-router/src/index.ts"],
+      "acryl-router/middleware": ["./src/plugins/acryl-router/src/middleware/index.ts"],
+      "acryl-router/helpers": ["./src/plugins/acryl-router/src/helpers/index.ts"]
+    }
   },
   "include": ["src", "test", "extensions"]
 }

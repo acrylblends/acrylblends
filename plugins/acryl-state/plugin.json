@@ -8,5 +8,5 @@
     "@deepseek-ai/cordis": "4.0.4"
   },
   "mount": "root.plugin(state); ctx.state.cell('todos.count', 0), then count.update((n) => n + 1)",
-  "omit": ["src/react.ts"]
+  "omit": ["src/react.ts", "**/*.test.*", "**/*.case.ts"]
 }

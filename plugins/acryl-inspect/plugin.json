@@ -7,5 +7,6 @@
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.4"
   },
-  "mount": "root.plugin(inspect); ctx.inspect.plugins(), ctx.inspect.explain('name'), ctx.inspect.render()"
+  "mount": "root.plugin(inspect); ctx.inspect.plugins(), ctx.inspect.explain('name'), ctx.inspect.render()",
+  "omit": ["**/*.test.*", "**/*.case.ts"]
 }

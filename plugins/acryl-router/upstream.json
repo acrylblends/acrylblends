@@ -2,7 +2,7 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-router",
-    "commit": "11fed295161c0282d144b5ac62616988b58d8189"
+    "commit": "df79b188398b6d4f8cceda35a72b88300a10a9ce"
   },
   "vendored": [
     "src",
@@ -10,7 +10,7 @@
     "LICENSE"
   ],
   "rewrittenSpecifiers": 0,
-  "digest": "sha256:3873e59cdc36ab606be983680dc2f338141563ebafb13b36215c6b7de7c80d42",
+  "digest": "sha256:6e15f8ce0499b94c95649342f6fe984bc9b2aec0f5a142e8853a5badcc3b85f5",
   "testsNotRun": {
     "tests/loader.spec.ts": "loads the built lib/ entry through the real Loader; the library ships source and has no build"
   },

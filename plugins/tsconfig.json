@@ -1,12 +1,10 @@
 {
   "compilerOptions": {
-    "target": "ES2023",
-    "lib": ["ES2023"],
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
@@ -17,6 +15,9 @@
   },
   "include": ["*/**/*.ts"],
   "exclude": [
+    "acryl-*/src/**/*.test.ts",
+    "acryl-*/src/**/*.case.ts",
+    "acryl-node-server/tests/adapter",
     "acryl-router/tests/loader.spec.ts",
     "acryl-state/src/react.ts",
     "acryl-state/tests/react.spec.ts",

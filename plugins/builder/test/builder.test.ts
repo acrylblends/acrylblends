@@ -112,16 +112,17 @@ test('the builder refuses to write anywhere that is not an extensions source', a
   await assert.rejects(app.plugin(builder, {}).await(), /not an extensions source/)
 })
 
-test('a plugin installed live reads a service as a property (ctx.router), not only with ctx.get', async () => {
+test('a plugin installed live reads a service as a property (ctx.router) and builds its routes with the acryl-router of the app', async () => {
   const { app, root } = await boot()
   const dir = join(root, 'extensions', 'probe')
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, 'index.ts'),
-    `export const name = 'probe'
+    `import { App } from 'acryl-router'
+export const name = 'probe'
 export const inject = ['router']
 export function apply(ctx) {
-  ctx.router.get('/probe', (c) => c.json({ ok: true }))
+  ctx.router.route('/', new App().get('/probe', (c) => c.json({ ok: true })))
 }
 `,
   )

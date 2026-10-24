@@ -1,5 +1,5 @@
 import { cpSync, existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** One entry of the plugin library: `plugins/<name>/plugin.json` in this repository. */
@@ -12,8 +12,40 @@ export interface LibraryPlugin {
   readonly dependencies: Readonly<Record<string, string>>
   /** How to mount it, shown after `acrylblends add`. */
   readonly mount?: string
-  /** Paths inside the plugin folder that are not copied into an app (for example a React hook an app without React cannot type-check). */
+  /**
+   * Paths inside the plugin folder that are not copied into an app (for example a React hook an app without React cannot type-check, or colocated test
+   * files). A pattern is an exact path or a glob: `*` matches within one folder name, `**` across folders, `?` one character; `**` followed by a slash also matches no folder.
+   */
   readonly omit?: readonly string[]
+}
+
+/** A glob as a regular expression: `*` within a name, `**` across folders, `**` plus a slash may match no folder, `?` one character. */
+function globToRegExp(glob: string): RegExp {
+  let source = ''
+  for (let i = 0; i < glob.length; i += 1) {
+    const c = glob[i] as string
+    if (c === '*' && glob[i + 1] === '*') {
+      if (glob[i + 2] === '/') {
+        source += '(?:.*/)?'
+        i += 2
+      } else {
+        source += '.*'
+        i += 1
+      }
+    } else if (c === '*') source += '[^/]*'
+    else if (c === '?') source += '[^/]'
+    else source += c.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  }
+  return new RegExp(`^${source}$`)
+}
+
+/** Whether a path inside a plugin folder (relative, any separator) is named by one of its `omit` patterns. */
+export function isOmitted(inside: string, patterns: readonly string[] | undefined): boolean {
+  if (!patterns || patterns.length === 0) return false
+  const path = inside.split(sep).join('/')
+  return patterns.some((pattern) =>
+    /[*?]/.test(pattern) ? globToRegExp(pattern).test(path) : pattern === path,
+  )
 }
 
 /** Files of a library plugin that stay in the repository: its manifest and its tests. */
@@ -98,7 +130,7 @@ export function copyPlugin(
     filter: (path) => {
       const inside = path.slice(source.length + 1)
       return (
-        !(dirname(path) === source && LIBRARY_ONLY.has(inside)) && !plugin.omit?.includes(inside)
+        !(dirname(path) === source && LIBRARY_ONLY.has(inside)) && !isOmitted(inside, plugin.omit)
       )
     },
   })

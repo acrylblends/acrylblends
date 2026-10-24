@@ -10,10 +10,11 @@ every copied line; there is no ACRYLBLENDS runtime to import.
 | I want to | Read |
 | --- | --- |
 | Run something in five minutes | [Getting started](getting-started.md) |
-| Understand why it is built this way | [Motivation](framework/concepts/motivation.md), [Plugins are the unit](framework/concepts/plugins-as-units.md) |
-| Look up a call | [API](framework/api/README.md) |
-| Copy a pattern | [Guides](framework/guides/README.md) |
-| See what ships in the box | [Middleware and helpers](framework/middleware/README.md) |
+| Understand why it is built this way | [Concepts](framework/concepts.md), [Plugin lifecycle](framework/plugin-lifecycle.md) |
+| Look up a call | [Routing](framework/routing.md), [Context](framework/context.md), [Request](framework/request.md) |
+| Copy a pattern | [Getting started with the framework](framework/getting-started.md), [Validation](framework/validation.md), [Helpers](framework/helpers.md), [Serving over HTTP](framework/node-server.md) |
+| See what ships in the box | [Middleware](framework/middleware.md) |
+| Move an app from 0.3 | [Migration from 0.3](framework/migration-from-0-3.md) |
 | Let an agent extend my running app | [Extending a running app](agent/extending-apps.md) |
 | Describe my app as data | [The app manifest](blends/manifest.md) |
 | See every plugin in the library | [The plugin library](plugins.md) |
@@ -33,4 +34,5 @@ reads `from './plugins/acryl-router/src/index.ts'` there.
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
+- [Release notes 0.4.0](release-notes/0.4.0.md) - the App and `ctx.router.route` migration
 - [Release notes 0.3.0](release-notes/0.3.0.md) - what is breaking and how to migrate three lines of a route
