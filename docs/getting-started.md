@@ -26,6 +26,10 @@ npm run dev                           # prints its URL; the app's data lives in 
 Every generated app is TypeScript, has `npm test` (`node:test`) and `npm run check` (types), and depends at run time on
 `@deepseek-ai/cordis` and `yaml` (plus `@deepseek-ai/schemastery` if you add `settings`).
 
+## As a desktop app
+
+`npx acrylblends init my-app --template todo --desktop` (or `acrylblends add desktop` in an existing app) adds `npm run desktop`: an Electron window on the app's own server, the same code as `npm run dev`. See [the desktop shell](desktop.md).
+
 ## Try the agent
 
 ```sh

@@ -87,6 +87,23 @@ export function copyTemplate(source: string, target: string, name: string): stri
 /** A template's own manifest, `template.json`: the library plugins it is built from. Never copied (nor is `upstream.json`, the record of what was synced from ACRYL, nor the template's `AGENTS.md`, which `writeAgentFiles` joins to the shared core). */
 export const TEMPLATE_MANIFEST = 'template.json'
 
+/** The address a template's desktop window opens on, when it is not the root (`template.json`: `desktopPath`). */
+export function readTemplateDesktopPath(templateDir: string): string | undefined {
+  const file = join(templateDir, TEMPLATE_MANIFEST)
+  if (!existsSync(file)) return undefined
+  return (JSON.parse(readFileSync(file, 'utf8')) as { desktopPath?: string }).desktopPath
+}
+
+/** Record where the desktop window opens in package.json (`acrylblends.desktopPath`), read by `src/plugins/desktop/main.ts`. */
+export function writeDesktopPath(appDir: string, path: string): void {
+  const file = join(appDir, 'package.json')
+  const manifest = JSON.parse(readFileSync(file, 'utf8')) as {
+    acrylblends?: Record<string, unknown>
+  }
+  manifest.acrylblends = { ...manifest.acrylblends, desktopPath: path }
+  writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)
+}
+
 export function readTemplatePlugins(templateDir: string): string[] {
   const file = join(templateDir, TEMPLATE_MANIFEST)
   if (!existsSync(file)) return []
@@ -111,6 +128,34 @@ export function mergeDependencies(
   )
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)
   return added
+}
+
+/**
+ * Add a plugin's development dependencies and scripts to an app's package.json: nothing the app already has is replaced. Returns the names of the development dependencies
+ * and scripts added.
+ */
+export function mergeTooling(
+  appDir: string,
+  tooling: {
+    devDependencies?: Readonly<Record<string, string>> | undefined
+    scripts?: Readonly<Record<string, string>> | undefined
+  },
+): { devDependencies: string[]; scripts: string[] } {
+  const file = join(appDir, 'package.json')
+  const manifest = JSON.parse(readFileSync(file, 'utf8')) as {
+    devDependencies?: Record<string, string>
+    scripts?: Record<string, string>
+  }
+  const dev = manifest.devDependencies ?? {}
+  const scripts = manifest.scripts ?? {}
+  const addedDev = Object.keys(tooling.devDependencies ?? {}).filter((name) => !(name in dev))
+  const addedScripts = Object.keys(tooling.scripts ?? {}).filter((name) => !(name in scripts))
+  manifest.devDependencies = Object.fromEntries(
+    Object.entries({ ...tooling.devDependencies, ...dev }).sort(([a], [b]) => a.localeCompare(b)),
+  )
+  manifest.scripts = { ...tooling.scripts, ...scripts }
+  writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)
+  return { devDependencies: addedDev, scripts: addedScripts }
 }
 
 /** The generated app's guide for a coding agent: the shared core, then the template's own part. `CLAUDE.md` is only an import of it. */

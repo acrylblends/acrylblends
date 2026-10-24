@@ -10,6 +10,10 @@ export interface LibraryPlugin {
   readonly requires: readonly string[]
   /** npm packages an app needs at run time for this plugin. */
   readonly dependencies: Readonly<Record<string, string>>
+  /** npm packages an app needs only to develop or run this plugin's tooling (for example `electron` for the desktop shell). */
+  readonly devDependencies?: Readonly<Record<string, string>>
+  /** `package.json` scripts the plugin adds; a script the app already has is kept. */
+  readonly scripts?: Readonly<Record<string, string>>
   /** How to mount it, shown after `acrylblends add`. */
   readonly mount?: string
   /**

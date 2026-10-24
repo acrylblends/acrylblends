@@ -252,8 +252,10 @@ describe('command line', () => {
       name: 'my-shop',
       template: 'agent',
       install: undefined,
+      desktop: false,
       yes: true,
     })
+    expect(parseInitOptions(['--desktop']).desktop).toBe(true)
     expect(parseInitOptions(['--no-agent']).template).toBe('blank')
     expect(parseInitOptions(['x', '--template', 'blank']).template).toBe('blank')
     expect(parseInitOptions(['x', '--template', 'agent', '--agent']).template).toBe('agent')
@@ -338,6 +340,39 @@ describe('init', () => {
     const failing = fakeIo({ installCode: 1 })
     expect(await runCli(['init', 'install-fails', '-y', '--install'], failing.io)).toBe(1)
     expect(failing.err()).toContain('npm install failed')
+  })
+})
+
+describe('the desktop shell', () => {
+  it('init --desktop adds the plugin, electron as a development dependency, the script and the todo window address', async () => {
+    const session = fakeIo()
+    expect(
+      await runCli(['init', 'desk', '--template', 'todo', '--desktop', '-y'], session.io),
+    ).toBe(0)
+    const dir = join(scratch, 'desk')
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    expect(pkg.devDependencies.electron).toBe('44.0.0')
+    expect(pkg.dependencies.electron).toBeUndefined()
+    expect(pkg.scripts.desktop).toBe('electron src/plugins/desktop/main.ts')
+    expect(pkg.acrylblends).toEqual({ desktopPath: '/todo' })
+    for (const file of ['main.ts', 'window.ts', 'user-data.ts', 'shutdown.ts', 'upstream.json'])
+      expect(existsSync(join(dir, 'src/plugins/desktop', file))).toBe(true)
+    expect(existsSync(join(dir, 'src/plugins/desktop/plugin.json'))).toBe(false)
+  })
+
+  it('a plain init has no electron, and add desktop brings it later without replacing a script the app has', async () => {
+    const session = fakeIo()
+    expect(await runCli(['init', 'plain-desk', '--template', 'blank', '-y'], session.io)).toBe(0)
+    const dir = join(scratch, 'plain-desk')
+    const file = join(dir, 'package.json')
+    expect(JSON.parse(readFileSync(file, 'utf8')).devDependencies.electron).toBeUndefined()
+    const pkg = JSON.parse(readFileSync(file, 'utf8'))
+    pkg.scripts.desktop = 'echo mine'
+    writeFileSync(file, JSON.stringify(pkg))
+    expect(await runCli(['add', 'desktop', '--dir', dir], fakeIo().io)).toBe(0)
+    const after = JSON.parse(readFileSync(file, 'utf8'))
+    expect(after.devDependencies.electron).toBe('44.0.0')
+    expect(after.scripts.desktop).toBe('echo mine')
   })
 })
 
