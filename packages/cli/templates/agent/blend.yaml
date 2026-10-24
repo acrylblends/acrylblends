@@ -1,6 +1,6 @@
 # The app as data, in ACRYL's Blend format (blends.acryl.dev/v1alpha1): which plugins it mounts, in what order, with what config.
 # Edit this, not app.ts, to switch a plugin off (disabled: true) or change its config. `npm run lock` records what the app is built from.
-# Order matters: http comes before extensions, because installed extensions start again at boot and may add routes.
+# Order matters: acryl-router comes before extensions, because installed extensions start again at boot and may add routes.
 apiVersion: blends.acryl.dev/v1alpha1
 kind: Blueprint
 metadata:

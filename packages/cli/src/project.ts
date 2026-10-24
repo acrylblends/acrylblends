@@ -55,7 +55,10 @@ export function copyTemplate(source: string, target: string, name: string): stri
     for (const entry of readdirSync(from, { withFileTypes: true })) {
       if (
         entry.name === 'node_modules' ||
-        (prefix === '' && (entry.name === TEMPLATE_MANIFEST || entry.name === 'upstream.json'))
+        (prefix === '' &&
+          (entry.name === TEMPLATE_MANIFEST ||
+            entry.name === 'upstream.json' ||
+            entry.name === 'AGENTS.md'))
       )
         continue
       const sourcePath = join(from, entry.name)
@@ -81,7 +84,7 @@ export function copyTemplate(source: string, target: string, name: string): stri
   return written
 }
 
-/** A template's own manifest, `template.json`: the library plugins it is built from. Never copied (nor is `upstream.json`, the record of what was synced from ACRYL). */
+/** A template's own manifest, `template.json`: the library plugins it is built from. Never copied (nor is `upstream.json`, the record of what was synced from ACRYL, nor the template's `AGENTS.md`, which `writeAgentFiles` joins to the shared core). */
 export const TEMPLATE_MANIFEST = 'template.json'
 
 export function readTemplatePlugins(templateDir: string): string[] {
@@ -108,4 +111,47 @@ export function mergeDependencies(
   )
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)
   return added
+}
+
+/** The generated app's guide for a coding agent: the shared core, then the template's own part. `CLAUDE.md` is only an import of it. */
+export function writeAgentFiles(
+  sharedDir: string,
+  templateDir: string,
+  target: string,
+  name: string,
+): string[] {
+  const core = readFileSync(join(sharedDir, 'AGENTS.core.md'), 'utf8')
+  const own = existsSync(join(templateDir, 'AGENTS.md'))
+    ? readFileSync(join(templateDir, 'AGENTS.md'), 'utf8')
+    : ''
+  writeFileSync(join(target, 'AGENTS.md'), `${core}${own}`.replaceAll('__APP_NAME__', name))
+  writeFileSync(join(target, 'CLAUDE.md'), '@AGENTS.md\n')
+  return ['AGENTS.md', 'CLAUDE.md']
+}
+
+/**
+ * Copy the framework's docs (a generated copy of ACRYL's `docs/framework`, already checked against its digest) into `<app>/docs/framework/`,
+ * so a coding agent working in the app reads the API from the folder it is in. The generated-copy notes and the digest record stay behind.
+ *
+ * @returns the copied files, relative to `target`
+ */
+export function copyFrameworkDocs(source: string, target: string): string[] {
+  const written: string[] = []
+  const walk = (from: string, to: string, prefix: string) => {
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      if (entry.name === 'upstream.json' || entry.name === 'UPSTREAM.md') continue
+      const sourcePath = join(from, entry.name)
+      const targetPath = join(to, entry.name)
+      if (entry.isDirectory()) {
+        mkdirSync(targetPath, { recursive: true })
+        walk(sourcePath, targetPath, `${prefix}${entry.name}/`)
+        continue
+      }
+      cpSync(sourcePath, targetPath)
+      written.push(`docs/framework/${prefix}${entry.name}`)
+    }
+  }
+  mkdirSync(join(target, 'docs', 'framework'), { recursive: true })
+  walk(source, join(target, 'docs', 'framework'), '')
+  return written
 }

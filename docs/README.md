@@ -34,5 +34,6 @@ reads `from './plugins/acryl-router/src/index.ts'` there.
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
+- [Release notes 0.4.1](release-notes/0.4.1.md) - the framework docs and an AGENTS.md inside every generated app
 - [Release notes 0.4.0](release-notes/0.4.0.md) - the App and `ctx.router.route` migration
 - [Release notes 0.3.0](release-notes/0.3.0.md) - what is breaking and how to migrate three lines of a route

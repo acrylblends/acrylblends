@@ -133,6 +133,41 @@ export function apply(ctx) {
   assert.equal((await app.router.request('/probe')).status, 404)
 })
 
+test("a live plugin's check runs with the plugin context: ctx.router reads as in apply, and a failing check rolls the install back", async () => {
+  const { app, root } = await boot()
+  const write = (name: string, status: number) => {
+    const dir = join(root, 'extensions', name)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      join(dir, 'index.ts'),
+      `import { App } from 'acryl-router'
+export const name = '${name}'
+export const inject = ['router']
+export function apply(ctx) {
+  ctx.router.route('/', new App().get('/${name}', (c) => c.json({ ok: true }, ${status})))
+}
+export async function check(ctx) {
+  const reply = await ctx.router.request('/${name}')
+  if (!reply.ok) throw new Error('answered ' + reply.status)
+}
+`,
+    )
+    return dir
+  }
+  const good = (await app.extensions.install(write('checked', 200))) as {
+    ok: boolean
+    errors?: string[]
+  }
+  assert.equal(good.ok, true, good.errors?.join('; '))
+  const bad = (await app.extensions.install(write('unchecked', 500))) as {
+    ok: boolean
+    stage?: string
+  }
+  assert.equal(bad.ok, false)
+  assert.equal(bad.stage, 'verify')
+  assert.equal((await app.router.request('/unchecked')).status, 404)
+})
+
 test('with the state service mounted, what is installed is a cell that follows every install and removal', async () => {
   const { app, ask } = await boot()
   const cell = app.state.find<Array<{ name: string; state: string }>>('extensions')

@@ -30,7 +30,7 @@ export function apply(ctx: Context) {
 }
 
 export async function check(ctx: Context) {
-  const reply = await ctx.get('router')!.request(${JSON.stringify(path)})
+  const reply = await ctx.router.request(${JSON.stringify(path)})
   if (!reply.ok) throw new Error(\`GET ${path} answered \${reply.status}\`)
 }
 `

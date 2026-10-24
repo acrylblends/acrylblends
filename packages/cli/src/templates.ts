@@ -29,3 +29,24 @@ export function templatesRoot(): string {
 export function templateDir(template: Template): string {
   return join(templatesRoot(), template)
 }
+
+/** The text every generated app's `AGENTS.md` starts with (`shared/`, beside `templates/`). */
+export function sharedDir(): string {
+  return join(dirname(templatesRoot()), 'shared')
+}
+
+/**
+ * The framework's docs, as ACRYL wrote them: `docs/framework` of the repository, or the copy `prepack` puts inside the package. The module sits at
+ * different depths in source and in the build, so walk up until a `docs/framework` folder holds the README.
+ */
+export function frameworkDocsRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url))
+  for (;;) {
+    const candidate = join(dir, 'docs', 'framework')
+    if (existsSync(join(candidate, 'README.md'))) return candidate
+    const parent = dirname(dir)
+    if (parent === dir)
+      throw new Error('acrylblends cannot find the framework docs (docs/framework)')
+    dir = parent
+  }
+}
