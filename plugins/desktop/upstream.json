@@ -1,0 +1,12 @@
+{
+  "source": {
+    "repo": "acryldev/acryl",
+    "files": {
+      "apps/acryl-desktop/src/shell/desktop-user-data.ts": "user-data.ts",
+      "apps/acryl-desktop/src/shell/shutdown.ts": "shutdown.ts"
+    },
+    "commit": "f5151e7f0c4de3b81bddb5cc686b5ef329e48e1c"
+  },
+  "rewrittenSpecifiers": 0,
+  "digest": "sha256:7dfe960a8bbb476c35540d2202a7aaa62b33492c2ac3e34314e2ecfca45f32f2"
+}

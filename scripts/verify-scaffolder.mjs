@@ -496,6 +496,50 @@ spec:
   capture(npm, ['install', '--no-audit', '--no-fund'], { cwd: grown })
   capture(npm, ['run', 'check'], { cwd: grown })
   log('add settings: copied, dependencies added, installed, type-checks')
+  // The desktop shell (spec 018): `init --desktop` adds electron as a development dependency and a script, the app's own code never imports electron, the whole app type-checks
+  // against electron's types, and the app's server starts and stops with no Electron involved (the project's own tests). The window itself is verify-desktop.mjs.
+  const desktop = join(scratch, 'desktop')
+  capture(process.execPath, [
+    cli,
+    'init',
+    desktop,
+    '--name',
+    'verify-desktop',
+    '--yes',
+    '--template',
+    'todo',
+    '--desktop',
+  ])
+  const desktopPackage = JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8'))
+  if (
+    desktopPackage.devDependencies?.electron === undefined ||
+    desktopPackage.dependencies?.electron !== undefined
+  )
+    fail('desktop: electron must be a development dependency only')
+  if (!/electron src\/plugins\/desktop\/main\.ts/.test(desktopPackage.scripts?.desktop ?? ''))
+    fail('desktop: the desktop script is missing')
+  if (desktopPackage.acrylblends?.desktopPath !== '/todo')
+    fail('desktop: the todo window must open on /todo')
+  const appSource = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory()
+        ? e.name === 'plugins'
+          ? []
+          : appSource(join(dir, e.name))
+        : [join(dir, e.name)],
+    )
+  for (const file of appSource(join(desktop, 'src')))
+    if (/from 'electron'/.test(readFileSync(file, 'utf8')))
+      fail(`desktop: ${file} imports electron; only src/plugins/desktop may`)
+  capture(npm, ['install', '--no-audit', '--no-fund'], {
+    cwd: desktop,
+    env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' },
+  })
+  capture(npm, ['run', 'check'], { cwd: desktop })
+  capture(npm, ['test'], { cwd: desktop })
+  log(
+    'desktop: init --desktop added electron as a development dependency, only the plugin imports it, the app type-checks and its tests (the server starts and stops without Electron) pass',
+  )
   log('OK')
 } finally {
   rmSync(scratch, { recursive: true, force: true })
