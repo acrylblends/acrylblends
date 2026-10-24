@@ -20,7 +20,8 @@
       "!packages/cli/lib",
       "!packages/cli/templates/todo/src/todo.ts",
       "!packages/cli/templates/todo/src/page.ts",
-      "!packages/cli/templates/todo/upstream.json"
+      "!packages/cli/templates/todo/upstream.json",
+      "!packages/cli/upstream.json"
     ]
   },
   "formatter": {

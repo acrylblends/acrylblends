@@ -35,6 +35,7 @@ generated Blend app the same names are the vendored plugin source in `src/plugin
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
+- [Release notes 0.5.1](release-notes/0.5.1.md) - the npm page: a README in the package
 - [Release notes 0.5.0](release-notes/0.5.0.md) - the framework is the package root, `create-acrylblends`, and the new docs
 - [Release notes 0.4.1](release-notes/0.4.1.md) - the framework docs and an AGENTS.md inside every generated app
 - [Release notes 0.4.0](release-notes/0.4.0.md) - the App and `ctx.router.route` migration
