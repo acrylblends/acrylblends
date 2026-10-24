@@ -8,7 +8,16 @@
 // so no global `acryl` or `acrylblends` can reach the owner's real apps. `pi` is driven with DeepSeek: the key is read from
 // ~/.secure-storage/llmproviders/deepseek/deepseek.json into that one process's environment and is never printed. Exit code 0 when every agent passed.
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -39,6 +48,16 @@ const which = (program) => {
 }
 const run = (cmd, args, cwd, options = {}) =>
   spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...options })
+
+/** The real program of an agent where a wrapper script of the caller's own tooling shadows it on PATH. */
+const PROGRAM_PATHS = {
+  codex: ['/opt/homebrew/bin/codex', '/usr/local/bin/codex'],
+  claude: [
+    join(homedir(), '.local/bin/claude'),
+    '/opt/homebrew/bin/claude',
+    '/usr/local/bin/claude',
+  ],
+}
 
 /** What each agent runs, and how its output says how much work it did. */
 const DRIVERS = {
@@ -142,8 +161,13 @@ function environment(dir, programDir) {
   for (const tool of ['node', 'npm', 'npx']) symlinkSync(join(nodeDir, tool), join(bin, tool))
   const home = join(dir, 'home')
   mkdirSync(home, { recursive: true })
+  // Only what a program needs to run: nothing of the caller's session (its agent variables, hooks or credentials) is inherited.
   const env = {
-    ...process.env,
+    ...Object.fromEntries(
+      ['TERM', 'LANG', 'USER', 'LOGNAME', 'TMPDIR']
+        .filter((k) => process.env[k] !== undefined)
+        .map((k) => [k, process.env[k]]),
+    ),
     HOME: home,
     PATH: [bin, programDir, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':'),
   }
@@ -160,9 +184,10 @@ function attempt(name) {
   const dir = join(base, name)
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
-  const programDir = dirname(which(name))
+  const program = PROGRAM_PATHS[name]?.find((path) => existsSync(path)) ?? which(name)
+  const programDir = dirname(program)
   const env = environment(dir, programDir)
-  const clean = { ...process.env, PATH: env.PATH }
+  const clean = { ...env }
   run('npm', ['init', '-y'], dir, { env: clean })
   run(
     'npm',
@@ -187,6 +212,25 @@ function attempt(name) {
   if (run('npm', ['test'], app, { env: clean }).status !== 0)
     return { name, pass: false, note: "the fresh app's own tests fail" }
   const agentEnv = { ...env }
+  const secrets = []
+  if (name === 'claude') {
+    // Claude Code keeps its login in the operating system's keychain, which does not depend on HOME: nothing is copied. A key or token in the caller's
+    // environment (an API-key setup) is handed on to this one process only.
+    for (const key of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL'])
+      if (process.env[key]) agentEnv[key] = process.env[key]
+  }
+  if (name === 'codex') {
+    // Codex keeps its login in a file: copy that one file into a scratch CODEX_HOME, and delete it afterwards.
+    const source = join(homedir(), '.codex', 'auth.json')
+    if (!existsSync(source)) return { name, pass: false, note: `no Codex login at ${source}` }
+    const codexHome = join(env.HOME, '.codex')
+    mkdirSync(codexHome, { recursive: true, mode: 0o700 })
+    copyFileSync(source, join(codexHome, 'auth.json'))
+    chmodSync(join(codexHome, 'auth.json'), 0o600)
+    writeFileSync(join(codexHome, 'config.toml'), 'cli_auth_credentials_store = "file"\n')
+    agentEnv.CODEX_HOME = codexHome
+    secrets.push(codexHome)
+  }
   if (name === 'pi') {
     const file = join(homedir(), '.secure-storage/llmproviders/deepseek/deepseek.json')
     if (!existsSync(file)) return { name, pass: false, note: `no DeepSeek key at ${file}` }
@@ -201,12 +245,13 @@ function attempt(name) {
   )
   const driver = DRIVERS[name]
   const started = Date.now()
-  const result = run(join(programDir, name), driver.args(values.task, app), app, {
+  const result = run(program, driver.args(values.task, app), app, {
     env: agentEnv,
     timeout: 900_000,
     input: '',
   })
   const seconds = Math.round((Date.now() - started) / 1000)
+  for (const path of secrets) rmSync(path, { recursive: true, force: true })
   const test = run('npm', ['test'], app, { env: clean })
   const check = run('npm', ['run', 'check'], app, { env: clean })
   // Tests that passed before the task prove nothing: the agent must have added a test and a source file, and the default task's route must answer.
