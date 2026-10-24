@@ -13,7 +13,18 @@ import { join, resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
-const shot = resolve(process.argv[2] ?? join(tmpdir(), 'acrylblends-desktop-window.png'))
+const args = process.argv.slice(2)
+const npmAt = args.indexOf('--from-npm')
+/** With `--from-npm <version>` the published package is used instead of this checkout: a blank app, then `acrylblends add desktop` on it, as a user would. */
+const fromNpm = npmAt >= 0 ? args[npmAt + 1] : undefined
+/** With `--plain [--tarball <acrylblends .tgz>]` the app is a plain Acryl app made by create-acrylblends (template nodejs), then `acrylblends add desktop`; the package is the tarball, or `--from-npm`'s version. */
+const plain = args.includes('--plain')
+const tarballAt = args.indexOf('--tarball')
+const tarball = tarballAt >= 0 ? resolve(args[tarballAt + 1] ?? '') : undefined
+const positional = args.filter(
+  (a, i) => !a.startsWith('--') && i !== npmAt + 1 && i !== tarballAt + 1,
+)
+const shot = resolve(positional[0] ?? join(tmpdir(), 'acrylblends-desktop-window.png'))
 const log = (m) => console.log(`verify-desktop: ${m}`)
 const fail = (m) => {
   throw new Error(`verify-desktop: ${m}`)
@@ -35,24 +46,49 @@ writeFileSync(marker, '')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const run = (cmd, args, cwd) =>
   execFileSync(cmd, args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+const entry = plain ? 'src/plugins/desktop-web/main.ts' : 'src/plugins/desktop/main.ts'
 const port = 9455 + Math.floor(Math.random() * 40)
 let child
 try {
-  run(
-    process.execPath,
-    [
-      cli,
-      'init',
-      'app',
-      '--name',
-      'verify-desktop-window',
-      '--template',
-      'todo',
-      '--desktop',
-      '-y',
-    ],
-    scratch,
-  )
+  if (plain) {
+    run(
+      process.execPath,
+      [
+        join(root, 'packages', 'create', 'bin', 'create-acrylblends.js'),
+        'app',
+        '--template',
+        'nodejs',
+        '-y',
+      ],
+      scratch,
+    )
+    const app = join(scratch, 'app')
+    run('npm', ['install', tarball ?? `acrylblends@${fromNpm}`, '--no-audit', '--no-fund'], app)
+    run(
+      process.execPath,
+      [join(app, 'node_modules', 'acrylblends', 'bin', 'acrylblends.js'), 'add', 'desktop'],
+      app,
+    )
+  } else if (fromNpm) {
+    const npx = (...rest) => run('npx', ['--yes', `acrylblends@${fromNpm}`, ...rest], scratch)
+    npx('init', 'app', '--name', 'verify-desktop-window', '--template', 'blank', '-y')
+    npx('add', 'desktop', '--dir', 'app')
+  } else
+    run(
+      process.execPath,
+      [
+        cli,
+        'init',
+        'app',
+        '--name',
+        'verify-desktop-window',
+        '--template',
+        'todo',
+        '--desktop',
+        '-y',
+      ],
+      scratch,
+    )
   const app = join(scratch, 'app')
   run('npm', ['install', '--no-audit', '--no-fund'], app)
   // A plain install must not have downloaded the binary (Electron 44 has no install script): the first `electron` run does, and this gate launches without installing it by hand.
@@ -63,7 +99,7 @@ try {
   const launchStarted = Date.now()
   child = spawn(
     join(app, 'node_modules', '.bin', 'electron'),
-    [`--remote-debugging-port=${port}`, 'src/plugins/desktop/main.ts'],
+    [`--remote-debugging-port=${port}`, entry],
     {
       cwd: app,
       env: { ...env, ACRYLBLENDS_PORT: '0' },
@@ -85,13 +121,17 @@ try {
     `the first launch fetched the Electron binary and opened the window in ${Math.round((Date.now() - launchStarted) / 1000)} s`,
   )
   const url = new URL(target.url)
-  if (url.pathname !== '/todo') fail(`the window opened on ${url.pathname}, not /todo`)
-  const created = await fetch(`${url.origin}/todo/api`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ title: 'Desktop window works' }),
-  })
-  if (created.status !== 201) fail(`the app's own API answered ${created.status}`)
+  const expectedPath = fromNpm || plain ? '/' : '/todo'
+  if (url.pathname !== expectedPath)
+    fail(`the window opened on ${url.pathname}, not ${expectedPath}`)
+  if (!fromNpm && !plain) {
+    const created = await fetch(`${url.origin}/todo/api`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Desktop window works' }),
+    })
+    if (created.status !== 201) fail(`the app's own API answered ${created.status}`)
+  }
   await sleep(500)
   const ws = new WebSocket(target.webSocketDebuggerUrl)
   await new Promise((r) => {
@@ -112,17 +152,18 @@ try {
   const text = (
     await call('Runtime.evaluate', { expression: 'document.body.innerText', returnByValue: true })
   ).result.value
-  if (!text.includes('Desktop window works'))
-    fail(`the window does not show the todo: ${JSON.stringify(text)}`)
+  const wanted = plain ? 'Acryl!' : fromNpm ? '"ok":true' : 'Desktop window works'
+  if (!text.includes(wanted))
+    fail(`the window does not show the app's content: ${JSON.stringify(text)}`)
   const png = await call('Page.captureScreenshot', { format: 'png' })
   writeFileSync(shot, Buffer.from(png.data, 'base64'))
   log(`the window shows the app's own page and the todo it just got (${shot})`)
   // A second launch of the same app hands over to the first one and ends.
-  const second = spawnSync(
-    join(app, 'node_modules', '.bin', 'electron'),
-    ['src/plugins/desktop/main.ts'],
-    { cwd: app, env: { ...env, ACRYLBLENDS_PORT: '0' }, timeout: 30_000 },
-  )
+  const second = spawnSync(join(app, 'node_modules', '.bin', 'electron'), [entry], {
+    cwd: app,
+    env: { ...env, ACRYLBLENDS_PORT: '0' },
+    timeout: 30_000,
+  })
   if (second.status !== 0) fail(`the second launch did not end cleanly (${second.status})`)
   const windows = (await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json())).filter(
     (t) => t.type === 'page',

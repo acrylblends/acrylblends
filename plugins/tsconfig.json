@@ -17,6 +17,8 @@
   "exclude": [
     "desktop/main.ts",
     "desktop/window.ts",
+    "desktop-web/main.ts",
+    "desktop-web/window.ts",
     "acryl-*/src/**/*.test.ts",
     "acryl-*/src/**/*.case.ts",
     "acryl-node-server/tests/adapter",

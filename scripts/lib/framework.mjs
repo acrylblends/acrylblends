@@ -227,6 +227,15 @@ export const TEMPLATE_SOURCES = {
       'apps/acryl-desktop/src/shell/shutdown.ts': 'shutdown.ts',
     },
   },
+  /** The same two files for the desktop shell of a plain Acryl app (`desktop-web`). */
+  desktopWeb: {
+    dir: 'plugins/desktop-web',
+    pluginsRoot: 'src/plugins',
+    files: {
+      'apps/acryl-desktop/src/shell/desktop-user-data.ts': 'user-data.ts',
+      'apps/acryl-desktop/src/shell/shutdown.ts': 'shutdown.ts',
+    },
+  },
 }
 
 /** The template files of one template, read from an ACRYL checkout and rewritten for the app layout: a Map of template path to bytes. */

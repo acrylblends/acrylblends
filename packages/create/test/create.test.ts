@@ -27,6 +27,11 @@ import {
 } from '../src/index'
 
 const repo = resolve(import.meta.dirname, '..', '..', '..')
+const cliVersion = (
+  JSON.parse(readFileSync(join(repo, 'packages', 'cli', 'package.json'), 'utf8')) as {
+    version: string
+  }
+).version
 const scratch = mkdtempSync(join(tmpdir(), 'create-acrylblends-test-'))
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
@@ -123,10 +128,10 @@ describe('create', () => {
     })
   })
 
-  it('nodejs: the package range and name come from names.ts', async () => {
+  it('nodejs: the dependency range is stamped from the framework release this package carries, so a new app never installs an older one', async () => {
     await runCreate(['ranged', '--template', 'nodejs', '-y'], fakeIo().io)
     const pkg = JSON.parse(readFileSync(join(scratch, 'ranged', 'package.json'), 'utf8'))
-    expect(pkg.dependencies).toEqual({ [PACKAGE]: '^0.5.0' })
+    expect(pkg.dependencies).toEqual({ [PACKAGE]: `^${cliVersion}` })
   })
 
   it('refuses a folder that is not empty and changes nothing', async () => {
