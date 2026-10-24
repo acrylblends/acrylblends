@@ -13,7 +13,12 @@ import { join, resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
-const shot = resolve(process.argv[2] ?? join(tmpdir(), 'acrylblends-desktop-window.png'))
+const args = process.argv.slice(2)
+const npmAt = args.indexOf('--from-npm')
+/** With `--from-npm <version>` the published package is used instead of this checkout: a blank app, then `acrylblends add desktop` on it, as a user would. */
+const fromNpm = npmAt >= 0 ? args[npmAt + 1] : undefined
+const positional = args.filter((a, i) => !a.startsWith('--') && i !== npmAt + 1)
+const shot = resolve(positional[0] ?? join(tmpdir(), 'acrylblends-desktop-window.png'))
 const log = (m) => console.log(`verify-desktop: ${m}`)
 const fail = (m) => {
   throw new Error(`verify-desktop: ${m}`)
@@ -38,21 +43,26 @@ const run = (cmd, args, cwd) =>
 const port = 9455 + Math.floor(Math.random() * 40)
 let child
 try {
-  run(
-    process.execPath,
-    [
-      cli,
-      'init',
-      'app',
-      '--name',
-      'verify-desktop-window',
-      '--template',
-      'todo',
-      '--desktop',
-      '-y',
-    ],
-    scratch,
-  )
+  if (fromNpm) {
+    const npx = (...rest) => run('npx', ['--yes', `acrylblends@${fromNpm}`, ...rest], scratch)
+    npx('init', 'app', '--name', 'verify-desktop-window', '--template', 'blank', '-y')
+    npx('add', 'desktop', '--dir', 'app')
+  } else
+    run(
+      process.execPath,
+      [
+        cli,
+        'init',
+        'app',
+        '--name',
+        'verify-desktop-window',
+        '--template',
+        'todo',
+        '--desktop',
+        '-y',
+      ],
+      scratch,
+    )
   const app = join(scratch, 'app')
   run('npm', ['install', '--no-audit', '--no-fund'], app)
   // A plain install must not have downloaded the binary (Electron 44 has no install script): the first `electron` run does, and this gate launches without installing it by hand.
@@ -85,13 +95,17 @@ try {
     `the first launch fetched the Electron binary and opened the window in ${Math.round((Date.now() - launchStarted) / 1000)} s`,
   )
   const url = new URL(target.url)
-  if (url.pathname !== '/todo') fail(`the window opened on ${url.pathname}, not /todo`)
-  const created = await fetch(`${url.origin}/todo/api`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ title: 'Desktop window works' }),
-  })
-  if (created.status !== 201) fail(`the app's own API answered ${created.status}`)
+  const expectedPath = fromNpm ? '/' : '/todo'
+  if (url.pathname !== expectedPath)
+    fail(`the window opened on ${url.pathname}, not ${expectedPath}`)
+  if (!fromNpm) {
+    const created = await fetch(`${url.origin}/todo/api`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Desktop window works' }),
+    })
+    if (created.status !== 201) fail(`the app's own API answered ${created.status}`)
+  }
   await sleep(500)
   const ws = new WebSocket(target.webSocketDebuggerUrl)
   await new Promise((r) => {
@@ -112,8 +126,9 @@ try {
   const text = (
     await call('Runtime.evaluate', { expression: 'document.body.innerText', returnByValue: true })
   ).result.value
-  if (!text.includes('Desktop window works'))
-    fail(`the window does not show the todo: ${JSON.stringify(text)}`)
+  const wanted = fromNpm ? '"ok":true' : 'Desktop window works'
+  if (!text.includes(wanted))
+    fail(`the window does not show the app's content: ${JSON.stringify(text)}`)
   const png = await call('Page.captureScreenshot', { format: 'png' })
   writeFileSync(shot, Buffer.from(png.data, 'base64'))
   log(`the window shows the app's own page and the todo it just got (${shot})`)
