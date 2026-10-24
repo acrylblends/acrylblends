@@ -55,8 +55,12 @@ try {
   )
   const app = join(scratch, 'app')
   run('npm', ['install', '--no-audit', '--no-fund'], app)
-  if (!existsSync(join(app, 'node_modules', 'electron', 'dist')))
-    run(process.execPath, [join(app, 'node_modules', 'electron', 'install.js')], app)
+  // A plain install must not have downloaded the binary (Electron 44 has no install script): the first `electron` run does, and this gate launches without installing it by hand.
+  if (existsSync(join(app, 'node_modules', 'electron', 'dist')))
+    fail(
+      'npm install downloaded the Electron binary; the lazy first-run download was not exercised',
+    )
+  const launchStarted = Date.now()
   child = spawn(
     join(app, 'node_modules', '.bin', 'electron'),
     [`--remote-debugging-port=${port}`, 'src/plugins/desktop/main.ts'],
@@ -67,14 +71,19 @@ try {
     },
   )
   let target
-  for (let i = 0; i < 60 && target === undefined; i++) {
+  for (let i = 0; i < 240 && target === undefined; i++) {
     await sleep(500)
     target = await fetch(`http://127.0.0.1:${port}/json/list`)
       .then((r) => r.json())
       .then((l) => l.find((t) => t.type === 'page' && t.url.startsWith('http://127.0.0.1:')))
       .catch(() => undefined)
   }
-  if (!target) fail('no window opened on the app within 30 s')
+  if (!target) fail('no window opened on the app within 2 minutes')
+  if (!existsSync(join(app, 'node_modules', 'electron', 'dist')))
+    fail('the window opened but the binary is not in node_modules/electron/dist')
+  log(
+    `the first launch fetched the Electron binary and opened the window in ${Math.round((Date.now() - launchStarted) / 1000)} s`,
+  )
   const url = new URL(target.url)
   if (url.pathname !== '/todo') fail(`the window opened on ${url.pathname}, not /todo`)
   const created = await fetch(`${url.origin}/todo/api`, {

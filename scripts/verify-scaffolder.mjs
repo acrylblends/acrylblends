@@ -535,6 +535,23 @@ spec:
     cwd: desktop,
     env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' },
   })
+  // Electron 44 has no install script, so a plain install leaves the binary to the first `electron` run (which downloads it): nothing heavy is fetched at install, and the
+  // package ships the commands that do the lazy download.
+  const electronPackage = JSON.parse(
+    readFileSync(join(desktop, 'node_modules', 'electron', 'package.json'), 'utf8'),
+  )
+  if (
+    electronPackage.scripts?.postinstall !== undefined ||
+    existsSync(join(desktop, 'node_modules', 'electron', 'dist'))
+  )
+    fail(
+      'desktop: electron now installs its binary at npm install; the desktop docs and verify-desktop must change',
+    )
+  if (
+    electronPackage.bin?.electron === undefined ||
+    electronPackage.bin?.['install-electron'] === undefined
+  )
+    fail('desktop: electron no longer ships the electron and install-electron commands')
   capture(npm, ['run', 'check'], { cwd: desktop })
   capture(npm, ['test'], { cwd: desktop })
   log(
