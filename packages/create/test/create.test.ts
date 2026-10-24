@@ -54,6 +54,15 @@ describe('names', () => {
   })
 })
 
+describe('README', () => {
+  it('shows the one command with the current names', () => {
+    const readme = readFileSync(join(repo, 'packages', 'create', 'README.md'), 'utf8')
+    expect(readme).toContain(`npm create ${PACKAGE}@latest my-app`)
+    expect(readme).toContain(`import { ${CLASS} } from '${PACKAGE}'`)
+    expect(readme).toContain(`# ${CREATE}`)
+  })
+})
+
 describe('options', () => {
   it('parses the flags and rejects bad ones', () => {
     expect(
