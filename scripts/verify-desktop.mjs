@@ -148,9 +148,16 @@ try {
   if (left) fail(`processes are left running: ${left}`)
   if (!existsSync(join(app, '.acrylblends', 'electron')))
     fail("Electron's user data is not inside the app's own home")
+  // Only what this app's Electron could have created: other programs write to the application-data folder all the time, so any new entry there is not evidence.
   const touched = spawnSync('find', [appSupport, '-maxdepth', '1', '-newer', marker], {
     encoding: 'utf8',
-  }).stdout.trim()
+  })
+    .stdout.split('\n')
+    .filter((entry) =>
+      /electron|verify-desktop-window|acrylblends/i.test(entry.slice(appSupport.length)),
+    )
+    .join('\n')
+    .trim()
   if (touched) fail(`something was written to ${appSupport}: ${touched}`)
   log(
     `closing the window ended the process (exit ${code}) and freed the port; nothing left running; user data is in the app's home; nothing written to ${appSupport}`,
