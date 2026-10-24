@@ -24,7 +24,10 @@
       "!packages/cli/upstream.json",
       "!plugins/desktop/user-data.ts",
       "!plugins/desktop/shutdown.ts",
-      "!plugins/desktop/upstream.json"
+      "!plugins/desktop/upstream.json",
+      "!plugins/desktop-web/user-data.ts",
+      "!plugins/desktop-web/shutdown.ts",
+      "!plugins/desktop-web/upstream.json"
     ]
   },
   "formatter": {

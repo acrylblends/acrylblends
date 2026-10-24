@@ -5,9 +5,9 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { CLASS, CREATE, PACKAGE, RANGE } from './names'
+import { CLASS, CREATE, PACKAGE } from './names'
 
-export { CLASS, CREATE, PACKAGE, RANGE }
+export { CLASS, CREATE, PACKAGE }
 
 export const TEMPLATES = ['nodejs', 'bun', 'acryl-app'] as const
 export type Template = (typeof TEMPLATES)[number]
@@ -159,12 +159,21 @@ const docsRoot = () =>
       : undefined,
   )
 
+/**
+ * The range a created app asks for: the framework version this package was released with, so a new app depends on the release that made it (and gets what that release's
+ * commands can do), never an older one. A caret range, so it also takes the newer patch releases.
+ */
+export function frameworkRange(): string {
+  const file = createRequire(import.meta.url).resolve(`${PACKAGE}/package.json`)
+  return `^${(JSON.parse(readFileSync(file, 'utf8')) as { version: string }).version}`
+}
+
 export function replacePlaceholders(text: string, name: string): string {
   return text
     .replaceAll('__APP_NAME__', name)
     .replaceAll('__PACKAGE__', PACKAGE)
     .replaceAll('__CLASS__', CLASS)
-    .replaceAll('__RANGE__', RANGE)
+    .replaceAll('__RANGE__', frameworkRange())
 }
 
 /** The guide for a coding agent in a created app: where the API is, how to run it, what must pass. */

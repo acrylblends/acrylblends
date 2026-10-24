@@ -158,6 +158,21 @@ export function mergeTooling(
   return { devDependencies: addedDev, scripts: addedScripts }
 }
 
+/** Add the lines a plugin needs to the app's `.gitignore` when it has one and they are missing. Returns the lines added. */
+export function appendGitignore(appDir: string, lines: readonly string[] | undefined): string[] {
+  const file = join(appDir, '.gitignore')
+  if (!lines || lines.length === 0 || !existsSync(file)) return []
+  const current = readFileSync(file, 'utf8')
+  const present = new Set(current.split('\n').map((line) => line.trim()))
+  const missing = lines.filter((line) => !present.has(line))
+  if (missing.length > 0)
+    writeFileSync(
+      file,
+      `${current}${current.endsWith('\n') || current === '' ? '' : '\n'}${missing.join('\n')}\n`,
+    )
+  return missing
+}
+
 /** The generated app's guide for a coding agent: the shared core, then the template's own part. `CLAUDE.md` is only an import of it. */
 export function writeAgentFiles(
   sharedDir: string,

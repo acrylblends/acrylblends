@@ -14,6 +14,8 @@ export interface LibraryPlugin {
   readonly devDependencies?: Readonly<Record<string, string>>
   /** `package.json` scripts the plugin adds; a script the app already has is kept. */
   readonly scripts?: Readonly<Record<string, string>>
+  /** Lines the app's `.gitignore` needs for this plugin (added when missing, if the app has a `.gitignore`). */
+  readonly gitignore?: readonly string[]
   /** How to mount it, shown after `acrylblends add`. */
   readonly mount?: string
   /**

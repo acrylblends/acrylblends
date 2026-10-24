@@ -376,6 +376,33 @@ describe('the desktop shell', () => {
   })
 })
 
+describe('the desktop shell in a plain Acryl app', () => {
+  it('add desktop picks desktop-web for an app without the Blend plugins, adds the script, electron and the gitignore line, and needs no instance plugin', async () => {
+    const dir = join(scratch, 'plain-acryl')
+    mkdirSync(join(dir, 'src'), { recursive: true })
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'plain-acryl',
+        scripts: { dev: 'x' },
+        dependencies: { acrylblends: '^0.6.0' },
+      }),
+    )
+    writeFileSync(join(dir, 'src/app.ts'), 'export default {}\n')
+    writeFileSync(join(dir, '.gitignore'), 'node_modules/\n')
+    expect(await runCli(['add', 'desktop', '--dir', dir], fakeIo().io)).toBe(0)
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    expect(pkg.scripts).toEqual({ desktop: 'electron src/plugins/desktop-web/main.ts', dev: 'x' })
+    expect(pkg.devDependencies.electron).toBe('44.0.0')
+    expect(existsSync(join(dir, 'src/plugins/desktop-web/main.ts'))).toBe(true)
+    expect(existsSync(join(dir, 'src/plugins/instance'))).toBe(false)
+    expect(existsSync(join(dir, 'src/plugins/desktop'))).toBe(false)
+    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toBe('node_modules/\n.acrylblends/\n')
+    // Adding it again changes nothing and is refused.
+    expect(await runCli(['add', 'desktop', '--dir', dir], fakeIo().io)).toBe(1)
+  })
+})
+
 describe('add and plugins', () => {
   it('adds a plugin to an app, refuses it twice, and refuses a folder that is not an app', async () => {
     expect(await runCli(['init', 'grows', '-y'], fakeIo().io)).toBe(0)

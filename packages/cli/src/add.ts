@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util'
 import { UsageError } from './init'
 import type { Io } from './io'
 import { closure, copyPlugin, type LibraryPlugin, readLibrary } from './library'
-import { mergeDependencies, mergeTooling } from './project'
+import { appendGitignore, mergeDependencies, mergeTooling } from './project'
 
 export interface AddOptions {
   readonly names: readonly string[]
@@ -52,7 +52,11 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     const code = addExternal(resolve(io.cwd, folder), appDir, io)
     if (code !== 0) return code
   }
-  const names = options.names.filter((name) => !external.includes(name))
+  // The desktop shell has two forms: the Blend app (it needs the `instance` plugin) and a plain Acryl app (`export default app`); `desktop` means the one that fits.
+  const plain = !existsSync(join(appDir, 'src', 'plugins', 'instance'))
+  const names = options.names
+    .filter((name) => !external.includes(name))
+    .map((name) => (name === 'desktop' && plain ? 'desktop-web' : name))
   if (names.length === 0) return 0
   const already = names.filter((name) => present(appDir, name))
   if (already.length > 0) {
@@ -69,6 +73,7 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     copyPlugin(plugin, appDir)
     addedDependencies.push(...mergeDependencies(appDir, plugin.dependencies))
     const tooling = mergeTooling(appDir, plugin)
+    appendGitignore(appDir, plugin.gitignore)
     addedDependencies.push(...tooling.devDependencies)
     if (tooling.scripts.length > 0)
       io.stdout.write(
