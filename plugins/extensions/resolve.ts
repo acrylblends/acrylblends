@@ -12,21 +12,81 @@ import { registerHooks } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+const PACKAGE = 'acrylblends'
+
 const isBare = (specifier: string) => !/^[./]/.test(specifier) && !specifier.includes(':')
 
-/** The router's specifiers, as files of the vendored plugin that sits beside this one; empty when the app has no router. */
+/**
+ * The framework's specifiers, as files of the vendored router plugin that sits beside this one. A plugin written while the app runs (by the agent, from the docs in the app)
+ * imports `acrylblends` and `acrylblends/<subpath>` as the docs write them; the old `acryl-router` names keep working. Empty when the app has no router.
+ */
+const MIDDLEWARE = [
+  'basic-auth',
+  'bearer-auth',
+  'body-limit',
+  'combine',
+  'compress',
+  'context-storage',
+  'cors',
+  'csrf',
+  'etag',
+  'ip-restriction',
+  'jwk',
+  'jwt',
+  'language',
+  'logger',
+  'loopback-only',
+  'method-not-allowed',
+  'method-override',
+  'powered-by',
+  'pretty-json',
+  'request-id',
+  'secure-headers',
+  'serve-static',
+  'timeout',
+  'timing',
+  'trailing-slash',
+]
+const HELPERS = [
+  'accepts',
+  'cookie',
+  'factory',
+  'html',
+  'route',
+  'schema-validator',
+  'streaming',
+  'testing',
+  'validator',
+  'ws',
+]
+
+/** The `acrylblends/...` names a plugin installed live may import, with the file each resolves to under `acryl-router/src`. */
+export function frameworkSpecifiers(): Record<string, string> {
+  const map: Record<string, string> = {
+    '': 'index.ts',
+    conninfo: 'index.ts',
+    'http-exception': 'index.ts',
+    types: 'index.ts',
+    client: 'client.ts',
+  }
+  for (const name of MIDDLEWARE) map[name] = 'middleware/index.ts'
+  for (const name of HELPERS) map[name] = 'helpers/index.ts'
+  return map
+}
+
 export function routerAliases(): Record<string, string> {
   const src = new URL('../acryl-router/src/', import.meta.url)
-  const files = {
-    'acryl-router': 'index.ts',
-    'acryl-router/middleware': 'middleware/index.ts',
-    'acryl-router/helpers': 'helpers/index.ts',
+  const aliases: Record<string, string> = {}
+  const add = (specifier: string, file: string) => {
+    const path = fileURLToPath(new URL(file, src))
+    if (existsSync(path)) aliases[specifier] = path
   }
-  return Object.fromEntries(
-    Object.entries(files)
-      .map(([specifier, file]) => [specifier, fileURLToPath(new URL(file, src))] as const)
-      .filter(([, path]) => existsSync(path)),
-  )
+  for (const [sub, file] of Object.entries(frameworkSpecifiers()))
+    add(sub === '' ? PACKAGE : `${PACKAGE}/${sub}`, file)
+  add('acryl-router', 'index.ts')
+  add('acryl-router/middleware', 'middleware/index.ts')
+  add('acryl-router/helpers', 'helpers/index.ts')
+  return aliases
 }
 
 export function resolveFromApp(

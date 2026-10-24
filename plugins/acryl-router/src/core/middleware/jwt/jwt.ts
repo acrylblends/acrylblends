@@ -1,12 +1,13 @@
 /**
  * @module
- * JWT Auth Middleware for App.
+ * JWT Auth Middleware for Acryl.
  */
 
 import type { Context } from '../../context.ts'
 import { getCookie, getSignedCookie } from '../../helper/cookie/index.ts'
 import { HTTPException } from '../../http-exception.ts'
 import type { MiddlewareHandler } from '../../types.ts'
+import type { BufferSource } from '../../utils/types.ts'
 import type { CookiePrefixOptions } from '../../utils/cookie.ts'
 import { Jwt } from '../../utils/jwt/index.ts'
 import '../../context.ts'
@@ -20,7 +21,7 @@ export type JwtVariables<T = any> = {
 }
 
 /**
- * JWT Auth Middleware for App.
+ * JWT Auth Middleware for Acryl.
  *
  *
  * @param {object} options - The options for the JWT middleware.
@@ -34,7 +35,7 @@ export type JwtVariables<T = any> = {
  *
  * @example
  * ```ts
- * const app = new App()
+ * const app = new Acryl()
  *
  * app.use(
  *   '/auth/*',

@@ -17,6 +17,7 @@
       "!plugins/acryl-*/tests",
       "!plugins/acryl-*/upstream.json",
       "!docs/framework/upstream.json",
+      "!packages/cli/lib",
       "!packages/cli/templates/todo/src/todo.ts",
       "!packages/cli/templates/todo/src/page.ts",
       "!packages/cli/templates/todo/upstream.json"

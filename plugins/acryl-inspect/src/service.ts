@@ -6,7 +6,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { loopbackOnly } from '../../acryl-router/src/middleware/index.ts'
-import { App } from '../../acryl-router/src/index.ts'
+import { Acryl } from '../../acryl-router/src/index.ts'
 import { explain, ownerOf, renderReports, reportFiber, type FiberView, type PluginReport } from './report.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -54,7 +54,7 @@ export function apply(ctx: Context): void {
   // The same facts on the router, for any surface; present only where a router is. A request over a socket must come from this machine to this app;
   // the terminal calls the router in process and is the host's own code.
   ctx.inject(['router'], inner => {
-    const api = new App()
+    const api = new Acryl()
       .use(loopbackOnly({ inProcess: 'allow' }))
       .get('/plugins', c => c.json(inspect.plugins()))
       .get('/plugins/:name', c => {

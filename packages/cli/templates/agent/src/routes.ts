@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { App } from './plugins/acryl-router/src/index.ts'
+import { Acryl } from './plugins/acryl-router/src/index.ts'
 import { bodyLimit } from './plugins/acryl-router/src/middleware/index.ts'
 import type {} from './plugins/agent/index.ts'
 import type {} from './plugins/extensions/index.ts'
@@ -23,7 +23,7 @@ export const routes = {
       const body = await c.req.json().catch(() => undefined)
       return typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {}
     }
-    const app = new App()
+    const app = new Acryl()
       .use(bodyLimit({ maxSize: 64 * 1024 }))
       .get('/', (c) => c.json({ app: APP_NAME, ok: true }))
       .get('/health', (c) => c.json({ ok: true }))

@@ -12,6 +12,7 @@ export const PLUGINS = {
       '': 'src/index.ts',
       '/middleware': 'src/middleware/index.ts',
       '/helpers': 'src/helpers/index.ts',
+      '/client': 'src/client.ts',
     },
     testsNotRun: {
       'tests/loader.spec.ts':

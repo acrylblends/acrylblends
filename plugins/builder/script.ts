@@ -18,7 +18,7 @@ const PATH = /^\/[a-z0-9/-]*$/
 
 export function routeSource(name: string, path: string, text: string): string {
   return `import type { Context } from '@deepseek-ai/cordis'
-import { App } from 'acryl-router'
+import { Acryl } from 'acrylblends'
 
 /** Written by the builder: answers GET ${path}, and checks that it does before the install counts. */
 export const name = '${name}'
@@ -26,7 +26,7 @@ export const inject = ['router']
 
 export function apply(ctx: Context) {
   // The app is mounted through this plugin's context, so the route is removed when the plugin is unloaded.
-  ctx.router.route('/', new App().get(${JSON.stringify(path)}, (c) => c.json({ text: ${JSON.stringify(text)} })))
+  ctx.router.route('/', new Acryl().get(${JSON.stringify(path)}, (c) => c.json({ text: ${JSON.stringify(text)} })))
 }
 
 export async function check(ctx: Context) {

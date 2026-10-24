@@ -83,12 +83,13 @@ describe('a coding agent in a generated app', () => {
       expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe('@AGENTS.md\n')
       for (const page of [
         'README.md',
-        'routing.md',
-        'request.md',
-        'context.md',
-        'validation.md',
-        'helpers.md',
-        'migration-from-0-3.md',
+        'api/routing.md',
+        'api/request.md',
+        'api/context.md',
+        'api/summary.md',
+        'guides/validation.md',
+        'guides/helpers.md',
+        'cordis/migration-from-0-4.md',
       ])
         expect(existsSync(join(dir, 'docs/framework', page))).toBe(true)
       expect(existsSync(join(dir, 'docs/framework/upstream.json'))).toBe(false)

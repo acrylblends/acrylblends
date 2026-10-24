@@ -2,7 +2,7 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-node-server",
-    "commit": "64e7c9d2e787f74b2da82492644fbbb46a601074"
+    "commit": "f5151e7f0c4de3b81bddb5cc686b5ef329e48e1c"
   },
   "vendored": [
     "src",
@@ -10,7 +10,7 @@
     "LICENSE"
   ],
   "rewrittenSpecifiers": 28,
-  "digest": "sha256:34c46038d5d69212247430c46ccf52c01cc6ceaf2c9c48fea39c1053de0820d2",
+  "digest": "sha256:551c97b074171e63d4dd09ae7624b2c4cd15050e4a8021603bc2e2e95ab790b3",
   "testsNotRun": {},
   "notice": [
     "LICENSE"

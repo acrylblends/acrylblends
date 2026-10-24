@@ -99,6 +99,34 @@ else {
     )
 }
 
+const frameworkRecordFile = join(root, 'packages', 'cli', 'framework.json')
+if (!existsSync(frameworkRecordFile))
+  problems.push('packages/cli/framework.json is missing; run scripts/vendor-framework-package.mjs')
+else {
+  const record = readJson(frameworkRecordFile)
+  const lib = join(root, 'packages', 'cli', 'lib')
+  const actual = digestOf(
+    new Map(listFiles(lib).map((file) => [file, readFileSync(join(lib, file))])),
+  )
+  if (actual !== record.digest)
+    problems.push(
+      `packages/cli/lib differs from the recorded digest (${record.digest.slice(0, 19)} recorded, ${actual.slice(0, 19)} found). Someone edited the vendored framework: build it in ACRYL and run scripts/vendor-framework-package.mjs again.`,
+    )
+  const exported = Object.keys(
+    readJson(join(root, 'packages', 'cli', 'package.json')).exports ?? {},
+  )
+  for (const subpath of [
+    '.',
+    './cli',
+    './node-server',
+    './schema-validator',
+    './loopback-only',
+    './conninfo',
+  ])
+    if (!exported.includes(subpath))
+      problems.push(`packages/cli/package.json does not export ${subpath}`)
+}
+
 for (const note of notes) console.warn(`note: ${note}`)
 if (problems.length > 0) {
   for (const problem of problems) console.error(`verify-framework-sync: ${problem}`)

@@ -112,17 +112,17 @@ test('the builder refuses to write anywhere that is not an extensions source', a
   await assert.rejects(app.plugin(builder, {}).await(), /not an extensions source/)
 })
 
-test('a plugin installed live reads a service as a property (ctx.router) and builds its routes with the acryl-router of the app', async () => {
+test('a plugin installed live reads a service as a property (ctx.router) and builds its routes with the acrylblends of the app', async () => {
   const { app, root } = await boot()
   const dir = join(root, 'extensions', 'probe')
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, 'index.ts'),
-    `import { App } from 'acryl-router'
+    `import { Acryl } from 'acrylblends'
 export const name = 'probe'
 export const inject = ['router']
 export function apply(ctx) {
-  ctx.router.route('/', new App().get('/probe', (c) => c.json({ ok: true })))
+  ctx.router.route('/', new Acryl().get('/probe', (c) => c.json({ ok: true })))
 }
 `,
   )
@@ -140,11 +140,11 @@ test("a live plugin's check runs with the plugin context: ctx.router reads as in
     mkdirSync(dir, { recursive: true })
     writeFileSync(
       join(dir, 'index.ts'),
-      `import { App } from 'acryl-router'
+      `import { Acryl } from 'acrylblends'
 export const name = '${name}'
 export const inject = ['router']
 export function apply(ctx) {
-  ctx.router.route('/', new App().get('/${name}', (c) => c.json({ ok: true }, ${status})))
+  ctx.router.route('/', new Acryl().get('/${name}', (c) => c.json({ ok: true }, ${status})))
 }
 export async function check(ctx) {
   const reply = await ctx.router.request('/${name}')

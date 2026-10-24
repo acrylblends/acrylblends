@@ -1,0 +1,329 @@
+import { spawn } from 'node:child_process'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { basename, dirname, join, resolve } from 'node:path'
+import { createInterface } from 'node:readline/promises'
+import { fileURLToPath } from 'node:url'
+import { parseArgs } from 'node:util'
+import { CLASS, CREATE, PACKAGE, RANGE } from './names'
+
+export { CLASS, CREATE, PACKAGE, RANGE }
+
+export const TEMPLATES = ['nodejs', 'bun', 'acryl-app'] as const
+export type Template = (typeof TEMPLATES)[number]
+export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const
+export type PackageManager = (typeof PACKAGE_MANAGERS)[number]
+
+/** The version of this package. */
+export const VERSION: string = (
+  createRequire(import.meta.url)('../package.json') as { version: string }
+).version
+
+export const HELP = `${CREATE} ${VERSION} - create an ${CLASS} app
+
+Usage:
+  npm create ${PACKAGE}@latest [directory] [-- options]
+
+Options:
+  --template <name>   nodejs, bun (experimental), acryl-app (asked when not given)
+  --install           install the dependencies after creating the app
+  --pm <manager>      ${PACKAGE_MANAGERS.join(', ')} (default: the one that ran this command, else npm)
+  -y, --yes           ask nothing: template nodejs unless --template is given, directory ${PACKAGE}-app
+  -h, --help          show this help
+  -v, --version       show the version
+`
+
+/** A command line mistake. The command prints it with the help text and exits 2. */
+export class UsageError extends Error {
+  override name = 'UsageError'
+}
+
+export interface Io {
+  stdout: { write(text: string): unknown }
+  stderr: { write(text: string): unknown }
+  cwd: string
+  env: Record<string, string | undefined>
+  /** Ask one question; `undefined` when there is no terminal to ask on. */
+  ask: ((question: string) => Promise<string>) | undefined
+  /** Run a program, showing its output; resolves to the exit code. */
+  run(command: string, args: string[], cwd: string): Promise<number>
+}
+
+export function processIo(): Io {
+  const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY)
+  return {
+    stdout: process.stdout,
+    stderr: process.stderr,
+    cwd: process.cwd(),
+    env: process.env,
+    ask: interactive
+      ? async (question) => {
+          const rl = createInterface({ input: process.stdin, output: process.stdout })
+          try {
+            return await rl.question(question)
+          } finally {
+            rl.close()
+          }
+        }
+      : undefined,
+    run: (command, args, cwd) =>
+      new Promise((done) => {
+        const child = spawn(command, args, {
+          cwd,
+          stdio: 'inherit',
+          shell: process.platform === 'win32',
+        })
+        child.on('error', () => done(1))
+        child.on('exit', (code) => done(code ?? 1))
+      }),
+  }
+}
+
+export interface CreateOptions {
+  directory: string | undefined
+  template: Template | undefined
+  install: boolean
+  pm: PackageManager | undefined
+  yes: boolean
+}
+
+export function isTemplate(value: string): value is Template {
+  return (TEMPLATES as readonly string[]).includes(value)
+}
+
+export function parseCreateOptions(argv: readonly string[]): CreateOptions {
+  let parsed: ReturnType<typeof parse>
+  try {
+    parsed = parse(argv)
+  } catch (error) {
+    throw new UsageError((error as Error).message)
+  }
+  const { values, positionals } = parsed
+  if (positionals.length > 1) throw new UsageError('takes at most one directory')
+  if (values.template !== undefined && !isTemplate(values.template))
+    throw new UsageError(`unknown template "${values.template}" (${TEMPLATES.join(', ')})`)
+  if (values.pm !== undefined && !(PACKAGE_MANAGERS as readonly string[]).includes(values.pm))
+    throw new UsageError(`unknown package manager "${values.pm}" (${PACKAGE_MANAGERS.join(', ')})`)
+  return {
+    directory: positionals[0],
+    template: values.template as Template | undefined,
+    install: values.install === true,
+    pm: values.pm as PackageManager | undefined,
+    yes: values.yes === true,
+  }
+}
+
+const parse = (argv: readonly string[]) =>
+  parseArgs({
+    args: [...argv],
+    allowPositionals: true,
+    strict: true,
+    options: {
+      template: { type: 'string' },
+      install: { type: 'boolean' },
+      pm: { type: 'string' },
+      yes: { type: 'boolean', short: 'y' },
+    },
+  })
+
+/** A valid package name from a directory name: lower case letters, digits and dashes. */
+export function nameFrom(directory: string): string {
+  const name = basename(resolve(directory))
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^[^a-z]+/, '')
+    .replace(/-+$/g, '')
+  return name === '' ? 'acryl-app' : name
+}
+
+function walkUp(from: string, test: (dir: string) => string | undefined): string {
+  let dir = from
+  for (;;) {
+    const found = test(dir)
+    if (found) return found
+    const parent = dirname(dir)
+    if (parent === dir) throw new Error(`${CREATE} cannot find its files`)
+    dir = parent
+  }
+}
+const here = dirname(fileURLToPath(import.meta.url))
+const templatesRoot = () =>
+  walkUp(here, (d) =>
+    existsSync(join(d, 'templates', 'nodejs')) ? join(d, 'templates') : undefined,
+  )
+/** The framework docs: the copy `prepack` puts in the package, or `docs/framework` of the repository. */
+const docsRoot = () =>
+  walkUp(here, (d) =>
+    existsSync(join(d, 'docs', 'framework', 'README.md'))
+      ? join(d, 'docs', 'framework')
+      : undefined,
+  )
+
+export function replacePlaceholders(text: string, name: string): string {
+  return text
+    .replaceAll('__APP_NAME__', name)
+    .replaceAll('__PACKAGE__', PACKAGE)
+    .replaceAll('__CLASS__', CLASS)
+    .replaceAll('__RANGE__', RANGE)
+}
+
+/** The guide for a coding agent in a created app: where the API is, how to run it, what must pass. */
+export function agentsText(template: Exclude<Template, 'acryl-app'>, name: string): string {
+  const run = { nodejs: 'npm run dev', bun: 'bun run dev' }[template]
+  const test = {
+    nodejs: 'npm test` and `npm run check',
+    bun: 'bun test` and `bun run check',
+  }[template]
+  return `# ${name}
+
+An ${CLASS} app (${template}${template === 'bun' ? ', experimental' : ''}): handlers over the Web Standard \`Request\` and \`Response\`, from the \`${PACKAGE}\` package.
+
+## The framework's API is in \`docs/framework/\`
+
+Start at \`docs/framework/README.md\`; \`api/summary.md\` is the one-page summary. Import the class from \`'${PACKAGE}'\` and each middleware or helper from its own
+subpath (\`'${PACKAGE}/cors'\`, \`'${PACKAGE}/validator'\`, ...). Parts marked "not yet available" in the docs are not in the package yet.
+
+## This app
+
+Run it with \`${run}\`. The routes are in \`${template === 'bun' ? 'src/index.ts' : 'src/app.ts'}\`; an app is a function from \`Request\` to \`Response\`,
+so test a route with \`await app.request('/path')\` and no server.
+
+## Things that surprise people
+
+- A page mounted at \`/x\` answers \`/x\`, not \`/x/\` (trailing slashes are strict); \`trimTrailingSlash()\` redirects.
+- A \`json\` validator target reads the body only with a JSON \`Content-Type\`; a failure answers 400 with \`{ error, issues: [{ message, path }] }\`.
+- \`throw new HTTPException(404, { message })\` answers an error response (plain text).
+
+## Before you say you are done
+
+\`${test}\` pass.
+`
+}
+
+function copyDocs(target: string): void {
+  const filter = (path: string) => !/(upstream\.json|UPSTREAM\.md)$/.test(path)
+  mkdirSync(join(target, 'docs'), { recursive: true })
+  cpSync(docsRoot(), join(target, 'docs', 'framework'), { recursive: true, filter })
+}
+
+function copyTemplate(
+  template: Exclude<Template, 'acryl-app'>,
+  target: string,
+  name: string,
+): string[] {
+  const written: string[] = []
+  const walk = (from: string, to: string, prefix: string) => {
+    mkdirSync(to, { recursive: true })
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const targetName = prefix === '' && entry.name === 'gitignore' ? '.gitignore' : entry.name
+      if (entry.isDirectory())
+        walk(join(from, entry.name), join(to, targetName), `${prefix}${entry.name}/`)
+      else {
+        writeFileSync(
+          join(to, targetName),
+          replacePlaceholders(readFileSync(join(from, entry.name), 'utf8'), name),
+        )
+        written.push(`${prefix}${targetName}`)
+      }
+    }
+  }
+  walk(join(templatesRoot(), template), target, '')
+  writeFileSync(join(target, 'AGENTS.md'), agentsText(template, name))
+  writeFileSync(join(target, 'CLAUDE.md'), '@AGENTS.md\n')
+  copyDocs(target)
+  return written
+}
+
+const isEmpty = (directory: string) => !existsSync(directory) || readdirSync(directory).length === 0
+
+/** The `acrylblends` command of the installed framework package, which creates the `acryl-app` template. */
+function acrylblendsBin(): string {
+  const pkgFile = createRequire(import.meta.url).resolve(`${PACKAGE}/package.json`)
+  const pkg = JSON.parse(readFileSync(pkgFile, 'utf8')) as { bin?: string | Record<string, string> }
+  const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.[PACKAGE]
+  if (!bin) throw new Error(`${PACKAGE} has no command to create an app with`)
+  return join(dirname(pkgFile), bin)
+}
+
+/** Create the app. Returns the exit code: 0 done, 1 refused or failed, 2 a usage error. Never calls `process.exit`. */
+export async function runCreate(argv: readonly string[], io: Io = processIo()): Promise<number> {
+  try {
+    if (argv.includes('-h') || argv.includes('--help')) {
+      io.stdout.write(HELP)
+      return 0
+    }
+    if (argv.includes('-v') || argv.includes('--version')) {
+      io.stdout.write(`${VERSION}\n`)
+      return 0
+    }
+    const options = parseCreateOptions(argv)
+    const ask = options.yes ? undefined : io.ask
+    const directory =
+      options.directory ??
+      (ask
+        ? (await ask(`Project directory (${PACKAGE}-app): `)).trim() || `${PACKAGE}-app`
+        : `${PACKAGE}-app`)
+    const target = resolve(io.cwd, directory)
+    const template: Template =
+      options.template ??
+      (ask
+        ? await (async () => {
+            const answer =
+              (
+                await ask(
+                  `Which template do you want to use? (nodejs, bun (experimental), acryl-app) [nodejs]: `,
+                )
+              ).trim() || 'nodejs'
+            if (!isTemplate(answer))
+              throw new UsageError(`unknown template "${answer}" (${TEMPLATES.join(', ')})`)
+            return answer
+          })()
+        : 'nodejs')
+    if (!isEmpty(target)) {
+      io.stderr.write(`error: ${target} is not empty; nothing was changed\n`)
+      return 1
+    }
+    const name = nameFrom(target)
+    if (template === 'acryl-app') {
+      const code = await io.run(
+        process.execPath,
+        [acrylblendsBin(), 'init', target, '--template', 'agent', '--name', name, '--yes'],
+        io.cwd,
+      )
+      if (code !== 0) return 1
+    } else {
+      const files = copyTemplate(template, target, name)
+      io.stdout.write(
+        `created ${name} (${template}) in ${target}: ${files.length} files, ${CLASS} docs in docs/framework\n`,
+      )
+    }
+    const pm: PackageManager =
+      options.pm ??
+      ((PACKAGE_MANAGERS as readonly string[]).find((m) =>
+        (io.env.npm_config_user_agent ?? '').startsWith(`${m}/`),
+      ) as PackageManager | undefined) ??
+      'npm'
+    if (options.install) {
+      if ((await io.run(pm, ['install'], target)) !== 0) {
+        io.stderr.write(`error: ${pm} install failed; run it yourself in ${directory}\n`)
+        return 1
+      }
+    }
+    const start = {
+      nodejs: `${pm} run dev`,
+      bun: 'bun run dev',
+      'acryl-app': `${pm} run dev`,
+    }[template]
+    io.stdout.write(
+      `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}  ${start}\n`,
+    )
+    return 0
+  } catch (error) {
+    if (error instanceof UsageError) {
+      io.stderr.write(`error: ${error.message}\n\n${HELP}`)
+      return 2
+    }
+    io.stderr.write(`error: ${(error as Error).message}\n`)
+    return 1
+  }
+}
