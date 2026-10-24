@@ -67,6 +67,7 @@ describe('options', () => {
       yes: true,
     })
     expect(() => parseCreateOptions(['--template', 'vercel'])).toThrow(UsageError)
+    expect(() => parseCreateOptions(['--template', 'deno'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['--pm', 'pip'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['a', 'b'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['--nope'])).toThrow(UsageError)
@@ -78,7 +79,7 @@ describe('options', () => {
 })
 
 describe('create', () => {
-  it.each(['nodejs', 'bun', 'deno'] as const)(
+  it.each(['nodejs', 'bun'] as const)(
     '%s: files, no placeholders, AGENTS.md, CLAUDE.md and the docs inside',
     async (template) => {
       const s = fakeIo()
@@ -159,6 +160,6 @@ describe('create', () => {
     const h = fakeIo()
     expect(await runCreate(['--help'], h.io)).toBe(0)
     expect(h.out()).toContain(`npm create ${PACKAGE}@latest`)
-    expect(TEMPLATES).toHaveLength(4)
+    expect(TEMPLATES).toEqual(['nodejs', 'bun', 'acryl-app'])
   })
 })

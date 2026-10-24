@@ -9,7 +9,7 @@ import { CLASS, CREATE, PACKAGE, RANGE } from './names'
 
 export { CLASS, CREATE, PACKAGE, RANGE }
 
-export const TEMPLATES = ['nodejs', 'bun', 'deno', 'acryl-app'] as const
+export const TEMPLATES = ['nodejs', 'bun', 'acryl-app'] as const
 export type Template = (typeof TEMPLATES)[number]
 export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number]
@@ -25,7 +25,7 @@ Usage:
   npm create ${PACKAGE}@latest [directory] [-- options]
 
 Options:
-  --template <name>   ${TEMPLATES.join(', ')} (asked when not given)
+  --template <name>   nodejs, bun (experimental), acryl-app (asked when not given)
   --install           install the dependencies after creating the app
   --pm <manager>      ${PACKAGE_MANAGERS.join(', ')} (default: the one that ran this command, else npm)
   -y, --yes           ask nothing: template nodejs unless --template is given, directory ${PACKAGE}-app
@@ -169,15 +169,14 @@ export function replacePlaceholders(text: string, name: string): string {
 
 /** The guide for a coding agent in a created app: where the API is, how to run it, what must pass. */
 export function agentsText(template: Exclude<Template, 'acryl-app'>, name: string): string {
-  const run = { nodejs: 'npm run dev', bun: 'bun run dev', deno: 'deno task dev' }[template]
+  const run = { nodejs: 'npm run dev', bun: 'bun run dev' }[template]
   const test = {
     nodejs: 'npm test` and `npm run check',
     bun: 'bun test` and `bun run check',
-    deno: 'deno test',
   }[template]
   return `# ${name}
 
-An ${CLASS} app (${template}): handlers over the Web Standard \`Request\` and \`Response\`, from the \`${PACKAGE}\` package.
+An ${CLASS} app (${template}${template === 'bun' ? ', experimental' : ''}): handlers over the Web Standard \`Request\` and \`Response\`, from the \`${PACKAGE}\` package.
 
 ## The framework's API is in \`docs/framework/\`
 
@@ -186,7 +185,7 @@ subpath (\`'${PACKAGE}/cors'\`, \`'${PACKAGE}/validator'\`, ...). Parts marked "
 
 ## This app
 
-Run it with \`${run}\`. The routes are in \`${template === 'deno' ? 'app.ts' : template === 'bun' ? 'src/index.ts' : 'src/app.ts'}\`; an app is a function from \`Request\` to \`Response\`,
+Run it with \`${run}\`. The routes are in \`${template === 'bun' ? 'src/index.ts' : 'src/app.ts'}\`; an app is a function from \`Request\` to \`Response\`,
 so test a route with \`await app.request('/path')\` and no server.
 
 ## Things that surprise people
@@ -271,7 +270,9 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
         ? await (async () => {
             const answer =
               (
-                await ask(`Which template do you want to use? (${TEMPLATES.join(', ')}) [nodejs]: `)
+                await ask(
+                  `Which template do you want to use? (nodejs, bun (experimental), acryl-app) [nodejs]: `,
+                )
               ).trim() || 'nodejs'
             if (!isTemplate(answer))
               throw new UsageError(`unknown template "${answer}" (${TEMPLATES.join(', ')})`)
@@ -302,7 +303,7 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
         (io.env.npm_config_user_agent ?? '').startsWith(`${m}/`),
       ) as PackageManager | undefined) ??
       'npm'
-    if (options.install && template !== 'deno') {
+    if (options.install) {
       if ((await io.run(pm, ['install'], target)) !== 0) {
         io.stderr.write(`error: ${pm} install failed; run it yourself in ${directory}\n`)
         return 1
@@ -311,11 +312,10 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
     const start = {
       nodejs: `${pm} run dev`,
       bun: 'bun run dev',
-      deno: 'deno task dev',
       'acryl-app': `${pm} run dev`,
     }[template]
     io.stdout.write(
-      `\nNext:\n  cd ${directory}\n${options.install || template === 'deno' ? '' : `  ${pm} install\n`}  ${start}\n`,
+      `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}  ${start}\n`,
     )
     return 0
   } catch (error) {
