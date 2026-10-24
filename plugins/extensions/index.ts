@@ -109,7 +109,7 @@ interface PluginModule {
   readonly name?: unknown
   readonly inject?: unknown
   readonly apply: (...args: unknown[]) => unknown
-  /** Optional self-check, run after the plugin starts: it throws (or rejects) when the plugin does not work. */
+  /** Optional self-check, run after the plugin starts with the plugin's own context (so `ctx.router` reads as in `apply`): it throws (or rejects) when the plugin does not work. */
   readonly check?: (ctx: Context) => unknown
 }
 
@@ -507,6 +507,7 @@ export class Extensions extends Service {
   /** Run the extension's own `check`, if it has one, with a time limit. Returns the failure, or `undefined` when it passes. */
   private async verify(
     module: PluginModule,
+    ctx: Context,
   ): Promise<{ stage: 'verify'; error: string } | undefined> {
     if (typeof module.check !== 'function') return undefined
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -517,7 +518,7 @@ export class Extensions extends Service {
           CHECK_TIMEOUT_MS,
         )
       })
-      await Promise.race([Promise.resolve(module.check(this.ctx)), limit])
+      await Promise.race([Promise.resolve(module.check(ctx)), limit])
       return undefined
     } catch (error) {
       return { stage: 'verify', error: `its check failed: ${message(error)}` }
@@ -615,7 +616,7 @@ export class Extensions extends Service {
             error: message(mounted.error ?? 'the plugin failed to start'),
           }
         : state === 'active'
-          ? await this.verify(module)
+          ? await this.verify(module, mounted.fiber.ctx)
           : undefined
     if (failure) {
       await mounted.fiber.dispose().catch(() => undefined)

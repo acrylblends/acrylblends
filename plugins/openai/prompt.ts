@@ -17,14 +17,14 @@ A plugin's index.ts is TypeScript that Node runs directly (erasable syntax only:
     ctx.router.route('/', new App().get('/hello', (c) => c.json({ text: 'Hello' })))   // removed when the plugin is unloaded
   }
   export async function check(ctx: Context) {   // optional: must pass, or the install is rolled back
-    const reply = await ctx.get('router')!.request('/hello')
+    const reply = await ctx.router.request('/hello')
     if (!reply.ok) throw new Error('GET /hello failed')
   }
 
 The router: build an App (import { App } from 'acryl-router'), register routes on it with app.get/post/put/patch/delete(path, handler) and mount it with
 ctx.router.route(prefix, app). A path parameter is :id and is read with c.req.param('id'); c.json(body, status) answers JSON, c.text(...) answers text,
 await c.req.json() reads a JSON body, throw new HTTPException(404, { message }) (also from 'acryl-router') answers an error. Routes added to an app
-after route() are not served: build the whole app first. ctx.get('router')!.request('/path', { method: 'POST', body: ... }) calls a route in process (use it in
+after route() are not served: build the whole app first. ctx.router.request('/path', { method: 'POST', body: ... }) calls a route in process (use it in
 check). The mount goes away when the plugin is unloaded.
 
 For a capability that is a pure function of data (parse, convert, compute), write a sandboxed TOOL instead of a plugin. It cannot touch the

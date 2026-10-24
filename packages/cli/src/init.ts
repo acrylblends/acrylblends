@@ -3,14 +3,23 @@ import { parseArgs } from 'node:util'
 import type { Io } from './io'
 import { closure, copyPlugin, readLibrary } from './library'
 import {
+  copyFrameworkDocs,
   copyTemplate,
   isValidName,
   mergeDependencies,
   nameFrom,
   readTemplatePlugins,
   TargetNotEmptyError,
+  writeAgentFiles,
 } from './project'
-import { isTemplate, TEMPLATES, type Template, templateDir } from './templates'
+import {
+  frameworkDocsRoot,
+  isTemplate,
+  sharedDir,
+  TEMPLATES,
+  type Template,
+  templateDir,
+} from './templates'
 
 /** A command line mistake. The CLI prints it with the help text and exits 2. */
 export class UsageError extends Error {
@@ -103,6 +112,8 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
   let files: string[]
   try {
     files = copyTemplate(templateDir(template), directory, name)
+    files.push(...writeAgentFiles(sharedDir(), templateDir(template), directory, name))
+    files.push(...copyFrameworkDocs(frameworkDocsRoot(), directory))
   } catch (error) {
     if (!(error instanceof TargetNotEmptyError)) throw error
     io.stderr.write(`error: ${error.message}\n`)

@@ -51,7 +51,7 @@ function fakeIo(options: { answers?: string[]; installCode?: number } = {}) {
 const manifest = (dir: string) => JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
 
 describe('templates', () => {
-  it('are exactly blank and agent', () => {
+  it('are exactly blank, todo and agent', () => {
     expect(readdirSync(templatesRoot()).sort()).toEqual([...TEMPLATES].sort())
   })
 
@@ -62,6 +62,43 @@ describe('templates', () => {
       for (const name of readTemplatePlugins(join(templatesRoot(), template)))
         expect(library.has(name)).toBe(true)
       expect(manifest(join(templatesRoot(), template)).dependencies).toEqual({})
+    },
+  )
+})
+
+describe('a coding agent in a generated app', () => {
+  it.each(TEMPLATES)(
+    '%s: docs/framework is inside the app, and AGENTS.md and CLAUDE.md point to it',
+    async (template) => {
+      const session = fakeIo()
+      expect(
+        await runCli(['init', `app-${template}`, '--template', template, '-y'], session.io),
+      ).toBe(0)
+      const dir = join(scratch, `app-${template}`)
+      const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
+      expect(agents).toContain(`# app-${template}`)
+      expect(agents).toContain('docs/framework/README.md')
+      expect(agents).not.toContain('__APP_NAME__')
+      expect(agents).toContain(`## This app (${template})`)
+      expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe('@AGENTS.md\n')
+      for (const page of [
+        'README.md',
+        'routing.md',
+        'request.md',
+        'context.md',
+        'validation.md',
+        'helpers.md',
+        'migration-from-0-3.md',
+      ])
+        expect(existsSync(join(dir, 'docs/framework', page))).toBe(true)
+      expect(existsSync(join(dir, 'docs/framework/upstream.json'))).toBe(false)
+      expect(existsSync(join(dir, 'docs/framework/UPSTREAM.md'))).toBe(false)
+      expect(existsSync(join(dir, 'AGENTS.md.bak'))).toBe(false)
+      // every page the README links exists in the copy
+      for (const [, target] of readFileSync(join(dir, 'docs/framework/README.md'), 'utf8').matchAll(
+        /\]\((?!http|#)([^)#]+)/g,
+      ))
+        expect(existsSync(join(dir, 'docs/framework', target as string)), String(target)).toBe(true)
     },
   )
 })

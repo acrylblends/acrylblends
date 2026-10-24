@@ -20,7 +20,9 @@
     "bin",
     "dist",
     "templates",
-    "plugins"
+    "shared",
+    "plugins",
+    "docs"
   ],
   "scripts": {
     "build": "tsdown",
