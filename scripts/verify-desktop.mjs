@@ -7,7 +7,16 @@
 //
 // Electron's binary comes from ELECTRON_CACHE (default: the platform's electron cache), so a cached download is reused.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -47,9 +56,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const run = (cmd, args, cwd) =>
   execFileSync(cmd, args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 const entry = plain ? 'src/plugins/desktop-web/main.ts' : 'src/plugins/desktop/main.ts'
-const port = 9455 + Math.floor(Math.random() * 40)
+/** A free port for the debugging connection (a fixed or random port could belong to another program, or to a previous run still closing). */
+const port = await new Promise((resolvePort, reject) => {
+  const probe = createServer()
+  probe.once('error', reject)
+  probe.listen(0, '127.0.0.1', () => {
+    const { port: free } = probe.address()
+    probe.close(() => resolvePort(free))
+  })
+})
+const electronLog = join(scratch, 'electron.log')
 let child
+/** The step being run, printed with the failure. */
+let current = 'start'
+const step = (name) => {
+  current = name
+}
 try {
+  step('create the app')
   if (plain) {
     run(
       process.execPath,
@@ -90,12 +114,14 @@ try {
       scratch,
     )
   const app = join(scratch, 'app')
+  step('npm install')
   run('npm', ['install', '--no-audit', '--no-fund'], app)
   // A plain install must not have downloaded the binary (Electron 44 has no install script): the first `electron` run does, and this gate launches without installing it by hand.
   if (existsSync(join(app, 'node_modules', 'electron', 'dist')))
     fail(
       'npm install downloaded the Electron binary; the lazy first-run download was not exercised',
     )
+  step('first launch: wait for the window')
   const launchStarted = Date.now()
   child = spawn(
     join(app, 'node_modules', '.bin', 'electron'),
@@ -103,7 +129,7 @@ try {
     {
       cwd: app,
       env: { ...env, ACRYLBLENDS_PORT: '0' },
-      stdio: 'ignore',
+      stdio: ['ignore', openSync(electronLog, 'a'), openSync(electronLog, 'a')],
     },
   )
   let target
@@ -120,6 +146,7 @@ try {
   log(
     `the first launch fetched the Electron binary and opened the window in ${Math.round((Date.now() - launchStarted) / 1000)} s`,
   )
+  step('the window shows the app')
   const url = new URL(target.url)
   const expectedPath = fromNpm || plain ? '/' : '/todo'
   if (url.pathname !== expectedPath)
@@ -159,6 +186,7 @@ try {
   writeFileSync(shot, Buffer.from(png.data, 'base64'))
   log(`the window shows the app's own page and the todo it just got (${shot})`)
   // A second launch of the same app hands over to the first one and ends.
+  step('second launch hands over')
   const second = spawnSync(join(app, 'node_modules', '.bin', 'electron'), [entry], {
     cwd: app,
     env: { ...env, ACRYLBLENDS_PORT: '0' },
@@ -171,6 +199,7 @@ try {
   if (windows.length !== 1) fail(`${windows.length} windows after a second launch`)
   log('a second launch of the same app ended and left one window')
   // Closing the window ends the process, after the server stopped.
+  step('close the window: the process ends')
   const exited = new Promise((r) => child.once('exit', (code) => r(code)))
   await call('Runtime.evaluate', { expression: 'window.close()' })
   const code = await Promise.race([exited, sleep(15_000).then(() => 'timeout')])
@@ -183,27 +212,44 @@ try {
     )
   )
     fail('the app server still answers after the window closed')
+  step('nothing left running, nothing written outside the app')
   const left = spawnSync('pgrep', ['-f', join(app, 'node_modules', 'electron')], {
     encoding: 'utf8',
   }).stdout.trim()
   if (left) fail(`processes are left running: ${left}`)
   if (!existsSync(join(app, '.acrylblends', 'electron')))
     fail("Electron's user data is not inside the app's own home")
-  // Only what this app's Electron could have created: other programs write to the application-data folder all the time, so any new entry there is not evidence.
-  const touched = spawnSync('find', [appSupport, '-maxdepth', '1', '-newer', marker], {
-    encoding: 'utf8',
-  })
-    .stdout.split('\n')
-    .filter((entry) =>
-      /electron|verify-desktop-window|acrylblends/i.test(entry.slice(appSupport.length)),
-    )
-    .join('\n')
-    .trim()
+  // Any new entry counts: if this fails, the message names the entries and when they changed, so the cause can be read instead of guessed.
+  const touched = spawnSync(
+    'find',
+    [appSupport, '-maxdepth', '1', '-newer', marker, '-exec', 'ls', '-ldT', '{}', ';'],
+    {
+      encoding: 'utf8',
+    },
+  ).stdout.trim()
   if (touched) fail(`something was written to ${appSupport}: ${touched}`)
   log(
     `closing the window ended the process (exit ${code}) and freed the port; nothing left running; user data is in the app's home; nothing written to ${appSupport}`,
   )
   log('OK')
+} catch (error) {
+  const text = (value) => (value === undefined ? '' : String(value).trim())
+  console.error(`verify-desktop: FAILED at step "${current}": ${error.message}`)
+  if (error.stdout || error.stderr)
+    console.error(
+      `--- the failing command's output ---\n${text(error.stdout)}\n${text(error.stderr)}`,
+    )
+  if (existsSync(electronLog))
+    console.error(
+      `--- Electron's own output (last 60 lines) ---\n${readFileSync(electronLog, 'utf8').split('\n').slice(-60).join('\n')}`,
+    )
+  console.error(
+    `--- processes of this app ---\n${text(spawnSync('pgrep', ['-fl', scratch], { encoding: 'utf8' }).stdout)}`,
+  )
+  console.error(
+    `--- new entries in ${appSupport} ---\n${text(spawnSync('find', [appSupport, '-maxdepth', '1', '-newer', marker], { encoding: 'utf8' }).stdout)}`,
+  )
+  process.exitCode = 1
 } finally {
   if (child && child.exitCode === null) child.kill('SIGKILL')
   rmSync(scratch, { recursive: true, force: true })
