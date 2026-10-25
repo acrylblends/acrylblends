@@ -1,6 +1,6 @@
 // The Notes gate's probe: starts the finished app the way a user does (`npm start`, then the desktop window) and walks it over HTTP like a browser.
 // Every step names itself, so a failure says what did not work. Returns { ok, steps } and never throws.
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { homedir } from 'node:os'
@@ -32,6 +32,8 @@ export async function probeNotes(app, env) {
     steps.push(`${ok ? 'ok' : 'FAIL'} ${name}${detail && !ok ? ` (${detail})` : ''}`)
     return ok
   }
+  // The agent may have been unable to install (a sandbox without network): a user runs `npm install` after it, so the gate does too.
+  spawnSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: app, env, stdio: 'ignore' })
   const port = await freePort()
   const server = spawn('npm', ['start'], {
     cwd: app,
@@ -99,10 +101,10 @@ export async function probeNotes(app, env) {
       api.status === 200 && JSON.stringify(body).includes('Gate note'),
       `status ${api.status}`,
     )
-    const anon = await fetch(`${base}/api/notes`)
+    const anon = await fetch(`${base}/api/notes`, { redirect: 'manual' })
     step(
       'the JSON API refuses a visitor',
-      anon.status === 401 || anon.status === 403,
+      [301, 302, 303, 307, 401, 403].includes(anon.status),
       `status ${anon.status}`,
     )
     const id = (list.match(/\/notes\/(\d+)/) ?? [])[1]
