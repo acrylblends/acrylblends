@@ -61,7 +61,12 @@ jobs:
           path: '*.tgz'
           if-no-files-found: error
       - name: Dry run of npm publish (no credentials needed)
-        run: npm publish ./*.tgz --access public --dry-run
+        run: |
+          # Run on a version that is already on npm (a dry run of the current release), npm refuses only because of that; every other refusal still fails the run.
+          if ! npm publish ./*.tgz --access public --dry-run 2> "$RUNNER_TEMP/dry.log"; then
+            cat "$RUNNER_TEMP/dry.log"
+            grep -q "cannot publish over the previously published" "$RUNNER_TEMP/dry.log" && echo "dry run: the packed version is already on npm; the tarball itself was accepted" || exit 1
+          fi
 
   publish:
     # Only a pushed tag reaches this job, and only after the owner approves the `npm-release` environment.
