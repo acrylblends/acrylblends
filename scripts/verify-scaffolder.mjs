@@ -376,7 +376,28 @@ try {
     fail(`npm run save did not refuse a secret: ${leak.stdout}${leak.stderr}`)
   if (capture('git', ['diff', '--cached', '--name-only'], { cwd: saved }).trim() !== '')
     fail('npm run save left files staged after refusing')
-  log('save: committed the app, then refused a file holding a secret with nothing left staged')
+  // The short-literal rule of @webboxes/app-persistence 0.1.1: a quoted literal assigned to a credential-named key is refused, a read from the environment is not.
+  rmSync(join(saved, 'leak.ts'))
+  writeFileSync(join(saved, 'creds.ts'), "export const config = { password: 'x-secret' }\n")
+  const literal = spawnSync(npm, ['run', '--silent', 'save', '--', 'literal'], {
+    cwd: saved,
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  })
+  if (literal.status === 0 || !/assigned secret/.test(literal.stderr))
+    fail(`npm run save did not refuse password: 'x-secret': ${literal.stdout}${literal.stderr}`)
+  writeFileSync(
+    join(saved, 'creds.ts'),
+    'export const config = { password: process.env.APP_PASSWORD }\n',
+  )
+  const env = capture(npm, ['run', '--silent', 'save', '--', 'from the environment'], {
+    cwd: saved,
+  })
+  if (!/^saved [0-9a-f]{12}/m.test(env))
+    fail(`npm run save refused a read from the environment: ${env}`)
+  log(
+    'save: committed the app, refused a secret key and a short literal password with nothing left staged, and accepted a read from the environment',
+  )
   // A Blend over a Blueprint, in a real app: it boots from its parent, an upgrade is planned and applied with the real npm scripts,
   // and an upgrade that would break the Blend is refused with the file untouched.
   const blended = join(scratch, 'blended')

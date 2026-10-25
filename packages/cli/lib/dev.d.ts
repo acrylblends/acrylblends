@@ -1,5 +1,5 @@
-import { _ as Env } from "./context-B5Y1lLha.js";
-import { t as Acryl } from "./app-BdrVHBlJ.js";
+import { _ as Env } from "./context-DVQBjuns.js";
+import { t as Acryl } from "./app-wFwpg-bt.js";
 
 //#region ../../plugins/acryl-router/src/core/helper/dev/index.d.ts
 interface ShowRoutesOptions {

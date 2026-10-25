@@ -182,8 +182,8 @@ importers:
         specifier: 8.18.2
         version: 8.18.2
       '@webboxes/app-persistence':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.1
+        version: 0.1.1
       '@webboxes/blends-core':
         specifier: 0.4.0
         version: 0.4.0
@@ -676,8 +676,8 @@ packages:
   '@vitest/spy@5.0.3':
     resolution: {integrity: sha512-XhFysQTB8AZ+P4gMi+Lpo99vg2AZi0qKpaB9yXQl37+CaMEAPO3iH/wGVnSyL5MPERiLezpqTVtrR6UZH5GCXg==}
 
-  '@webboxes/app-persistence@0.1.0':
-    resolution: {integrity: sha512-O2ivsZ2W3hvnGizeXkTULbeY6B7xhPuHUmfTY7DjnC5sKbl9nZ/D2ac+ZCesoXPllXCI/VtHWVlpcL19sUB74g==}
+  '@webboxes/app-persistence@0.1.1':
+    resolution: {integrity: sha512-evbzvtxDsd0mfaj/KboAT1sNjA9xl0VIWTrKxjVmKvWAYYD1LiYoZDFcFeA6g1tXNK2fGjTjGuKxGFwg69XEMw==}
     engines: {node: ^22.19.0 || >=24.0.0}
     hasBin: true
 
@@ -1717,7 +1717,7 @@ snapshots:
 
   '@vitest/spy@5.0.3': {}
 
-  '@webboxes/app-persistence@0.1.0':
+  '@webboxes/app-persistence@0.1.1':
     dependencies:
       yaml: 2.9.0
 

@@ -1,5 +1,5 @@
-import { I as MiddlewareHandler } from "./context-B5Y1lLha.js";
-import { t as Acryl } from "./app-BdrVHBlJ.js";
+import { I as MiddlewareHandler } from "./context-DVQBjuns.js";
+import { t as Acryl } from "./app-wFwpg-bt.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/method-override/index.d.ts
 type MethodOverrideOptions = {

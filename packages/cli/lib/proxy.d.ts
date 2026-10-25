@@ -1,5 +1,5 @@
 import { r as RequestHeader } from "./headers-tu2YYN8T.js";
-import { c as HeadersInit } from "./types-D9DEXMjE.js";
+import { l as HeadersInit } from "./types-Lqx5BxQF.js";
 
 //#region ../../plugins/acryl-router/src/core/helper/proxy/index.d.ts
 interface ProxyRequestInit extends Omit<RequestInit, 'headers'> {

@@ -1,4 +1,4 @@
-import { I as MiddlewareHandler } from "./context-B5Y1lLha.js";
+import { I as MiddlewareHandler } from "./context-DVQBjuns.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/logger/index.d.ts
 type PrintFunc = (str: string, ...rest: string[]) => void;

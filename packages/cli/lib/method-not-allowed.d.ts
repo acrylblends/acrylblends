@@ -1,5 +1,5 @@
-import { I as MiddlewareHandler, _ as Env, t as Context } from "./context-B5Y1lLha.js";
-import { t as Acryl } from "./app-BdrVHBlJ.js";
+import { I as MiddlewareHandler, _ as Env, t as Context } from "./context-DVQBjuns.js";
+import { t as Acryl } from "./app-wFwpg-bt.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/method-not-allowed/index.d.ts
 type MethodNotAllowedHandler<E extends Env> = (c: Context<E>, allowedMethods: string[]) => Response | Promise<Response>;

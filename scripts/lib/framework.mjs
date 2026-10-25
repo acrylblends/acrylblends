@@ -13,6 +13,10 @@ export const PLUGINS = {
       '/middleware': 'src/middleware/index.ts',
       '/helpers': 'src/helpers/index.ts',
       '/client': 'src/client.ts',
+      '/jsx': 'src/core/jsx/index.ts',
+      '/jsx/jsx-runtime': 'src/core/jsx/jsx-runtime.ts',
+      '/jsx/jsx-dev-runtime': 'src/core/jsx/jsx-dev-runtime.ts',
+      '/jsx/streaming': 'src/core/jsx/streaming.ts',
     },
     testsNotRun: {
       'tests/loader.spec.ts':

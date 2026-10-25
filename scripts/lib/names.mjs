@@ -20,8 +20,6 @@ export const NOT_YET_AVAILABLE = [
   'lambda-edge',
   'service-worker',
   'node-ws',
-  'jsx',
   'jsx-renderer',
-  'css',
   'ssg',
 ]
