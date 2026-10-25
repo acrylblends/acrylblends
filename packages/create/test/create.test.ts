@@ -106,6 +106,9 @@ describe('create', () => {
         expect(readFileSync(file, 'utf8'), file).not.toMatch(/__[A-Z_]+__/)
       expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe('@AGENTS.md\n')
       expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('docs/framework/README.md')
+      expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain(
+        "jsx('h1', { class: 'title' }, 'Hello')",
+      )
       expect(existsSync(join(dir, 'docs/framework/README.md'))).toBe(true)
       expect(existsSync(join(dir, 'docs/framework/UPSTREAM.md'))).toBe(false)
       expect(s.out()).toContain(`created app-${template}`)
