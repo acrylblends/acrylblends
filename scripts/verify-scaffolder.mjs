@@ -578,6 +578,48 @@ spec:
   log(
     'desktop: init --desktop added electron as a development dependency, only the plugin imports it, the app type-checks and its tests (the server starts and stops without Electron) pass',
   )
+  // The `notes` template of create-acrylblends: a full-stack starter made from the packed framework, whose own tests and type-check pass, and which takes the desktop shell
+  // with one command. The window itself and the HTTP walk are the manual gates (verify-desktop.mjs, notes-probe.mjs).
+  const packed = join(scratch, 'packed')
+  mkdirSync(packed)
+  capture('pnpm', ['pack', '--pack-destination', packed], { cwd: cliDir })
+  const frameworkTarball = join(
+    packed,
+    readdirSync(packed).find((f) => /^acrylblends-.*\.tgz$/.test(f)) ?? '',
+  )
+  const notes = join(scratch, 'notes')
+  capture(
+    process.execPath,
+    [
+      join(root, 'packages', 'create', 'bin', 'create-acrylblends.js'),
+      notes,
+      '--template',
+      'notes',
+      '-y',
+    ],
+    { cwd: scratch },
+  )
+  capture(npm, ['install', frameworkTarball, '--no-audit', '--no-fund'], { cwd: notes })
+  capture(npm, ['run', 'check'], { cwd: notes })
+  capture(npm, ['test'], { cwd: notes })
+  capture(
+    process.execPath,
+    [join(notes, 'node_modules', 'acrylblends', 'bin', 'acrylblends.js'), 'add', 'desktop'],
+    {
+      cwd: notes,
+    },
+  )
+  capture(npm, ['install', '--no-audit', '--no-fund'], {
+    cwd: notes,
+    env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' },
+  })
+  if (!existsSync(join(notes, 'src', 'plugins', 'desktop-web', 'main.ts')))
+    fail('notes: add desktop did not add the plain-app shell')
+  capture(npm, ['run', 'check'], { cwd: notes })
+  capture(npm, ['test'], { cwd: notes })
+  log(
+    'notes template: created, installed from the packed framework, type-checks, every route tested, and takes the desktop shell',
+  )
   log('OK')
 } finally {
   rmSync(scratch, { recursive: true, force: true })

@@ -44,6 +44,12 @@ const PRESETS = {
     path: '/about',
   },
 }
+PRESETS.tags = {
+  task: 'Add tags to notes. A note has zero or more tags, entered in the note form as one text field named tags, comma separated (for example "alpha, beta"). The notes list shows each note\'s tags, the list can be filtered with the query string ?tag=alpha (only notes with that tag; it combines with the search ?q=), the edit form shows the current tags, and the JSON API returns and accepts tags too. Existing databases must keep working. Add tests for all of it. Finish when npm test and npm run check pass.',
+  path: '/login',
+  notes: true,
+  tags: true,
+}
 PRESETS.notes = {
   task: 'Build a small multi-user notes app in this folder, using only what the docs in docs/framework and AGENTS.md say. Users sign up and log in with an email address and a password (form fields named email and password; password hashed with node:crypto scrypt, a cookie session). Notes are stored in SQLite through the built-in node:sqlite (no native dependencies). A signed-in user can create, edit, delete and search their own notes with HTML forms (form fields named title and body; pages at /signup, /login, /notes, /notes/new, /notes/:id/edit, with POST /signup, /login, /logout, /notes, /notes/:id (edit) and /notes/:id/delete; server-side validation with clear error messages shown on the page). One part of the UI is interactive in the browser (a live character counter on the note field, or an instant filter on the list). There is a JSON API under /api/notes that a typed client is used on in a test. Every route has a test. The app runs as a desktop window (npm run desktop) and `npm start` serves it on the port in the PORT environment variable. Finish when npm test and npm run check pass.',
   path: '/login',
@@ -56,7 +62,8 @@ if (values.preset) {
   }
   values.task = PRESETS[values.preset].task
 }
-const SETUPS = ['blend', 'blend-desktop', 'nodejs']
+const PLAIN_SETUPS = ['nodejs', 'notes']
+const SETUPS = ['blend', 'blend-desktop', 'nodejs', 'notes']
 if (!SETUPS.includes(values.setup)) {
   console.error(`unknown setup "${values.setup}" (${SETUPS.join(', ')})`)
   process.exit(2)
@@ -172,20 +179,19 @@ async function probeRoute(app, env) {
   const preset = values.preset ? PRESETS[values.preset] : undefined
   const path = preset?.path ?? '/customers/count'
   if (preset?.notes) {
-    const probe = await probeNotes(app, env)
+    const probe = await probeNotes(app, env, { tags: Boolean(preset.tags) })
     lastProbe = probe.steps
     return probe.ok ? 'ok' : 'FAIL'
   }
   const check = preset
     ? "reply.status === 200 && /html/.test(reply.headers.get('content-type') ?? '') && /</.test(await reply.clone().text())"
     : "reply.status === 200 && typeof (await reply.clone().json()).count === 'number'"
-  const script =
-    values.setup === 'nodejs'
-      ? `import app from './src/app.ts'
+  const script = PLAIN_SETUPS.includes(values.setup)
+    ? `import app from './src/app.ts'
 const reply = await app.request('${path}')
 process.exit(${check} ? 0 : 1)
 `
-      : `import { createApp } from './src/app.ts'
+    : `import { createApp } from './src/app.ts'
 import { pinnedInstance, withPort } from './src/plugins/instance/index.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -200,10 +206,9 @@ process.exit(ok ? 0 : 1)
   const file = join(app, 'gate-probe.ts')
   writeFileSync(file, script)
   // The app is started the way its own scripts start it: with the register hook, so a .tsx page loads.
-  const hook =
-    values.setup === 'nodejs'
-      ? 'acrylblends/node-server/register'
-      : './src/plugins/acryl-node-server/src/register.ts'
+  const hook = PLAIN_SETUPS.includes(values.setup)
+    ? 'acrylblends/node-server/register'
+    : './src/plugins/acryl-node-server/src/register.ts'
   const probe = run('node', ['--import', hook, file], app, { env, timeout: 60_000 })
   rmSync(file, { force: true })
   return probe.status === 0 ? 'ok' : 'FAIL'
@@ -257,32 +262,41 @@ async function attempt(name) {
     { env: clean },
   )
   const acrylblends = join(dir, 'node_modules/.bin/acrylblends')
-  const created =
-    values.setup === 'nodejs'
-      ? (run('npm', ['install', 'create-acrylblends@latest', '--no-audit', '--no-fund'], dir, {
-          env: clean,
-        }),
+  const created = PLAIN_SETUPS.includes(values.setup)
+    ? process.env.CREATE_ACRYLBLENDS_BIN
+      ? // Before a release: the create package of this checkout instead of the published one.
         run(
-          join(dir, 'node_modules/.bin/create-acrylblends'),
-          ['app', '--template', 'nodejs', '-y'],
-          dir,
-          { env: clean },
-        ))
-      : run(
-          acrylblends,
-          [
-            'init',
-            'app',
-            '--template',
-            values.template,
-            ...(values.setup === 'blend-desktop' ? ['--desktop'] : []),
-            '-y',
-          ],
+          process.execPath,
+          [process.env.CREATE_ACRYLBLENDS_BIN, 'app', '--template', values.setup, '-y'],
           dir,
           { env: clean },
         )
+      : (() => {
+          run('npm', ['install', 'create-acrylblends@latest', '--no-audit', '--no-fund'], dir, {
+            env: clean,
+          })
+          return run(
+            join(dir, 'node_modules/.bin/create-acrylblends'),
+            ['app', '--template', values.setup, '-y'],
+            dir,
+            { env: clean },
+          )
+        })()
+    : run(
+        acrylblends,
+        [
+          'init',
+          'app',
+          '--template',
+          values.template,
+          ...(values.setup === 'blend-desktop' ? ['--desktop'] : []),
+          '-y',
+        ],
+        dir,
+        { env: clean },
+      )
   if (created.status !== 0) return { name, pass: false, note: `init failed: ${created.stderr}` }
-  if (values.setup === 'nodejs')
+  if (PLAIN_SETUPS.includes(values.setup))
     run(
       'npm',
       [
@@ -295,6 +309,9 @@ async function attempt(name) {
       { env: clean },
     )
   const app = join(dir, 'app')
+  // The notes starter is the app a user has after `add desktop`: the agent works on that.
+  if (values.setup === 'notes')
+    run(join(dir, 'app', 'node_modules/.bin/acrylblends'), ['add', 'desktop'], app, { env: clean })
   run('npm', ['install', '--no-audit', '--no-fund'], app, { env: clean })
   if (run('npm', ['test'], app, { env: clean }).status !== 0)
     return { name, pass: false, note: "the fresh app's own tests fail" }

@@ -1,0 +1,22 @@
+{
+  "name": "__APP_NAME__",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "node --watch --import acrylblends/node-server/register src/index.ts",
+    "start": "node --import acrylblends/node-server/register src/index.ts",
+    "test": "node --import acrylblends/node-server/register --test \"test/**/*.test.{ts,tsx}\"",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "__PACKAGE__": "__RANGE__"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "6.0.3"
+  }
+}
