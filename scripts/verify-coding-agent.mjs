@@ -45,7 +45,7 @@ const PRESETS = {
   },
 }
 PRESETS.notes = {
-  task: 'Build a small multi-user notes app in this folder, using only what the docs in docs/framework and AGENTS.md say. Users sign up and log in (password hashed with node:crypto scrypt, a cookie session). Notes are stored in SQLite through the built-in node:sqlite (no native dependencies). A signed-in user can create, edit, delete and search their own notes with HTML forms (pages at /signup, /login, /notes, /notes/new, /notes/:id/edit; server-side validation with clear error messages shown on the page). One part of the UI is interactive in the browser (a live character counter on the note field, or an instant filter on the list). There is a JSON API under /api/notes that a typed client is used on in a test. Every route has a test. The app runs as a desktop window (npm run desktop) and `npm start` serves it on the port in the PORT environment variable. Finish when npm test and npm run check pass.',
+  task: 'Build a small multi-user notes app in this folder, using only what the docs in docs/framework and AGENTS.md say. Users sign up and log in with an email address and a password (form fields named email and password; password hashed with node:crypto scrypt, a cookie session). Notes are stored in SQLite through the built-in node:sqlite (no native dependencies). A signed-in user can create, edit, delete and search their own notes with HTML forms (form fields named title and body; pages at /signup, /login, /notes, /notes/new, /notes/:id/edit, with POST /signup, /login, /logout, /notes, /notes/:id (edit) and /notes/:id/delete; server-side validation with clear error messages shown on the page). One part of the UI is interactive in the browser (a live character counter on the note field, or an instant filter on the list). There is a JSON API under /api/notes that a typed client is used on in a test. Every route has a test. The app runs as a desktop window (npm run desktop) and `npm start` serves it on the port in the PORT environment variable. Finish when npm test and npm run check pass.',
   path: '/login',
   notes: true,
 }
@@ -373,13 +373,15 @@ async function attempt(name) {
 
 const results = []
 for (const name of values.agent === 'all' ? AGENTS : [values.agent]) {
-  results.push(await (async () => {
-  try {
-    return await attempt(name)
-  } catch (error) {
-    return { name, pass: false, note: error.message }
-  }
-  })())
+  results.push(
+    await (async () => {
+      try {
+        return await attempt(name)
+      } catch (error) {
+        return { name, pass: false, note: error.message }
+      }
+    })(),
+  )
 }
 for (const r of results)
   console.log(`${r.pass ? 'PASS' : 'FAIL'} ${r.name}: ${r.note}${r.app ? ` (${r.app})` : ''}`)
