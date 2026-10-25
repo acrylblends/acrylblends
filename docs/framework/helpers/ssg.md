@@ -1,8 +1,5 @@
 # SSG Helper
 
-> **Not yet available.** Static site generation (`acrylblends/ssg`) is documented here so the page structure matches the rest of the framework, and is not part of acrylblends yet. The code on this page is not checked by the docs tests.
-
-
 SSG Helper generates a static site from your Acryl application. It will retrieve the contents of registered routes and save them as static files.
 
 ## Usage
@@ -237,7 +234,7 @@ Plugins allow you to extend the functionality of the static site generation proc
 
 ### Default Plugin
 
-By default, `toSSG` uses `defaultPlugin` which skips non-200 status responses (like redirects, errors, or 404s). This prevents generating files for unsuccessful responses.
+By default, `toSSG` uses `defaultPlugin()`, which skips non-200 status responses (like redirects, errors, or 404s). This prevents generating files for unsuccessful responses.
 
 ```ts
 import { toSSG, defaultPlugin } from 'acrylblends/ssg'
@@ -246,14 +243,14 @@ import { toSSG, defaultPlugin } from 'acrylblends/ssg'
 toSSG(app, fs)
 
 // Equivalent to:
-toSSG(app, fs, { plugins: [defaultPlugin] })
+toSSG(app, fs, { plugins: [defaultPlugin()] })
 ```
 
 If you specify custom plugins, `defaultPlugin` is **not** automatically included. To keep the default behavior while adding custom plugins, explicitly include it:
 
 ```ts
 toSSG(app, fs, {
-  plugins: [defaultPlugin, myCustomPlugin],
+  plugins: [defaultPlugin(), myCustomPlugin],
 })
 ```
 

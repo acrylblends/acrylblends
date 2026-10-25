@@ -1,7 +1,7 @@
 import { D as createContext, E as useContext, T as globalContexts, _ as toArray, h as styleObjectForEach, m as normalizeIntrinsicElementKey } from "./base-ddiVmiE7.js";
 import { a as DOM_STASH, i as DOM_RENDERER, n as DOM_INTERNAL_TAG, r as DOM_MEMO, t as DOM_ERROR_HANDLER } from "./constants-BR9jM9BC.js";
 //#region ../../plugins/acryl-router/src/core/jsx/dom/render.ts
-const HONO_PORTAL_ELEMENT = "_hp";
+const ACRYL_PORTAL_ELEMENT = "_hp";
 const eventAliasMap = {
 	Change: "Input",
 	DoubleClick: "DblClick"
@@ -146,7 +146,7 @@ const getNextChildren = (node, container, nextChildren, childrenToRemove, callba
 	});
 };
 const findInsertBefore = (node) => {
-	while (node && (node.tag === HONO_PORTAL_ELEMENT || !node.e)) node = node.tag === HONO_PORTAL_ELEMENT || !node.vC?.[0] ? node.nN : node.vC[0];
+	while (node && (node.tag === ACRYL_PORTAL_ELEMENT || !node.e)) node = node.tag === ACRYL_PORTAL_ELEMENT || !node.vC?.[0] ? node.nN : node.vC[0];
 	return node?.e;
 };
 const removeNode = (node) => {
@@ -192,7 +192,7 @@ const applyNodeObject = (node, container, isNew) => {
 		if (offsetByNextNode !== void 0) {
 			insertBeforeNode = childNodes[offsetByNextNode];
 			offset = offsetByNextNode;
-		} else offset = findChildNodeIndex(childNodes, next.find((n) => n.tag !== HONO_PORTAL_ELEMENT && n.e)?.e) ?? -1;
+		} else offset = findChildNodeIndex(childNodes, next.find((n) => n.tag !== ACRYL_PORTAL_ELEMENT && n.e)?.e) ?? -1;
 		if (offset === -1) isNew = true;
 	}
 	for (let i = 0, len = next.length; i < len; i++, offset++) {
@@ -214,7 +214,7 @@ const applyNodeObject = (node, container, isNew) => {
 				if (child.tag === "select") applySelectValue(el, child.props);
 			}
 		}
-		if (child.tag === HONO_PORTAL_ELEMENT) offset--;
+		if (child.tag === ACRYL_PORTAL_ELEMENT) offset--;
 		else if (isNew) {
 			if (!el.parentNode) container.appendChild(el);
 		} else if (childNodes[offset] !== el && childNodes[offset - 1] !== el) if (childNodes[offset + 1] === el) container.appendChild(childNodes[offset]);
@@ -497,7 +497,7 @@ const flushSync = (callback) => {
 	currentUpdateSets.pop();
 };
 const createPortal = (children, container, key) => ({
-	tag: HONO_PORTAL_ELEMENT,
+	tag: ACRYL_PORTAL_ELEMENT,
 	props: { children },
 	key,
 	e: container,

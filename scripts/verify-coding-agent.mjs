@@ -28,13 +28,34 @@ const { values, positionals } = parseArgs({
     agent: { type: 'string', default: 'claude' },
     template: { type: 'string', default: 'blank' },
     task: { type: 'string', default: 'add a /customers/count route with a test' },
+    setup: { type: 'string', default: 'blend' },
+    preset: { type: 'string' },
   },
 })
+/** Named tasks, each with a probe of the finished app. */
+const PRESETS = {
+  about: {
+    task: 'add a server-rendered JSX page at /about using acrylblends/jsx, with a test',
+    path: '/about',
+  },
+}
+if (values.preset) {
+  if (!PRESETS[values.preset]) {
+    console.error(`unknown preset "${values.preset}" (${Object.keys(PRESETS).join(', ')})`)
+    process.exit(2)
+  }
+  values.task = PRESETS[values.preset].task
+}
+const SETUPS = ['blend', 'blend-desktop', 'nodejs']
+if (!SETUPS.includes(values.setup)) {
+  console.error(`unknown setup "${values.setup}" (${SETUPS.join(', ')})`)
+  process.exit(2)
+}
 const [spec] = positionals
 const AGENTS = ['claude', 'codex', 'pi']
 if (!spec || (values.agent !== 'all' && !AGENTS.includes(values.agent))) {
   console.error(
-    'usage: node scripts/verify-coding-agent.mjs <tarball|version> [--agent claude|codex|pi|all] [--template t] [--task "..."]',
+    'usage: node scripts/verify-coding-agent.mjs <tarball|version> [--agent claude|codex|pi|all] [--template t] [--task "..." | --preset about] [--setup blend|blend-desktop|nodejs]',
   )
   process.exit(2)
 }
@@ -136,17 +157,28 @@ function failureText(result) {
 
 /** Start the generated app and ask the default task's route; `ok` when it answers 200 with a JSON count. */
 function probeRoute(app, env) {
-  const script = `import { createApp } from './src/app.ts'
+  const preset = values.preset ? PRESETS[values.preset] : undefined
+  const path = preset?.path ?? '/customers/count'
+  const check = preset
+    ? "reply.status === 200 && /html/.test(reply.headers.get('content-type') ?? '') && /</.test(await reply.clone().text())"
+    : "reply.status === 200 && typeof (await reply.clone().json()).count === 'number'"
+  const script =
+    values.setup === 'nodejs'
+      ? `import app from './src/app.ts'
+const reply = await app.request('${path}')
+process.exit(${check} ? 0 : 1)
+`
+      : `import { createApp } from './src/app.ts'
 import { pinnedInstance, withPort } from './src/plugins/instance/index.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 const home = mkdtempSync(join(tmpdir(), 'gate-probe-'))
 const app = await createApp(withPort(pinnedInstance(home, { root: process.cwd() }), 0))
-const reply = await fetch(app.url + '/customers/count')
-const body = await reply.json()
+const reply = await fetch(app.url + '${path}')
+const ok = ${check}
 await app.stop()
-process.exit(reply.status === 200 && typeof body.count === 'number' ? 0 : 1)
+process.exit(ok ? 0 : 1)
 `
   const file = join(app, 'gate-probe.ts')
   writeFileSync(file, script)
@@ -202,13 +234,44 @@ function attempt(name) {
     dir,
     { env: clean },
   )
-  const created = run(
-    join(dir, 'node_modules/.bin/acrylblends'),
-    ['init', 'app', '--template', values.template, '-y'],
-    dir,
-    { env: clean },
-  )
+  const acrylblends = join(dir, 'node_modules/.bin/acrylblends')
+  const created =
+    values.setup === 'nodejs'
+      ? (run('npm', ['install', 'create-acrylblends@latest', '--no-audit', '--no-fund'], dir, {
+          env: clean,
+        }),
+        run(
+          join(dir, 'node_modules/.bin/create-acrylblends'),
+          ['app', '--template', 'nodejs', '-y'],
+          dir,
+          { env: clean },
+        ))
+      : run(
+          acrylblends,
+          [
+            'init',
+            'app',
+            '--template',
+            values.template,
+            ...(values.setup === 'blend-desktop' ? ['--desktop'] : []),
+            '-y',
+          ],
+          dir,
+          { env: clean },
+        )
   if (created.status !== 0) return { name, pass: false, note: `init failed: ${created.stderr}` }
+  if (values.setup === 'nodejs')
+    run(
+      'npm',
+      [
+        'install',
+        spec.endsWith('.tgz') ? resolve(spec) : `acrylblends@${spec}`,
+        '--no-audit',
+        '--no-fund',
+      ],
+      join(dir, 'app'),
+      { env: clean },
+    )
   const app = join(dir, 'app')
   run('npm', ['install', '--no-audit', '--no-fund'], app, { env: clean })
   if (run('npm', ['test'], app, { env: clean }).status !== 0)
@@ -267,7 +330,8 @@ function attempt(name) {
     .map((line) => line.slice(3))
   const touchedTests = changed.some((file) => file.startsWith('test/'))
   const touchedSource = changed.some((file) => file.startsWith('src/') || file === 'blend.yaml')
-  const route = values.task === DEFAULT_TASK ? probeRoute(app, clean) : 'not probed'
+  const route =
+    values.task === DEFAULT_TASK || values.preset ? probeRoute(app, clean) : 'not probed'
   const pass =
     result.status === 0 &&
     test.status === 0 &&

@@ -1,4 +1,4 @@
-import { I as MiddlewareHandler } from "./context-DVQBjuns.js";
+import { L as MiddlewareHandler } from "./context-DS3fYyG-.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/trailing-slash/index.d.ts
 type TrimTrailingSlashOptions = {

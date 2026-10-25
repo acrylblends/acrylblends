@@ -7,10 +7,10 @@ import { cloneRawRequest } from "./request.js";
 const defaultCacheableStatusCodes = [200];
 const defaultMaxQueryBodySize = 64 * 1024;
 const cacheKeyPath = "/.acryl-router/cache";
-const cacheKeyParameter = "__hono_cache_key";
-const cacheMethodKeyParameter = "__hono_cache_method";
-const queryDigestKeyParameter = "__hono_query_digest";
-const cacheVaryKeyParameter = "__hono_cache_vary";
+const cacheKeyParameter = "__acryl_cache_key";
+const cacheMethodKeyParameter = "__acryl_cache_method";
+const queryDigestKeyParameter = "__acryl_query_digest";
+const cacheVaryKeyParameter = "__acryl_cache_vary";
 const queryRepresentationMetadataHeaders = [
 	"content-type",
 	"content-encoding",

@@ -1,6 +1,6 @@
 {
   "name": "acrylblends",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "The Acryl web framework (import { Acryl } from \"acrylblends\") and the acrylblends command that scaffolds Cordis apps.",
   "license": "MIT",
   "type": "module",
@@ -81,6 +81,10 @@
     "./ip-restriction": {
       "types": "./lib/ip-restriction.d.ts",
       "default": "./lib/ip-restriction.js"
+    },
+    "./jsx-renderer": {
+      "types": "./lib/jsx-renderer.d.ts",
+      "default": "./lib/jsx-renderer.js"
     },
     "./jwk": {
       "types": "./lib/jwk.d.ts",
@@ -173,6 +177,10 @@
     "./route": {
       "types": "./lib/route.d.ts",
       "default": "./lib/route.js"
+    },
+    "./ssg": {
+      "types": "./lib/ssg.d.ts",
+      "default": "./lib/ssg.js"
     },
     "./streaming": {
       "types": "./lib/streaming.d.ts",

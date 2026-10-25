@@ -168,6 +168,28 @@ export async function check(ctx) {
   assert.equal((await app.router.request('/unchecked')).status, 404)
 })
 
+test('a live plugin renders a page with acrylblends/jsx (the call JSX compiles to; Node does not compile JSX syntax)', async () => {
+  const { app, root } = await boot()
+  const dir = join(root, 'extensions', 'about')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    join(dir, 'index.ts'),
+    `import { Acryl } from 'acrylblends'
+import { jsx } from 'acrylblends/jsx'
+export const name = 'about'
+export const inject = ['router']
+export function apply(ctx) {
+  ctx.router.route('/', new Acryl().get('/about', (c) => c.html(jsx('main', null, jsx('h1', null, 'About')).toString())))
+}
+`,
+  )
+  const installed = (await app.extensions.install(dir)) as { ok: boolean; errors?: string[] }
+  assert.equal(installed.ok, true, installed.errors?.join('; '))
+  const reply = await app.router.request('/about')
+  assert.equal(reply.status, 200)
+  assert.match(await reply.text(), /<main><h1>About<\/h1><\/main>/)
+})
+
 test('with the state service mounted, what is installed is a cell that follows every install and removal', async () => {
   const { app, ask } = await boot()
   const cell = app.state.find<Array<{ name: string; state: string }>>('extensions')

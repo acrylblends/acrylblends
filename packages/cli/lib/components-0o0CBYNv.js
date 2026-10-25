@@ -1,8 +1,8 @@
 import { C as captureRenderContext, E as useContext, d as renderUntrustedObject, i as isUntrustedObject, n as JSXNode, o as jsx, t as Fragment, u as renderChildren, w as createContext } from "./base-ddiVmiE7.js";
 import { HtmlEscapedCallbackPhase, raw, resolveCallback } from "./utils/html.js";
 import { a as DOM_STASH, i as DOM_RENDERER } from "./constants-BR9jM9BC.js";
-import { x as buildDataStack } from "./hooks-Bq5q9IMl.js";
-import { n as Suspense$1, t as ErrorBoundary$1 } from "./components-DYZdxJIJ.js";
+import { x as buildDataStack } from "./hooks-BMw6BAyP.js";
+import { n as Suspense$1, t as ErrorBoundary$1 } from "./components-DdI7-ns7.js";
 //#region ../../plugins/acryl-router/src/core/jsx/streaming.ts
 /**
 * @module

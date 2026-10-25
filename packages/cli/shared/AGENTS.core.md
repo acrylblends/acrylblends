@@ -15,6 +15,10 @@ The docs write `import { Acryl } from 'acrylblends'` and `from 'acrylblends/<sub
 - `./plugins/acryl-router/src/index.ts` for `Acryl`, `Context`, `HTTPException`, `connectionOf`, `getConnInfo` and the types;
 - `./plugins/acryl-router/src/middleware/index.ts` for every middleware (`cors`, `bodyLimit`, `trimTrailingSlash`, `loopbackOnly`, ...);
 - `./plugins/acryl-router/src/helpers/index.ts` for the helpers and validators (`streamSSE`, `schemaValidator`, `validator`, cookies, `testClient`, ...).
+- `./plugins/acryl-router/src/core/jsx/index.ts` for `acrylblends/jsx` (`jsx`, `Fragment`, the types), and `.../core/jsx/streaming.ts` for `acrylblends/jsx/streaming`.
+
+**JSX syntax does not run here.** Node runs this app by stripping TypeScript types, which does not compile JSX (a `.tsx` file will not load). Write the call JSX compiles to instead: `jsx('h1', { class: 'title' }, 'Hello')`, children after the props as further arguments
+(`jsx(tag, props, ...children)`); render with `.toString()` and return it with `c.html(...)`. A component is a function from props to a `jsx(...)` node.
 
 A plugin written into `extensions/` while the app runs may use the docs' own names instead: `acrylblends` and `acrylblends/<subpath>` resolve to the same files. `App` is the
 deprecated name of `Acryl`.

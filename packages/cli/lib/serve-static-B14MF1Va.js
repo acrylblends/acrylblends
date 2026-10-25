@@ -1,5 +1,6 @@
 import { getMimeType } from "./utils/mime.js";
 import "./factory.js";
+import "./ssg-BwjcA-Ge.js";
 import "./css.js";
 import "./connection-C7xgP1hP.js";
 import { Readable } from "node:stream";
