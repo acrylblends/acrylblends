@@ -36,6 +36,7 @@ generated Blend app the same names are the vendored plugin source in `src/plugin
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
+- [Release notes 0.6.3](release-notes/0.6.3.md) - jsx and css, the stricter save, the desktop page
 - [Release notes 0.6.2](release-notes/0.6.2.md) - presets, dev, mount, cache and proxy
 - [Release notes 0.6.1](release-notes/0.6.1.md) - add desktop for a plain Acryl app, the create version stamp
 - [Release notes 0.6.0](release-notes/0.6.0.md) - the desktop shell

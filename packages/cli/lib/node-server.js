@@ -1,5 +1,5 @@
 import { defineWebSocketHelper } from "./ws.js";
-import { t as serveStatic } from "./serve-static-Dw_m6KxR.js";
+import { t as serveStatic } from "./serve-static-Cw23shXv.js";
 import { getConnInfo } from "./node-server/conninfo.js";
 import { STATUS_CODES, ServerResponse, createServer } from "node:http";
 import { Http2ServerRequest, constants } from "node:http2";

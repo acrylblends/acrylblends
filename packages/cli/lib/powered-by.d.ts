@@ -1,4 +1,4 @@
-import { I as MiddlewareHandler } from "./context-B5Y1lLha.js";
+import { I as MiddlewareHandler } from "./context-DVQBjuns.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/powered-by/index.d.ts
 type PoweredByOptions = {

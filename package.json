@@ -24,7 +24,7 @@
     "@deepseek-ai/schemastery": "3.18.4",
     "@types/node": "^24.0.0",
     "@types/ws": "8.18.2",
-    "@webboxes/app-persistence": "0.1.0",
+    "@webboxes/app-persistence": "0.1.1",
     "@webboxes/blends-core": "0.4.0",
     "@whatwg-node/fetch": "0.9.23",
     "ajv": "^8.20.0",

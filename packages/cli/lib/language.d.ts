@@ -1,4 +1,4 @@
-import { I as MiddlewareHandler, t as Context } from "./context-B5Y1lLha.js";
+import { I as MiddlewareHandler, t as Context } from "./context-DVQBjuns.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/language/language.d.ts
 type DetectorType = 'path' | 'querystring' | 'cookie' | 'header';
