@@ -21,6 +21,7 @@ import {
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+import { probeNotes } from './lib/notes-probe.mjs'
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -42,6 +43,11 @@ const PRESETS = {
     task: 'add a server-rendered JSX page at /about using acrylblends/jsx, with a test',
     path: '/about',
   },
+}
+PRESETS.notes = {
+  task: 'Build a small multi-user notes app in this folder, using only what the docs in docs/framework and AGENTS.md say. Users sign up and log in (password hashed with node:crypto scrypt, a cookie session). Notes are stored in SQLite through the built-in node:sqlite (no native dependencies). A signed-in user can create, edit, delete and search their own notes with HTML forms (pages at /signup, /login, /notes, /notes/new, /notes/:id/edit; server-side validation with clear error messages shown on the page). One part of the UI is interactive in the browser (a live character counter on the note field, or an instant filter on the list). There is a JSON API under /api/notes that a typed client is used on in a test. Every route has a test. The app runs as a desktop window (npm run desktop) and `npm start` serves it on the port in the PORT environment variable. Finish when npm test and npm run check pass.',
+  path: '/login',
+  notes: true,
 }
 if (values.preset) {
   if (!PRESETS[values.preset]) {
@@ -100,7 +106,7 @@ const DRIVERS = {
       '--permission-mode',
       'acceptEdits',
       '--allowedTools',
-      'Read,Edit,Write,Glob,Grep,Bash(npm *),Bash(node *),Bash(ls *),Bash(cat *)',
+      'Read,Edit,Write,Glob,Grep,Bash(npm *),Bash(npx *),Bash(node *),Bash(ls *),Bash(cat *)',
       '--disallowedTools',
       'WebFetch,WebSearch',
     ],
@@ -160,9 +166,16 @@ function failureText(result) {
 }
 
 /** Start the generated app and ask the default task's route; `ok` when it answers 200 with a JSON count. */
-function probeRoute(app, env) {
+/** The steps of the last Notes probe, printed with the result. */
+let lastProbe = []
+async function probeRoute(app, env) {
   const preset = values.preset ? PRESETS[values.preset] : undefined
   const path = preset?.path ?? '/customers/count'
+  if (preset?.notes) {
+    const probe = await probeNotes(app, env)
+    lastProbe = probe.steps
+    return probe.ok ? 'ok' : 'FAIL'
+  }
   const check = preset
     ? "reply.status === 200 && /html/.test(reply.headers.get('content-type') ?? '') && /</.test(await reply.clone().text())"
     : "reply.status === 200 && typeof (await reply.clone().json()).count === 'number'"
@@ -223,7 +236,7 @@ function environment(dir, programDir) {
   return env
 }
 
-function attempt(name) {
+async function attempt(name) {
   const dir = join(base, name)
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
@@ -325,7 +338,7 @@ function attempt(name) {
   const started = Date.now()
   const result = run(program, driver.args(values.task, app), app, {
     env: agentEnv,
-    timeout: 900_000,
+    timeout: values.preset === 'notes' ? 2_400_000 : 900_000,
     input: '',
   })
   const seconds = Math.round((Date.now() - started) / 1000)
@@ -341,7 +354,7 @@ function attempt(name) {
   const wroteTsx = changed.filter((file) => /\.tsx$/.test(file))
   const touchedSource = changed.some((file) => file.startsWith('src/') || file === 'blend.yaml')
   const route =
-    values.task === DEFAULT_TASK || values.preset ? probeRoute(app, clean) : 'not probed'
+    values.task === DEFAULT_TASK || values.preset ? await probeRoute(app, clean) : 'not probed'
   const pass =
     result.status === 0 &&
     test.status === 0 &&
@@ -353,18 +366,21 @@ function attempt(name) {
   return {
     name,
     pass,
-    note: `${driver.steps(result.stdout)}, ${seconds} s; agent exit ${result.status}${reason}; isolation: ${isolation}; tests ${test.status === 0 ? 'pass' : 'FAIL'}, type-check ${check.status === 0 ? 'pass' : 'FAIL'}, test added ${touchedTests}, source changed ${touchedSource}, tsx files ${wroteTsx.length === 0 ? 'none' : wroteTsx.join(' ')}, route ${route}`,
+    note: `${driver.steps(result.stdout)}, ${seconds} s; agent exit ${result.status}${reason}; isolation: ${isolation}; tests ${test.status === 0 ? 'pass' : 'FAIL'}, type-check ${check.status === 0 ? 'pass' : 'FAIL'}, test added ${touchedTests}, source changed ${touchedSource}, tsx files ${wroteTsx.length === 0 ? 'none' : wroteTsx.join(' ')}, route ${route}${lastProbe.length > 0 ? `\n  ${lastProbe.join('\n  ')}` : ''}`,
     app,
   }
 }
 
-const results = (values.agent === 'all' ? AGENTS : [values.agent]).map((name) => {
+const results = []
+for (const name of values.agent === 'all' ? AGENTS : [values.agent]) {
+  results.push(await (async () => {
   try {
-    return attempt(name)
+    return await attempt(name)
   } catch (error) {
     return { name, pass: false, note: error.message }
   }
-})
+  })())
+}
 for (const r of results)
   console.log(`${r.pass ? 'PASS' : 'FAIL'} ${r.name}: ${r.note}${r.app ? ` (${r.app})` : ''}`)
 process.exit(results.every((r) => r.pass) ? 0 : 1)
