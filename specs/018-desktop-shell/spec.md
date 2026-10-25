@@ -1,6 +1,12 @@
 # 018 - the same app as a desktop app
 
-Status: proposal, no code. Awaiting confirmation. Node.js only: Bun, `bun compile` and Electrobun are later decisions.
+Status: implemented and released (acrylblends 0.6.0, and 0.6.1 for the plain Acryl app form). Node.js only: Bun, `bun compile` and Electrobun are later decisions.
+
+As built (differences from the proposal below):
+- The shell lives in `src/plugins/desktop/` (a Blend app) and `src/plugins/desktop-web/` (a plain Acryl app, added by `acrylblends add desktop` when the app has no `instance` plugin), not `src/desktop/`. `init --desktop` and `add desktop` add `electron` 44.0.0 as a development dependency, the script `npm run desktop`, and `.acrylblends/` to `.gitignore`.
+- Only `desktop-user-data.ts` and `shutdown.ts` could be vendored verbatim (digest in `upstream.json`); the window options are our own `window.ts` with ACRYL's same `webPreferences`, because ACRYL's file imports Host types.
+- `npm install` does not download Electron's binary (Electron 44 has no install script); the first `npm run desktop` does. `verify-desktop.mjs` exercises that path, the single-instance lock, the quit order, and that nothing is written outside the app folder or left running (also `--plain`, `--from-npm`); `verify:scaffolder` checks that only the plugin imports `electron`.
+- 0.7.0: the shells register the `.tsx` hook before loading the app by dynamic import. Packaging (dmg, exe, deb) is still not built.
 
 ## Goal
 

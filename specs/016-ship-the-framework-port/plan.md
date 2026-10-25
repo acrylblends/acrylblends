@@ -1,6 +1,12 @@
 # 016: Ship the framework port as 0.4.0
 
-Status: waiting for ACRYL's sync commit (branch `047-framework-port`). Nothing here depends on the final code; the steps that do are marked.
+Status: shipped. 0.4.0 (the ported `App` core, synced from ACRYL `df79b188`), then deprecated 0.3.0 once 0.4.0 was verified from the registry (all of `<0.5.0` is deprecated since 0.5.0).
+
+What followed from it, as released (each verified from npm; notes in docs/release-notes/):
+- 0.4.1: the framework docs and an `AGENTS.md` inside every generated app; `check()` of a live plugin receives the plugin's context.
+- 0.5.0: the package root is the framework (`import { Acryl } from 'acrylblends'`, 74 subpaths, the old root API at `acrylblends/cli`), `create-acrylblends` 0.1.0, the 86-page docs tree on both sites.
+- 0.5.1: the package README (the npm page). 0.6.0 and 0.6.1: the desktop shell (spec 018) and its plain-app form. 0.6.2 and 0.6.3: presets, dev, mount, cache, proxy, then jsx, jsx/dom and css; `save` on `@webboxes/app-persistence` 0.1.1.
+- 0.6.4: the upstream name removed from longer identifiers, a tarball release gate (`verify:tarball`), a package a third smaller, JSX guidance in `AGENTS.md`. 0.7.0: `.tsx` on Node.js through `acrylblends/node-server/register`; `create-acrylblends` 0.2.0.
 Decisions: the owner, relayed by the coordinator (2026-10-23): "ship latest 0.4.0"; 0.3.0 stays on npm and is deprecated once 0.4.0 is verified from the registry.
 
 ## Already prepared (branch `016-port-prep`, local)
