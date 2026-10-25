@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { aboutPage } from './about.tsx'
 import { Acryl } from './plugins/acryl-router/src/index.ts'
 
 export const APP_NAME = '__APP_NAME__'
@@ -11,6 +12,7 @@ export const routes = {
     const app = new Acryl()
       .get('/', (c) => c.json({ app: APP_NAME, ok: true }))
       .get('/health', (c) => c.json({ ok: true }))
+      .get('/about', (c) => c.html(aboutPage()))
     ctx.router.route('/', app)
   },
 }

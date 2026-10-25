@@ -5,7 +5,7 @@
       "examples/acryl-todo/src/index.ts": "src/todo.ts",
       "examples/acryl-todo/src/page.ts": "src/page.ts"
     },
-    "commit": "fd1f7dcaaff8b757c0562294002c0d32d6e0a893"
+    "commit": "7bba3ed0420d87e61d8256fa60614d22af734c8f"
   },
   "rewrittenSpecifiers": 4,
   "digest": "sha256:9093704776563001f7f472f94cc5c2fdd79206342c1cb59c11fce62aa74df3ed"

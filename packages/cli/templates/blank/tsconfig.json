@@ -11,7 +11,9 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "#acryl-jsx"
   },
   "include": ["src", "test"]
 }

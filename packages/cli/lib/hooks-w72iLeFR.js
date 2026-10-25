@@ -1,4 +1,4 @@
-import { D as createContext, E as useContext, T as globalContexts, _ as toArray, h as styleObjectForEach, m as normalizeIntrinsicElementKey } from "./base-ddiVmiE7.js";
+import { D as createContext, E as useContext, T as globalContexts, _ as toArray, h as styleObjectForEach, m as normalizeIntrinsicElementKey } from "./base-NSN_SNv-.js";
 import { a as DOM_STASH, i as DOM_RENDERER, n as DOM_INTERNAL_TAG, r as DOM_MEMO, t as DOM_ERROR_HANDLER } from "./constants-BR9jM9BC.js";
 //#region ../../plugins/acryl-router/src/core/jsx/dom/render.ts
 const ACRYL_PORTAL_ELEMENT = "_hp";

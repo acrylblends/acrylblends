@@ -1,0 +1,14 @@
+/** A page written in JSX: Node.js runs it through `acrylblends/node-server/register` (see the scripts in package.json), which compiles .tsx with this app's own typescript. */
+const About = () => (
+  <main>
+    <h1>About</h1>
+    <p>Rendered on the server with __PACKAGE__/jsx.</p>
+  </main>
+)
+
+export const aboutPage = (): string => (<About />).toString()
+
+/** Throws on purpose: the template's test checks that the stack names this file, so a failure in your own pages points at the .tsx line. */
+export const failingPage = (): string => {
+  throw new Error('a page failed')
+}

@@ -32,7 +32,13 @@ export const PLUGINS = {
       'tests/surfaces.spec.ts': 'needs @deepseek-ai/dsh-host-webserver (the DSH web server)',
     },
   },
-  'acryl-node-server': { entries: { '': 'src/index.ts' }, testsNotRun: {} },
+  'acryl-node-server': {
+    entries: { '': 'src/index.ts' },
+    testsNotRun: {
+      'tests/register.spec.ts':
+        "links typescript from the plugin's own node_modules (ACRYL's workspace layout); the hook is exercised here by the templates' own .tsx tests and verify:scaffolder",
+    },
+  },
   'acryl-state': {
     entries: { '': 'src/index.ts', '/react': 'src/react.ts' },
     testsNotRun: {

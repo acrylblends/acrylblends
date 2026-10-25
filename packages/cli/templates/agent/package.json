@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "imports": {
+    "#acryl-jsx/jsx-runtime": "./src/plugins/acryl-router/src/core/jsx/jsx-runtime.ts",
+    "#acryl-jsx/jsx-dev-runtime": "./src/plugins/acryl-router/src/core/jsx/jsx-dev-runtime.ts"
+  },
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
-    "start": "node src/main.ts",
-    "dev": "node --watch src/main.ts",
-    "test": "node --test",
+    "start": "node --import ./src/plugins/acryl-node-server/src/register.ts src/main.ts",
+    "dev": "node --watch --import ./src/plugins/acryl-node-server/src/register.ts src/main.ts",
+    "test": "node --import ./src/plugins/acryl-node-server/src/register.ts --test \"test/**/*.test.{ts,tsx}\"",
     "check": "tsc --noEmit",
     "lock": "node src/plugins/manifest/lock.ts",
     "save": "node src/plugins/save/cli.ts",

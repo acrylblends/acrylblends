@@ -1,5 +1,5 @@
-import { u as renderChildren } from "../../base-ddiVmiE7.js";
-import { i as renderToReadableStream$1 } from "../../components-0o0CBYNv.js";
+import { u as renderChildren } from "../../base-NSN_SNv-.js";
+import { i as renderToReadableStream$1 } from "../../components-cEW3ovK0.js";
 import dom_default from "../dom.js";
 //#region ../../plugins/acryl-router/src/core/jsx/dom/server.ts
 const prepareRoot = (element) => typeof element === "string" || Array.isArray(element) ? renderChildren([element]) : element;

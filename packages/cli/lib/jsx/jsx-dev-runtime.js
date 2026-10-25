@@ -1,4 +1,4 @@
-import { s as jsxFn, t as Fragment } from "../base-ddiVmiE7.js";
+import { s as jsxFn, t as Fragment } from "../base-NSN_SNv-.js";
 //#region ../../plugins/acryl-router/src/core/jsx/jsx-dev-runtime.ts
 function jsxDEV(tag, props, key) {
 	let node;

@@ -62,7 +62,9 @@
         "./src/plugins/acryl-router/src/core/jsx/jsx-dev-runtime.ts"
       ],
       "acrylblends/jsx/streaming": ["./src/plugins/acryl-router/src/core/jsx/streaming.ts"]
-    }
+    },
+    "jsx": "react-jsx",
+    "jsxImportSource": "#acryl-jsx"
   },
   "include": ["src", "test", "extensions"]
 }

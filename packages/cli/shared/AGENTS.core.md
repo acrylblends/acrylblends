@@ -17,8 +17,7 @@ The docs write `import { Acryl } from 'acrylblends'` and `from 'acrylblends/<sub
 - `./plugins/acryl-router/src/helpers/index.ts` for the helpers and validators (`streamSSE`, `schemaValidator`, `validator`, cookies, `testClient`, ...).
 - `./plugins/acryl-router/src/core/jsx/index.ts` for `acrylblends/jsx` (`jsx`, `Fragment`, the types), and `.../core/jsx/streaming.ts` for `acrylblends/jsx/streaming`.
 
-**JSX syntax does not run here.** Node runs this app by stripping TypeScript types, which does not compile JSX (a `.tsx` file will not load). Write the call JSX compiles to instead: `jsx('h1', { class: 'title' }, 'Hello')`, children after the props as further arguments
-(`jsx(tag, props, ...children)`); render with `.toString()` and return it with `c.html(...)`. A component is a function from props to a `jsx(...)` node.
+**JSX: write `.tsx`.** The scripts in `package.json` run Node.js with `--import ./src/plugins/acryl-node-server/src/register.ts`, which compiles `.tsx` files with this app's own `typescript`; `tsconfig.json` sets `jsx: react-jsx` and `jsxImportSource: #acryl-jsx`, which `package.json`'s `imports` maps to the vendored runtime in `src/plugins/acryl-router`. See `src/about.tsx` (blank template) for a page and `test/app.test.ts` for how it is tested. Render a component with `.toString()` and return it with `c.html(...)`; import `jsx`, `Fragment` and the types from `./plugins/acryl-router/src/core/jsx/index.ts` when you need them. A command that starts the app without those scripts (a bare `node src/main.ts`) cannot load a `.tsx` file. Without a build step you can write the call JSX compiles to instead: `jsx('h1', { class: 'title' }, 'Hello')`, children after the props.
 
 A plugin written into `extensions/` while the app runs may use the docs' own names instead: `acrylblends` and `acrylblends/<subpath>` resolve to the same files. `App` is the
 deprecated name of `Acryl`.

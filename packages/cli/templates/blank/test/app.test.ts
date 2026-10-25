@@ -29,6 +29,21 @@ test('serves the index route', () =>
     assert.deepEqual(await response.json(), { app: APP_NAME, ok: true })
   }))
 
+test('renders a .tsx page, and an error in it names the .tsx line', () =>
+  withApp(async (app) => {
+    const response = await fetch(`${app.url}/about`)
+    assert.equal(response.status, 200)
+    assert.match(await response.text(), /<main><h1>About<\/h1>/)
+    const { failingPage } = await import('../src/about.tsx')
+    let stack = ''
+    try {
+      failingPage()
+    } catch (error) {
+      stack = String((error as Error).stack)
+    }
+    assert.match(stack, /about\.tsx:\d+/)
+  }))
+
 test('answers health checks and 404 for unknown paths', () =>
   withApp(async (app) => {
     assert.equal((await fetch(`${app.url}/health`)).status, 200)
