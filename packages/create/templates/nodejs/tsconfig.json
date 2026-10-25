@@ -10,7 +10,9 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "__PACKAGE__/jsx"
   },
   "include": ["src", "test"]
 }

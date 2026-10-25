@@ -1,4 +1,4 @@
-import { D as renderNode, S as buildNode, _ as useState } from "../../hooks-BMw6BAyP.js";
+import { D as renderNode, S as buildNode, _ as useState } from "../../hooks-w72iLeFR.js";
 //#region ../../plugins/acryl-router/src/core/jsx/dom/client.ts
 /**
 * Create a root object for rendering

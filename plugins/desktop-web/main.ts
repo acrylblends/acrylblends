@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { serve } from 'acrylblends/node-server'
 import { app, BrowserWindow, shell } from 'electron'
-import acrylApp from '../../app.ts'
+import 'acrylblends/node-server/register'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { windowOptions } from './window.ts'
@@ -66,6 +66,8 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(async () => {
+    // The hook above is registered before the app's modules are loaded, so the app may have .tsx pages: they are loaded here, not as a static import.
+    const { default: acrylApp } = await import('../../app.ts')
     const port = await new Promise<number>((resolve) => {
       server = serve(
         { fetch: acrylApp.fetch, port: 0, hostname: '127.0.0.1' },

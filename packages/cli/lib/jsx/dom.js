@@ -1,9 +1,9 @@
-import { D as createContext, E as useContext, a as isValidElement, f as shallowEqual, g as Children, l as reactAPICompatVersion } from "../base-ddiVmiE7.js";
+import { D as createContext, E as useContext, a as isValidElement, f as shallowEqual, g as Children, l as reactAPICompatVersion } from "../base-NSN_SNv-.js";
 import { r as DOM_MEMO } from "../constants-BR9jM9BC.js";
-import { C as createPortal, E as render, _ as useState, a as use, b as useViewTransition, c as useDeferredValue, d as useImperativeHandle, f as useInsertionEffect, g as useRef, h as useReducer, i as startViewTransition, l as useEffect, m as useMemo, n as forwardRef, o as useCallback, p as useLayoutEffect, r as startTransition, s as useDebugValue, t as createRef, u as useId, v as useSyncExternalStore, w as flushSync, y as useTransition } from "../hooks-BMw6BAyP.js";
-import { a as useOptimistic, i as useFormStatus, n as jsxDEV, r as useActionState, t as Fragment } from "../jsx-dev-runtime-D18Y35TI.js";
+import { C as createPortal, E as render, _ as useState, a as use, b as useViewTransition, c as useDeferredValue, d as useImperativeHandle, f as useInsertionEffect, g as useRef, h as useReducer, i as startViewTransition, l as useEffect, m as useMemo, n as forwardRef, o as useCallback, p as useLayoutEffect, r as startTransition, s as useDebugValue, t as createRef, u as useId, v as useSyncExternalStore, w as flushSync, y as useTransition } from "../hooks-w72iLeFR.js";
+import { a as useOptimistic, i as useFormStatus, n as jsxDEV, r as useActionState, t as Fragment } from "../jsx-dev-runtime-CWLRA2F3.js";
 import "./dom/jsx-runtime.js";
-import { n as Suspense, t as ErrorBoundary } from "../components-DdI7-ns7.js";
+import { n as Suspense, t as ErrorBoundary } from "../components-JXVm45kK.js";
 //#region ../../plugins/acryl-router/src/core/jsx/dom/index.ts
 /**
 * @module

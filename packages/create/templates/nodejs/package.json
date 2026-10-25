@@ -7,9 +7,9 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "dev": "node --watch src/index.ts",
-    "start": "node src/index.ts",
-    "test": "node --test",
+    "dev": "node --watch --import acrylblends/node-server/register src/index.ts",
+    "start": "node --import acrylblends/node-server/register src/index.ts",
+    "test": "node --import acrylblends/node-server/register --test \"test/**/*.test.{ts,tsx}\"",
     "check": "tsc --noEmit"
   },
   "dependencies": {

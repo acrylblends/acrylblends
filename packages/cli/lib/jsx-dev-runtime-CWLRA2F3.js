@@ -1,6 +1,6 @@
-import { D as createContext, E as useContext, O as __exportAll, S as shouldDeDupeByKey, b as domRenderers, v as dataPrecedenceAttr, x as isStylesheetLinkWithPrecedence, y as deDupeKeyMap } from "./base-ddiVmiE7.js";
+import { D as createContext, E as useContext, O as __exportAll, S as shouldDeDupeByKey, b as domRenderers, v as dataPrecedenceAttr, x as isStylesheetLinkWithPrecedence, y as deDupeKeyMap } from "./base-NSN_SNv-.js";
 import { o as PERMALINK } from "./constants-BR9jM9BC.js";
-import { C as createPortal, T as getNameSpaceContext, _ as useState, a as use, m as useMemo, o as useCallback } from "./hooks-BMw6BAyP.js";
+import { C as createPortal, T as getNameSpaceContext, _ as useState, a as use, m as useMemo, o as useCallback } from "./hooks-w72iLeFR.js";
 //#region ../../plugins/acryl-router/src/core/jsx/dom/hooks/index.ts
 /**
 * Provide hooks used only in jsx/dom

@@ -1,4 +1,4 @@
-import { h as styleObjectForEach, p as isValidAttributeName, t as Fragment } from "../base-ddiVmiE7.js";
+import { h as styleObjectForEach, p as isValidAttributeName, t as Fragment } from "../base-NSN_SNv-.js";
 import { escapeToBuffer, raw, stringBufferToString } from "../utils/html.js";
 import { html } from "../html.js";
 import { jsxDEV } from "./jsx-dev-runtime.js";

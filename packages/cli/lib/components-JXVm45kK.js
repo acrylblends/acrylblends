@@ -1,5 +1,5 @@
 import { t as DOM_ERROR_HANDLER } from "./constants-BR9jM9BC.js";
-import { t as Fragment } from "./jsx-dev-runtime-D18Y35TI.js";
+import { t as Fragment } from "./jsx-dev-runtime-CWLRA2F3.js";
 import "./jsx/dom/jsx-runtime.js";
 //#region ../../plugins/acryl-router/src/core/jsx/dom/components.ts
 const ErrorBoundary = (({ children, fallback, fallbackRender, onError }) => {

@@ -1,5 +1,6 @@
 import { escapeToBuffer, raw, resolveCallbackSync, stringBufferToString } from "./utils/html.js";
 import { i as DOM_RENDERER, n as DOM_INTERNAL_TAG, o as PERMALINK, r as DOM_MEMO, t as DOM_ERROR_HANDLER } from "./constants-BR9jM9BC.js";
+import "node:module";
 //#region \0rolldown/runtime.js
 var __defProp = Object.defineProperty;
 var __exportAll = (all, no_symbols) => {
