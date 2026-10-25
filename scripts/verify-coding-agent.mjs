@@ -34,6 +34,10 @@ const { values, positionals } = parseArgs({
 })
 /** Named tasks, each with a probe of the finished app. */
 const PRESETS = {
+  contact: {
+    task: 'add a server-rendered JSX page at /contact using acrylblends/jsx, with a test',
+    path: '/contact',
+  },
   about: {
     task: 'add a server-rendered JSX page at /about using acrylblends/jsx, with a test',
     path: '/about',
@@ -182,7 +186,12 @@ process.exit(ok ? 0 : 1)
 `
   const file = join(app, 'gate-probe.ts')
   writeFileSync(file, script)
-  const probe = run('node', [file], app, { env, timeout: 60_000 })
+  // The app is started the way its own scripts start it: with the register hook, so a .tsx page loads.
+  const hook =
+    values.setup === 'nodejs'
+      ? 'acrylblends/node-server/register'
+      : './src/plugins/acryl-node-server/src/register.ts'
+  const probe = run('node', ['--import', hook, file], app, { env, timeout: 60_000 })
   rmSync(file, { force: true })
   return probe.status === 0 ? 'ok' : 'FAIL'
 }
@@ -329,6 +338,7 @@ function attempt(name) {
     .filter(Boolean)
     .map((line) => line.slice(3))
   const touchedTests = changed.some((file) => file.startsWith('test/'))
+  const wroteTsx = changed.filter((file) => /\.tsx$/.test(file))
   const touchedSource = changed.some((file) => file.startsWith('src/') || file === 'blend.yaml')
   const route =
     values.task === DEFAULT_TASK || values.preset ? probeRoute(app, clean) : 'not probed'
@@ -343,7 +353,7 @@ function attempt(name) {
   return {
     name,
     pass,
-    note: `${driver.steps(result.stdout)}, ${seconds} s; agent exit ${result.status}${reason}; isolation: ${isolation}; tests ${test.status === 0 ? 'pass' : 'FAIL'}, type-check ${check.status === 0 ? 'pass' : 'FAIL'}, test added ${touchedTests}, source changed ${touchedSource}, route ${route}`,
+    note: `${driver.steps(result.stdout)}, ${seconds} s; agent exit ${result.status}${reason}; isolation: ${isolation}; tests ${test.status === 0 ? 'pass' : 'FAIL'}, type-check ${check.status === 0 ? 'pass' : 'FAIL'}, test added ${touchedTests}, source changed ${touchedSource}, tsx files ${wroteTsx.length === 0 ? 'none' : wroteTsx.join(' ')}, route ${route}`,
     app,
   }
 }
