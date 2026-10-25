@@ -115,6 +115,18 @@ describe('create', () => {
     },
   )
 
+  it('notes: AGENTS.md describes the structure and points at the deploy page; nodejs has no such section', async () => {
+    await runCreate(['shipped', '--template', 'notes', '-y'], fakeIo().io)
+    const notes = readFileSync(join(scratch, 'shipped', 'AGENTS.md'), 'utf8')
+    expect(notes).toContain('## Before you ship')
+    expect(notes).toContain('docs/framework/getting-started/deploy.md')
+    expect(notes).toContain('src/notes-app.ts')
+    await runCreate(['plain', '--template', 'nodejs', '-y'], fakeIo().io)
+    expect(readFileSync(join(scratch, 'plain', 'AGENTS.md'), 'utf8')).not.toContain(
+      'Before you ship',
+    )
+  })
+
   it('nodejs: the generated app type-checks against the real framework package', async () => {
     await runCreate(['typed', '--template', 'nodejs', '-y'], fakeIo().io)
     const dir = join(scratch, 'typed')

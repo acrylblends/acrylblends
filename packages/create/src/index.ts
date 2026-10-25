@@ -205,6 +205,16 @@ export function agentsText(template: Exclude<Template, 'acryl-app'>, name: strin
 - \`test/notes.test.ts\`: a test for every route. A form POST in a test needs \`origin: 'http://localhost'\` (csrf) and the \`sid\` cookie from sign up.
 - Forms answer an invalid input with status 400 and the same page with the messages; a successful POST redirects with 303.
 - To add a column: change the \`CREATE TABLE\` in \`openDb\`, \`notesStore\`, \`checkNote\`, the form and the list in \`views.tsx\`, and the tests.
+
+## Before you ship
+
+Read \`docs/framework/getting-started/deploy.md\`. In short:
+
+- Install with \`npm ci --omit=dev\` and start with \`NODE_ENV=production npm start\` (\`typescript\` stays a runtime dependency: it compiles the \`.tsx\` pages at start).
+- The app listens on \`127.0.0.1\`; set \`HOST=0.0.0.0\` only in a container. \`PORT\` chooses the port.
+- Put the SQLite file outside the code folder (\`NOTES_DB=/var/lib/notes/notes.db\`) and back it up.
+- Behind an HTTPS reverse proxy set \`TRUST_PROXY=1\` and \`PUBLIC_ORIGIN=https://your.site\`, or the cookie is not \`Secure\` and csrf refuses form posts.
+- \`npm test\` includes a test that starts the server and stops it with SIGTERM; keep it passing if you change \`src/index.ts\`.
 `
       : ''
   return `# ${name}
