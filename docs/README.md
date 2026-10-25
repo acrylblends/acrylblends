@@ -36,6 +36,7 @@ generated Blend app the same names are the vendored plugin source in `src/plugin
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
+- [Release notes 0.7.2](release-notes/0.7.2.md) - client components without a bundler, serve() on 127.0.0.1, the notes template, production-ready starters
 - [Release notes 0.7.1](release-notes/0.7.1.md) - Electron 44.9.3, no shell warning on Windows, forms and sessions guide
 - [Release notes 0.7.0](release-notes/0.7.0.md) - .tsx pages on Node.js with no build step
 - [Release notes 0.6.4](release-notes/0.6.4.md) - the rename completed, a smaller package, JSX in apps

@@ -2,16 +2,17 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-node-server",
-    "commit": "524406d2033cdc5ca5e01207f9ce29543bbf221b"
+    "commit": "cdc083e1bbaedaeafa7494fe646bdb202ce86d09"
   },
   "vendored": [
     "src",
     "tests",
     "LICENSE"
   ],
-  "rewrittenSpecifiers": 28,
-  "digest": "sha256:c830697a6c09e4f9137f5589cffb56e55d07a06044f22c4087206bcfc3e62ea6",
+  "rewrittenSpecifiers": 31,
+  "digest": "sha256:0a3278e006540d0dbecdfb6ada3ca865f3a9a78b649edd9454dab0c76281eda0",
   "testsNotRun": {
+    "tests/client-modules.spec.ts": "links typescript from the plugin's own node_modules (ACRYL's workspace layout); clientModules and build-client are exercised here by the templates' tests and verify:scaffolder",
     "tests/register.spec.ts": "links typescript from the plugin's own node_modules (ACRYL's workspace layout); the hook is exercised here by the templates' own .tsx tests and verify:scaffolder"
   },
   "notice": [

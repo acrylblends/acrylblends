@@ -1,9 +1,15 @@
+import { t as Acryl } from "./app-BM0rTCp7.js";
+import { basePath } from "./route.js";
 import { defineWebSocketHelper } from "./ws.js";
 import { t as serveStatic } from "./serve-static-B14MF1Va.js";
 import { getConnInfo } from "./node-server/conninfo.js";
+import { n as compileModule, t as MissingTypeScriptError } from "./transpile-CTnWof4z.js";
 import { STATUS_CODES, ServerResponse, createServer } from "node:http";
 import { Http2ServerRequest, constants } from "node:http2";
 import { Readable } from "node:stream";
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 //#region ../../plugins/acryl-node-server/src/adapter/error.ts
 var RequestError = class extends Error {
 	constructor(message, options) {
@@ -1293,9 +1299,7 @@ const upgradeWebSocket = defineWebSocketHelper(async (c, events, options) => {
 	})();
 	return new Response();
 });
-//#endregion
-//#region ../../plugins/acryl-node-server/src/adapter/server.ts
-const createAdaptorServer = (options) => {
+function createAdaptorServer(options) {
 	const fetchCallback = options.fetch;
 	const requestListener = getRequestListener(fetchCallback, {
 		hostname: options.hostname,
@@ -1312,14 +1316,267 @@ const createAdaptorServer = (options) => {
 		});
 	}
 	return server;
-};
-const serve = (options, listeningListener) => {
+}
+function serve(options, listeningListener) {
 	const server = createAdaptorServer(options);
-	server.listen(options?.port ?? 3e3, options.hostname, () => {
+	server.listen(options?.port ?? 3e3, options.hostname ?? "127.0.0.1", () => {
 		const serverInfo = server.address();
 		listeningListener && listeningListener(serverInfo);
 	});
 	return server;
-};
+}
 //#endregion
-export { RequestError, createAdaptorServer, getConnInfo, getRequestListener, serve, serveStatic, upgradeWebSocket };
+//#region ../../plugins/acryl-node-server/src/client-modules.ts
+/**
+* Client components without a bundler. `clientModules({ root: 'src/client' })` is an app that serves the TypeScript and JSX modules of a
+* folder to the browser as ES modules: a `.tsx`/`.ts`/`.jsx` file compiled with the app's own `typescript` (JSX for `acrylblends/jsx/dom`),
+* a `.js`/`.mjs` file as it is. The framework's own browser imports (`acrylblends/jsx/dom` with its runtimes and `client`, and
+* `acrylblends/client`) are rewritten to two self-contained files the same app serves, at a URL relative to each module, so a page needs
+* one `<script type="module" src="/client/counter.tsx">` and no import map, under whatever path the app is routed at.
+*
+* Production runs without `typescript` (a deploy that leaves out devDependencies): `buildClientModules` writes the same compiled modules
+* and the two browser files into a folder, and with `NODE_ENV=production` and `compiled` set, only that folder is served.
+*/
+/** The folder the two browser files are served from, below the app's mount. A source folder of this name is not served. */
+const RUNTIME_DIR = "@acrylblends";
+/** The framework's browser imports and the browser file that provides each. */
+const BROWSER_IMPORTS = {
+	"acrylblends/jsx/dom": "jsx-dom.js",
+	"acrylblends/jsx/dom/jsx-runtime": "jsx-dom.js",
+	"acrylblends/jsx/dom/jsx-dev-runtime": "jsx-dom.js",
+	"acrylblends/jsx/dom/client": "jsx-dom.js",
+	"acrylblends/client": "client.js"
+};
+const RUNTIME_FILES = ["jsx-dom.js", "client.js"];
+const COMPILED = /* @__PURE__ */ new Set([
+	".ts",
+	".tsx",
+	".jsx",
+	".mts"
+]);
+const SERVED = /* @__PURE__ */ new Set([
+	...COMPILED,
+	".js",
+	".mjs"
+]);
+const JS_TYPE = "text/javascript; charset=utf-8";
+/** The cache bound when `cacheBytes` is not given. */
+const DEFAULT_CACHE_BYTES = 16 * 1024 * 1024;
+/** The framework's two browser files, next to the built module that contains this code. */
+const defaultRuntimeDir = () => fileURLToPath(new URL("./browser/", import.meta.url));
+/** A module path below the root (`widgets/counter.tsx`) with the URL prefix that reaches the browser files from it. */
+const runtimePrefix = (relativePath) => {
+	const depth = relativePath.split("/").length - 1;
+	return depth === 0 ? "./" : "../".repeat(depth);
+};
+/** One client module compiled for the browser: TypeScript and JSX compiled, the framework's imports pointed at its browser files. */
+function compileForBrowser(file, relativePath) {
+	const prefix = runtimePrefix(relativePath);
+	return compileModule(file, readFileSync(file, "utf8"), {
+		importSource: "acrylblends/jsx/dom",
+		defaultImportSource: "acrylblends/jsx/dom",
+		what: "is a client module",
+		rewrite: (specifier) => {
+			const target = BROWSER_IMPORTS[specifier];
+			return target === void 0 ? void 0 : `${prefix}${RUNTIME_DIR}/${target}`;
+		}
+	});
+}
+/**
+* The path below the root a request names, or `undefined` when it must not be served: a `..` or dot segment, a backslash or NUL, an
+* extension outside the served set, or a `.d.ts` file.
+*/
+function servedPath(requestPath) {
+	let decoded;
+	try {
+		decoded = decodeURIComponent(requestPath);
+	} catch {
+		return;
+	}
+	const parts = decoded.split("/").filter((part) => part !== "");
+	if (parts.length === 0 || parts.some((part) => part.startsWith(".") || part.includes("\\") || part.includes("\0"))) return void 0;
+	const path = parts.join("/");
+	if (!SERVED.has(extname(path)) || path.endsWith(".d.ts")) return void 0;
+	return path;
+}
+/** A real file inside `root` (symbolic links followed), or `undefined`. */
+function fileInside(root, path) {
+	try {
+		const file = realpathSync(join(root, ...path.split("/")));
+		return file.startsWith(root + sep) && statSync(file).isFile() ? file : void 0;
+	} catch {
+		return;
+	}
+}
+/** A file's validator: its size and modification time. */
+const etagOf = (stat) => `"${stat.size.toString(36)}-${Math.trunc(stat.mtimeMs).toString(36)}"`;
+/** Compiled modules, least recently served first, bounded by the UTF-8 bytes of their code. Exported for its tests. */
+var CompileCache = class {
+	entries = /* @__PURE__ */ new Map();
+	bytes = 0;
+	limit;
+	constructor(limit) {
+		this.limit = limit;
+	}
+	get(file, mtimeMs, size) {
+		const entry = this.entries.get(file);
+		if (entry === void 0) return void 0;
+		this.entries.delete(file);
+		if (entry.mtimeMs !== mtimeMs || entry.size !== size) {
+			this.bytes -= entry.bytes;
+			return;
+		}
+		this.entries.set(file, entry);
+		return entry;
+	}
+	set(file, stat, code) {
+		const entry = {
+			mtimeMs: stat.mtimeMs,
+			size: stat.size,
+			etag: etagOf(stat),
+			code,
+			bytes: Buffer.byteLength(code)
+		};
+		const previous = this.entries.get(file);
+		if (previous !== void 0) {
+			this.entries.delete(file);
+			this.bytes -= previous.bytes;
+		}
+		if (entry.bytes > this.limit) return entry;
+		this.entries.set(file, entry);
+		this.bytes += entry.bytes;
+		for (const [key, old] of this.entries) {
+			if (this.bytes <= this.limit) break;
+			this.entries.delete(key);
+			this.bytes -= old.bytes;
+		}
+		return entry;
+	}
+	/** The UTF-8 bytes of code held now. */
+	get heldBytes() {
+		return this.bytes;
+	}
+	/** The files held now, least recently served first. */
+	get files() {
+		return [...this.entries.keys()];
+	}
+};
+const absolute = (path) => isAbsolute(path) ? path : resolve(path);
+/** A folder's real path; one that does not exist (a production image that ships only the compiled folder) keeps its absolute path. */
+const realFolder = (path) => {
+	try {
+		return realpathSync(absolute(path));
+	} catch {
+		return absolute(path);
+	}
+};
+/**
+* An app serving a folder of client modules to the browser. Route it where the page's script tags point: `app.route('/client',
+* clientModules({ root: 'src/client' }))` serves `src/client/counter.tsx` at `/client/counter.tsx`. Files are compiled on request and
+* cached until they change (bounded by `cacheBytes`); a response carries an ETag and `Cache-Control: no-cache`, so an edit shows on the
+* next reload. With `NODE_ENV=production` and `compiled` set, only the `compiled` folder is served and nothing is compiled.
+* @param options - the folder, the precompiled folder, and the cache bound.
+* @returns the app.
+*/
+function clientModules(options) {
+	const root = realFolder(options.root);
+	const runtimeDir = absolute(options.runtimeDir ?? defaultRuntimeDir());
+	let compiled;
+	if (process.env.NODE_ENV === "production" && options.compiled !== void 0) try {
+		compiled = realpathSync(absolute(options.compiled));
+	} catch {
+		throw new Error(`acrylblends: the compiled client folder ${absolute(options.compiled)} does not exist; build it with buildClientModules before starting in production`);
+	}
+	const cache = new CompileCache(options.cacheBytes ?? DEFAULT_CACHE_BYTES);
+	const app = new Acryl();
+	app.get("/*", (c) => {
+		const requestPath = c.req.path.slice(basePath(c).length);
+		const runtime = /^\/@acrylblends\/([a-z-]+\.js)$/u.exec(requestPath)?.[1];
+		const send = (code, etag) => {
+			if (c.req.header("if-none-match") === etag) return c.body(null, 304, {
+				etag,
+				"cache-control": "no-cache"
+			});
+			return c.body(code, 200, {
+				"content-type": JS_TYPE,
+				etag,
+				"cache-control": "no-cache"
+			});
+		};
+		const serveFile = (file) => {
+			const stat = statSync(file);
+			return send(readFileSync(file, "utf8"), etagOf(stat));
+		};
+		if (runtime !== void 0) {
+			if (!RUNTIME_FILES.includes(runtime)) return c.notFound();
+			return serveFile(compiled === void 0 ? join(runtimeDir, runtime) : join(compiled, RUNTIME_DIR, runtime));
+		}
+		const path = servedPath(requestPath);
+		if (path === void 0 || path.split("/")[0] === RUNTIME_DIR) return c.notFound();
+		if (compiled !== void 0) {
+			const file = fileInside(compiled, path);
+			if (file !== void 0) return serveFile(file);
+			if (fileInside(root, path) !== void 0) return c.text(`acrylblends: ${path} is not in ${relative(process.cwd(), compiled) || compiled}; build the client modules again (buildClientModules)`, 500);
+			return c.notFound();
+		}
+		const file = fileInside(root, path);
+		if (file === void 0) return c.notFound();
+		if (!COMPILED.has(extname(file))) return serveFile(file);
+		const stat = statSync(file);
+		let entry = cache.get(file, stat.mtimeMs, stat.size);
+		if (entry === void 0) {
+			let code;
+			try {
+				code = compileForBrowser(file, path);
+			} catch (error) {
+				if (error instanceof MissingTypeScriptError) return c.text(error.message, 500);
+				throw error;
+			}
+			entry = cache.set(file, stat, code);
+		}
+		return send(entry.code, entry.etag);
+	});
+	return app;
+}
+/** Every served file below `dir`, as paths below `root` with `/` separators; dot entries, `node_modules` and the runtime folder skipped. */
+function sourceFiles(root, dir = root) {
+	const files = [];
+	for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		if (entry.name.startsWith(".") || entry.name === "node_modules" || dir === root && entry.name === RUNTIME_DIR) continue;
+		const full = join(dir, entry.name);
+		if (entry.isDirectory()) files.push(...sourceFiles(root, full));
+		else if (entry.isFile() && SERVED.has(extname(entry.name)) && !entry.name.endsWith(".d.ts")) files.push(relative(root, full).split(sep).join("/"));
+	}
+	return files.sort();
+}
+/**
+* Compile a folder of client modules once, for a production that has no `typescript`: each module is written to `outDir` at the same
+* relative path and file name (so the page's URLs stay the same), compiled exactly as {@link clientModules} compiles it, and the two
+* browser files are copied to `outDir/@acrylblends/`. Files already in `outDir` that no source produces are left there.
+* @param options - the source folder and the output folder.
+* @returns the paths written, relative to `outDir`.
+* @throws MissingTypeScriptError when the app has no `typescript`; an error when `outDir` lies inside `root`.
+*/
+function buildClientModules(options) {
+	const root = realpathSync(absolute(options.root));
+	const outDir = absolute(options.outDir);
+	const runtimeDir = absolute(options.runtimeDir ?? defaultRuntimeDir());
+	if (outDir === root || outDir.startsWith(root + sep)) throw new Error(`acrylblends: the output folder ${outDir} lies inside the client folder ${root}`);
+	const written = [];
+	for (const path of sourceFiles(root)) {
+		const source = join(root, ...path.split("/"));
+		const target = join(outDir, ...path.split("/"));
+		mkdirSync(dirname(target), { recursive: true });
+		if (COMPILED.has(extname(path))) writeFileSync(target, compileForBrowser(source, path));
+		else copyFileSync(source, target);
+		written.push(path);
+	}
+	mkdirSync(join(outDir, RUNTIME_DIR), { recursive: true });
+	for (const name of RUNTIME_FILES) {
+		copyFileSync(join(runtimeDir, name), join(outDir, RUNTIME_DIR, name));
+		written.push(`${RUNTIME_DIR}/${name}`);
+	}
+	return written;
+}
+//#endregion
+export { RequestError, buildClientModules, clientModules, createAdaptorServer, getConnInfo, getRequestListener, serve, serveStatic, upgradeWebSocket };

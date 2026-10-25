@@ -35,6 +35,8 @@ export const PLUGINS = {
   'acryl-node-server': {
     entries: { '': 'src/index.ts' },
     testsNotRun: {
+      'tests/client-modules.spec.ts':
+        "links typescript from the plugin's own node_modules (ACRYL's workspace layout); clientModules and build-client are exercised here by the templates' tests and verify:scaffolder",
       'tests/register.spec.ts':
         "links typescript from the plugin's own node_modules (ACRYL's workspace layout); the hook is exercised here by the templates' own .tsx tests and verify:scaffolder",
     },

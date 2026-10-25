@@ -2,7 +2,9 @@
 
 `acrylblends/jsx` supports not only server side but also client side. This means that it is possible to create an interactive UI that runs in the browser. We call it Client Components or `acrylblends/jsx/dom`.
 
-It is fast and very small. The counter program in `acrylblends/jsx/dom` is only 2.8KB with Brotli compression, but 47.8KB for React.
+It is small and imports nothing. Measured with Node's `zlib.brotliCompressSync` at the highest quality: the whole runtime as
+[`clientModules`](client-modules.md) serves it (`jsx-dom.js`, not minified) is 11,209 bytes with Brotli compression, and the counter
+below, bundled and minified with tsdown so only the parts it uses are kept, is 5,804 bytes.
 
 This section introduces Client Components-specific features.
 
@@ -271,6 +273,9 @@ export default function App() {
 ```
 
 ## The `acrylblends/jsx/dom` runtime
+
+On Node you can skip the bundler: [Client components without a bundler](client-modules.md) serves `.tsx` client modules to the browser with
+this runtime and one script tag, in development and in production.
 
 There is a small JSX Runtime for Client Components. Using this will result in smaller bundled results than using `acrylblends/jsx`. Specify `acrylblends/jsx/dom` in `tsconfig.json`. For Deno, modify the deno.json.
 

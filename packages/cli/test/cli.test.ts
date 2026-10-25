@@ -454,3 +454,16 @@ describe('add and plugins', () => {
     expect(session.out()).toMatch(/^acryl-node-server .*requires acryl-router, acryl-router-http/m)
   })
 })
+
+describe('build-client', () => {
+  it('refuses a missing client folder, too many arguments and options; the help names it', async () => {
+    const missing = fakeIo()
+    expect(await runCli(['build-client'], missing.io)).toBe(1)
+    expect(missing.err()).toContain('src/client')
+    expect(await runCli(['build-client', 'a', 'b', 'c'], fakeIo().io)).toBe(2)
+    expect(await runCli(['build-client', '--watch'], fakeIo().io)).toBe(2)
+    const help = fakeIo()
+    await runCli(['--help'], help.io)
+    expect(help.out()).toContain('build-client')
+  })
+})

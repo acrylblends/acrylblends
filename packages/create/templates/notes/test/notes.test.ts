@@ -73,7 +73,7 @@ test('create, search, edit and delete a note through the forms', async () => {
   const cookie = await signedUp(app)
   assert.match(
     await (await app.request('/notes/new', { headers: { cookie } })).text(),
-    /data-counter/,
+    /data-island="counter"/,
   )
 
   const invalid = await app.request('/notes', form({ title: ' ', body: 'x' }, cookie))
@@ -228,4 +228,18 @@ test('an error answers a plain 500 with no stack and no detail', async () => {
   const res = await app.request('/notes', { headers: { cookie: 'sid=anything' } })
   assert.equal(res.status, 500)
   assert.equal(await res.text(), 'Internal Server Error')
+})
+
+test('the note form loads the character counter, a client component compiled for the browser', async () => {
+  const app = createApp(openDb(':memory:'))
+  const cookie = await signedUp(app)
+  assert.match(
+    await (await app.request('/notes/new', { headers: { cookie } })).text(),
+    /src="\/client\/counter\.tsx"/,
+  )
+  const module = await app.request('/client/counter.tsx')
+  assert.equal(module.status, 200)
+  assert.match(module.headers.get('content-type') ?? '', /javascript/)
+  assert.doesNotMatch(await module.text(), /<Count/)
+  assert.equal((await app.request('/client/../src/db.ts')).status, 404)
 })

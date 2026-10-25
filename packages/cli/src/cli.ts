@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import { add, listPlugins, parseAddOptions } from './add'
+import { buildClient, parseBuildClientOptions } from './build-client'
 import { init, parseInitOptions, UsageError } from './init'
 import { type Io, processIo } from './io'
 
@@ -15,6 +16,7 @@ Usage:
   acrylblends add <plugin...> [--dir d]  Copy library plugins (and what they require) into an app;
                                       a folder path brings an external plugin into its extensions/
   acrylblends plugins                    List the plugin library
+  acrylblends build-client [root] [out]  Compile the client modules once for production (src/client to dist/client)
 
 Options for init:
   --template <name>      blank or agent (asked when not given); --agent means --template agent,
@@ -44,6 +46,7 @@ export async function runCli(argv: readonly string[], io: Io = processIo()): Pro
     }
     if (command === 'init') return await init(parseInitOptions(args), io)
     if (command === 'add') return await add(parseAddOptions(args), io)
+    if (command === 'build-client') return await buildClient(parseBuildClientOptions(args), io)
     if (command === 'plugins') return listPlugins(io)
     throw new UsageError(`unknown command "${command}"`)
   } catch (error) {
