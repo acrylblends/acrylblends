@@ -1,4 +1,4 @@
-import { I as MiddlewareHandler } from "./context-DVQBjuns.js";
+import { L as MiddlewareHandler } from "./context-DS3fYyG-.js";
 import { COMPRESSIBLE_CONTENT_TYPE_REGEX } from "./utils/compress.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/compress/index.d.ts

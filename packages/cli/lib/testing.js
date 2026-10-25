@@ -1,4 +1,4 @@
-import { t as hc } from "./client-BHTr318g.js";
+import { t as hc } from "./client-DDLXwhBo.js";
 //#region ../../plugins/acryl-router/src/core/helper/testing/index.ts
 /**
 * @module

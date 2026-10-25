@@ -1,4 +1,4 @@
-import { I as MiddlewareHandler, t as Context } from "./context-DVQBjuns.js";
+import { L as MiddlewareHandler, t as Context } from "./context-DS3fYyG-.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/mount/index.d.ts
 type ApplicationHandler = (request: Request, ...args: any) => Response | Promise<Response>;

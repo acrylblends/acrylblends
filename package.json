@@ -14,7 +14,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "verify:scaffolder": "node scripts/verify-scaffolder.mjs",
-    "check": "pnpm run lint && pnpm run build && pnpm run verify:framework && pnpm run typecheck && pnpm run test && pnpm run verify:scaffolder",
+    "check": "pnpm run lint && pnpm run build && pnpm run verify:framework && pnpm run typecheck && pnpm run test && pnpm run verify:scaffolder && pnpm run verify:tarball",
     "verify:model": "node scripts/verify-real-model.mjs",
     "verify:framework": "node scripts/verify-framework-sync.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs"
