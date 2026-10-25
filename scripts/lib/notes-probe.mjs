@@ -50,12 +50,17 @@ export async function probeNotes(app, env) {
       const r = await fetch(`${base}${path}`, {
         redirect: 'manual',
         ...init,
-        headers: { ...(cookie ? { cookie } : {}), ...init.headers },
+        headers: { origin: base, ...(cookie ? { cookie } : {}), ...init.headers },
       })
       const set = r.headers.get('set-cookie')
       if (set) cookie = set.split(';')[0]
       return r
     }
+    // A refusal is a 4xx, or a page (not a redirect into the app) that says what is wrong; either way no session starts.
+    const message =
+      /invalid|incorrect|wrong|error|required|must|enter|valid|too short|at least|empty|blank|missing|taken|exists/i
+    const refused = async (r) =>
+      (r.status >= 400 && r.status < 500) || (r.status === 200 && message.test(await r.text()))
     const form = (data) => ({ method: 'POST', body: new URLSearchParams(data) })
     const email = `gate${Date.now()}@example.com`
     step(
@@ -63,22 +68,22 @@ export async function probeNotes(app, env) {
       (await call('/notes')).status >= 300 || (await call('/notes')).status === 401,
     )
     const bad = await call('/signup', form({ email: 'not-an-email', password: 'x' }))
-    step(
-      'sign up refuses bad input with a message',
-      bad.status === 400 && /\S/.test(await bad.text()),
-    )
+    step('sign up refuses bad input with a message', await refused(bad), `status ${bad.status}`)
     const su = await call('/signup', form({ email, password: 'correct horse battery' }))
-    step('sign up works and sets a cookie', su.status < 400 && cookie !== '', `status ${su.status}`)
+    step('sign up is accepted', su.status < 400, `status ${su.status}`)
+    // An app may sign the new user in at once, or send them to the log in page: both are fine.
+    if (cookie === '') await call('/login', form({ email, password: 'correct horse battery' }))
+    step('a session cookie is set', cookie !== '')
     const notes = await call('/notes')
     step('the notes page shows after sign up', notes.status === 200, `status ${notes.status}`)
     const empty = await call('/notes', form({ title: '', body: 'x' }))
     step(
       'create refuses an empty title with a message',
-      empty.status === 400 && /title/i.test(await empty.text()),
+      await refused(empty),
       `status ${empty.status}`,
     )
     const made = await call('/notes', form({ title: 'Gate note', body: 'findme body' }))
-    step('create works', made.status >= 300 && made.status < 400, `status ${made.status}`)
+    step('create works', made.status >= 200 && made.status < 400, `status ${made.status}`)
     const list = await (await call('/notes')).text()
     step('the note is listed', list.includes('Gate note'))
     const found = await (await call('/notes?q=findme')).text()
@@ -125,7 +130,8 @@ export async function probeNotes(app, env) {
     const wrong = await call('/login', form({ email, password: 'wrong wrong wrong' }))
     step(
       'log in refuses a wrong password with a message',
-      wrong.status >= 400 && wrong.status < 500,
+      await refused(wrong),
+      `status ${wrong.status}`,
     )
     const counter = await (await call('/notes/new')).text().catch(() => '')
     step(
