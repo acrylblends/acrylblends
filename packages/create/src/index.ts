@@ -183,6 +183,10 @@ export function agentsText(template: Exclude<Template, 'acryl-app'>, name: strin
     nodejs: 'npm test` and `npm run check',
     bun: 'bun test` and `bun run check',
   }[template]
+  const jsxNote =
+    template === 'nodejs'
+      ? "Node.js strips TypeScript types and does not compile JSX, so a `.tsx` file will not load. Write the call JSX compiles to instead: `jsx('h1', { class: 'title' }, 'Hello')` from `'acrylblends/jsx'`, with the children after the props as further arguments (`jsx(tag, props, ...children)`); render a node with `.toString()` and return it with `c.html(...)`. See `docs/framework/guides/jsx.md`."
+      : "Write the call JSX compiles to rather than JSX syntax, so the same file runs on Node.js too: `jsx('h1', { class: 'title' }, 'Hello')` from `'acrylblends/jsx'`, with the children after the props as further arguments (`jsx(tag, props, ...children)`); render a node with `.toString()` and return it with `c.html(...)`. See `docs/framework/guides/jsx.md`."
   return `# ${name}
 
 An ${CLASS} app (${template}${template === 'bun' ? ', experimental' : ''}): handlers over the Web Standard \`Request\` and \`Response\`, from the \`${PACKAGE}\` package.
@@ -202,6 +206,7 @@ so test a route with \`await app.request('/path')\` and no server.
 - A page mounted at \`/x\` answers \`/x\`, not \`/x/\` (trailing slashes are strict); \`trimTrailingSlash()\` redirects.
 - A \`json\` validator target reads the body only with a JSON \`Content-Type\`; a failure answers 400 with \`{ error, issues: [{ message, path }] }\`.
 - \`throw new HTTPException(404, { message })\` answers an error response (plain text).
+- **JSX syntax does not run in this app.** ${jsxNote}
 
 ## Before you say you are done
 
