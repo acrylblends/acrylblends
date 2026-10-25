@@ -134,7 +134,7 @@ describe('create', () => {
   it('nodejs: the dependency range is stamped from the framework release this package carries, so a new app never installs an older one', async () => {
     await runCreate(['ranged', '--template', 'nodejs', '-y'], fakeIo().io)
     const pkg = JSON.parse(readFileSync(join(scratch, 'ranged', 'package.json'), 'utf8'))
-    expect(pkg.dependencies).toEqual({ [PACKAGE]: `^${cliVersion}` })
+    expect(pkg.dependencies).toEqual({ [PACKAGE]: `^${cliVersion}`, typescript: '6.0.3' })
   })
 
   it('refuses a folder that is not empty and changes nothing', async () => {

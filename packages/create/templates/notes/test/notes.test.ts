@@ -1,5 +1,6 @@
 import { testClient } from '__PACKAGE__/testing'
 import assert from 'node:assert/strict'
+import type { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
 import { openDb } from '../src/db.ts'
 import { createApi, createApp } from '../src/notes-app.ts'
@@ -186,4 +187,45 @@ test('csrf refuses a form POST from another site', async () => {
     headers: { origin: 'https://evil.example' },
   })
   assert.equal(res.status, 403)
+})
+
+test('the session cookie is Secure over HTTPS, and behind a proxy only when the proxy is trusted', async () => {
+  const body = new URLSearchParams({ email: 'a@example.com', password: 'correct horse' })
+  const flags = async (url: string, headers: Record<string, string>, trustProxy: boolean) => {
+    const app = createApp(openDb(':memory:'), { trustProxy })
+    const origin = new URL(url).origin
+    const res = await app.request(url, { method: 'POST', body, headers: { origin, ...headers } })
+    assert.equal(res.status, 303)
+    return res.headers.get('set-cookie') ?? ''
+  }
+  assert.doesNotMatch(await flags('http://localhost/signup', {}, false), /Secure/i)
+  assert.match(await flags('https://localhost/signup', {}, false), /Secure/i)
+  const forwarded = { 'x-forwarded-proto': 'https' }
+  assert.doesNotMatch(await flags('http://localhost/signup', forwarded, false), /Secure/i)
+  assert.match(await flags('http://localhost/signup', forwarded, true), /Secure/i)
+})
+
+test('behind a proxy csrf accepts the public origin and still refuses others', async () => {
+  const app = createApp(openDb(':memory:'), { publicOrigin: 'https://notes.example.com' })
+  const post = (origin: string) =>
+    app.request('/signup', {
+      method: 'POST',
+      body: new URLSearchParams({ email: 'a@example.com', password: 'correct horse' }),
+      headers: { origin },
+    })
+  assert.equal((await post('https://notes.example.com')).status, 303)
+  assert.equal((await post('https://evil.example')).status, 403)
+})
+
+test('an error answers a plain 500 with no stack and no detail', async () => {
+  const broken = {
+    prepare() {
+      throw new Error('secret detail at /srv/app/db.ts:1')
+    },
+    exec() {},
+  } as unknown as DatabaseSync
+  const app = createApp(broken)
+  const res = await app.request('/notes', { headers: { cookie: 'sid=anything' } })
+  assert.equal(res.status, 500)
+  assert.equal(await res.text(), 'Internal Server Error')
 })

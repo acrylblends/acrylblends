@@ -118,6 +118,8 @@ try {
     const allowed = new Set([
       '@deepseek-ai/cordis',
       '@deepseek-ai/schemastery',
+      // `.tsx` pages are compiled at start by the app's own typescript (acrylblends/node-server/register), so a production install (`npm ci --omit=dev`) needs it.
+      'typescript',
       '@webboxes/app-persistence',
       '@webboxes/blends-core',
       'yaml',

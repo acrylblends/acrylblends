@@ -1,7 +1,9 @@
+import type { Context } from '__PACKAGE__'
 import { __CLASS__ } from '__PACKAGE__'
 import { deleteCookie, getCookie, setCookie } from '__PACKAGE__/cookie'
 import { csrf } from '__PACKAGE__/csrf'
 import { createMiddleware } from '__PACKAGE__/factory'
+import { HTTPException } from '__PACKAGE__/http-exception'
 import { schemaValidator } from '__PACKAGE__/schema-validator'
 import type { DatabaseSync } from 'node:sqlite'
 import { authStore, verifyPassword } from './auth.ts'
@@ -12,7 +14,14 @@ import { authPage, formPage, listPage } from './views.tsx'
 type Env = { Variables: { user: { id: number; email: string } } }
 
 const COOKIE = 'sid'
-const session = { path: '/', httpOnly: true, sameSite: 'Lax' as const, maxAge: 60 * 60 * 24 * 30 }
+const MONTH = 60 * 60 * 24 * 30
+
+export interface AppOptions {
+  /** Believe `X-Forwarded-Proto` (set it when a reverse proxy you run terminates HTTPS in front of the app). Default: the TRUST_PROXY=1 environment variable. */
+  trustProxy?: boolean
+  /** The address people use in the browser, for example `https://notes.example.com`. Behind a proxy the app sees `http://127.0.0.1:3000`, so csrf needs it. Default: PUBLIC_ORIGIN. */
+  publicOrigin?: string
+}
 
 export function createApi(db: DatabaseSync) {
   const auth = authStore(db)
@@ -51,12 +60,34 @@ export function createApi(db: DatabaseSync) {
 
 export type Api = ReturnType<typeof createApi>
 
-export function createApp(db: DatabaseSync = openDb()) {
+export function createApp(
+  db: DatabaseSync = openDb(),
+  {
+    trustProxy = process.env.TRUST_PROXY === '1',
+    publicOrigin = process.env.PUBLIC_ORIGIN,
+  }: AppOptions = {},
+) {
   const auth = authStore(db)
   const notes = notesStore(db)
   const app = new __CLASS__<Env>()
   // Refuses a form POST that does not come from this site (checks Origin and Sec-Fetch-Site); JSON requests are not form-shaped and pass.
-  app.use(csrf())
+  app.use(csrf(publicOrigin ? { origin: [publicOrigin] } : undefined))
+  // A secure cookie is only sent over HTTPS: set when the request is HTTPS, or a proxy we trust says it was.
+  const session = (c: Context<Env>) => ({
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax' as const,
+    maxAge: MONTH,
+    secure:
+      new URL(c.req.url).protocol === 'https:' ||
+      (trustProxy && c.req.header('x-forwarded-proto') === 'https'),
+  })
+  // The log has the stack; the page never does.
+  app.onError((error, c) => {
+    if (error instanceof HTTPException) return error.getResponse()
+    console.error(error)
+    return c.text('Internal Server Error', 500)
+  })
 
   const requireUser = createMiddleware<Env>(async (c, next) => {
     const user = auth.userFor(getCookie(c, COOKIE))
@@ -79,7 +110,7 @@ export function createApp(db: DatabaseSync = openDb()) {
       errors.push('That email already has an account. Log in instead.')
     if (errors.length > 0) return c.html(authPage('signup', errors, email), 400)
     const id = await auth.createUser(email, String(form.password))
-    setCookie(c, COOKIE, auth.startSession(id), session)
+    setCookie(c, COOKIE, auth.startSession(id), session(c))
     return c.redirect('/notes', 303)
   })
 
@@ -93,7 +124,7 @@ export function createApp(db: DatabaseSync = openDb()) {
     const user = auth.findUser(email)
     if (!user || !(await verifyPassword(String(form.password), user.password_hash)))
       return c.html(authPage('login', ['Wrong email or password.'], email), 401)
-    setCookie(c, COOKIE, auth.startSession(user.id), session)
+    setCookie(c, COOKIE, auth.startSession(user.id), session(c))
     return c.redirect('/notes', 303)
   })
 

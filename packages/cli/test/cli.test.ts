@@ -56,12 +56,14 @@ describe('templates', () => {
   })
 
   it.each(TEMPLATES)(
-    '%s lists library plugins that exist, and declares no dependency of its own',
+    '%s lists library plugins that exist, and declares only typescript of its own (the .tsx hook compiles with it at start, so a production install needs it)',
     (template) => {
       const library = readLibrary()
       for (const name of readTemplatePlugins(join(templatesRoot(), template)))
         expect(library.has(name)).toBe(true)
-      expect(manifest(join(templatesRoot(), template)).dependencies).toEqual({})
+      expect(manifest(join(templatesRoot(), template)).dependencies).toEqual({
+        typescript: '6.0.3',
+      })
     },
   )
 })
@@ -294,6 +296,7 @@ describe('init', () => {
       '@deepseek-ai/schemastery': '3.18.4',
       '@webboxes/app-persistence': '0.1.1',
       '@webboxes/blends-core': '0.4.0',
+      typescript: '6.0.3',
       yaml: '2.9.0',
     })
     expect(existsSync(join(dir, 'blend.yaml'))).toBe(true)
