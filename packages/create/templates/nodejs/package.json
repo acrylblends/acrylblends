@@ -13,10 +13,10 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "__PACKAGE__": "__RANGE__"
+    "__PACKAGE__": "__RANGE__",
+    "typescript": "6.0.3"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "6.0.3"
+    "@types/node": "^24.0.0"
   }
 }

@@ -19,9 +19,10 @@
     "save": "node src/plugins/save/cli.ts",
     "upgrade": "node src/plugins/manifest/upgrade-cli.ts"
   },
-  "dependencies": {},
-  "devDependencies": {
-    "@types/node": "^24.0.0",
+  "dependencies": {
     "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
   }
 }
