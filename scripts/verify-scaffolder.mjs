@@ -589,39 +589,64 @@ spec:
     packed,
     readdirSync(packed).find((f) => /^acrylblends-.*\.tgz$/.test(f)) ?? '',
   )
-  const notes = join(scratch, 'notes')
-  capture(
-    process.execPath,
-    [
-      join(root, 'packages', 'create', 'bin', 'create-acrylblends.js'),
-      notes,
-      '--template',
-      'notes',
-      '-y',
-    ],
-    { cwd: scratch },
-  )
-  capture(npm, ['install', frameworkTarball, '--no-audit', '--no-fund'], { cwd: notes })
-  capture(npm, ['run', 'check'], { cwd: notes })
-  capture(npm, ['test'], { cwd: notes })
-  capture(
-    process.execPath,
-    [join(notes, 'node_modules', 'acrylblends', 'bin', 'acrylblends.js'), 'add', 'desktop'],
-    {
+  const clientFile = { notes: 'counter.tsx', chat: 'chat.tsx' }
+  for (const kind of ['notes', 'chat']) {
+    const notes = join(scratch, kind)
+    capture(
+      process.execPath,
+      [
+        join(root, 'packages', 'create', 'bin', 'create-acrylblends.js'),
+        notes,
+        '--template',
+        kind,
+        '-y',
+      ],
+      { cwd: scratch },
+    )
+    capture(npm, ['install', frameworkTarball, '--no-audit', '--no-fund'], { cwd: notes })
+    capture(npm, ['run', 'check'], { cwd: notes })
+    capture(npm, ['test'], { cwd: notes })
+    capture(
+      process.execPath,
+      [join(notes, 'node_modules', 'acrylblends', 'bin', 'acrylblends.js'), 'add', 'desktop'],
+      {
+        cwd: notes,
+      },
+    )
+    capture(npm, ['install', '--no-audit', '--no-fund'], {
       cwd: notes,
-    },
-  )
-  capture(npm, ['install', '--no-audit', '--no-fund'], {
-    cwd: notes,
-    env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' },
-  })
-  if (!existsSync(join(notes, 'src', 'plugins', 'desktop-web', 'main.ts')))
-    fail('notes: add desktop did not add the plain-app shell')
-  capture(npm, ['run', 'check'], { cwd: notes })
-  capture(npm, ['test'], { cwd: notes })
-  log(
-    'notes template: created, installed from the packed framework, type-checks, every route tested, and takes the desktop shell',
-  )
+      env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' },
+    })
+    if (!existsSync(join(notes, 'src', 'plugins', 'desktop-web', 'main.ts')))
+      fail(`${kind}: add desktop did not add the plain-app shell`)
+    capture(npm, ['run', 'check'], { cwd: notes })
+    capture(npm, ['test'], { cwd: notes })
+    // Production: the client folder is compiled once (`npm run build`); then only dist/client is served, with no compiler involved.
+    capture(npm, ['run', 'build'], { cwd: notes })
+    if (
+      !existsSync(join(notes, 'dist', 'client', clientFile[kind])) ||
+      !existsSync(join(notes, 'dist', 'client', '@acrylblends', 'jsx-dom.js'))
+    )
+      fail(`${kind}: npm run build did not write dist/client`)
+    const production = capture(
+      process.execPath,
+      [
+        '--import',
+        'acrylblends/node-server/register',
+        '--input-type=module',
+        '-e',
+        "import app from './src/app.ts'; const r = await app.request('/client/" +
+          clientFile[kind] +
+          "'); console.log(r.status, r.headers.get('content-type')); process.exit(0)",
+      ],
+      { cwd: notes, env: { ...process.env, NODE_ENV: 'production' } },
+    )
+    if (!/^200 .*javascript/.test(production.trim()))
+      fail(`${kind}: production serving of dist/client answered ${production}`)
+    log(
+      `${kind} template: created, installed from the packed framework, type-checks, every route tested, and takes the desktop shell`,
+    )
+  }
   log('OK')
 } finally {
   rmSync(scratch, { recursive: true, force: true })
