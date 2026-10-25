@@ -10,7 +10,7 @@ import { packageManagerInvocation } from './spawn'
 
 export { CLASS, CREATE, PACKAGE }
 
-export const TEMPLATES = ['nodejs', 'bun', 'acryl-app'] as const
+export const TEMPLATES = ['nodejs', 'notes', 'bun', 'acryl-app'] as const
 export type Template = (typeof TEMPLATES)[number]
 export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number]
@@ -26,7 +26,7 @@ Usage:
   npm create ${PACKAGE}@latest [directory] [-- options]
 
 Options:
-  --template <name>   nodejs, bun (experimental), acryl-app (asked when not given)
+  --template <name>   nodejs, notes, bun (experimental), acryl-app (asked when not given)
   --install           install the dependencies after creating the app
   --pm <manager>      ${PACKAGE_MANAGERS.join(', ')} (default: the one that ran this command, else npm)
   -y, --yes           ask nothing: template nodejs unless --template is given, directory ${PACKAGE}-app
@@ -176,19 +176,37 @@ export function replacePlaceholders(text: string, name: string): string {
 
 /** The guide for a coding agent in a created app: where the API is, how to run it, what must pass. */
 export function agentsText(template: Exclude<Template, 'acryl-app'>, name: string): string {
-  const run = { nodejs: 'npm run dev', bun: 'bun run dev' }[template]
+  const run = { nodejs: 'npm run dev', notes: 'npm run dev', bun: 'bun run dev' }[template]
   const desktopNote =
-    template === 'nodejs'
+    template === 'nodejs' || template === 'notes'
       ? `\nTo run it as a desktop window: \`npx ${PACKAGE} add desktop\`, \`npm install\`, then \`npm run desktop\` (see \`docs/framework/getting-started/desktop.md\`).`
       : ''
   const test = {
     nodejs: 'npm test` and `npm run check',
+    notes: 'npm test` and `npm run check',
     bun: 'bun test` and `bun run check',
   }[template]
   const jsxNote =
-    template === 'nodejs'
-      ? "Write pages in `.tsx` (see `src/page.tsx`): the scripts in `package.json` run Node.js with `--import acrylblends/node-server/register`, which compiles `.tsx` with this app's own `typescript`, and `tsconfig.json` sets `jsx: react-jsx` with `jsxImportSource: acrylblends/jsx`. Render a component with `.toString()` and return it with `c.html(...)`. A command that starts the app without those scripts (a bare `node src/index.ts`) cannot load a `.tsx` file. Without a build step you can write the call JSX compiles to instead: `jsx('h1', { class: 'title' }, 'Hello')` from `'acrylblends/jsx'`, children after the props. See `docs/framework/guides/jsx.md`."
+    template === 'nodejs' || template === 'notes'
+      ? 'Write pages in `.tsx` (see `src/' +
+        (template === 'notes' ? 'views.tsx' : 'page.tsx') +
+        "`): the scripts in `package.json` run Node.js with `--import acrylblends/node-server/register`, which compiles `.tsx` with this app's own `typescript`, and `tsconfig.json` sets `jsx: react-jsx` with `jsxImportSource: acrylblends/jsx`. Render a component with `.toString()` and return it with `c.html(...)`. A command that starts the app without those scripts (a bare `node src/index.ts`) cannot load a `.tsx` file. Without a build step you can write the call JSX compiles to instead: `jsx('h1', { class: 'title' }, 'Hello')` from `'acrylblends/jsx'`, children after the props. See `docs/framework/guides/jsx.md`."
       : "Bun compiles `.tsx` itself: write pages in `.tsx`, render a component with `.toString()` and return it with `c.html(...)`. `jsx('h1', { class: 'title' }, 'Hello')` from `'acrylblends/jsx'` (children after the props) is the same thing without JSX syntax. See `docs/framework/guides/jsx.md`."
+  const notesStructure =
+    template === 'notes'
+      ? `
+## Structure (a notes app: accounts, sessions, a database)
+
+- \`src/db.ts\`: \`openDb()\` (SQLite through the built-in \`node:sqlite\`; the file is \`notes.db\` or \`$NOTES_DB\`) and \`notesStore(db)\`, the queries for notes.
+- \`src/auth.ts\`: scrypt password hashes (\`node:crypto\`) and the \`sessions\` table; the cookie \`sid\` holds a random token.
+- \`src/schema.ts\`: the rules for a note and for credentials. The HTML forms and the JSON API both use \`checkNote\`.
+- \`src/views.tsx\`: the pages, as JSX components rendered to strings, and the small script for the live character counter and the instant filter.
+- \`src/notes-app.ts\`: \`createApp(db)\` (pages and forms, csrf on) and \`createApi(db)\` (the JSON API under \`/api/notes\`, chained so \`testClient\` is typed). \`src/app.ts\` is \`export default createApp()\`; tests call \`createApp(openDb(':memory:'))\`.
+- \`test/notes.test.ts\`: a test for every route. A form POST in a test needs \`origin: 'http://localhost'\` (csrf) and the \`sid\` cookie from sign up.
+- Forms answer an invalid input with status 400 and the same page with the messages; a successful POST redirects with 303.
+- To add a column: change the \`CREATE TABLE\` in \`openDb\`, \`notesStore\`, \`checkNote\`, the form and the list in \`views.tsx\`, and the tests.
+`
+      : ''
   return `# ${name}
 
 An ${CLASS} app (${template}${template === 'bun' ? ', experimental' : ''}): handlers over the Web Standard \`Request\` and \`Response\`, from the \`${PACKAGE}\` package.
@@ -200,9 +218,10 @@ subpath (\`'${PACKAGE}/cors'\`, \`'${PACKAGE}/validator'\`, ...). Parts marked "
 
 ## This app
 
-Run it with \`${run}\`. The routes are in \`${template === 'bun' ? 'src/index.ts' : 'src/app.ts'}\`; an app is a function from \`Request\` to \`Response\`,
+Run it with \`${run}\`. The routes are in \`${template === 'bun' ? 'src/index.ts' : template === 'notes' ? 'src/notes-app.ts' : 'src/app.ts'}\`; an app is a function from \`Request\` to \`Response\`,
 so test a route with \`await app.request('/path')\` and no server.${desktopNote}
 
+${notesStructure}
 ## Things that surprise people
 
 - A page mounted at \`/x\` answers \`/x\`, not \`/x/\` (trailing slashes are strict); \`trimTrailingSlash()\` redirects.
@@ -288,7 +307,7 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
             const answer =
               (
                 await ask(
-                  `Which template do you want to use? (nodejs, bun (experimental), acryl-app) [nodejs]: `,
+                  `Which template do you want to use? (nodejs, notes, bun (experimental), acryl-app) [nodejs]: `,
                 )
               ).trim() || 'nodejs'
             if (!isTemplate(answer))
@@ -328,6 +347,7 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
     }
     const start = {
       nodejs: `${pm} run dev`,
+      notes: `${pm} run dev`,
       bun: 'bun run dev',
       'acryl-app': `${pm} run dev`,
     }[template]

@@ -1,7 +1,7 @@
 // The Notes gate's probe: starts the finished app the way a user does (`npm start`, then the desktop window) and walks it over HTTP like a browser.
 // Every step names itself, so a failure says what did not work. Returns { ok, steps } and never throws.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -26,7 +26,7 @@ async function until(fn, ms) {
   }
 }
 
-export async function probeNotes(app, env) {
+export async function probeNotes(app, env, { tags = false } = {}) {
   const steps = []
   const step = (name, ok, detail = '') => {
     steps.push(`${ok ? 'ok' : 'FAIL'} ${name}${detail && !ok ? ` (${detail})` : ''}`)
@@ -94,6 +94,24 @@ export async function probeNotes(app, env) {
       'search finds it and only it',
       found.includes('Gate note') && !missing.includes('Gate note'),
     )
+    if (tags) {
+      await call('/notes', form({ title: 'Tagged note', body: 'about tags', tags: 'alpha, beta' }))
+      await call('/notes', form({ title: 'Plain note', body: 'no tags here', tags: 'gamma' }))
+      const shown = await (await call('/notes')).text()
+      step("the list shows a note's tags", /alpha/.test(shown) && /beta/.test(shown))
+      const byTag = await (await call('/notes?tag=alpha')).text()
+      step(
+        '?tag=alpha lists only notes with that tag',
+        byTag.includes('Tagged note') && !byTag.includes('Plain note'),
+      )
+      const none = await (await call('/notes?tag=zzz')).text()
+      step('?tag=zzz lists none', !none.includes('Tagged note') && !none.includes('Plain note'))
+      const edit = (shown.match(/\/notes\/(\d+)\/edit[^>]*>Tagged note/) ?? [])[1]
+      const editPage = edit ? await (await call(`/notes/${edit}/edit`)).text() : ''
+      step('the edit form carries the tags', /alpha/.test(editPage) && /beta/.test(editPage))
+      const apiTagged = await (await call('/api/notes')).text()
+      step('the JSON API returns the tags', /alpha/.test(apiTagged) && /beta/.test(apiTagged))
+    }
     const api = await call('/api/notes')
     const body = await api.json().catch(() => undefined)
     step(
