@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { CLASS, CREATE, PACKAGE } from './names'
+import { packageManagerInvocation } from './spawn'
 
 export { CLASS, CREATE, PACKAGE }
 
@@ -68,11 +69,8 @@ export function processIo(): Io {
       : undefined,
     run: (command, args, cwd) =>
       new Promise((done) => {
-        const child = spawn(command, args, {
-          cwd,
-          stdio: 'inherit',
-          shell: process.platform === 'win32',
-        })
+        const invocation = packageManagerInvocation(command, args)
+        const child = spawn(invocation.file, invocation.args, { cwd, stdio: 'inherit' })
         child.on('error', () => done(1))
         child.on('exit', (code) => done(code ?? 1))
       }),
