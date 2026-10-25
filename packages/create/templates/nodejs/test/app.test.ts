@@ -28,3 +28,13 @@ test('an error thrown in a .tsx file names the .tsx line in its stack', async ()
   }
   assert.match(stack, /page\.tsx:\d+/)
 })
+
+test('GET /counter serves a page with a client component, and the component is compiled for the browser', async () => {
+  const page = await app.request('/counter')
+  assert.equal(page.status, 200)
+  assert.match(await page.text(), /<script type="module" src="\/client\/counter\.tsx">/)
+  const module = await app.request('/client/counter.tsx')
+  assert.equal(module.status, 200)
+  assert.match(module.headers.get('content-type') ?? '', /javascript/)
+  assert.doesNotMatch(await module.text(), /<Counter|<button/)
+})

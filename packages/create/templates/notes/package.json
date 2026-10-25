@@ -10,7 +10,8 @@
     "dev": "node --watch --import acrylblends/node-server/register src/index.ts",
     "start": "node --import acrylblends/node-server/register src/index.ts",
     "test": "node --import acrylblends/node-server/register --test \"test/**/*.test.{ts,tsx}\"",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit && tsc --noEmit -p src/client",
+    "build": "acrylblends build-client"
   },
   "dependencies": {
     "__PACKAGE__": "__RANGE__",

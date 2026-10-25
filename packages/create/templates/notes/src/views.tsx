@@ -2,12 +2,6 @@ import type { Note } from './db.ts'
 import { BODY_MAX, TITLE_MAX } from './schema.ts'
 
 const counterScript = `
-for (const area of document.querySelectorAll('[data-counter]')) {
-  const out = document.getElementById(area.dataset.counter)
-  const show = () => { out.textContent = area.value.length + ' / ' + area.maxLength }
-  area.addEventListener('input', show)
-  show()
-}
 const filter = document.getElementById('filter')
 if (filter) filter.addEventListener('input', () => {
   const q = filter.value.toLowerCase()
@@ -58,6 +52,7 @@ const Layout = ({
       </nav>
       {children}
       <script dangerouslySetInnerHTML={{ __html: counterScript }} />
+      <script type="module" src="/client/counter.tsx" />
     </body>
   </html>
 )
@@ -125,10 +120,10 @@ export const formPage = (
         <label for="title">Title</label>
         <input id="title" name="title" value={note.title} />
         <label for="body">Note</label>
-        <textarea id="body" name="body" rows={8} maxlength={BODY_MAX} data-counter="count">
+        <textarea id="body" name="body" rows={8} maxlength={BODY_MAX}>
           {note.body}
         </textarea>
-        <small id="count" aria-live="polite" />
+        <small id="count" aria-live="polite" data-island="counter" />
         <p>
           <button type="submit">Save</button> <a href="/notes">Cancel</a>
         </p>

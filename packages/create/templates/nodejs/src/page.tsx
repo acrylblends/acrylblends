@@ -12,3 +12,15 @@ export const aboutPage = (): string => (<About />).toString()
 export const failingPage = (): string => {
   throw new Error('a page failed')
 }
+
+/** A page with one client component: `src/client/counter.tsx` runs in the browser, compiled on request by `clientModules` (see src/app.ts). */
+export const counterPage = (): string =>
+  (
+    <html lang="en">
+      <body>
+        <h1>Counter</h1>
+        <div id="counter" />
+        <script type="module" src="/client/counter.tsx" />
+      </body>
+    </html>
+  ).toString()

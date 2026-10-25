@@ -192,6 +192,10 @@ export function agentsText(template: Exclude<Template, 'acryl-app'>, name: strin
         (template === 'notes' ? 'views.tsx' : 'page.tsx') +
         "`): the scripts in `package.json` run Node.js with `--import acrylblends/node-server/register`, which compiles `.tsx` with this app's own `typescript`, and `tsconfig.json` sets `jsx: react-jsx` with `jsxImportSource: acrylblends/jsx`. Render a component with `.toString()` and return it with `c.html(...)`. A command that starts the app without those scripts (a bare `node src/index.ts`) cannot load a `.tsx` file. Without a build step you can write the call JSX compiles to instead: `jsx('h1', { class: 'title' }, 'Hello')` from `'acrylblends/jsx'`, children after the props. See `docs/framework/guides/jsx.md`."
       : "Bun compiles `.tsx` itself: write pages in `.tsx`, render a component with `.toString()` and return it with `c.html(...)`. `jsx('h1', { class: 'title' }, 'Hello')` from `'acrylblends/jsx'` (children after the props) is the same thing without JSX syntax. See `docs/framework/guides/jsx.md`."
+  const clientNote =
+    template === 'nodejs'
+      ? `- **Client components** (run in the browser) live in \`src/client/\`, which has its own \`tsconfig.json\` (DOM types, no Node types); \`clientModules\` in \`src/app.ts\` compiles them when the browser asks, and \`npm run build\` compiles them once for production. See \`src/client/counter.tsx\` and \`docs/framework/guides/client-modules.md\`.\n`
+      : ''
   const notesStructure =
     template === 'notes'
       ? `
@@ -200,7 +204,8 @@ export function agentsText(template: Exclude<Template, 'acryl-app'>, name: strin
 - \`src/db.ts\`: \`openDb()\` (SQLite through the built-in \`node:sqlite\`; the file is \`notes.db\` or \`$NOTES_DB\`) and \`notesStore(db)\`, the queries for notes.
 - \`src/auth.ts\`: scrypt password hashes (\`node:crypto\`) and the \`sessions\` table; the cookie \`sid\` holds a random token.
 - \`src/schema.ts\`: the rules for a note and for credentials. The HTML forms and the JSON API both use \`checkNote\`.
-- \`src/views.tsx\`: the pages, as JSX components rendered to strings, and the small script for the live character counter and the instant filter.
+- \`src/views.tsx\`: the pages, as JSX components rendered to strings, and the small script for the instant filter.
+- \`src/client/\`: client components, with their own \`tsconfig.json\` (browser types). \`counter.tsx\` is the live character counter. \`clientModules\` in \`notes-app.ts\` compiles them when the browser asks; \`npm run build\` compiles them once into \`dist/client\` for production. See \`docs/framework/guides/client-modules.md\`.
 - \`src/notes-app.ts\`: \`createApp(db)\` (pages and forms, csrf on) and \`createApi(db)\` (the JSON API under \`/api/notes\`, chained so \`testClient\` is typed). \`src/app.ts\` is \`export default createApp()\`; tests call \`createApp(openDb(':memory:'))\`.
 - \`test/notes.test.ts\`: a test for every route. A form POST in a test needs \`origin: 'http://localhost'\` (csrf) and the \`sid\` cookie from sign up.
 - Forms answer an invalid input with status 400 and the same page with the messages; a successful POST redirects with 303.
@@ -210,7 +215,7 @@ export function agentsText(template: Exclude<Template, 'acryl-app'>, name: strin
 
 Read \`docs/framework/getting-started/deploy.md\`. In short:
 
-- Install with \`npm ci --omit=dev\` and start with \`NODE_ENV=production npm start\` (\`typescript\` stays a runtime dependency: it compiles the \`.tsx\` pages at start).
+- Install with \`npm ci --omit=dev\`, run \`npm run build\` (it compiles \`src/client\` once; with \`NODE_ENV=production\` only \`dist/client\` is served), and start with \`NODE_ENV=production npm start\` (\`typescript\` stays a runtime dependency: it compiles the \`.tsx\` pages at start).
 - The app listens on \`127.0.0.1\`; set \`HOST=0.0.0.0\` only in a container. \`PORT\` chooses the port.
 - Put the SQLite file outside the code folder (\`NOTES_DB=/var/lib/notes/notes.db\`) and back it up.
 - Behind an HTTPS reverse proxy set \`TRUST_PROXY=1\` and \`PUBLIC_ORIGIN=https://your.site\`, or the cookie is not \`Secure\` and csrf refuses form posts.
@@ -239,7 +244,7 @@ ${notesStructure}
 - \`throw new HTTPException(404, { message })\` answers an error response (plain text).
 - \`testClient(app)\` from \`'${PACKAGE}/testing'\` types only routes chained on the \`new ${CLASS}()\` expression (\`new ${CLASS}().get(...).post(...)\`); headers such as a cookie go in the second argument of each call.
 - **JSX:** ${jsxNote}
-
+${clientNote}
 ## Before you say you are done
 
 \`${test}\` pass.

@@ -15,7 +15,7 @@ function shutdown(): void {
     db.close()
     process.exit(0)
   })
-  if ('closeIdleConnections' in server) server.closeIdleConnections() // the return type also covers HTTP/2 servers, which have no such method
+  server.closeIdleConnections()
   setTimeout(() => process.exit(1), 10_000).unref()
 }
 process.once('SIGINT', shutdown)

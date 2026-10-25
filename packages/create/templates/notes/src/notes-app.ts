@@ -4,6 +4,7 @@ import { deleteCookie, getCookie, setCookie } from '__PACKAGE__/cookie'
 import { csrf } from '__PACKAGE__/csrf'
 import { createMiddleware } from '__PACKAGE__/factory'
 import { HTTPException } from '__PACKAGE__/http-exception'
+import { clientModules } from '__PACKAGE__/node-server'
 import { schemaValidator } from '__PACKAGE__/schema-validator'
 import type { DatabaseSync } from 'node:sqlite'
 import { authStore, verifyPassword } from './auth.ts'
@@ -192,5 +193,7 @@ export function createApp(
   })
 
   app.route('/api/notes', createApi(db))
+  // Client components without a bundler: src/client is compiled when the browser asks; `npm run build` compiles it once for production.
+  app.route('/client', clientModules({ root: 'src/client', compiled: 'dist/client' }))
   return app
 }
