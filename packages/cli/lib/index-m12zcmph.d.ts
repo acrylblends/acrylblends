@@ -1,7 +1,7 @@
 import { n as ContentfulStatusCode, s as ServerErrorStatusCode, t as ClientErrorStatusCode } from "./http-status-DaAwGAFL.js";
-import { T as UnionToIntersection } from "./types-CwrQjlaM.js";
-import { t as Acryl } from "./app-CmAYW1Al.js";
-import { a as ClientResponse, i as ClientRequestOptions, n as Client, s as FilterClientResponseByStatusCode } from "./types-CHesD1KG.js";
+import { E as UnionToIntersection } from "./types-D9DEXMjE.js";
+import { t as Acryl } from "./app-BdrVHBlJ.js";
+import { a as ClientResponse, i as ClientRequestOptions, n as Client, s as FilterClientResponseByStatusCode } from "./types-Bd29gh2o.js";
 
 //#region ../../plugins/acryl-router/src/core/client/client.d.ts
 declare const hc: <T extends Acryl<any, any, any>, Prefix extends string = string>(baseUrl: Prefix, options?: ClientRequestOptions) => UnionToIntersection<Client<T, Prefix>>;

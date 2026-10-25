@@ -1,2 +1,2 @@
-import { $ as Acryl, et as AcrylOptions } from "./context-Bm7rI-oK.js";
+import { $ as Acryl, et as AcrylOptions } from "./context-B5Y1lLha.js";
 export { Acryl as AcrylBase, AcrylOptions };

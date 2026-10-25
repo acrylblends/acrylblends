@@ -1,4 +1,4 @@
-import { n as UpgradeWebSocket } from "./index-UTBmM3GX.js";
+import { n as UpgradeWebSocket } from "./index-Kqou8Fjh.js";
 import { ServeStaticOptions, serveStatic } from "./node-server/serve-static.js";
 import { getConnInfo } from "./node-server/conninfo.js";
 import { AddressInfo } from "node:net";

@@ -1,5 +1,5 @@
-import { I as MiddlewareHandler, t as Context } from "./context-Bm7rI-oK.js";
-import { r as GetConnInfo, t as AddressType } from "./types-CDO6I3B0.js";
+import { I as MiddlewareHandler, t as Context } from "./context-B5Y1lLha.js";
+import { r as GetConnInfo, t as AddressType } from "./types-ZM9gIiKh.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/ip-restriction/index.d.ts
 /**
