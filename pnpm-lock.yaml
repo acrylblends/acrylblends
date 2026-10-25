@@ -223,6 +223,9 @@ importers:
 
   packages/create:
     dependencies:
+      '@webboxes/app-persistence':
+        specifier: 0.1.1
+        version: 0.1.1
       acrylblends:
         specifier: workspace:^
         version: link:../cli

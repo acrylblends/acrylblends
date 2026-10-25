@@ -1,0 +1,241 @@
+/**
+ * Templates from outside this package: `github:owner/repo[#ref]`, a scoped npm package (`@scope/name[@version]`) or a packed tarball on disk.
+ * A source is only ever downloaded and unpacked: no git clone (hooks), no lifecycle script (`npm pack --ignore-scripts`), nothing of it is run.
+ */
+import { spawnSync } from 'node:child_process'
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { join, resolve } from 'node:path'
+import { PACKAGE, TEMPLATE_MANIFEST } from './names'
+
+export type Source =
+  | { kind: 'github'; owner: string; repo: string; ref: string | undefined }
+  | { kind: 'npm'; spec: string }
+  | { kind: 'tarball'; path: string }
+
+/** What a template says about itself in `acryl.template.json`. */
+export interface Manifest {
+  name: string
+  description: string
+  /** Library plugins the template needs, added with `acrylblends add`. */
+  plugins: string[]
+}
+
+/** A source that cannot be used; the message says why and is shown as it is. */
+export class SourceError extends Error {
+  override name = 'SourceError'
+}
+
+export const SOURCE_FORMS = `github:owner/repo[#ref], @scope/name[@version], or a packed .tgz file`
+
+const LIMITS = { files: 5000, bytes: 50 * 1024 * 1024 }
+
+/** Recognise a source argument, or return `undefined` when it is not one (so the caller can report a usage error). */
+export function parseSource(text: string, cwd: string): Source | undefined {
+  const github = /^github:([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:#([A-Za-z0-9_./-]+))?$/.exec(text)
+  if (github) return { kind: 'github', owner: github[1]!, repo: github[2]!, ref: github[3] }
+  if (text.startsWith('github:')) throw new SourceError(`"${text}" is not github:owner/repo[#ref]`)
+  if (/^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*(@[A-Za-z0-9._-]+)?$/.test(text))
+    return { kind: 'npm', spec: text }
+  if (text.startsWith('@')) throw new SourceError(`"${text}" is not @scope/name[@version]`)
+  if (/\.(tgz|tar\.gz)$/.test(text)) {
+    const path = resolve(cwd, text)
+    if (!existsSync(path)) throw new SourceError(`${path} does not exist`)
+    return { kind: 'tarball', path }
+  }
+  return undefined
+}
+
+/** How the bytes of a source are obtained; real by default, replaced in tests. */
+export interface Fetchers {
+  /** The body at a URL (a GitHub tarball). */
+  download(url: string): Promise<Uint8Array>
+  /** `npm pack <spec> --ignore-scripts` into `dest`; the path of the tarball. */
+  pack(spec: string, dest: string): string
+}
+
+export const realFetchers: Fetchers = {
+  async download(url) {
+    const response = await fetch(url, { redirect: 'follow' })
+    if (!response.ok) throw new SourceError(`${url} answered ${response.status}`)
+    return new Uint8Array(await response.arrayBuffer())
+  },
+  pack(spec, dest) {
+    const result = spawnSync(
+      'npm',
+      ['pack', spec, '--ignore-scripts', '--json', '--pack-destination', dest],
+      {
+        encoding: 'utf8',
+        shell: false,
+        env: { ...process.env, npm_config_ignore_scripts: 'true' },
+      },
+    )
+    if (result.status !== 0)
+      throw new SourceError(
+        `npm could not pack ${spec}: ${(result.stderr || result.stdout).trim().split('\n').at(-1)}`,
+      )
+    const file = (JSON.parse(result.stdout) as { filename: string }[])[0]?.filename
+    if (!file) throw new SourceError(`npm packed nothing for ${spec}`)
+    return join(dest, file)
+  },
+}
+
+/** Unpack a tarball into `dir`, dropping its single top folder; refuses links, paths that leave the folder, and archives that are too big. */
+function extract(tarball: string, dir: string): void {
+  const list = spawnSync('tar', ['-tzf', tarball], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  if (list.status !== 0) throw new SourceError(`${tarball} is not a readable tar.gz archive`)
+  const entries = list.stdout.split('\n').filter(Boolean)
+  if (entries.length > LIMITS.files)
+    throw new SourceError(`the template has more than ${LIMITS.files} files`)
+  for (const entry of entries)
+    if (entry.startsWith('/') || entry.split('/').includes('..'))
+      throw new SourceError(`the archive holds a path that leaves its folder: ${entry}`)
+  mkdirSync(dir, { recursive: true })
+  const run = spawnSync('tar', ['-xzf', tarball, '-C', dir, '--strip-components=1'], {
+    encoding: 'utf8',
+  })
+  if (run.status !== 0) throw new SourceError(`could not unpack ${tarball}: ${run.stderr.trim()}`)
+  let bytes = 0
+  const walk = (folder: string) => {
+    for (const entry of readdirSync(folder)) {
+      const path = join(folder, entry)
+      const info = lstatSync(path)
+      if (info.isSymbolicLink())
+        throw new SourceError(
+          `the template holds a symbolic link (${path.slice(dir.length + 1)}); links are not allowed`,
+        )
+      if (info.isDirectory()) walk(path)
+      else bytes += info.size
+    }
+  }
+  walk(dir)
+  if (bytes > LIMITS.bytes)
+    throw new SourceError(`the template is larger than ${LIMITS.bytes / 1024 / 1024} MB`)
+}
+
+/** Download or pack a source and unpack it into `dir` (which must not exist yet). Nothing in it is run. */
+export async function fetchSource(
+  source: Source,
+  dir: string,
+  scratch: string,
+  fetchers: Fetchers,
+): Promise<void> {
+  mkdirSync(scratch, { recursive: true })
+  let tarball: string
+  if (source.kind === 'tarball') tarball = source.path
+  else if (source.kind === 'npm') tarball = fetchers.pack(source.spec, scratch)
+  else {
+    tarball = join(scratch, 'source.tar.gz')
+    writeFileSync(
+      tarball,
+      await fetchers.download(
+        `https://codeload.github.com/${source.owner}/${source.repo}/tar.gz/${source.ref ?? 'HEAD'}`,
+      ),
+    )
+  }
+  extract(tarball, dir)
+}
+
+/** Read and check `acryl.template.json`; a source without it is not a template. */
+export function readManifest(dir: string): Manifest {
+  const file = join(dir, TEMPLATE_MANIFEST)
+  if (!existsSync(file))
+    throw new SourceError(
+      `this source has no ${TEMPLATE_MANIFEST}, so it is not a template: add one with a name and a description (see the create-acrylblends guide)`,
+    )
+  let data: unknown
+  try {
+    data = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    throw new SourceError(`${TEMPLATE_MANIFEST} is not valid JSON`)
+  }
+  const m = data as Record<string, unknown>
+  if (typeof m.name !== 'string' || m.name.trim() === '')
+    throw new SourceError(`${TEMPLATE_MANIFEST} needs a "name"`)
+  if (typeof m.description !== 'string')
+    throw new SourceError(`${TEMPLATE_MANIFEST} needs a "description"`)
+  const plugins = m.plugins ?? []
+  if (
+    !Array.isArray(plugins) ||
+    plugins.some((p) => typeof p !== 'string' || !/^[a-z][a-z0-9-]*$/.test(p))
+  )
+    throw new SourceError(
+      `"plugins" in ${TEMPLATE_MANIFEST} is a list of plugin names such as "desktop"`,
+    )
+  return { name: m.name, description: m.description, plugins: plugins as string[] }
+}
+
+const SKIP = new Set(['.git', 'node_modules', TEMPLATE_MANIFEST])
+/** Lifecycle scripts npm runs on `npm install` in the app's own folder. */
+export const LIFECYCLE = [
+  'preinstall',
+  'install',
+  'postinstall',
+  'prepublish',
+  'preprepare',
+  'prepare',
+  'postprepare',
+]
+
+const isText = (buffer: Buffer) => !buffer.subarray(0, 8000).includes(0)
+
+/**
+ * Copy the unpacked template into `target`, replacing the placeholders of the built-in templates, naming the app, and pointing a dependency on the framework at
+ * the release this package carries. Returns the files written (relative paths) and the lifecycle scripts the app's package.json defines.
+ */
+export function writeTemplate(
+  from: string,
+  target: string,
+  stamp: (text: string) => string,
+  range: string,
+  name: string,
+): { files: string[]; lifecycle: Record<string, string> } {
+  const files: string[] = []
+  const walk = (src: string, dst: string, prefix: string) => {
+    mkdirSync(dst, { recursive: true })
+    for (const entry of readdirSync(src, { withFileTypes: true })) {
+      if (SKIP.has(entry.name)) continue
+      const outName = prefix === '' && entry.name === 'gitignore' ? '.gitignore' : entry.name
+      if (entry.isDirectory())
+        walk(join(src, entry.name), join(dst, outName), `${prefix}${entry.name}/`)
+      else {
+        const buffer = readFileSync(join(src, entry.name))
+        writeFileSync(join(dst, outName), isText(buffer) ? stamp(buffer.toString('utf8')) : buffer)
+        files.push(`${prefix}${outName}`)
+      }
+    }
+  }
+  walk(from, target, '')
+  const lifecycle: Record<string, string> = {}
+  const pkgFile = join(target, 'package.json')
+  if (existsSync(pkgFile)) {
+    const pkg = JSON.parse(readFileSync(pkgFile, 'utf8')) as {
+      name?: string
+      scripts?: Record<string, string>
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    pkg.name = name
+    for (const group of [pkg.dependencies, pkg.devDependencies])
+      if (group?.[PACKAGE] !== undefined) group[PACKAGE] = range
+    writeFileSync(pkgFile, `${JSON.stringify(pkg, null, 2)}\n`)
+    for (const script of LIFECYCLE)
+      if (typeof pkg.scripts?.[script] === 'string') lifecycle[script] = pkg.scripts[script]
+  }
+  return { files, lifecycle }
+}
+
+/** Remove a folder tree quietly. */
+export const removeTree = (path: string) => rmSync(path, { recursive: true, force: true })
+export { cpSync }

@@ -1,14 +1,36 @@
 import { spawn } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { CLASS, CREATE, PACKAGE } from './names'
+import { findSecrets } from '@webboxes/app-persistence'
+import { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST } from './names'
+import {
+  type Fetchers,
+  fetchSource,
+  LIFECYCLE,
+  parseSource,
+  readManifest,
+  realFetchers,
+  removeTree,
+  SOURCE_FORMS,
+  SourceError,
+  writeTemplate,
+} from './source'
 import { packageManagerInvocation } from './spawn'
 
-export { CLASS, CREATE, PACKAGE }
+export { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST }
 
 export const TEMPLATES = ['nodejs', 'notes', 'chat', 'bun', 'acryl-app'] as const
 export type Template = (typeof TEMPLATES)[number]
@@ -23,11 +45,17 @@ export const VERSION: string = (
 export const HELP = `${CREATE} ${VERSION} - create an ${CLASS} app
 
 Usage:
-  npm create ${PACKAGE}@latest [directory] [-- options]
+  npm create ${PACKAGE}@latest [directory] [source] [-- options]
+
+A source makes the app from someone else's template (it is downloaded and unpacked, nothing in it runs):
+  github:owner/repo[#ref]    a GitHub repository, as a tarball (no clone)
+  @scope/name[@version]      an npm package (npm pack --ignore-scripts)
+  ./template.tgz             a packed template on disk
+A template is a folder with an ${TEMPLATE_MANIFEST} (name, description, plugins).
 
 Options:
   --template <name>   nodejs, notes, chat, bun (experimental), acryl-app (asked when not given)
-  --install           install the dependencies after creating the app
+  --install           install the dependencies after creating the app (the lifecycle scripts it will run are listed first)
   --pm <manager>      ${PACKAGE_MANAGERS.join(', ')} (default: the one that ran this command, else npm)
   -y, --yes           ask nothing: template nodejs unless --template is given, directory ${PACKAGE}-app
   -h, --help          show this help
@@ -48,6 +76,8 @@ export interface Io {
   ask: ((question: string) => Promise<string>) | undefined
   /** Run a program, showing its output; resolves to the exit code. */
   run(command: string, args: string[], cwd: string): Promise<number>
+  /** How a template source is fetched; the real network and npm by default. */
+  fetchers?: Fetchers
 }
 
 export function processIo(): Io {
@@ -83,6 +113,8 @@ export interface CreateOptions {
   install: boolean
   pm: PackageManager | undefined
   yes: boolean
+  /** `github:owner/repo[#ref]`, `@scope/name` or a packed `.tgz`: a template from outside this package. */
+  source: string | undefined
 }
 
 export function isTemplate(value: string): value is Template {
@@ -97,7 +129,10 @@ export function parseCreateOptions(argv: readonly string[]): CreateOptions {
     throw new UsageError((error as Error).message)
   }
   const { values, positionals } = parsed
-  if (positionals.length > 1) throw new UsageError('takes at most one directory')
+  if (positionals.length > 2)
+    throw new UsageError('takes a directory and at most one template source')
+  if (positionals[1] !== undefined && values.template !== undefined)
+    throw new UsageError('give a template source or --template, not both')
   if (values.template !== undefined && !isTemplate(values.template))
     throw new UsageError(`unknown template "${values.template}" (${TEMPLATES.join(', ')})`)
   if (values.pm !== undefined && !(PACKAGE_MANAGERS as readonly string[]).includes(values.pm))
@@ -108,6 +143,7 @@ export function parseCreateOptions(argv: readonly string[]): CreateOptions {
     install: values.install === true,
     pm: values.pm as PackageManager | undefined,
     yes: values.yes === true,
+    source: positionals[1],
   }
 }
 
@@ -319,6 +355,134 @@ function acrylblendsBin(): string {
   return join(dirname(pkgFile), bin)
 }
 
+/** The lifecycle scripts a template defines and the line that says when they run. */
+const describeScripts = (scripts: Record<string, string>) =>
+  Object.entries(scripts)
+    .map(([key, value]) => `    ${key}: ${value}`)
+    .join('\n')
+
+/** Files whose text is checked for secrets: the template's own, not the framework docs copied in. */
+function textFiles(root: string): { path: string; text: string }[] {
+  const found: { path: string; text: string }[] = []
+  const walk = (dir: string, prefix: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (
+        entry.name === 'node_modules' ||
+        entry.name === '.git' ||
+        (prefix === '' && entry.name === 'docs')
+      )
+        continue
+      if (entry.isDirectory()) walk(join(dir, entry.name), `${prefix}${entry.name}/`)
+      else {
+        const buffer = readFileSync(join(dir, entry.name))
+        if (!buffer.subarray(0, 8000).includes(0))
+          found.push({ path: `${prefix}${entry.name}`, text: buffer.toString('utf8') })
+      }
+    }
+  }
+  walk(root, '')
+  return found
+}
+
+/**
+ * Create an app from a template source (`github:`, `@scope/name`, a packed tarball). The source is fetched and unpacked into a scratch folder, checked
+ * (manifest, secrets), and only then copied to the target; nothing in it is installed or run unless `--install`, which lists the scripts first.
+ */
+async function createFromSource(
+  options: CreateOptions,
+  target: string,
+  directory: string,
+  io: Io,
+): Promise<number> {
+  if (!isEmpty(target)) {
+    io.stderr.write(`error: ${target} is not empty; nothing was changed\n`)
+    return 1
+  }
+  const scratch = mkdtempSync(join(tmpdir(), 'create-acrylblends-'))
+  try {
+    const source = parseSource(options.source!, io.cwd)
+    if (!source)
+      throw new UsageError(`unknown template source "${options.source}" (${SOURCE_FORMS})`)
+    const name = nameFrom(target)
+    await fetchSource(
+      source,
+      join(scratch, 'source'),
+      join(scratch, 'download'),
+      io.fetchers ?? realFetchers,
+    )
+    const manifest = readManifest(join(scratch, 'source'))
+    const staged = join(scratch, 'app')
+    const { files, lifecycle } = writeTemplate(
+      join(scratch, 'source'),
+      staged,
+      (text) => replacePlaceholders(text, name),
+      frameworkRange(),
+      name,
+    )
+    if (!existsSync(join(staged, 'AGENTS.md')))
+      writeFileSync(
+        join(staged, 'AGENTS.md'),
+        `# ${name}\n\nAn ${CLASS} app made from the template "${manifest.name}": ${manifest.description}\n\nThe framework's API is in \`docs/framework/\` (start at \`docs/framework/README.md\`).\n`,
+      )
+    if (!existsSync(join(staged, 'CLAUDE.md')))
+      writeFileSync(join(staged, 'CLAUDE.md'), '@AGENTS.md\n')
+    const found = findSecrets(textFiles(staged))
+    if (found.length > 0) {
+      io.stderr.write(
+        `error: the template holds what looks like a secret, so nothing was created:\n${found.map((f) => `  ${f.path}:${f.line} (${f.kind})`).join('\n')}\n`,
+      )
+      return 1
+    }
+    copyDocs(staged)
+    cpSync(staged, target, { recursive: true })
+    io.stdout.write(
+      `created ${name} from ${manifest.name} (${manifest.description}) in ${target}: ${files.length} files, ${CLASS} docs in docs/framework\n`,
+    )
+    if (manifest.plugins.length > 0)
+      io.stdout.write(
+        `it needs these plugins: ${manifest.plugins.join(', ')}; add them with: npx ${PACKAGE} add ${manifest.plugins.join(' ')}\n`,
+      )
+    const pm: PackageManager =
+      options.pm ??
+      ((PACKAGE_MANAGERS as readonly string[]).find((m) =>
+        (io.env.npm_config_user_agent ?? '').startsWith(`${m}/`),
+      ) as PackageManager | undefined) ??
+      'npm'
+    const hasScripts = Object.keys(lifecycle).length > 0
+    if (options.install) {
+      const pkg = JSON.parse(readFileSync(join(target, 'package.json'), 'utf8')) as {
+        dependencies?: object
+        devDependencies?: object
+      }
+      io.stdout.write(
+        `running ${pm} install in ${directory}. This installs: ${[...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.devDependencies ?? {})].join(', ') || 'nothing'}` +
+          `${hasScripts ? `\nand runs the template's own lifecycle scripts:\n${describeScripts(lifecycle)}` : ''}\n` +
+          `(the dependencies' install scripts run too unless your ${pm} is set to ignore them)\n`,
+      )
+      if ((await io.run(pm, ['install'], target)) !== 0) {
+        io.stderr.write(`error: ${pm} install failed; run it yourself in ${directory}\n`)
+        return 1
+      }
+    } else if (hasScripts) {
+      io.stdout.write(
+        `nothing was installed or run. The template defines ${LIFECYCLE.filter((k) => lifecycle[k]).join(', ')}, which ${pm} install would run:\n${describeScripts(lifecycle)}\nread them first, or pass --install to run them.\n`,
+      )
+    }
+    io.stdout.write(
+      `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}  see the template's README or package.json scripts\n`,
+    )
+    return 0
+  } catch (error) {
+    if (error instanceof SourceError) {
+      io.stderr.write(`error: ${error.message}\nnothing was changed\n`)
+      return 1
+    }
+    throw error
+  } finally {
+    removeTree(scratch)
+  }
+}
+
 /** Create the app. Returns the exit code: 0 done, 1 refused or failed, 2 a usage error. Never calls `process.exit`. */
 export async function runCreate(argv: readonly string[], io: Io = processIo()): Promise<number> {
   try {
@@ -338,6 +502,7 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
         ? (await ask(`Project directory (${PACKAGE}-app): `)).trim() || `${PACKAGE}-app`
         : `${PACKAGE}-app`)
     const target = resolve(io.cwd, directory)
+    if (options.source !== undefined) return await createFromSource(options, target, directory, io)
     const template: Template =
       options.template ??
       (ask

@@ -5,3 +5,6 @@
 export const PACKAGE = 'acrylblends'
 export const CLASS = 'Acryl'
 export const CREATE = 'create-acrylblends'
+
+/** The file that makes a folder a template other people can create apps from (`${CREATE} <name> github:owner/repo`). */
+export const TEMPLATE_MANIFEST = 'acryl.template.json'
