@@ -21,6 +21,7 @@ import {
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+import { probeChat } from './lib/chat-probe.mjs'
 import { probeNotes } from './lib/notes-probe.mjs'
 
 const { values, positionals } = parseArgs({
@@ -49,6 +50,11 @@ PRESETS.tags = {
   path: '/login',
   notes: true,
   tags: true,
+}
+PRESETS.chat = {
+  task: 'Build a small AI chat app in this folder, using only what the docs in docs/framework and AGENTS.md say. A chat page (GET /) has a text box, a Send button and, while an answer is streaming, a Stop button. POST /api/chat takes JSON {"message": "...", "conversation": optional number} and answers a text/event-stream through acrylblends/streaming streamSSE: the answer streams token by token, as the model produces it. The server calls an OpenAI-compatible chat completions API with stream: true using fetch; the base URL comes from the environment variable DEEPSEEK_BASE_URL (default https://api.deepseek.com), the model from DEEPSEEK_MODEL (default deepseek-chat), and the key ONLY from the environment variable DEEPSEEK_API_KEY (never written to any file, never in a response or log). The browser side is a client component (acrylblends/jsx/dom, served by clientModules from src/client) that shows the answer as it arrives and whose Stop button aborts the request; the server must then abort its own request to the model (use the request signal, c.req.raw.signal), and keep what had arrived. Conversation history is stored in SQLite through node:sqlite and the earlier messages of a conversation are sent to the model with each new message. GET /api/conversations answers {"conversations":[{"id","title"}]} and GET /api/conversations/:id answers {"messages":[{"role","content"}]}; an empty message is refused with a 400 and a clear message. Tests use a mock model, never the network, and cover every route. It runs as a desktop window (npm run desktop) and `npm start` serves it on the port in the PORT environment variable. Finish when npm test and npm run check pass.',
+  path: '/',
+  chat: true,
 }
 PRESETS.notes = {
   task: 'Build a small multi-user notes app in this folder, using only what the docs in docs/framework and AGENTS.md say. Users sign up and log in with an email address and a password (form fields named email and password; password hashed with node:crypto scrypt, a cookie session). Notes are stored in SQLite through the built-in node:sqlite (no native dependencies). A signed-in user can create, edit, delete and search their own notes with HTML forms (form fields named title and body; pages at /signup, /login, /notes, /notes/new, /notes/:id/edit, with POST /signup, /login, /logout, /notes, /notes/:id (edit) and /notes/:id/delete; server-side validation with clear error messages shown on the page). One part of the UI is interactive in the browser (a live character counter on the note field, or an instant filter on the list). There is a JSON API under /api/notes that a typed client is used on in a test. Every route has a test. The app runs as a desktop window (npm run desktop) and `npm start` serves it on the port in the PORT environment variable. Finish when npm test and npm run check pass.',
@@ -178,6 +184,11 @@ let lastProbe = []
 async function probeRoute(app, env) {
   const preset = values.preset ? PRESETS[values.preset] : undefined
   const path = preset?.path ?? '/customers/count'
+  if (preset?.chat) {
+    const probe = await probeChat(app, env)
+    lastProbe = probe.steps
+    return probe.ok ? 'ok' : 'FAIL'
+  }
   if (preset?.notes) {
     const probe = await probeNotes(app, env, { tags: Boolean(preset.tags) })
     lastProbe = probe.steps
@@ -355,7 +366,7 @@ async function attempt(name) {
   const started = Date.now()
   const result = run(program, driver.args(values.task, app), app, {
     env: agentEnv,
-    timeout: values.preset === 'notes' ? 2_400_000 : 900_000,
+    timeout: values.preset === 'notes' || values.preset === 'chat' ? 2_400_000 : 900_000,
     input: '',
   })
   const seconds = Math.round((Date.now() - started) / 1000)

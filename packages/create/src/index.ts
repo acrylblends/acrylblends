@@ -10,7 +10,7 @@ import { packageManagerInvocation } from './spawn'
 
 export { CLASS, CREATE, PACKAGE }
 
-export const TEMPLATES = ['nodejs', 'notes', 'bun', 'acryl-app'] as const
+export const TEMPLATES = ['nodejs', 'notes', 'chat', 'bun', 'acryl-app'] as const
 export type Template = (typeof TEMPLATES)[number]
 export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number]
@@ -26,7 +26,7 @@ Usage:
   npm create ${PACKAGE}@latest [directory] [-- options]
 
 Options:
-  --template <name>   nodejs, notes, bun (experimental), acryl-app (asked when not given)
+  --template <name>   nodejs, notes, chat, bun (experimental), acryl-app (asked when not given)
   --install           install the dependencies after creating the app
   --pm <manager>      ${PACKAGE_MANAGERS.join(', ')} (default: the one that ran this command, else npm)
   -y, --yes           ask nothing: template nodejs unless --template is given, directory ${PACKAGE}-app
@@ -176,18 +176,24 @@ export function replacePlaceholders(text: string, name: string): string {
 
 /** The guide for a coding agent in a created app: where the API is, how to run it, what must pass. */
 export function agentsText(template: Exclude<Template, 'acryl-app'>, name: string): string {
-  const run = { nodejs: 'npm run dev', notes: 'npm run dev', bun: 'bun run dev' }[template]
+  const run = {
+    nodejs: 'npm run dev',
+    notes: 'npm run dev',
+    chat: 'npm run dev',
+    bun: 'bun run dev',
+  }[template]
   const desktopNote =
-    template === 'nodejs' || template === 'notes'
+    template === 'nodejs' || template === 'notes' || template === 'chat'
       ? `\nTo run it as a desktop window: \`npx ${PACKAGE} add desktop\`, \`npm install\`, then \`npm run desktop\` (see \`docs/framework/getting-started/desktop.md\`).`
       : ''
   const test = {
     nodejs: 'npm test` and `npm run check',
     notes: 'npm test` and `npm run check',
+    chat: 'npm test` and `npm run check',
     bun: 'bun test` and `bun run check',
   }[template]
   const jsxNote =
-    template === 'nodejs' || template === 'notes'
+    template === 'nodejs' || template === 'notes' || template === 'chat'
       ? 'Write pages in `.tsx` (see `src/' +
         (template === 'notes' ? 'views.tsx' : 'page.tsx') +
         "`): the scripts in `package.json` run Node.js with `--import acrylblends/node-server/register`, which compiles `.tsx` with this app's own `typescript`, and `tsconfig.json` sets `jsx: react-jsx` with `jsxImportSource: acrylblends/jsx`. Render a component with `.toString()` and return it with `c.html(...)`. A command that starts the app without those scripts (a bare `node src/index.ts`) cannot load a `.tsx` file. Without a build step you can write the call JSX compiles to instead: `jsx('h1', { class: 'title' }, 'Hello')` from `'acrylblends/jsx'`, children after the props. See `docs/framework/guides/jsx.md`."
@@ -195,6 +201,23 @@ export function agentsText(template: Exclude<Template, 'acryl-app'>, name: strin
   const clientNote =
     template === 'nodejs'
       ? `- **Client components** (run in the browser) live in \`src/client/\`, which has its own \`tsconfig.json\` (DOM types, no Node types); \`clientModules\` in \`src/app.ts\` compiles them when the browser asks, and \`npm run build\` compiles them once for production. See \`src/client/counter.tsx\` and \`docs/framework/guides/client-modules.md\`.\n`
+      : ''
+  const chatStructure =
+    template === 'chat'
+      ? `
+## Structure (a chat app: a streamed answer, history in a database)
+
+- \`src/llm.ts\`: \`Llm\`, what the app needs from a model (messages in, pieces out, an aborted signal stops the work), and \`openAiCompatible\`, which calls an OpenAI-compatible chat completions API with \`stream: true\`. The base URL is \`DEEPSEEK_BASE_URL\` (default \`https://api.deepseek.com\`), the model \`DEEPSEEK_MODEL\` (default \`deepseek-chat\`), the key **only** the environment variable \`DEEPSEEK_API_KEY\`, read at the moment of the call: never write it to a file, a response or a log.
+- \`src/db.ts\`: \`openDb()\` (SQLite through \`node:sqlite\`; the file is \`chat.db\` or \`$CHAT_DB\`) and \`chatStore(db)\`. The routes only call \`chatStore\`; keep SQL out of them.
+- \`src/chat-app.ts\`: \`createApp(db, llm)\`. \`POST /api/chat\` answers Server-Sent Events: \`meta\` (the conversation id), a \`token\` per piece, then \`done\` or \`error\`. The request's signal (\`c.req.raw.signal\`) goes to the model call, so a closed tab or the Stop button stops the request to the model; what had arrived is kept.
+- \`src/client/chat.tsx\`: the client component (own \`tsconfig.json\`, browser types): sends the message with \`fetch\`, reads the events as they arrive, shows the answer growing, and aborts on Stop. \`clientModules\` compiles it when the browser asks; \`npm run build\` compiles it once into \`dist/client\`. See \`docs/framework/guides/client-modules.md\`.
+- \`test/chat.test.ts\` tests every route with a mock \`Llm\` (never the network); keep it that way. \`test/server.test.ts\` starts the real server and stops it with a signal.
+- To try it with a real model: \`DEEPSEEK_API_KEY=... npm run dev\`.
+
+## Before you ship
+
+Read \`docs/framework/getting-started/deploy.md\`. In short: \`npm ci --omit=dev\`, \`npm run build\`, \`NODE_ENV=production npm start\`; the app listens on \`127.0.0.1\` (\`HOST=0.0.0.0\` only in a container); the SQLite file goes outside the code folder (\`CHAT_DB=/var/lib/chat/chat.db\`) and is backed up; the model key is an environment variable of the service (a root-only environment file for systemd), never a file in the repository. Anyone who can reach the app can spend your key: put it behind a login or on a private network before it is public.
+`
       : ''
   const notesStructure =
     template === 'notes'
@@ -233,10 +256,10 @@ subpath (\`'${PACKAGE}/cors'\`, \`'${PACKAGE}/validator'\`, ...). Parts marked "
 
 ## This app
 
-Run it with \`${run}\`. The routes are in \`${template === 'bun' ? 'src/index.ts' : template === 'notes' ? 'src/notes-app.ts' : 'src/app.ts'}\`; an app is a function from \`Request\` to \`Response\`,
+Run it with \`${run}\`. The routes are in \`${template === 'bun' ? 'src/index.ts' : template === 'notes' ? 'src/notes-app.ts' : template === 'chat' ? 'src/chat-app.ts' : 'src/app.ts'}\`; an app is a function from \`Request\` to \`Response\`,
 so test a route with \`await app.request('/path')\` and no server.${desktopNote}
 
-${notesStructure}
+${notesStructure}${chatStructure}
 ## Things that surprise people
 
 - A page mounted at \`/x\` answers \`/x\`, not \`/x/\` (trailing slashes are strict); \`trimTrailingSlash()\` redirects.
@@ -322,7 +345,7 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
             const answer =
               (
                 await ask(
-                  `Which template do you want to use? (nodejs, notes, bun (experimental), acryl-app) [nodejs]: `,
+                  `Which template do you want to use? (nodejs, notes, chat, bun (experimental), acryl-app) [nodejs]: `,
                 )
               ).trim() || 'nodejs'
             if (!isTemplate(answer))
@@ -363,6 +386,7 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
     const start = {
       nodejs: `${pm} run dev`,
       notes: `${pm} run dev`,
+      chat: `${pm} run dev`,
       bun: 'bun run dev',
       'acryl-app': `${pm} run dev`,
     }[template]

@@ -92,7 +92,7 @@ describe('options', () => {
 })
 
 describe('create', () => {
-  it.each(['nodejs', 'notes', 'bun'] as const)(
+  it.each(['nodejs', 'notes', 'chat', 'bun'] as const)(
     '%s: files, no placeholders, AGENTS.md, CLAUDE.md and the docs inside',
     async (template) => {
       const s = fakeIo()
@@ -189,6 +189,6 @@ describe('create', () => {
     const h = fakeIo()
     expect(await runCreate(['--help'], h.io)).toBe(0)
     expect(h.out()).toContain(`npm create ${PACKAGE}@latest`)
-    expect(TEMPLATES).toEqual(['nodejs', 'notes', 'bun', 'acryl-app'])
+    expect(TEMPLATES).toEqual(['nodejs', 'notes', 'chat', 'bun', 'acryl-app'])
   })
 })

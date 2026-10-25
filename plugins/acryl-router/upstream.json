@@ -2,7 +2,7 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-router",
-    "commit": "cdc083e1bbaedaeafa7494fe646bdb202ce86d09"
+    "commit": "e79bf3de59c700667ae617f5d367cc1fd2f8e037"
   },
   "vendored": [
     "src",
