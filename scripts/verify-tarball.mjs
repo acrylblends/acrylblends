@@ -3,7 +3,7 @@
 //
 //   node scripts/verify-tarball.mjs [tarball...]      (no argument: pack packages/cli and packages/create into a scratch folder first)
 //
-// 1. The name of the upstream project the framework core was ported from appears nowhere in a packed file or path (substring match, case-insensitive), except in a LICENSE file. The
+// 1. The name of the upstream project the framework core was ported from appears nowhere in a packed file or path (a case-insensitive substring match; only the whole English words honor, honour and their forms are allowed: see scripts/lib/name-gate.mjs), except in a LICENSE file. The
 //    English words that contain it (honor, honour and their forms) are not hits. The name is built from character codes so this file does not carry it either.
 // 2. No test file of a vendored plugin is shipped (`*.test.*`, `*.spec.*`, `*.case.ts`, a `test` or `tests` folder under `plugins/`): apps never receive them.
 // Prints each package's packed and unpacked size and file count.
@@ -11,10 +11,9 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { findName } from './lib/name-gate.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const name = String.fromCharCode(104, 111, 110, 111)
-const pattern = new RegExp(`${name}(?!u?r)`, 'i') // 'honor', 'honour', 'honored', 'honorific' are English, not the name
 const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-tarball-'))
 const problems = []
 
@@ -50,14 +49,14 @@ for (const tarball of tarballs) {
   for (const file of files) {
     const inside = file.slice(join(into, 'package').length + 1)
     unpacked += statSync(file).size
-    if (pattern.test(inside))
+    if (findName(inside).length > 0)
       problems.push(`${tarball.split('/').at(-1)}: the path ${inside} names the upstream project`)
     if (/(^|\/)LICENSE(\.md)?$/.test(inside)) continue
     const bytes = readFileSync(file)
     if (bytes.includes(0)) continue
     const lines = bytes.toString('utf8').split('\n')
     lines.forEach((line, index) => {
-      if (pattern.test(line))
+      if (findName(line).length > 0)
         problems.push(
           `${tarball.split('/').at(-1)}: ${inside}:${index + 1}: ${line.trim().slice(0, 120)}`,
         )
