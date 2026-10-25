@@ -22,6 +22,7 @@ import {
   PACKAGE,
   parseCreateOptions,
   runCreate,
+  TEMPLATE_MANIFEST,
   TEMPLATES,
   UsageError,
 } from '../src/index'
@@ -55,7 +56,12 @@ function fakeIo(answers: string[] = [], interactive = false) {
 
 describe('names', () => {
   it('are the ones scripts/lib/names.mjs holds, so a rename is one change in each', () => {
-    expect([PACKAGE, CLASS, CREATE]).toEqual([shared.PACKAGE, shared.CLASS, shared.CREATE])
+    expect([PACKAGE, CLASS, CREATE, TEMPLATE_MANIFEST]).toEqual([
+      shared.PACKAGE,
+      shared.CLASS,
+      shared.CREATE,
+      shared.TEMPLATE_MANIFEST,
+    ])
   })
 })
 
@@ -82,7 +88,8 @@ describe('options', () => {
     expect(() => parseCreateOptions(['--template', 'vercel'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['--template', 'deno'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['--pm', 'pip'])).toThrow(UsageError)
-    expect(() => parseCreateOptions(['a', 'b'])).toThrow(UsageError)
+    expect(parseCreateOptions(['a', 'github:o/r']).source).toBe('github:o/r')
+    expect(() => parseCreateOptions(['a', 'b', 'c'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['--nope'])).toThrow(UsageError)
   })
   it('derives a valid name from a directory', () => {

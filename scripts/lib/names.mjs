@@ -21,3 +21,6 @@ export const NOT_YET_AVAILABLE = [
   'service-worker',
   'node-ws',
 ]
+
+/** The file that makes a folder a template other people can create apps from (`create-acrylblends <name> github:owner/repo`). */
+export const TEMPLATE_MANIFEST = 'acryl.template.json'

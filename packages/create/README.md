@@ -74,3 +74,13 @@ MIT license.
 - a live character counter and an instant filter written as a small script in the page. When the client components of `acrylblends/jsx/dom` can be served without a bundler (planned for 0.7.2), they will replace that script here.
 
 `npx acrylblends add desktop` followed by `npm install` and `npm run desktop` runs it as a desktop window (see `docs/framework/getting-started/desktop.md`).
+
+## Templates from a repository or a package
+
+```sh
+npm create acrylblends@latest my-app github:owner/repo[#ref]
+npm create acrylblends@latest my-app @scope/name[@version]
+npm create acrylblends@latest my-app ./template.tgz
+```
+
+The source is downloaded as a tarball (never cloned) or packed with `npm pack --ignore-scripts`, unpacked, and read: it must hold an `acryl.template.json` (`name`, `description`, optional `plugins`), it is checked for secrets, and only then is the folder created. Nothing of the template is installed or run; if its `package.json` defines install scripts they are listed, and `--install` prints what will run before it runs. See the create-acrylblends guide in `docs/framework/guides/`.
