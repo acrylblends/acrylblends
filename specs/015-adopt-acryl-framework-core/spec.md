@@ -1,6 +1,6 @@
 # 015: Adopt the ACRYL framework core
 
-Status: implemented on branch `015-framework-core`; release 0.3.0 prepared (see docs/release-notes/0.3.0.md). Written against acrylblends `main` at `55867be` and ACRYL
+Status: shipped as acrylblends 0.3.0 (docs/release-notes/0.3.0.md); `0.3.0` is deprecated on npm and superseded by 0.5.0. The vendoring mechanism it introduced (sync script, `upstream.json` records with a commit and a digest, `verify:framework`) is how every later release took the framework, the docs, the todo template and the package README from ACRYL; since 0.5.0 the framework is also vendored as a built package (`packages/cli/lib`, record in `packages/cli/framework.json`). Written against acrylblends `main` at `55867be` and ACRYL
 branch `046-acryl-framework` at `1fdd2115` (read only).
 
 ## Decisions (coordinator, 2026-10-23)
