@@ -1,4 +1,4 @@
-import { I as MiddlewareHandler, t as Context } from "./context-Bm7rI-oK.js";
+import { I as MiddlewareHandler, t as Context } from "./context-B5Y1lLha.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/secure-headers/permissions-policy.d.ts
 type PermissionsPolicyDirective = StandardizedFeatures | ProposedFeatures | ExperimentalFeatures;

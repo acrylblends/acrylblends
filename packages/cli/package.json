@@ -1,6 +1,6 @@
 {
   "name": "acrylblends",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "The Acryl web framework (import { Acryl } from \"acrylblends\") and the acrylblends command that scaffolds Cordis apps.",
   "license": "MIT",
   "type": "module",
@@ -30,6 +30,14 @@
       "types": "./lib/http-exception.d.ts",
       "default": "./lib/http-exception.js"
     },
+    "./tiny": {
+      "types": "./lib/tiny.d.ts",
+      "default": "./lib/tiny.js"
+    },
+    "./quick": {
+      "types": "./lib/quick.d.ts",
+      "default": "./lib/quick.js"
+    },
     "./basic-auth": {
       "types": "./lib/basic-auth.d.ts",
       "default": "./lib/basic-auth.js"
@@ -41,6 +49,10 @@
     "./body-limit": {
       "types": "./lib/body-limit.d.ts",
       "default": "./lib/body-limit.js"
+    },
+    "./cache": {
+      "types": "./lib/cache.d.ts",
+      "default": "./lib/cache.js"
     },
     "./combine": {
       "types": "./lib/combine.d.ts",
@@ -94,6 +106,10 @@
       "types": "./lib/method-override.d.ts",
       "default": "./lib/method-override.js"
     },
+    "./mount": {
+      "types": "./lib/mount.d.ts",
+      "default": "./lib/mount.js"
+    },
     "./powered-by": {
       "types": "./lib/powered-by.d.ts",
       "default": "./lib/powered-by.js"
@@ -138,6 +154,10 @@
       "types": "./lib/cookie.d.ts",
       "default": "./lib/cookie.js"
     },
+    "./dev": {
+      "types": "./lib/dev.d.ts",
+      "default": "./lib/dev.js"
+    },
     "./factory": {
       "types": "./lib/factory.d.ts",
       "default": "./lib/factory.js"
@@ -145,6 +165,10 @@
     "./html": {
       "types": "./lib/html.d.ts",
       "default": "./lib/html.js"
+    },
+    "./proxy": {
+      "types": "./lib/proxy.d.ts",
+      "default": "./lib/proxy.js"
     },
     "./route": {
       "types": "./lib/route.d.ts",

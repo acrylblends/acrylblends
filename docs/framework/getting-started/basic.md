@@ -63,7 +63,7 @@ import { Acryl } from 'acrylblends'
 const app = new Acryl()
 
 app.get('/', (c) => {
-  return c.text('Hello Acryl!')
+  return c.text('Acryl!')
 })
 
 export default app
@@ -83,7 +83,7 @@ const app = new Acryl()
 app.get('/api/hello', (c) => {
   return c.json({
     ok: true,
-    message: 'Hello Acryl!',
+    message: 'Acryl!',
   })
 })
 ```
@@ -162,7 +162,7 @@ app.use(
   '/admin/*',
   basicAuth({
     username: 'admin',
-    password: 'secret',
+    password: process.env.ADMIN_PASSWORD!,
   })
 )
 
@@ -181,7 +181,7 @@ An app is a function from `Request` to `Response`, so a test needs no server:
 import { Acryl } from 'acrylblends'
 
 const app = new Acryl()
-app.get('/', (c) => c.text('Hello Acryl!'))
+app.get('/', (c) => c.text('Acryl!'))
 
 const response = await app.request('/')
 console.log(response.status, await response.text())

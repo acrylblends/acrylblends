@@ -1,4 +1,4 @@
-import { I as MiddlewareHandler, _ as Env, t as Context } from "../context-Bm7rI-oK.js";
+import { I as MiddlewareHandler, _ as Env, t as Context } from "../context-B5Y1lLha.js";
 
 //#region ../../plugins/acryl-node-server/src/adapter/serve-static.d.ts
 type ServeStaticOptions<E extends Env = Env> = {

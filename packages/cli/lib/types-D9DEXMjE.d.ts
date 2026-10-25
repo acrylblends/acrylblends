@@ -62,6 +62,8 @@ type StringLiteralUnion<T> = T | (string & Record<never, never>);
 type BufferSource = ArrayBufferView<ArrayBuffer> | ArrayBuffer;
 /** A Web Crypto key, named from the runtime's own `crypto` so the public types do not need the DOM library. */
 type CryptoKey = Awaited<ReturnType<typeof crypto.subtle.importKey>>;
+/** What the Web `Headers` constructor accepts, named from the runtime's own `Headers` so the public types do not need the DOM library. */
+type HeadersInit = NonNullable<ConstructorParameters<typeof Headers>[0]>;
 /** How a WebSocket hands binary data to `onmessage`; declared here so the public types do not need the DOM library. */
 type BinaryType = 'arraybuffer' | 'blob';
 /** The members of a WebSocket `message` event the helpers hand out (the Web `MessageEvent`, whose Node global is not generic); declared here so the public types do not need the DOM library. */
@@ -102,4 +104,4 @@ interface JsonWebKey {
   y?: string;
 }
 //#endregion
-export { SimplifyDeepArray as C, Simplify as S, UnionToIntersection as T, JsonWebKey as _, Equal as a, RemoveBlankRecord as b, IfAnyThenEmptyObject as c, IsAny as d, JSONArray as f, JSONValue as g, JSONPrimitive as h, CryptoKey as i, InterfaceToType as l, JSONParsed as m, BufferSource as n, Expect as o, JSONObject as p, CloseEvent as r, HasRequiredKeys as s, BinaryType as t, InvalidJSONValue as u, MessageEvent as v, StringLiteralUnion as w, RequiredKeysOf as x, NotEqual as y };
+export { Simplify as C, UnionToIntersection as E, RequiredKeysOf as S, StringLiteralUnion as T, JSONValue as _, Equal as a, NotEqual as b, HeadersInit as c, InvalidJSONValue as d, IsAny as f, JSONPrimitive as g, JSONParsed as h, CryptoKey as i, IfAnyThenEmptyObject as l, JSONObject as m, BufferSource as n, Expect as o, JSONArray as p, CloseEvent as r, HasRequiredKeys as s, BinaryType as t, InterfaceToType as u, JsonWebKey as v, SimplifyDeepArray as w, RemoveBlankRecord as x, MessageEvent as y };

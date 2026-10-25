@@ -1,5 +1,5 @@
-import { A as Input, J as Schema, _ as Env, h as BlankSchema, o as AcrylRequest, p as BlankEnv } from "./context-Bm7rI-oK.js";
-import { t as Acryl } from "./app-CmAYW1Al.js";
+import { A as Input, J as Schema, _ as Env, h as BlankSchema, o as AcrylRequest, p as BlankEnv } from "./context-B5Y1lLha.js";
+import { t as Acryl } from "./app-BdrVHBlJ.js";
 
 //#region ../../plugins/acryl-router/src/deprecated.d.ts
 /** @deprecated Use `Acryl` (`new Acryl()`); `App` is the 0.4 name and goes away in the next release. */

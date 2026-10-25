@@ -1,4 +1,4 @@
-import { I as MiddlewareHandler, t as Context } from "./context-Bm7rI-oK.js";
+import { I as MiddlewareHandler, t as Context } from "./context-B5Y1lLha.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/basic-auth/index.d.ts
 type MessageFunction = (c: Context) => string | object | Promise<string | object>;

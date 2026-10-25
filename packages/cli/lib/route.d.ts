@@ -1,4 +1,4 @@
-import { q as RouterRoute, t as Context } from "./context-Bm7rI-oK.js";
+import { q as RouterRoute, t as Context } from "./context-B5Y1lLha.js";
 
 //#region ../../plugins/acryl-router/src/core/helper/route/index.d.ts
 /**
