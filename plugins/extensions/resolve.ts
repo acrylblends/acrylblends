@@ -68,6 +68,10 @@ export function frameworkSpecifiers(): Record<string, string> {
     'http-exception': 'index.ts',
     types: 'index.ts',
     client: 'client.ts',
+    jsx: 'core/jsx/index.ts',
+    'jsx/jsx-runtime': 'core/jsx/jsx-runtime.ts',
+    'jsx/jsx-dev-runtime': 'core/jsx/jsx-dev-runtime.ts',
+    'jsx/streaming': 'core/jsx/streaming.ts',
   }
   for (const name of MIDDLEWARE) map[name] = 'middleware/index.ts'
   for (const name of HELPERS) map[name] = 'helpers/index.ts'
