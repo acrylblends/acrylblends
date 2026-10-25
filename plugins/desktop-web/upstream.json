@@ -5,7 +5,7 @@
       "apps/acryl-desktop/src/shell/desktop-user-data.ts": "user-data.ts",
       "apps/acryl-desktop/src/shell/shutdown.ts": "shutdown.ts"
     },
-    "commit": "7bba3ed0420d87e61d8256fa60614d22af734c8f"
+    "commit": "524406d2033cdc5ca5e01207f9ce29543bbf221b"
   },
   "rewrittenSpecifiers": 0,
   "digest": "sha256:7dfe960a8bbb476c35540d2202a7aaa62b33492c2ac3e34314e2ecfca45f32f2"

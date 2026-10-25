@@ -6,7 +6,7 @@
   "provides": [],
   "dependencies": {},
   "devDependencies": {
-    "electron": "44.0.0"
+    "electron": "44.9.3"
   },
   "scripts": {
     "desktop": "electron src/plugins/desktop-web/main.ts"

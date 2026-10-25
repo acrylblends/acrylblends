@@ -177,6 +177,10 @@ export function replacePlaceholders(text: string, name: string): string {
 /** The guide for a coding agent in a created app: where the API is, how to run it, what must pass. */
 export function agentsText(template: Exclude<Template, 'acryl-app'>, name: string): string {
   const run = { nodejs: 'npm run dev', bun: 'bun run dev' }[template]
+  const desktopNote =
+    template === 'nodejs'
+      ? `\nTo run it as a desktop window: \`npx ${PACKAGE} add desktop\`, \`npm install\`, then \`npm run desktop\` (see \`docs/framework/getting-started/desktop.md\`).`
+      : ''
   const test = {
     nodejs: 'npm test` and `npm run check',
     bun: 'bun test` and `bun run check',
@@ -197,13 +201,14 @@ subpath (\`'${PACKAGE}/cors'\`, \`'${PACKAGE}/validator'\`, ...). Parts marked "
 ## This app
 
 Run it with \`${run}\`. The routes are in \`${template === 'bun' ? 'src/index.ts' : 'src/app.ts'}\`; an app is a function from \`Request\` to \`Response\`,
-so test a route with \`await app.request('/path')\` and no server.
+so test a route with \`await app.request('/path')\` and no server.${desktopNote}
 
 ## Things that surprise people
 
 - A page mounted at \`/x\` answers \`/x\`, not \`/x/\` (trailing slashes are strict); \`trimTrailingSlash()\` redirects.
 - A \`json\` validator target reads the body only with a JSON \`Content-Type\`; a failure answers 400 with \`{ error, issues: [{ message, path }] }\`.
 - \`throw new HTTPException(404, { message })\` answers an error response (plain text).
+- \`testClient(app)\` from \`'${PACKAGE}/testing'\` types only routes chained on the \`new ${CLASS}()\` expression (\`new ${CLASS}().get(...).post(...)\`); headers such as a cookie go in the second argument of each call.
 - **JSX:** ${jsxNote}
 
 ## Before you say you are done
