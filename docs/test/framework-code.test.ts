@@ -23,6 +23,7 @@ const pagesIn = (dir: string): string[] =>
 
 interface Block {
   strict: boolean
+  worker: boolean
   page: string
   line: number
   code: string
@@ -62,7 +63,7 @@ function extract(): { checked: Block[]; skipped: { page: string; line: number; w
     const lines = text.split('\n')
     let index = 0
     for (let i = 0; i < lines.length; i++) {
-      const open = /^(\s*)```ts( twoslash| no-check)?\s*$/.exec(lines[i] ?? '')
+      const open = /^(\s*)```ts( twoslash| no-check| lib=webworker)?\s*$/.exec(lines[i] ?? '')
       if (!open) continue
       const start = i + 1
       const noCheck = open[2] === ' no-check'
@@ -87,6 +88,7 @@ function extract(): { checked: Block[]; skipped: { page: string; line: number; w
       const name = `${page.replace(/\.md$/, '').replaceAll('/', '__')}__${index++}.ts`
       checked.push({
         strict: open[2] === ' twoslash',
+        worker: open[2] === ' lib=webworker',
         page,
         line: start,
         code,
@@ -114,6 +116,7 @@ describe('framework docs: code', () => {
     )
     // A block that augments the package's interfaces (`declare module`) changes the types of every other block in the same program, so each one is checked alone.
     const augments = (block: Block) => /declare (module|global)/.test(block.code)
+    // A block fenced ` ```ts lib=webworker ` is code for a Service Worker or a Worker: it is checked with the WebWorker library (and no DOM, no Node types), alone.
     // The pages about Cordis describe an app where `acrylblends` is the vendored acryl-router plugin (the app's tsconfig `paths`, taken from the agent template); the others are the
     // public package. The two classes are separate declarations, so a block is checked against the one its page is about.
     const inCordis = (b: Block) =>
@@ -135,20 +138,29 @@ describe('framework docs: code', () => {
       name: string
       blocks: Block[]
       paths: Record<string, string[]> | undefined
+      worker?: boolean
     }[] = [
       {
         name: 'main',
-        blocks: checked.filter((b) => !augments(b) && !inCordis(b)),
+        blocks: checked.filter((b) => !b.worker && !augments(b) && !inCordis(b)),
         paths: undefined,
       },
       {
         name: 'cordis',
-        blocks: checked.filter((b) => !augments(b) && inCordis(b)),
+        blocks: checked.filter((b) => !b.worker && !augments(b) && inCordis(b)),
         paths: pluginPaths,
       },
       ...checked
-        .filter(augments)
+        .filter((b) => !b.worker && augments(b))
         .map((b) => ({ name: basename(b.file, '.ts'), blocks: [b], paths: undefined })),
+      ...checked
+        .filter((b) => b.worker)
+        .map((b) => ({
+          name: `worker-${basename(b.file, '.ts')}`,
+          blocks: [b],
+          paths: undefined,
+          worker: true,
+        })),
     ].filter((p) => p.blocks.length > 0)
     let output = ''
     for (const program of programs) {
@@ -158,7 +170,7 @@ describe('framework docs: code', () => {
         JSON.stringify({
           compilerOptions: {
             target: 'ES2024',
-            lib: ['ES2024', 'DOM', 'DOM.Iterable'],
+            lib: program.worker ? ['ES2024', 'WebWorker'] : ['ES2024', 'DOM', 'DOM.Iterable'],
             module: 'NodeNext',
             moduleResolution: 'NodeNext',
             strict: true,
@@ -166,11 +178,14 @@ describe('framework docs: code', () => {
             skipLibCheck: true,
             allowImportingTsExtensions: true,
             esModuleInterop: true,
-            types: ['node'],
+            types: program.worker ? [] : ['node'],
             typeRoots: [join(root, 'node_modules', '@types')],
             ...(program.paths ? { paths: program.paths } : {}),
           },
-          files: [join(out, 'blocks', 'ambient.d.ts'), ...program.blocks.map((b) => b.file)],
+          files: [
+            ...(program.worker ? [] : [join(out, 'blocks', 'ambient.d.ts')]),
+            ...program.blocks.map((b) => b.file),
+          ],
         }),
       )
       try {
