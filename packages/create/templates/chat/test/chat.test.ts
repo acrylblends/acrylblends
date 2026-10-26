@@ -1,8 +1,18 @@
+import type { Db } from '__PACKAGE__/db'
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import { createApp } from '../src/chat-app.ts'
-import { openDb } from '../src/db.ts'
+import { openChatDb } from '../src/db.ts'
 import type { Llm } from '../src/llm.ts'
+
+/** A fresh database in memory with the real migrations; every one is closed when the tests end. */
+const closers: (() => Promise<void>)[] = []
+after(() => Promise.all(closers.map((close) => close())))
+async function memoryDb(): Promise<Db> {
+  const { db, close } = await openChatDb(':memory:')
+  closers.push(close)
+  return db
+}
 
 /** A model that answers with fixed pieces and records what it was asked. */
 function mock(pieces: string[]) {
@@ -34,7 +44,7 @@ function events(text: string): [string, string][] {
 
 test('the answer streams as events: meta, one token per piece, done', async () => {
   const { llm } = mock(['Hel', 'lo ', 'there\nline'])
-  const app = createApp(openDb(':memory:'), llm)
+  const app = createApp(await memoryDb(), llm)
   const res = await app.request('/api/chat', post({ message: 'hi' }))
   assert.equal(res.status, 200)
   assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/)
@@ -54,7 +64,7 @@ test('the answer streams as events: meta, one token per piece, done', async () =
 
 test('history is stored, sent back to the model, and listed', async () => {
   const { llm, asked } = mock(['ok'])
-  const app = createApp(openDb(':memory:'), llm)
+  const app = createApp(await memoryDb(), llm)
   const first = events(
     await (await app.request('/api/chat', post({ message: 'first question' }))).text(),
   )
@@ -82,7 +92,7 @@ test('history is stored, sent back to the model, and listed', async () => {
 
 test('a bad message answers 400 with a message, an unknown conversation 404, and nothing reaches the model', async () => {
   const { llm, asked } = mock(['x'])
-  const app = createApp(openDb(':memory:'), llm)
+  const app = createApp(await memoryDb(), llm)
   const empty = await app.request('/api/chat', post({ message: '  ' }))
   assert.equal(empty.status, 400)
   assert.match(JSON.stringify(await empty.json()), /Write a message/)
@@ -94,7 +104,7 @@ test('a bad message answers 400 with a message, an unknown conversation 404, and
 })
 
 test('a conversation can be deleted', async () => {
-  const app = createApp(openDb(':memory:'), mock(['a']).llm)
+  const app = createApp(await memoryDb(), mock(['a']).llm)
   const first = events(await (await app.request('/api/chat', post({ message: 'hi' }))).text())
   const id = (JSON.parse(first[0]![1]) as { conversation: number }).conversation
   assert.equal((await app.request(`/api/conversations/${id}`, { method: 'DELETE' })).status, 200)
@@ -107,7 +117,7 @@ test('a failing model sends an error event with a plain message and no detail', 
     yield 'partial '
     throw new Error('upstream secret detail')
   }
-  const app = createApp(openDb(':memory:'), llm)
+  const app = createApp(await memoryDb(), llm)
   const text = await (await app.request('/api/chat', post({ message: 'hi' }))).text()
   assert.doesNotMatch(text, /secret detail/)
   const last = events(text).at(-1)
@@ -131,7 +141,7 @@ test('when the client goes away the model call is aborted and what arrived is ke
     if (signal.aborted) throw new DOMException('aborted', 'AbortError')
     yield 'never sent'
   }
-  const db = openDb(':memory:')
+  const db = await memoryDb()
   const app = createApp(db, llm)
   const controller = new AbortController()
   const res = await app.request('/api/chat', {
@@ -145,7 +155,9 @@ test('when the client goes away the model call is aborted and what arrived is ke
   controller.abort()
   assert.equal(await aborted, true)
   await new Promise((resolve) => setTimeout(resolve, 50))
-  const rows = db.prepare('SELECT role, content FROM messages ORDER BY id').all()
+  const rows = await db.all<{ role: string; content: string }>(
+    'SELECT role, content FROM messages ORDER BY id',
+  )
   assert.deepEqual(
     rows.map((r) => `${r.role}:${r.content}`),
     ['user:hi', 'assistant:first '],

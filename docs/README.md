@@ -36,6 +36,7 @@ generated Blend app the same names are the vendored plugin source in `src/plugin
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
+- [Release notes 0.7.5](release-notes/0.7.5.md) - the `db` port and numbered migrations; the notes and chat templates use them
 - [Release notes 0.7.4](release-notes/0.7.4.md) - hosting adapters (AWS Lambda, Cloudflare, Vercel, Netlify, Bun...), templates from a repository
 - [Release notes 0.7.3](release-notes/0.7.3.md) - the chat template, streaming docs
 - [Release notes 0.7.2](release-notes/0.7.2.md) - client components without a bundler, serve() on 127.0.0.1, the notes template, production-ready starters

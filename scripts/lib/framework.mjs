@@ -49,6 +49,22 @@ export const PLUGINS = {
     },
   },
   'acryl-inspect': { entries: { '': 'src/index.ts' }, testsNotRun: {} },
+  // Data (spec 049): the `db` port, and its SQLite provider as a Cordis plugin. The plain apps use `acrylblends/db` and `acrylblends/db/sqlite` instead.
+  'acryl-db': {
+    entries: {
+      '': 'src/index.ts',
+      '/cordis': 'src/cordis.ts',
+      '/conformance': 'src/conformance.ts',
+    },
+    testsNotRun: {},
+  },
+  'acryl-db-sqlite': {
+    entries: { '': 'src/index.ts', '/open': 'src/open.ts' },
+    testsNotRun: {
+      'tests/loader.spec.ts':
+        'loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install; the plain opener it wraps is tested here by open.spec.ts and conformance.spec.ts',
+    },
+  },
 }
 
 /** Folders copied verbatim from a plugin, and the notice files copied when upstream has them. */
@@ -178,11 +194,20 @@ export function readUpstream(checkout, plugin) {
     }
   }
   const notice = notices.length > 0 ? notices : null
+  // A test file whose header says `vendoring: skip - <reason>` is vendored but not run here: it tests the plugin's own build, which a copy in an app does not have.
+  const skipped = {}
+  for (const [path, bytes] of files) {
+    const marker = /^\s*\*\s*vendoring: skip - (.+(?:\n\s*\*\s+(?!\/)\S.*)*)/mu.exec(
+      bytes.toString('utf8'),
+    )
+    if (marker && path.startsWith('tests/'))
+      skipped[path] = (marker[1] ?? '').replace(/\n\s*\*\s*/gu, ' ').trim()
+  }
   for (const entry of Object.values(PLUGINS[plugin].entries)) {
     if (!files.has(entry))
       throw new Error(`${plugin}: the entry ${entry} is not in the vendored files`)
   }
-  return { files, rewritten, notice }
+  return { files, rewritten, notice, skipped }
 }
 
 export function readJson(path) {

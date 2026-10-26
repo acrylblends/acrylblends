@@ -54,8 +54,16 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
   }
   // The desktop shell has two forms: the Blend app (it needs the `instance` plugin) and a plain Acryl app (`export default app`); `desktop` means the one that fits.
   const plain = !existsSync(join(appDir, 'src', 'plugins', 'instance'))
+  if (plain && options.names.includes('db')) {
+    io.stderr.write(
+      'error: "db" is the Cordis plugin for a Blend app. A plain Acryl app opens its database with openDb from "acrylblends/db/sqlite" (see docs/framework/guides/data.md)\n',
+    )
+    return 1
+  }
   const names = options.names
     .filter((name) => !external.includes(name))
+    // `db` is the SQLite provider of the db port (it brings the port); a plain app opens its database with `acrylblends/db/sqlite` instead.
+    .map((name) => (name === 'db' ? 'acryl-db-sqlite' : name))
     .map((name) => (name === 'desktop' && plain ? 'desktop-web' : name))
   if (names.length === 0) return 0
   const already = names.filter((name) => present(appDir, name))

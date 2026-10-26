@@ -244,15 +244,15 @@ export function agentsText(template: Exclude<Template, 'acryl-app'>, name: strin
 ## Structure (a chat app: a streamed answer, history in a database)
 
 - \`src/llm.ts\`: \`Llm\`, what the app needs from a model (messages in, pieces out, an aborted signal stops the work), and \`openAiCompatible\`, which calls an OpenAI-compatible chat completions API with \`stream: true\`. The base URL is \`DEEPSEEK_BASE_URL\` (default \`https://api.deepseek.com\`), the model \`DEEPSEEK_MODEL\` (default \`deepseek-chat\`), the key **only** the environment variable \`DEEPSEEK_API_KEY\`, read at the moment of the call: never write it to a file, a response or a log.
-- \`src/db.ts\`: \`openDb()\` (SQLite through \`node:sqlite\`; the file is \`chat.db\` or \`$CHAT_DB\`) and \`chatStore(db)\`. The routes only call \`chatStore\`; keep SQL out of them.
-- \`src/chat-app.ts\`: \`createApp(db, llm)\`. \`POST /api/chat\` answers Server-Sent Events: \`meta\` (the conversation id), a \`token\` per piece, then \`done\` or \`error\`. The request's signal (\`c.req.raw.signal\`) goes to the model call, so a closed tab or the Stop button stops the request to the model; what had arrived is kept.
+- \`src/db.ts\`: \`openChatDb()\` (the \`db\` port on a SQLite file, \`data/chat.sqlite\` or \`$CHAT_DB\`, with \`migrations/\` applied on start; it returns \`{ db, close }\`) and \`chatStore(db)\`. The routes only call \`chatStore\`; keep SQL out of them. Every \`db\` call returns a promise: \`await\` it. The shape of the database is \`migrations/NNN-name.sql\`: to change it add the next numbered file and never edit one that has run. See \`docs/framework/guides/data.md\`.
+- \`src/app.ts\` opens the database (top-level \`await\`) and exports the app and \`close\`; \`src/index.ts\` serves it and closes the database on SIGTERM. \`src/chat-app.ts\`: \`createApp(db, llm)\`. \`POST /api/chat\` answers Server-Sent Events: \`meta\` (the conversation id), a \`token\` per piece, then \`done\` or \`error\`. The request's signal (\`c.req.raw.signal\`) goes to the model call, so a closed tab or the Stop button stops the request to the model; what had arrived is kept.
 - \`src/client/chat.tsx\`: the client component (own \`tsconfig.json\`, browser types): sends the message with \`fetch\`, reads the events as they arrive, shows the answer growing, and aborts on Stop. \`clientModules\` compiles it when the browser asks; \`npm run build\` compiles it once into \`dist/client\`. See \`docs/framework/guides/client-modules.md\`.
 - \`test/chat.test.ts\` tests every route with a mock \`Llm\` (never the network); keep it that way. \`test/server.test.ts\` starts the real server and stops it with a signal.
 - To try it with a real model: \`DEEPSEEK_API_KEY=... npm run dev\`.
 
 ## Before you ship
 
-Read \`docs/framework/getting-started/deploy.md\`. In short: \`npm ci --omit=dev\`, \`npm run build\`, \`NODE_ENV=production npm start\`; the app listens on \`127.0.0.1\` (\`HOST=0.0.0.0\` only in a container); the SQLite file goes outside the code folder (\`CHAT_DB=/var/lib/chat/chat.db\`) and is backed up; the model key is an environment variable of the service (a root-only environment file for systemd), never a file in the repository. Anyone who can reach the app can spend your key: put it behind a login or on a private network before it is public.
+Read \`docs/framework/getting-started/deploy.md\`. In short: \`npm ci --omit=dev\`, \`npm run build\`, \`NODE_ENV=production npm start\`; the app listens on \`127.0.0.1\` (\`HOST=0.0.0.0\` only in a container); the SQLite file goes outside the code folder (\`CHAT_DB=/var/lib/chat/chat.sqlite\`) and is backed up; the model key is an environment variable of the service (a root-only environment file for systemd), never a file in the repository. Anyone who can reach the app can spend your key: put it behind a login or on a private network before it is public.
 `
       : ''
   const notesStructure =
@@ -260,15 +260,16 @@ Read \`docs/framework/getting-started/deploy.md\`. In short: \`npm ci --omit=dev
       ? `
 ## Structure (a notes app: accounts, sessions, a database)
 
-- \`src/db.ts\`: \`openDb()\` (SQLite through the built-in \`node:sqlite\`; the file is \`notes.db\` or \`$NOTES_DB\`) and \`notesStore(db)\`, the queries for notes.
+- \`src/db.ts\`: \`openNotesDb()\` (the \`db\` port on a SQLite file, \`data/notes.sqlite\` or \`$NOTES_DB\`, with \`migrations/\` applied on start; it returns \`{ db, close }\`) and \`notesStore(db)\`, the queries for notes. Every \`db\` call returns a promise: \`await\` it. Use \`?\` bindings, never string-built SQL. See \`docs/framework/guides/data.md\`.
+- \`migrations/\`: the shape of the database, one numbered file per change (\`001-notes.sql\`). A file that has run is never edited; a change is the next file (\`002-name.sql\`).
 - \`src/auth.ts\`: scrypt password hashes (\`node:crypto\`) and the \`sessions\` table; the cookie \`sid\` holds a random token.
 - \`src/schema.ts\`: the rules for a note and for credentials. The HTML forms and the JSON API both use \`checkNote\`.
 - \`src/views.tsx\`: the pages, as JSX components rendered to strings, and the small script for the instant filter.
 - \`src/client/\`: client components, with their own \`tsconfig.json\` (browser types). \`counter.tsx\` is the live character counter. \`clientModules\` in \`notes-app.ts\` compiles them when the browser asks; \`npm run build\` compiles them once into \`dist/client\` for production. See \`docs/framework/guides/client-modules.md\`.
-- \`src/notes-app.ts\`: \`createApp(db)\` (pages and forms, csrf on) and \`createApi(db)\` (the JSON API under \`/api/notes\`, chained so \`testClient\` is typed). \`src/app.ts\` is \`export default createApp()\`; tests call \`createApp(openDb(':memory:'))\`.
+- \`src/notes-app.ts\`: \`createApp(db)\` (pages and forms, csrf on) and \`createApi(db)\` (the JSON API under \`/api/notes\`, chained so \`testClient\` is typed). \`src/app.ts\` opens the database (top-level \`await\`) and exports the app and \`close\`; \`src/index.ts\` serves it and closes the database on SIGTERM. Tests open \`openNotesDb(':memory:')\` and pass its \`db\` to \`createApp\`.
 - \`test/notes.test.ts\`: a test for every route. A form POST in a test needs \`origin: 'http://localhost'\` (csrf) and the \`sid\` cookie from sign up.
 - Forms answer an invalid input with status 400 and the same page with the messages; a successful POST redirects with 303.
-- To add a column: change the \`CREATE TABLE\` in \`openDb\`, \`notesStore\`, \`checkNote\`, the form and the list in \`views.tsx\`, and the tests.
+- To add a column or a table: write the next migration (\`migrations/002-name.sql\`), then change \`notesStore\`, \`checkNote\`, the form and the list in \`views.tsx\`, and the tests. Do not edit \`001-notes.sql\`.
 
 ## Before you ship
 
@@ -276,7 +277,7 @@ Read \`docs/framework/getting-started/deploy.md\`. In short:
 
 - Install with \`npm ci --omit=dev\`, run \`npm run build\` (it compiles \`src/client\` once; with \`NODE_ENV=production\` only \`dist/client\` is served), and start with \`NODE_ENV=production npm start\` (\`typescript\` stays a runtime dependency: it compiles the \`.tsx\` pages at start).
 - The app listens on \`127.0.0.1\`; set \`HOST=0.0.0.0\` only in a container. \`PORT\` chooses the port.
-- Put the SQLite file outside the code folder (\`NOTES_DB=/var/lib/notes/notes.db\`) and back it up.
+- Put the SQLite file outside the code folder (\`NOTES_DB=/var/lib/notes/notes.sqlite\`) and back it up.
 - Behind an HTTPS reverse proxy set \`TRUST_PROXY=1\` and \`PUBLIC_ORIGIN=https://your.site\`, or the cookie is not \`Secure\` and csrf refuses form posts.
 - \`npm test\` includes a test that starts the server and stops it with SIGTERM; keep it passing if you change \`src/index.ts\`.
 `

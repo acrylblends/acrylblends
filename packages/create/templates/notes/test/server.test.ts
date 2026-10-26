@@ -15,7 +15,7 @@ async function start(env: Record<string, string> = {}) {
       env: {
         ...process.env,
         PORT: '0',
-        NOTES_DB: join(mkdtempSync(join(tmpdir(), 'notes-')), 'notes.db'),
+        NOTES_DB: join(mkdtempSync(join(tmpdir(), 'notes-')), 'notes.sqlite'),
         ...env,
       },
       stdio: ['ignore', 'pipe', 'inherit'],

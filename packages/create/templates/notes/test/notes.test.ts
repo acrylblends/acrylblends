@@ -1,9 +1,18 @@
+import type { Db } from '__PACKAGE__/db'
 import { testClient } from '__PACKAGE__/testing'
 import assert from 'node:assert/strict'
-import type { DatabaseSync } from 'node:sqlite'
-import { test } from 'node:test'
-import { openDb } from '../src/db.ts'
+import { after, test } from 'node:test'
+import { openNotesDb } from '../src/db.ts'
 import { createApi, createApp } from '../src/notes-app.ts'
+
+/** A fresh database in memory with the real migrations; every one is closed when the tests end. */
+const closers: (() => Promise<void>)[] = []
+after(() => Promise.all(closers.map((close) => close())))
+async function memoryDb(): Promise<Db> {
+  const { db, close } = await openNotesDb(':memory:')
+  closers.push(close)
+  return db
+}
 
 const form = (data: Record<string, string>, cookie = ''): RequestInit => ({
   method: 'POST',
@@ -18,7 +27,7 @@ async function signedUp(app: ReturnType<typeof createApp>, email = 'a@example.co
 }
 
 test('the home page sends a visitor to the notes, which send them to log in', async () => {
-  const app = createApp(openDb(':memory:'))
+  const app = createApp(await memoryDb())
   assert.equal((await app.request('/')).headers.get('location'), '/notes')
   const res = await app.request('/notes')
   assert.equal(res.status, 302)
@@ -26,7 +35,7 @@ test('the home page sends a visitor to the notes, which send them to log in', as
 })
 
 test('sign up validates, refuses a duplicate, and starts a session', async () => {
-  const app = createApp(openDb(':memory:'))
+  const app = createApp(await memoryDb())
   assert.match(await (await app.request('/signup')).text(), /Create account/)
   const bad = await app.request('/signup', form({ email: 'nope', password: 'short' }))
   assert.equal(bad.status, 400)
@@ -44,7 +53,7 @@ test('sign up validates, refuses a duplicate, and starts a session', async () =>
 })
 
 test('log in checks the password; log out ends the session', async () => {
-  const app = createApp(openDb(':memory:'))
+  const app = createApp(await memoryDb())
   const first = await signedUp(app)
   assert.match(await (await app.request('/login')).text(), /Log in/)
   const wrong = await app.request(
@@ -69,7 +78,7 @@ test('log in checks the password; log out ends the session', async () => {
 })
 
 test('create, search, edit and delete a note through the forms', async () => {
-  const app = createApp(openDb(':memory:'))
+  const app = createApp(await memoryDb())
   const cookie = await signedUp(app)
   assert.match(
     await (await app.request('/notes/new', { headers: { cookie } })).text(),
@@ -123,7 +132,7 @@ test('create, search, edit and delete a note through the forms', async () => {
 })
 
 test("one user cannot read or change another user's notes", async () => {
-  const app = createApp(openDb(':memory:'))
+  const app = createApp(await memoryDb())
   const alice = await signedUp(app, 'alice@example.com')
   const bob = await signedUp(app, 'bob@example.com')
   await app.request('/notes', form({ title: 'Secret', body: 'alice only' }, alice))
@@ -133,7 +142,7 @@ test("one user cannot read or change another user's notes", async () => {
 })
 
 test('the JSON API needs a session and validates input', async () => {
-  const db = openDb(':memory:')
+  const db = await memoryDb()
   const app = createApp(db)
   const cookie = await signedUp(app)
   const res = await app.request('/api/notes')
@@ -149,7 +158,7 @@ test('the JSON API needs a session and validates input', async () => {
 })
 
 test('the typed client covers every API route', async () => {
-  const db = openDb(':memory:')
+  const db = await memoryDb()
   const app = createApp(db)
   const cookie = await signedUp(app)
   const client = testClient(createApi(db))
@@ -180,7 +189,7 @@ test('the typed client covers every API route', async () => {
 })
 
 test('csrf refuses a form POST from another site', async () => {
-  const app = createApp(openDb(':memory:'))
+  const app = createApp(await memoryDb())
   const res = await app.request('/signup', {
     method: 'POST',
     body: new URLSearchParams({ email: 'a@example.com', password: 'correct horse' }),
@@ -192,7 +201,7 @@ test('csrf refuses a form POST from another site', async () => {
 test('the session cookie is Secure over HTTPS, and behind a proxy only when the proxy is trusted', async () => {
   const body = new URLSearchParams({ email: 'a@example.com', password: 'correct horse' })
   const flags = async (url: string, headers: Record<string, string>, trustProxy: boolean) => {
-    const app = createApp(openDb(':memory:'), { trustProxy })
+    const app = createApp(await memoryDb(), { trustProxy })
     const origin = new URL(url).origin
     const res = await app.request(url, { method: 'POST', body, headers: { origin, ...headers } })
     assert.equal(res.status, 303)
@@ -206,7 +215,7 @@ test('the session cookie is Secure over HTTPS, and behind a proxy only when the 
 })
 
 test('behind a proxy csrf accepts the public origin and still refuses others', async () => {
-  const app = createApp(openDb(':memory:'), { publicOrigin: 'https://notes.example.com' })
+  const app = createApp(await memoryDb(), { publicOrigin: 'https://notes.example.com' })
   const post = (origin: string) =>
     app.request('/signup', {
       method: 'POST',
@@ -218,12 +227,10 @@ test('behind a proxy csrf accepts the public origin and still refuses others', a
 })
 
 test('an error answers a plain 500 with no stack and no detail', async () => {
-  const broken = {
-    prepare() {
-      throw new Error('secret detail at /srv/app/db.ts:1')
-    },
-    exec() {},
-  } as unknown as DatabaseSync
+  const fail = async (): Promise<never> => {
+    throw new Error('secret detail at /srv/app/db.ts:1')
+  }
+  const broken: Db = { exec: fail, run: fail, get: fail, all: fail, transaction: fail }
   const app = createApp(broken)
   const res = await app.request('/notes', { headers: { cookie: 'sid=anything' } })
   assert.equal(res.status, 500)
@@ -231,7 +238,7 @@ test('an error answers a plain 500 with no stack and no detail', async () => {
 })
 
 test('the note form loads the character counter, a client component compiled for the browser', async () => {
-  const app = createApp(openDb(':memory:'))
+  const app = createApp(await memoryDb())
   const cookie = await signedUp(app)
   assert.match(
     await (await app.request('/notes/new', { headers: { cookie } })).text(),

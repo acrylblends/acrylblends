@@ -1,9 +1,9 @@
 import { __CLASS__ } from '__PACKAGE__'
+import type { Db } from '__PACKAGE__/db'
 import { clientModules } from '__PACKAGE__/node-server'
 import { type StandardSchema, schemaValidator } from '__PACKAGE__/schema-validator'
 import { streamSSE } from '__PACKAGE__/streaming'
-import type { DatabaseSync } from 'node:sqlite'
-import { chatStore, openDb } from './db.ts'
+import { chatStore } from './db.ts'
 import { type Llm, openAiCompatible } from './llm.ts'
 import { chatPage } from './page.tsx'
 
@@ -30,41 +30,45 @@ const ChatSchema: StandardSchema<ChatInput> = {
   },
 }
 
-export function createApp(db: DatabaseSync = openDb(), llm: Llm = openAiCompatible) {
+export function createApp(db: Db, llm: Llm = openAiCompatible) {
   const store = chatStore(db)
   const app = new __CLASS__()
 
-  app.get('/', (c) => {
+  app.get('/', async (c) => {
     const id = Number(c.req.query('c'))
-    const current = Number.isInteger(id) ? store.conversation(id) : undefined
+    const current = Number.isInteger(id) ? await store.conversation(id) : undefined
     return c.html(
-      chatPage(store.conversations(), current, current ? store.messages(current.id) : []),
+      chatPage(
+        await store.conversations(),
+        current,
+        current ? await store.messages(current.id) : [],
+      ),
     )
   })
 
-  app.get('/api/conversations', (c) => c.json({ conversations: store.conversations() }))
-  app.get('/api/conversations/:id', (c) => {
+  app.get('/api/conversations', async (c) => c.json({ conversations: await store.conversations() }))
+  app.get('/api/conversations/:id', async (c) => {
     const id = Number(c.req.param('id'))
-    const conversation = store.conversation(id)
+    const conversation = await store.conversation(id)
     return conversation
-      ? c.json({ conversation, messages: store.messages(id) })
+      ? c.json({ conversation, messages: await store.messages(id) })
       : c.json({ error: 'No such conversation.' }, 404)
   })
-  app.delete('/api/conversations/:id', (c) =>
-    store.remove(Number(c.req.param('id')))
+  app.delete('/api/conversations/:id', async (c) =>
+    (await store.remove(Number(c.req.param('id'))))
       ? c.json({ ok: true })
       : c.json({ error: 'No such conversation.' }, 404),
   )
 
   // The answer streams as Server-Sent Events: `meta` (the conversation id), then one `token` per piece, then `done`, or `error`.
   // The request's signal aborts when the client goes away (the Stop button, a closed tab); it is passed to the model call so the upstream request stops too.
-  app.post('/api/chat', schemaValidator('json', ChatSchema), (c) => {
+  app.post('/api/chat', schemaValidator('json', ChatSchema), async (c) => {
     const { message, conversation } = c.req.valid('json')
-    const known = conversation === undefined ? undefined : store.conversation(conversation)
+    const known = conversation === undefined ? undefined : await store.conversation(conversation)
     if (conversation !== undefined && !known) return c.json({ error: 'No such conversation.' }, 404)
-    const id = known?.id ?? store.start(message)
-    store.add(id, 'user', message)
-    const history = store.messages(id).map(({ role, content }) => ({ role, content }))
+    const id = known?.id ?? (await store.start(message))
+    await store.add(id, 'user', message)
+    const history = (await store.messages(id)).map(({ role, content }) => ({ role, content }))
     const signal = c.req.raw.signal
     return streamSSE(c, async (stream) => {
       let answer = ''
@@ -86,7 +90,7 @@ export function createApp(db: DatabaseSync = openDb(), llm: Llm = openAiCompatib
         }
       } finally {
         // What arrived is kept, also when the reader pressed Stop.
-        if (answer !== '') store.add(id, 'assistant', answer)
+        if (answer !== '') await store.add(id, 'assistant', answer)
       }
     })
   })

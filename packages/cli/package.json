@@ -1,6 +1,6 @@
 {
   "name": "acrylblends",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "The Acryl web framework (import { Acryl } from \"acrylblends\") and the acrylblends command that scaffolds Cordis apps.",
   "license": "MIT",
   "type": "module",
@@ -417,6 +417,14 @@
     "./node-server/register": {
       "types": "./lib/node-server/register.d.ts",
       "default": "./lib/node-server/register.js"
+    },
+    "./db": {
+      "types": "./lib/db.d.ts",
+      "default": "./lib/db.js"
+    },
+    "./db/sqlite": {
+      "types": "./lib/db/sqlite.d.ts",
+      "default": "./lib/db/sqlite.js"
     },
     "./package.json": "./package.json",
     "./cli": {
