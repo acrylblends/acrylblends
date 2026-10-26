@@ -582,6 +582,52 @@ spec:
   log(
     'add db: the port and the SQLite provider copied, installed, type-check, and a plugin that injects db reads and writes through numbered migrations',
   )
+  // `add kv`: the port and the JSON-file provider arrive with their npm packages; the provider writes the file and serves `kv` to a plugin that injects it.
+  const withKv = join(scratch, 'with-kv')
+  capture(process.execPath, [
+    cli,
+    'init',
+    withKv,
+    '--name',
+    'verify-kv',
+    '--yes',
+    '--template',
+    'blank',
+  ])
+  capture(process.execPath, [cli, 'add', 'kv', '--dir', withKv])
+  for (const name of ['acryl-kv', 'acryl-kv-json'])
+    if (!existsSync(join(withKv, 'src', 'plugins', name, 'src', 'index.ts')))
+      fail(`add kv: ${name} was not copied`)
+  capture(npm, ['install', '--no-audit', '--no-fund'], { cwd: withKv })
+  capture(npm, ['run', 'check'], { cwd: withKv })
+  writeFileSync(
+    join(withKv, 'kv-probe.ts'),
+    [
+      "import { Context } from '@deepseek-ai/cordis'",
+      "import { join } from 'node:path'",
+      "import * as kvJson from './src/plugins/acryl-kv-json/src/index.ts'",
+      "import type {} from './src/plugins/acryl-kv/src/cordis.ts'",
+      'const root = new Context()',
+      "root.plugin(kvJson, { path: join(process.cwd(), 'probe-kv.json') })",
+      'let seen = 0',
+      "root.plugin({ name: 'consumer', inject: ['kv'], apply: async (ctx) => {",
+      "  await ctx.kv.set('theme', 'dark')",
+      "  seen = await ctx.kv.update<number>('visits', (n) => (n ?? 0) + 1)",
+      '} })',
+      'await new Promise((resolve) => setTimeout(resolve, 500))',
+      'await root.fiber.dispose()',
+      'process.exit(seen === 1 ? 0 : 1)',
+      '',
+    ].join('\n'),
+  )
+  capture(process.execPath, ['--experimental-strip-types', '--no-warnings', 'kv-probe.ts'], {
+    cwd: withKv,
+  })
+  if (!JSON.parse(readFileSync(join(withKv, 'probe-kv.json'), 'utf8')).entries.theme)
+    fail('add kv: the provider did not write the file')
+  log(
+    'add kv: the port and the JSON-file provider copied, installed, type-check, and a plugin that injects kv reads and writes the file',
+  )
   // The desktop shell (spec 018): `init --desktop` adds electron as a development dependency and a script, the app's own code never imports electron, the whole app type-checks
   // against electron's types, and the app's server starts and stops with no Electron involved (the project's own tests). The window itself is verify-desktop.mjs.
   const desktop = join(scratch, 'desktop')

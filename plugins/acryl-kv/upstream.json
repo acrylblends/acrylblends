@@ -1,0 +1,18 @@
+{
+  "source": {
+    "repo": "acryldev/acryl",
+    "path": "plugins/acryl-kv",
+    "commit": "f8e385e4389fe2fdc6fd2a4366a7f2a7389faacb"
+  },
+  "vendored": [
+    "src",
+    "tests",
+    "LICENSE"
+  ],
+  "rewrittenSpecifiers": 0,
+  "digest": "sha256:dbf0d156d0f3d3b394e48cba87b015362f2720c96a3b198ae97ac5bea61c4ae4",
+  "testsNotRun": {},
+  "notice": [
+    "LICENSE"
+  ]
+}
