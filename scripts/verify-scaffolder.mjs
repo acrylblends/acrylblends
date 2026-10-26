@@ -565,6 +565,20 @@ spec:
   capture(process.execPath, ['--experimental-strip-types', '--no-warnings', 'db-probe.ts'], {
     cwd: withDb,
   })
+  // The dependency rule: the app as `add db` leaves it passes; a driver planted in a plugin is named by file and line.
+  capture(process.execPath, [cli, 'check-deps'], { cwd: withDb })
+  mkdirSync(join(withDb, 'src', 'plugins', 'things'), { recursive: true })
+  writeFileSync(
+    join(withDb, 'src', 'plugins', 'things', 'index.ts'),
+    "export const inject = ['db']\nimport { DatabaseSync } from 'node:sqlite'\nexport { DatabaseSync }\n",
+  )
+  const planted = spawnSync(process.execPath, [cli, 'check-deps'], {
+    cwd: withDb,
+    encoding: 'utf8',
+  })
+  if (planted.status !== 1 || !planted.stderr.includes('src/plugins/things/index.ts:2:'))
+    fail(`add db: check-deps did not name the planted import: ${planted.status} ${planted.stderr}`)
+  rmSync(join(withDb, 'src', 'plugins', 'things'), { recursive: true, force: true })
   log(
     'add db: the port and the SQLite provider copied, installed, type-check, and a plugin that injects db reads and writes through numbered migrations',
   )
@@ -691,6 +705,16 @@ spec:
     )
     if (!/^200 .*javascript/.test(production.trim()))
       fail(`${kind}: production serving of dist/client answered ${production}`)
+    // The dependency rule: a driver imported in a route file is named by file and line, and the template's own check passes without it.
+    writeFileSync(
+      join(notes, 'src', 'planted.ts'),
+      "import { DatabaseSync } from 'node:sqlite'\nexport { DatabaseSync }\n",
+    )
+    const planted = spawnSync(npm, ['run', '--silent', 'check'], { cwd: notes, encoding: 'utf8' })
+    rmSync(join(notes, 'src', 'planted.ts'))
+    if (planted.status === 0 || !planted.stderr.includes('src/planted.ts:1:'))
+      fail(`${kind}: the dependency rule did not name the planted import: ${planted.stderr}`)
+    capture(npm, ['run', 'check'], { cwd: notes })
     log(
       `${kind} template: created, installed from the packed framework, type-checks, every route tested, and takes the desktop shell`,
     )

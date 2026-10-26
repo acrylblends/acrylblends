@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util'
 import { UsageError } from './init'
 import type { Io } from './io'
 import { closure, copyPlugin, type LibraryPlugin, readLibrary } from './library'
-import { appendGitignore, mergeDependencies, mergeTooling } from './project'
+import { appendGitignore, mergeDependencies, mergeOpener, mergeTooling } from './project'
 
 export interface AddOptions {
   readonly names: readonly string[]
@@ -82,6 +82,8 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     addedDependencies.push(...mergeDependencies(appDir, plugin.dependencies))
     const tooling = mergeTooling(appDir, plugin)
     appendGitignore(appDir, plugin.gitignore)
+    // The provider is mounted from src/app.ts, which is therefore the one file that may import it (`acrylblends check-deps`).
+    if (plugin.name === 'acryl-db-sqlite') mergeOpener(appDir, 'src/app.ts')
     addedDependencies.push(...tooling.devDependencies)
     if (tooling.scripts.length > 0)
       io.stdout.write(

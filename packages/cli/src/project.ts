@@ -130,6 +130,19 @@ export function mergeDependencies(
   return added
 }
 
+/** Declare a file as an opener in package.json (`"acryl": { "opener": [...] }`): the one place that may import a database provider. */
+export function mergeOpener(appDir: string, opener: string): void {
+  const file = join(appDir, 'package.json')
+  const manifest = JSON.parse(readFileSync(file, 'utf8')) as {
+    acryl?: { opener?: string | string[] }
+  }
+  const current = manifest.acryl?.opener
+  const list = typeof current === 'string' ? [current] : (current ?? [])
+  if (list.includes(opener)) return
+  manifest.acryl = { ...manifest.acryl, opener: [...list, opener] }
+  writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)
+}
+
 /**
  * Add a plugin's development dependencies and scripts to an app's package.json: nothing the app already has is replaced. Returns the names of the development dependencies
  * and scripts added.

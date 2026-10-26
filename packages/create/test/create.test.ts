@@ -128,6 +128,10 @@ describe('create', () => {
     expect(notes).toContain('## Before you ship')
     expect(notes).toContain('docs/framework/getting-started/deploy.md')
     expect(notes).toContain('src/notes-app.ts')
+    expect(notes).toContain('check-deps')
+    expect(
+      JSON.parse(readFileSync(join(scratch, 'shipped', 'package.json'), 'utf8')).acryl.opener,
+    ).toBe('src/db.ts')
     await runCreate(['plain', '--template', 'nodejs', '-y'], fakeIo().io)
     expect(readFileSync(join(scratch, 'plain', 'AGENTS.md'), 'utf8')).not.toContain(
       'Before you ship',

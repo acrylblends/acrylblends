@@ -3,14 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "acryl": {
+    "opener": "src/db.ts"
+  },
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
     "dev": "node --watch --import acrylblends/node-server/register src/index.ts",
     "start": "node --import acrylblends/node-server/register src/index.ts",
-    "test": "node --import acrylblends/node-server/register --test \"test/**/*.test.{ts,tsx}\"",
-    "check": "tsc --noEmit && tsc --noEmit -p src/client",
+    "test": "acrylblends check-deps && node --import acrylblends/node-server/register --test \"test/**/*.test.{ts,tsx}\"",
+    "check": "tsc --noEmit && tsc --noEmit -p src/client && acrylblends check-deps",
     "build": "acrylblends build-client"
   },
   "dependencies": {
