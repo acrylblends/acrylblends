@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
 //#region ../../plugins/acryl-node-server/src/transpile.ts
 /**
 * One TypeScript module compiled to JavaScript with the app's own `typescript`: the transform behind `acrylblends/node-server/register`

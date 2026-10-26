@@ -1,4 +1,4 @@
-import { n as compileModule } from "../transpile-CTnWof4z.js";
+import { n as compileModule } from "../transpile-QUK9b3eG.js";
 import { registerHooks } from "node:module";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

@@ -9,18 +9,7 @@ export const CREATE = 'create-acrylblends'
  * Subpaths the docs show but the package does not export yet. A code block that imports one of them is not type-checked; remove an entry when the subpath lands.
  * An entry matches itself and everything below it (`jsx` covers `jsx/dom`).
  */
-export const NOT_YET_AVAILABLE = [
-  'bun',
-  'deno',
-  'cloudflare-workers',
-  'cloudflare-pages',
-  'aws-lambda',
-  'vercel',
-  'netlify',
-  'lambda-edge',
-  'service-worker',
-  'node-ws',
-]
+export const NOT_YET_AVAILABLE = ['deno', 'node-ws']
 
 /** The file that makes a folder a template other people can create apps from (`create-acrylblends <name> github:owner/repo`). */
 export const TEMPLATE_MANIFEST = 'acryl.template.json'
