@@ -1,6 +1,6 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
-import type { DatabaseSync } from 'node:sqlite'
 import { promisify } from 'node:util'
+import type { Db } from '__PACKAGE__/db'
 
 const scryptAsync = promisify(scrypt) as (
   password: string,
@@ -22,34 +22,36 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return timingSafeEqual(actual, expected)
 }
 
-export function authStore(db: DatabaseSync) {
+export function authStore(db: Db) {
   return {
     findUser(email: string) {
-      return db.prepare('SELECT id, email, password_hash FROM users WHERE email = ?').get(email) as
-        | { id: number; email: string; password_hash: string }
-        | undefined
+      return db.get<{ id: number; email: string; password_hash: string }>(
+        'SELECT id, email, password_hash FROM users WHERE email = ?',
+        email,
+      )
     },
     async createUser(email: string, password: string): Promise<number> {
-      const info = db
-        .prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)')
-        .run(email, await hashPassword(password))
-      return Number(info.lastInsertRowid)
+      const user = await db.get<{ id: number }>(
+        'INSERT INTO users (email, password_hash) VALUES (?, ?) RETURNING id',
+        email,
+        await hashPassword(password),
+      )
+      return user!.id
     },
-    startSession(userId: number): string {
+    async startSession(userId: number): Promise<string> {
       const token = randomBytes(32).toString('hex')
-      db.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').run(token, userId)
+      await db.run('INSERT INTO sessions (token, user_id) VALUES (?, ?)', token, userId)
       return token
     },
-    userFor(token: string | undefined) {
+    async userFor(token: string | undefined) {
       if (!token) return undefined
-      return db
-        .prepare(
-          'SELECT users.id AS id, users.email AS email FROM sessions JOIN users ON users.id = sessions.user_id WHERE token = ?',
-        )
-        .get(token) as { id: number; email: string } | undefined
+      return db.get<{ id: number; email: string }>(
+        'SELECT users.id AS id, users.email AS email FROM sessions JOIN users ON users.id = sessions.user_id WHERE token = ?',
+        token,
+      )
     },
-    endSession(token: string) {
-      db.prepare('DELETE FROM sessions WHERE token = ?').run(token)
+    async endSession(token: string): Promise<void> {
+      await db.run('DELETE FROM sessions WHERE token = ?', token)
     },
   }
 }

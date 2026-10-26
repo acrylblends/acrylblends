@@ -198,7 +198,16 @@ async function probeRoute(app, env) {
     ? "reply.status === 200 && /html/.test(reply.headers.get('content-type') ?? '') && /</.test(await reply.clone().text())"
     : "reply.status === 200 && typeof (await reply.clone().json()).count === 'number'"
   const script = PLAIN_SETUPS.includes(values.setup)
-    ? `import app from './src/app.ts'
+    ? values.setup === 'notes'
+      ? `import { openNotesDb } from './src/db.ts'
+import { createApp } from './src/notes-app.ts'
+const { db, close } = await openNotesDb(':memory:')
+const reply = await createApp(db).request('${path}')
+const ok = ${check}
+await close()
+process.exit(ok ? 0 : 1)
+`
+      : `import app from './src/app.ts'
 const reply = await app.request('${path}')
 process.exit(${check} ? 0 : 1)
 `

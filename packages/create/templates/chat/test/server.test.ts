@@ -15,7 +15,7 @@ async function start(env: Record<string, string> = {}) {
       env: {
         ...process.env,
         PORT: '0',
-        CHAT_DB: join(mkdtempSync(join(tmpdir(), 'chat-')), 'chat.db'),
+        CHAT_DB: join(mkdtempSync(join(tmpdir(), 'chat-')), 'chat.sqlite'),
         ...env,
       },
       stdio: ['ignore', 'pipe', 'inherit'],

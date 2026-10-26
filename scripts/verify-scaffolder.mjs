@@ -590,6 +590,7 @@ spec:
     readdirSync(packed).find((f) => /^acrylblends-.*\.tgz$/.test(f)) ?? '',
   )
   const clientFile = { notes: 'counter.tsx', chat: 'chat.tsx' }
+  const opener = { notes: 'openNotesDb', chat: 'openChatDb' }
   for (const kind of ['notes', 'chat']) {
     const notes = join(scratch, kind)
     capture(
@@ -635,9 +636,7 @@ spec:
         'acrylblends/node-server/register',
         '--input-type=module',
         '-e',
-        "import app from './src/app.ts'; const r = await app.request('/client/" +
-          clientFile[kind] +
-          "'); console.log(r.status, r.headers.get('content-type')); process.exit(0)",
+        `import { ${opener[kind]} } from './src/db.ts'; import { createApp } from './src/${kind}-app.ts'; const { db, close } = await ${opener[kind]}(':memory:'); const r = await createApp(db).request('/client/${clientFile[kind]}'); console.log(r.status, r.headers.get('content-type')); await close(); process.exit(0)`,
       ],
       { cwd: notes, env: { ...process.env, NODE_ENV: 'production' } },
     )
