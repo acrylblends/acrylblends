@@ -60,10 +60,18 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     )
     return 1
   }
+  if (plain && options.names.includes('kv')) {
+    io.stderr.write(
+      'error: "kv" is the Cordis plugin for a Blend app. A plain Acryl app opens its store with openKv from "acrylblends/kv/json" (see docs/framework/guides/data.md#a-tiny-app-kv)\n',
+    )
+    return 1
+  }
   const names = options.names
     .filter((name) => !external.includes(name))
     // `db` is the SQLite provider of the db port (it brings the port); a plain app opens its database with `acrylblends/db/sqlite` instead.
     .map((name) => (name === 'db' ? 'acryl-db-sqlite' : name))
+    // `kv` is the JSON-file provider of the kv port (it brings the port); `acryl-kv-db` is the one over db.
+    .map((name) => (name === 'kv' ? 'acryl-kv-json' : name))
     .map((name) => (name === 'desktop' && plain ? 'desktop-web' : name))
   if (names.length === 0) return 0
   const already = names.filter((name) => present(appDir, name))

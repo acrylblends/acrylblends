@@ -49,7 +49,8 @@ export const PLUGINS = {
     },
   },
   'acryl-inspect': { entries: { '': 'src/index.ts' }, testsNotRun: {} },
-  // Data (spec 049): the `db` port, and its SQLite provider as a Cordis plugin. The plain apps use `acrylblends/db` and `acrylblends/db/sqlite` instead.
+  // Data (spec 049): the `db` port and its SQLite provider as Cordis plugins, and the `kv` port with its two providers. The plain apps use
+  // `acrylblends/db`, `acrylblends/db/sqlite` and `acrylblends/kv/*` instead.
   'acryl-db': {
     entries: {
       '': 'src/index.ts',
@@ -63,6 +64,30 @@ export const PLUGINS = {
     testsNotRun: {
       'tests/loader.spec.ts':
         'loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install; the plain opener it wraps is tested here by open.spec.ts and conformance.spec.ts',
+    },
+  },
+  'acryl-kv': {
+    entries: {
+      '': 'src/index.ts',
+      '/cordis': 'src/cordis.ts',
+      '/conformance': 'src/conformance.ts',
+    },
+    testsNotRun: {},
+  },
+  'acryl-kv-json': {
+    entries: { '': 'src/index.ts', '/open': 'src/open.ts' },
+    testsNotRun: {
+      'tests/loader.spec.ts':
+        'loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install; the plain opener it wraps is tested here by open.spec.ts and conformance.spec.ts',
+      'tests/crash.spec.ts':
+        'kills a child process that imports the package build (lib/), which a copy vendored into an app does not have; it runs in ACRYL',
+    },
+  },
+  'acryl-kv-db': {
+    entries: { '': 'src/index.ts', '/open': 'src/open.ts' },
+    testsNotRun: {
+      'tests/loader.spec.ts':
+        'loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install; kvOnDb is tested here by open.spec.ts and conformance.spec.ts',
     },
   },
 }

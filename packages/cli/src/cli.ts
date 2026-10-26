@@ -4,6 +4,7 @@ import { buildClient, parseBuildClientOptions } from './build-client'
 import { checkDeps, parseCheckDepsOptions } from './check-deps'
 import { init, parseInitOptions, UsageError } from './init'
 import { type Io, processIo } from './io'
+import { kvImport, parseKvOptions } from './kv-import'
 
 /** The version of this package. */
 export const VERSION: string = (
@@ -18,6 +19,7 @@ Usage:
                                       a folder path brings an external plugin into its extensions/
   acrylblends plugins                    List the plugin library
   acrylblends build-client [root] [out]  Compile the client modules once for production (src/client to dist/client)
+  acrylblends kv import <kv.json> <db>   Move a JSON-file kv store into the kv table of a SQLite database [--overwrite] [--table t] [--migrations dir]
   acrylblends check-deps [dir]           Fail when app code imports a database driver or opener outside the file named in
                                       package.json "acryl": { "opener": "src/db.ts" } (a port is imported, a provider is not)
 
@@ -50,6 +52,7 @@ export async function runCli(argv: readonly string[], io: Io = processIo()): Pro
     if (command === 'init') return await init(parseInitOptions(args), io)
     if (command === 'add') return await add(parseAddOptions(args), io)
     if (command === 'build-client') return await buildClient(parseBuildClientOptions(args), io)
+    if (command === 'kv') return await kvImport(parseKv(args), io)
     if (command === 'check-deps') return checkDeps(parseCheckDeps(args), io)
     if (command === 'plugins') return listPlugins(io)
     throw new UsageError(`unknown command "${command}"`)
@@ -69,4 +72,8 @@ function parseCheckDeps(args: readonly string[]) {
   } catch (error) {
     throw new UsageError((error as Error).message)
   }
+}
+
+function parseKv(args: readonly string[]) {
+  return parseKvOptions(args)
 }
