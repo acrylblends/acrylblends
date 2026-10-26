@@ -1,6 +1,6 @@
-import { fileURLToPath } from 'node:url'
 import type { Db } from '__PACKAGE__/db'
 import { openDb } from '__PACKAGE__/db/sqlite'
+import { fileURLToPath } from 'node:url'
 
 export interface Note {
   id: number

@@ -1,14 +1,11 @@
 import { serve } from '__PACKAGE__/node-server'
-import { openNotesDb } from './db.ts'
-import { createApp } from './notes-app.ts'
+import app, { close } from './app.ts'
 
 const port = Number(process.env.PORT || 3000)
 // Local by default. Behind a reverse proxy on the same machine this is right; in a container set HOST=0.0.0.0.
 const hostname = process.env.HOST || '127.0.0.1'
 
-// The database is opened here, once, and closed when the process stops.
-const { db, close } = await openNotesDb()
-const server = serve({ fetch: createApp(db).fetch, port, hostname }, (info) => {
+const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   console.log(`listening on http://${info.address}:${info.port}`)
 })
 

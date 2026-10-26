@@ -1,5 +1,5 @@
 /**
- * The desktop shell of a plain Acryl app: `npm run desktop` serves the app (`src/app.ts`, `export default app`) on a free loopback port from this Electron main process and
+ * The desktop shell of a plain Acryl app: `npm run desktop` serves the app (`src/app.ts`: `export default app`, and optionally `export const close` for a database to close) on a free loopback port from this Electron main process and
  * opens one window on it. Nothing in the app imports electron; every Electron call is in this file and `window.ts`, so a different shell is a change here only.
  *
  * Order matters: the user-data folder is set before anything else (and before the single-instance lock), so one app never shares window state, logs or the lock with
@@ -36,13 +36,19 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   let server: ReturnType<typeof serve> | undefined
   let window: BrowserWindow | undefined
+  /** The app module's optional `close`, for an app that owns a database: called once the server has stopped. */
+  let closeApp: (() => Promise<void>) | undefined
 
   const shutdown = createDesktopShutdown(
     () =>
       new Promise<void>((done) => {
         if (server === undefined) return done()
         server.close(() => {
-          done()
+          const closing = closeApp?.() ?? Promise.resolve()
+          closing.then(
+            () => done(),
+            () => done(),
+          )
         })
         // Open streams and keep-alive connections would hold close() open: end them.
         ;(server as { closeAllConnections?: () => void }).closeAllConnections?.()
@@ -67,7 +73,11 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     // The hook above is registered before the app's modules are loaded, so the app may have .tsx pages: they are loaded here, not as a static import.
-    const { default: acrylApp } = await import('../../app.ts')
+    const { default: acrylApp, close } = (await import('../../app.ts')) as {
+      default: { fetch: Parameters<typeof serve>[0]['fetch'] }
+      close?: () => Promise<void>
+    }
+    closeApp = close
     const port = await new Promise<number>((resolve) => {
       server = serve(
         { fetch: acrylApp.fetch, port: 0, hostname: '127.0.0.1' },

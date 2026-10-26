@@ -1,7 +1,7 @@
+import type { Db } from '__PACKAGE__/db'
 import { testClient } from '__PACKAGE__/testing'
 import assert from 'node:assert/strict'
 import { after, test } from 'node:test'
-import type { Db } from '__PACKAGE__/db'
 import { openNotesDb } from '../src/db.ts'
 import { createApi, createApp } from '../src/notes-app.ts'
 

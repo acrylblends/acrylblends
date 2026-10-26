@@ -1,6 +1,6 @@
+import type { Db } from '__PACKAGE__/db'
 import assert from 'node:assert/strict'
 import { after, test } from 'node:test'
-import type { Db } from '__PACKAGE__/db'
 import { createApp } from '../src/chat-app.ts'
 import { openChatDb } from '../src/db.ts'
 import type { Llm } from '../src/llm.ts'

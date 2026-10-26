@@ -1,6 +1,6 @@
+import type { Db } from '__PACKAGE__/db'
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
-import type { Db } from '__PACKAGE__/db'
 
 const scryptAsync = promisify(scrypt) as (
   password: string,
