@@ -4,7 +4,7 @@ The ConnInfo Helper helps you to get the connection information. For example, yo
 
 ## Import
 
-Only the Node.js adapter, `acrylblends/node-server`, is available today. The adapters for the other platforms (Cloudflare Workers, Bun, Vercel, AWS Lambda, Netlify and Lambda@Edge) are **not yet available**; their imports are shown for completeness and are not checked by the docs tests.
+Each adapter has its own `getConnInfo`: `acrylblends/node-server`, `acrylblends/cloudflare-workers`, `acrylblends/vercel`, `acrylblends/aws-lambda`, `acrylblends/netlify`, `acrylblends/lambda-edge` and `acrylblends/bun`. The Bun example is not type-checked by the docs tests, which run without Bun's types.
 
 **Cloudflare Workers**
 
