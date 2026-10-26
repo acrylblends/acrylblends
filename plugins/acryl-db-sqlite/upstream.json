@@ -1,0 +1,21 @@
+{
+  "source": {
+    "repo": "acryldev/acryl",
+    "path": "plugins/acryl-db-sqlite",
+    "commit": "4721bb00960fa4e157e6070c330cf87c148739fc"
+  },
+  "vendored": [
+    "src",
+    "tests",
+    "LICENSE"
+  ],
+  "rewrittenSpecifiers": 9,
+  "digest": "sha256:853af986073e5721c9b8fb5626b46bcd1ca8a6c5f936c4ac11fc3c21f3c5c0ef",
+  "testsNotRun": {
+    "tests/loader.spec.ts": "loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install; the plain opener it wraps is tested here by open.spec.ts and conformance.spec.ts",
+    "tests/plain-entry-imports.spec.ts": "a copy vendored into an app (with relative imports, no build of its own) has neither `lib/`; the app's own typecheck is what proves the copy names no Cordis type it does not provide."
+  },
+  "notice": [
+    "LICENSE"
+  ]
+}

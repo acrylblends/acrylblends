@@ -1,0 +1,18 @@
+{
+  "source": {
+    "repo": "acryldev/acryl",
+    "path": "plugins/acryl-db",
+    "commit": "4721bb00960fa4e157e6070c330cf87c148739fc"
+  },
+  "vendored": [
+    "src",
+    "tests",
+    "LICENSE"
+  ],
+  "rewrittenSpecifiers": 0,
+  "digest": "sha256:51e5613457498bfab7c281e0c6443c4f7535401c16520ac44624dc8791a90fa6",
+  "testsNotRun": {},
+  "notice": [
+    "LICENSE"
+  ]
+}

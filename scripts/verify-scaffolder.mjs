@@ -519,6 +519,55 @@ spec:
   capture(npm, ['install', '--no-audit', '--no-fund'], { cwd: grown })
   capture(npm, ['run', 'check'], { cwd: grown })
   log('add settings: copied, dependencies added, installed, type-checks')
+  // `add db`: the port and the SQLite provider arrive with their npm packages; the provider migrates and serves `db` to a plugin that injects it.
+  const withDb = join(scratch, 'with-db')
+  capture(process.execPath, [
+    cli,
+    'init',
+    withDb,
+    '--name',
+    'verify-db',
+    '--yes',
+    '--template',
+    'blank',
+  ])
+  capture(process.execPath, [cli, 'add', 'db', '--dir', withDb])
+  for (const name of ['acryl-db', 'acryl-db-sqlite'])
+    if (!existsSync(join(withDb, 'src', 'plugins', name, 'src', 'index.ts')))
+      fail(`add db: ${name} was not copied`)
+  capture(npm, ['install', '--no-audit', '--no-fund'], { cwd: withDb })
+  capture(npm, ['run', 'check'], { cwd: withDb })
+  mkdirSync(join(withDb, 'migrations'), { recursive: true })
+  writeFileSync(
+    join(withDb, 'migrations', '001-things.sql'),
+    'CREATE TABLE things (id INTEGER PRIMARY KEY, name TEXT NOT NULL);\n',
+  )
+  writeFileSync(
+    join(withDb, 'db-probe.ts'),
+    [
+      "import { Context } from '@deepseek-ai/cordis'",
+      "import { join } from 'node:path'",
+      "import * as sqlite from './src/plugins/acryl-db-sqlite/src/index.ts'",
+      "import type {} from './src/plugins/acryl-db/src/cordis.ts'",
+      'const root = new Context()',
+      "root.plugin(sqlite, { path: join(process.cwd(), 'probe.sqlite'), migrations: join(process.cwd(), 'migrations') })",
+      'let seen = 0',
+      "root.plugin({ name: 'consumer', inject: ['db'], apply: async (ctx) => {",
+      "  await ctx.db.run('INSERT INTO things (name) VALUES (?)', 'one')",
+      "  seen = (await ctx.db.all('SELECT * FROM things')).length",
+      '} })',
+      'await new Promise((resolve) => setTimeout(resolve, 500))',
+      'await root.fiber.dispose()',
+      'process.exit(seen === 1 ? 0 : 1)',
+      '',
+    ].join('\n'),
+  )
+  capture(process.execPath, ['--experimental-strip-types', '--no-warnings', 'db-probe.ts'], {
+    cwd: withDb,
+  })
+  log(
+    'add db: the port and the SQLite provider copied, installed, type-check, and a plugin that injects db reads and writes through numbered migrations',
+  )
   // The desktop shell (spec 018): `init --desktop` adds electron as a development dependency and a script, the app's own code never imports electron, the whole app type-checks
   // against electron's types, and the app's server starts and stops with no Electron involved (the project's own tests). The window itself is verify-desktop.mjs.
   const desktop = join(scratch, 'desktop')

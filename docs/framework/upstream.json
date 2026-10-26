@@ -2,7 +2,7 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "docs/framework",
-    "commit": "2e3d42ec9cfb13bed26aa458960dab6abff5ba78"
+    "commit": "4721bb00960fa4e157e6070c330cf87c148739fc"
   },
   "files": 99,
   "digest": "sha256:ce484a4cf2bc9781d188fe468e98c498052d50155bb72f84c0a1ad384b1a5e85"
