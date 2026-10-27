@@ -42,6 +42,8 @@ section { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw)
 section.shown { display: flex }
 header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #e5e7eb }
 header strong { flex: 1 }
+#term { flex: 1; min-height: 0; background: #000 }
+#term[hidden], form[hidden], #log[hidden] { display: none }
 #log { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px }
 .msg { white-space: pre-wrap; padding: 8px 10px; border-radius: 8px; background: #f3f4f6 }
 .me { background: #dbeafe; align-self: flex-end }
@@ -66,12 +68,12 @@ async function start(): Promise<void> {
     <button class="open" type="button">Ask the agent</button>
     <section aria-label="Agent panel">
       <header><strong>Agent</strong><select aria-label="Agent">${session.drivers
-        .filter((d) => d.kind === 'chat')
         .map((d) => `<option>${d.name}</option>`)
         .join(
           '',
-        )}</select><button class="close" type="button" aria-label="Close">×</button></header>
+        )}</select><button class="termstop" type="button" hidden>Stop terminal</button><button class="close" type="button" aria-label="Close">×</button></header>
       <div id="log" role="log"></div>
+      <div id="term" hidden></div>
       <form><textarea aria-label="Message" placeholder="What should the app do?"></textarea>
         <div class="row"><button class="send" type="submit">Send</button><button class="stop" type="button" disabled>Stop</button></div></form>
     </section>`
@@ -82,6 +84,54 @@ async function start(): Promise<void> {
   const send = $<HTMLButtonElement>('.send')
   const stop = $<HTMLButtonElement>('.stop')
   const driver = $<HTMLSelectElement>('select')
+  const term = $<HTMLElement>('#term')
+  const termStop = $<HTMLButtonElement>('.termstop')
+  termStop.addEventListener('click', () => void terminal?.stop())
+  const form = $<HTMLFormElement>('form')
+  const kindOf = (name: string): 'chat' | 'terminal' =>
+    session.drivers.find((d) => d.name === name)?.kind ?? 'chat'
+  let terminal: { detach(): void; stop(): Promise<void> } | undefined
+  // A terminal driver swaps the chat for the driver's own terminal (loaded from the plugin that provides it, only when asked for).
+  const choose = async (): Promise<void> => {
+    terminal?.detach()
+    terminal = undefined
+    const isTerminal = kindOf(driver.value) === 'terminal'
+    log.hidden = isTerminal
+    form.hidden = isTerminal
+    term.hidden = !isTerminal
+    termStop.hidden = !isTerminal
+    if (!isTerminal) return
+    try {
+      const url = '/api/driver-pty/client/terminal.ts'
+      const { openTerminal } = (await import(url)) as {
+        openTerminal(options: {
+          container: HTMLElement
+          token: string
+          driver: string
+          status(text: string): void
+          onChange(change: { extension: string; action: string }): void
+        }): Promise<{ detach(): void; stop(): Promise<void> }>
+      }
+      terminal = await openTerminal({
+        container: term,
+        token: session.token,
+        driver: driver.value,
+        status: (text) => line(text, 'tool'),
+        onChange: (change) => {
+          line(`plugin ${change.extension}: ${change.action}`, 'tool')
+          line('Reloading the page to show it.', 'tool')
+          setTimeout(() => location.reload(), 900)
+        },
+      })
+    } catch (error) {
+      line(
+        `The terminal could not open: ${error instanceof Error ? error.message : String(error)}`,
+        'err',
+      )
+      log.hidden = false
+    }
+  }
+  driver.addEventListener('change', () => void choose())
   const show = (open: boolean): void => {
     panel.classList.toggle('shown', open)
     if (open) input.focus()
@@ -159,6 +209,19 @@ async function start(): Promise<void> {
     }
   })
   document.body.append(host)
+  // A terminal that was open before a reload is still running on the server: show it again.
+  try {
+    const remembered = JSON.parse(sessionStorage.getItem('driver-pty-session') ?? 'null') as {
+      driver?: string
+    } | null
+    if (remembered?.driver && kindOf(remembered.driver) === 'terminal') {
+      driver.value = remembered.driver
+      show(true)
+      void choose()
+    }
+  } catch {
+    // No storage: nothing to show again.
+  }
 }
 
 void start()

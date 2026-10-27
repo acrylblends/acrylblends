@@ -41,6 +41,7 @@ interface Chunk {
   readonly id: number
   readonly text: string
 }
+type Item = Chunk | { exit: number | null } | { change: { extension: string; action: string } }
 interface Live {
   readonly id: string
   readonly driver: string
@@ -49,7 +50,11 @@ interface Live {
   size: number
   next: number
   exit?: { code: number | null }
-  readonly listeners: Set<(chunk: Chunk | { exit: number | null }) => Promise<void> | void>
+  readonly listeners: Set<
+    (
+      item: Chunk | { exit: number | null } | { change: { extension: string; action: string } },
+    ) => Promise<void> | void
+  >
   dispose(): Promise<void>
 }
 
@@ -148,6 +153,13 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
     return state
   }
 
+  // A plugin installed or removed while a terminal is open (by the agent, through the door): the page is told, so it reloads and shows the new feature.
+  const off = ctx.on('extensions/changed', (extension: string, action: string) => {
+    if (live && !live.exit)
+      for (const listener of live.listeners) void listener({ change: { extension, action } })
+  })
+  ctx.effect(() => off)
+
   const app = new Acryl()
     .route(`${PREFIX}/client`, clientModules({ root: CLIENT_DIR }))
     .post(`${PREFIX}/sessions`, async (c) => {
@@ -187,7 +199,9 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
           return
         }
         await new Promise<void>((done) => {
-          const listener = async (item: Chunk | { exit: number | null }): Promise<void> => {
+          const listener = async (item: Item): Promise<void> => {
+            if ('change' in item)
+              return stream.writeSSE({ event: 'change', data: JSON.stringify(item.change) })
             if (!('exit' in item)) return send(item)
             await stream
               .writeSSE({ event: 'exit', data: JSON.stringify({ code: item.exit }) })
