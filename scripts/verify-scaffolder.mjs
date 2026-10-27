@@ -95,8 +95,9 @@ try {
   log('building the acrylblends CLI')
   capture('pnpm', ['run', 'build'], { cwd: cliDir })
   const present = readdirSync(join(cliDir, 'templates')).sort()
-  if (present.join(',') !== Object.keys(TEMPLATES).sort().join(','))
-    fail(`unexpected templates: ${present.join(', ')}`)
+  // blank, todo and agent are walked below by `init`; nodejs, notes and chat are the web templates `create-acrylblends` makes (walked at the end).
+  const expected = [...Object.keys(TEMPLATES), 'nodejs', 'notes', 'chat'].sort()
+  if (present.join(',') !== expected.join(',')) fail(`unexpected templates: ${present.join(', ')}`)
 
   for (const [template, flags] of Object.entries(TEMPLATES)) {
     const dir = join(scratch, template)
@@ -689,7 +690,7 @@ spec:
   log(
     'desktop: init --desktop added electron as a development dependency, only the plugin imports it, the app type-checks and its tests (the server starts and stops without Electron) pass',
   )
-  // The `notes` template of create-acrylblends: a full-stack starter made from the packed framework, whose own tests and type-check pass, and which takes the desktop shell
+  // The `notes` template of create-acrylblends: a Cordis app made from the packed framework, whose own tests and type-check pass, and which takes the desktop shell
   // with one command. The window itself and the HTTP walk are the manual gates (verify-desktop.mjs, notes-probe.mjs).
   const packed = join(scratch, 'packed')
   mkdirSync(packed)
@@ -698,9 +699,8 @@ spec:
     packed,
     readdirSync(packed).find((f) => /^acrylblends-.*\.tgz$/.test(f)) ?? '',
   )
-  const clientFile = { notes: 'counter.tsx', chat: 'chat.tsx' }
-  const opener = { notes: 'openNotesDb', chat: 'openChatDb' }
-  for (const kind of ['notes', 'chat']) {
+  const clientFile = { nodejs: 'counter.tsx', notes: 'counter.tsx', chat: 'chat.tsx' }
+  for (const kind of ['nodejs', 'notes', 'chat']) {
     const notes = join(scratch, kind)
     capture(
       process.execPath,
@@ -727,8 +727,12 @@ spec:
       cwd: notes,
       env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' },
     })
-    if (!existsSync(join(notes, 'plugins', 'desktop-web', 'main.ts')))
-      fail(`${kind}: add desktop did not add the plain-app shell`)
+    if (
+      !existsSync(join(notes, 'plugins', 'desktop', 'main.ts')) ||
+      !existsSync(join(notes, 'blend.yaml')) ||
+      !existsSync(join(notes, 'plugins', 'library.json'))
+    )
+      fail(`${kind}: this is not a Cordis app with the desktop shell (blend.yaml, plugins/)`)
     capture(npm, ['run', 'check'], { cwd: notes })
     capture(npm, ['test'], { cwd: notes })
     // Production: the client folder is compiled once (`npm run build`); then only dist/client is served, with no compiler involved.
@@ -742,10 +746,10 @@ spec:
       process.execPath,
       [
         '--import',
-        'acrylblends/node-server/register',
+        './plugins/acryl-node-server/src/register.ts',
         '--input-type=module',
         '-e',
-        `import { ${opener[kind]} } from './src/db.ts'; import { createApp } from './src/${kind}-app.ts'; const { db, close } = await ${opener[kind]}(':memory:'); const r = await createApp(db).request('/client/${clientFile[kind]}'); console.log(r.status, r.headers.get('content-type')); await close(); process.exit(0)`,
+        `import { join } from 'node:path'; import { tmpdir } from 'node:os'; import { mkdtempSync } from 'node:fs'; import { createApp } from './src/app.ts'; import { pinnedInstance, withPort } from './plugins/instance/index.ts'; const home = mkdtempSync(join(tmpdir(), 'prod-')); const app = await createApp(withPort(pinnedInstance(home, { root: process.cwd() }), 0), { database: join(home, 'x.sqlite') }); const r = await fetch(app.url + '/client/${clientFile[kind]}'); console.log(r.status, r.headers.get('content-type')); await app.stop(); process.exit(0)`,
       ],
       { cwd: notes, env: { ...process.env, NODE_ENV: 'production' } },
     )

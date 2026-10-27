@@ -1,15 +1,12 @@
-import { createRequire } from 'node:module'
 import { add, listPlugins, parseAddOptions } from './add'
 import { buildClient, parseBuildClientOptions } from './build-client'
 import { checkDeps, parseCheckDepsOptions } from './check-deps'
 import { init, parseInitOptions, UsageError } from './init'
 import { type Io, processIo } from './io'
 import { kvImport, parseKvOptions } from './kv-import'
+import { VERSION } from './version'
 
-/** The version of this package. */
-export const VERSION: string = (
-  createRequire(import.meta.url)('../package.json') as { version: string }
-).version
+export { VERSION }
 
 export const HELP = `acrylblends ${VERSION} - scaffold Cordis apps
 

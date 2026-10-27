@@ -10,11 +10,12 @@ It asks which template you want, creates `my-app`, and prints what to run next. 
 
 ## Templates
 
+Every template is a Cordis app: `blend.yaml` lists the plugins that are mounted and every plugin is a folder in `plugins/`.
+
 | Template | What you get |
 | --- | --- |
-| `nodejs` | an Acryl app served with `serve()` from `acrylblends/node-server`, with a test; run with Node.js 22.19 or newer |
-| `bun` (experimental) | the same app for Bun, with `export default app` |
-| `notes` | a full-stack starter: accounts (scrypt, cookie session), notes in SQLite (`node:sqlite`), validated forms, search, a JSON API with a typed test client, csrf on, a test for every route |
+| `nodejs` | a web app: routes, a server-rendered JSX page and a client component, with tests; run with Node.js 22.19 or newer |
+| `notes` | a full-stack starter: accounts (scrypt, cookie session), notes in SQLite through the `db` port, validated forms, search, a JSON API with a typed test client, csrf on, a test for every route |
 | `chat` | an AI chat starter: the answer streams token by token (Server-Sent Events) from an OpenAI-compatible API (DeepSeek by default, key only from `DEEPSEEK_API_KEY`), a client component with a Stop button that also stops the request to the model, history in SQLite, tests with a mock model |
 | `acryl-app` | a Cordis app built from plugins, with an agent that can extend it while it runs (the same app `npx acrylblends init --template agent` creates) |
 
@@ -30,7 +31,7 @@ npm create acrylblends@latest my-app -- --template nodejs --install --pm npm
 
 | Option | |
 | --- | --- |
-| `--template <name>` | `nodejs`, `notes`, `chat`, `bun` or `acryl-app` |
+| `--template <name>` | `nodejs`, `notes`, `chat` or `acryl-app` (a bare name after the directory means the same: `npm create acrylblends@latest my-app notes`) |
 | `--install` | install the dependencies after creating the app |
 | `--pm <manager>` | `npm`, `pnpm`, `yarn` or `bun` (default: the one that ran the command) |
 | `-y`, `--yes` | ask nothing: template `nodejs`, directory `acrylblends-app` unless given |

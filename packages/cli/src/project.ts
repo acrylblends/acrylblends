@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
+import { VERSION } from './version'
 
 /** Thrown when the target directory exists and is not empty. Nothing has been written. */
 export class TargetNotEmptyError extends Error {
@@ -43,7 +44,7 @@ export function assertTargetFree(target: string): void {
 }
 
 /**
- * Copy a template into `target`, replacing `__APP_NAME__` with `name`. Checks the target before writing anything.
+ * Copy a template into `target`, replacing `__APP_NAME__` with `name` and `__ACRYLBLENDS_RANGE__` with the range of this release. Checks the target before writing anything.
  *
  * @returns the copied files, relative to `target`
  */
@@ -74,8 +75,11 @@ export function copyTemplate(source: string, target: string, name: string): stri
         continue
       }
       const text = readFileSync(sourcePath, 'utf8')
-      if (text.includes('__APP_NAME__'))
-        writeFileSync(targetPath, text.replaceAll('__APP_NAME__', name))
+      if (text.includes('__APP_NAME__') || text.includes('__ACRYLBLENDS_RANGE__'))
+        writeFileSync(
+          targetPath,
+          text.replaceAll('__APP_NAME__', name).replaceAll('__ACRYLBLENDS_RANGE__', `^${VERSION}`),
+        )
       else cpSync(sourcePath, targetPath)
       written.push(`${prefix}${targetName}`)
     }
