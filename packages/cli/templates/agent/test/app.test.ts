@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdirSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -8,15 +9,18 @@ import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { type App, createApp } from '../src/app.ts'
 import { APP_NAME } from '../src/routes.ts'
 
-// One process at a time serves a folder's door; these tests start several apps in the same folder.
-process.env.ACRYL_DOOR = 'off'
+/** Throwaway homes live inside the project (`.acrylblends/` is ignored by git): a sandboxed agent may not write to the system temp folder. */
+const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
+mkdirSync(scratch, { recursive: true })
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 /** Boot the app in a throwaway home on any free port, run the test, always stop it and remove the home. */
 async function withApp(run: (app: App) => Promise<void>) {
-  const home = await mkdtemp(join(tmpdir(), 'app-test-'))
-  const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0))
+  const home = await mkdtemp(join(scratch, 'app-test-'))
+  const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
+    listen: false,
+  })
   try {
     await run(app)
   } finally {
@@ -27,21 +31,35 @@ async function withApp(run: (app: App) => Promise<void>) {
 
 test('serves the index route', () =>
   withApp(async (app) => {
-    const response = await fetch(`${app.url}/`)
+    const response = await app.root.router.request(`/`)
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), { app: APP_NAME, ok: true })
   }))
 
 test('answers health checks and 404 for unknown paths', () =>
   withApp(async (app) => {
-    assert.equal((await fetch(`${app.url}/health`)).status, 200)
-    const missing = await fetch(`${app.url}/nope`)
+    assert.equal((await app.root.router.request(`/health`)).status, 200)
+    const missing = await app.root.router.request(`/nope`)
     assert.equal(missing.status, 404)
     await missing.body?.cancel()
   }))
 
-test('stops listening when stopped', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'app-test-'))
+/** A sandbox may forbid listening on a port (Codex's workspace-write does); the one test that starts the real server is skipped there, and says so. */
+const canListen = await new Promise<boolean>((done) => {
+  const probe = createServer()
+  probe.once('error', () => done(false))
+  probe.listen(0, '127.0.0.1', () => probe.close(() => done(true)))
+})
+const skip = canListen ? false : 'this environment does not allow listening on a port'
+if (!canListen)
+  console.log(
+    `skipped: the test that starts the real server (${skip}); every other test ran in process`,
+  )
+
+test('stops listening when stopped', { skip }, async () => {
+  const home = await mkdtemp(join(scratch, 'app-test-'))
+  // The door is left out (ACRYL_DOOR=off): one process at a time serves a folder's door.
+  process.env.ACRYL_DOOR = 'off'
   const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0))
   await app.stop()
   await assert.rejects(fetch(`${app.url}/health`))

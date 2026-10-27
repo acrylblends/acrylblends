@@ -5,9 +5,9 @@
  * (ACRYL needed the same fallback on Deno); the returned function removes the hook.
  *
  * The framework plugins are not packages in an app (they are source under `plugins/`), so `aliases` names the files a framework specifier such as
- * `acryl-router` stands for. A staged plugin then imports the same module the app itself runs, so `App` is the very class the router mounts.
+ * `acryl-router` stands for (and the ports and providers beside it: `acryl-kv`, `acryl-kv-json`, `acryl-db`, ..., and each as `#acryl-kv` ... the name the app's `package.json` "imports" gives them). A staged plugin then imports the same module the app itself runs, so `App` is the very class the router mounts.
  */
-import { existsSync, mkdirSync, realpathSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, realpathSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -90,6 +90,20 @@ export function routerAliases(): Record<string, string> {
   add('acryl-router', 'index.ts')
   add('acryl-router/middleware', 'middleware/index.ts')
   add('acryl-router/helpers', 'helpers/index.ts')
+  // The ports and their providers sit beside the router as source too (`acrylblends add kv` copies `acryl-kv` and `acryl-kv-json`). A plugin installed live, a
+  // provider of your own for example, imports them by name and gets the very modules the app runs.
+  const plugins = new URL('../', import.meta.url)
+  for (const folder of readdirSync(fileURLToPath(plugins), { withFileTypes: true })) {
+    if (!folder.isDirectory() || !folder.name.startsWith('acryl-')) continue
+    const entry = fileURLToPath(new URL(`${folder.name}/src/index.ts`, plugins))
+    if (!existsSync(entry)) continue
+    // The bare name, and the app's own `#name` (a `package.json` "imports" entry that `acrylblends add` writes): a staged copy lives in the app's home, which may be
+    // outside the app folder, where Node would not find that entry.
+    aliases[folder.name] ??= entry
+    aliases[`#${folder.name}`] = entry
+    const suite = fileURLToPath(new URL(`${folder.name}/src/conformance.ts`, plugins))
+    if (existsSync(suite)) aliases[`#${folder.name}/conformance`] = suite
+  }
   return aliases
 }
 

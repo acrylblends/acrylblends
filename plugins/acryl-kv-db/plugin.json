@@ -9,5 +9,8 @@
     "@deepseek-ai/schemastery": "3.18.4"
   },
   "mount": "mount it after acryl-db-sqlite: root.plugin(kvDb, {}); it waits for db and provides the same kv as acryl-kv-json",
-  "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"]
+  "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"],
+  "imports": {
+    "#acryl-kv-db": "acryl-kv-db/src/index.ts"
+  }
 }

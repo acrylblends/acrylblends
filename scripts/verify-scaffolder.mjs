@@ -108,6 +108,45 @@ async function json(response, what) {
   return response.json()
 }
 
+/**
+ * Every template must pass its own tests where an agent runs them. Codex's default sandbox (`workspace-write`, no network) forbids the system temp folder and listening on a
+ * port, so a template whose tests need either leaves the agent unable to check its work. `codex sandbox` runs the command under that sandbox; without Codex the check says so.
+ */
+let sandboxNoticeShown = false
+function testsInCodexSandbox(dir, label) {
+  const home = mkdtempSync(join(tmpdir(), 'codex-home-'))
+  try {
+    const probe = spawnSync('codex', ['--version'], { encoding: 'utf8' })
+    if (probe.status !== 0) {
+      if (!sandboxNoticeShown)
+        log('skipped the Codex sandbox check: codex is not installed on this machine')
+      sandboxNoticeShown = true
+      return
+    }
+    const run = spawnSync(
+      'codex',
+      ['sandbox', '-c', 'sandbox_mode="workspace-write"', '--', 'npm', 'test'],
+      {
+        cwd: dir,
+        encoding: 'utf8',
+        env: { PATH: process.env.PATH, HOME: home, TERM: 'xterm' },
+      },
+    )
+    if (run.status !== 0)
+      fail(
+        `${label}: the tests fail in Codex's default sandbox:\n${(run.stdout + run.stderr)
+          .split('\n')
+          .filter((l) => /✖|EPERM|Error/.test(l))
+          .slice(0, 6)
+          .join('\n')}`,
+      )
+    const skipped = /skipped: .*/.exec(run.stdout)?.[0]
+    log(`${label}: the tests pass in Codex's default sandbox${skipped ? ` (${skipped})` : ''}`)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+}
+
 try {
   log('building the acrylblends CLI')
   capture('pnpm', ['run', 'build'], { cwd: cliDir })
@@ -160,6 +199,7 @@ try {
     ) {
       fail(`${template}: npm run lock wrote ${JSON.stringify(locked).slice(0, 200)}`)
     }
+    testsInCodexSandbox(dir, template)
     log(`${template}: installed, project tests pass`)
 
     const home = mkdtempSync(join(tmpdir(), `verify-home-${template}-`))
@@ -370,8 +410,14 @@ try {
       await stopCleanly(child)
     }
     // ACRYLBLENDS_HOME pinned the data elsewhere, so the project folder must not have grown its own data folder.
-    if (existsSync(join(dir, '.acrylblends')))
-      fail(`${template}: wrote .acrylblends into the project despite ACRYLBLENDS_HOME`)
+    // (The project's tests keep their throwaway homes in .acrylblends/test, so only the app's own data counts.)
+    const grown = existsSync(join(dir, '.acrylblends'))
+      ? readdirSync(join(dir, '.acrylblends')).filter((entry) => entry !== 'test')
+      : []
+    if (grown.length > 0)
+      fail(
+        `${template}: wrote .acrylblends/${grown.join(', ')} into the project despite ACRYLBLENDS_HOME`,
+      )
     rmSync(home, { recursive: true, force: true })
     log(`${template}: stopped cleanly; data stayed in the pinned home`)
   }
@@ -733,6 +779,7 @@ spec:
     capture(npm, ['install', frameworkTarball, '--no-audit', '--no-fund'], { cwd: notes })
     capture(npm, ['run', 'check'], { cwd: notes })
     capture(npm, ['test'], { cwd: notes })
+    testsInCodexSandbox(notes, kind)
     capture(
       process.execPath,
       [join(notes, 'node_modules', 'acrylblends', 'bin', 'acrylblends.js'), 'add', 'desktop'],

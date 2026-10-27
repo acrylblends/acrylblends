@@ -134,6 +134,26 @@ export function mergeDependencies(
   return added
 }
 
+/** Add `package.json` "imports" entries (`#acryl-kv`: `./plugins/acryl-kv/src/index.ts`); an entry the app already has is kept. Returns the names added. */
+export function mergeImports(
+  appDir: string,
+  imports: Readonly<Record<string, string>>,
+  pluginsDir: string,
+): string[] {
+  const file = join(appDir, 'package.json')
+  const manifest = JSON.parse(readFileSync(file, 'utf8')) as { imports?: Record<string, string> }
+  const current = manifest.imports ?? {}
+  const added = Object.keys(imports).filter((name) => !(name in current))
+  manifest.imports = {
+    ...Object.fromEntries(
+      Object.entries(imports).map(([name, path]) => [name, `./${pluginsDir}/${path}`]),
+    ),
+    ...current,
+  }
+  writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)
+  return added
+}
+
 /** Declare a file as an opener in package.json (`"acryl": { "opener": [...] }`): the one place that may import a database provider. */
 export function mergeOpener(appDir: string, opener: string): void {
   const file = join(appDir, 'package.json')

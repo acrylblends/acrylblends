@@ -38,8 +38,19 @@ export function readManifest(values?: Readonly<Record<string, ParameterValue>>) 
   })
 }
 
+/** The manifest without its server row: the app is then reached in process, through `root.router.request`. */
+function withoutServer<M extends { plugins: readonly { use: string }[] }>(manifest: M): M {
+  return {
+    ...manifest,
+    plugins: manifest.plugins.map((row) =>
+      row.use === 'acryl-node-server' ? { ...row, disabled: true } : row,
+    ),
+  }
+}
+
 export interface App {
   readonly root: Context
+  /** The address the server listens on; empty when the app was made with `listen: false`. */
   readonly url: string
   stop(): Promise<void>
 }
@@ -47,7 +58,11 @@ export interface App {
 /** The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. */
 export async function createApp(
   chosen: AppInstance,
-  options: { values?: Readonly<Record<string, ParameterValue>> } = {},
+  options: {
+    values?: Readonly<Record<string, ParameterValue>>
+    /** Start the HTTP server (default). Tests pass `false` and call `app.root.router.request(path)`: it needs no port, so it also runs where a sandbox forbids listening. */
+    listen?: boolean
+  } = {},
 ): Promise<App> {
   const manifest = readManifest(options.values)
   const root = new Context()
@@ -55,15 +70,20 @@ export async function createApp(
   await first.await()
   const fibers: Fiber[] = [
     first,
-    ...(await compose(root, manifest, registry, {
-      // Runtime values the manifest cannot hold: where the list is kept (in the app's home) and where the server listens.
-      todo: { file: join(chosen.home, 'todo.json') },
-      server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 },
-    })),
+    ...(await compose(
+      root,
+      options.listen === false ? withoutServer(manifest) : manifest,
+      registry,
+      {
+        // Runtime values the manifest cannot hold: where the list is kept (in the app's home) and where the server listens.
+        todo: { file: join(chosen.home, 'todo.json') },
+        server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 },
+      },
+    )),
   ]
   return {
     root,
-    url: root.nodeServer.url,
+    url: options.listen === false ? '' : root.nodeServer.url,
     async stop() {
       for (const fiber of [...fibers].reverse()) await fiber.dispose()
     },

@@ -21,6 +21,7 @@ import {
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+import { probeByo, startByoApp } from './lib/byo.mjs'
 import { probeChat } from './lib/chat-probe.mjs'
 import { probeDoor } from './lib/door-probe.mjs'
 import { probeNotes } from './lib/notes-probe.mjs'
@@ -54,6 +55,11 @@ PRESETS.tags = {
   notes: true,
   tags: true,
 }
+// Spec 049 slice 15: an agent follows the guide alone and swaps a provider into a running app. The tool is not the guide's own (lowdb), so the agent has to apply the guide, not copy it.
+PRESETS.byo = {
+  task: 'The app in this folder is running right now (npm start is already running; do not start it again, and do not stop it). It uses the kv port, provided by the plugin in plugins/kv, and plugins/visits counts visits at GET /visits in that store. Read docs/framework/guides/bring-your-own-tool.md and follow it: wrap the npm package `conf` as a provider of the kv port in plugins/kv-conf (the `conf` package is not installed yet), make it pass the kv conformance suite, and then swap it in for the running app through the door (.acryl/bin/acryl), so that GET /visits keeps counting, served by kv-conf, without restarting the app. The old provider must be removed from the running app. Finish when the suite passes, npm run check passes, and the running app answers GET /visits from kv-conf.',
+  byo: true,
+}
 PRESETS.chat = {
   task: 'Build a small AI chat app in this folder, using only what the docs in docs/framework and AGENTS.md say. A chat page (GET /) has a text box, a Send button and, while an answer is streaming, a Stop button. POST /api/chat takes JSON {"message": "...", "conversation": optional number} and answers a text/event-stream through acrylblends/streaming streamSSE: the answer streams token by token, as the model produces it. The server calls an OpenAI-compatible chat completions API with stream: true using fetch; the base URL comes from the environment variable DEEPSEEK_BASE_URL (default https://api.deepseek.com), the model from DEEPSEEK_MODEL (default deepseek-chat), and the key ONLY from the environment variable DEEPSEEK_API_KEY (never written to any file, never in a response or log). The browser side is a client component (acrylblends/jsx/dom, served by clientModules from src/client) that shows the answer as it arrives and whose Stop button aborts the request; the server must then abort its own request to the model (use the request signal, c.req.raw.signal), and keep what had arrived. Conversation history is stored in SQLite (the docs say how) and the earlier messages of a conversation are sent to the model with each new message. GET /api/conversations answers {"conversations":[{"id","title"}]} and GET /api/conversations/:id answers {"messages":[{"role","content"}]}; an empty message is refused with a 400 and a clear message. Tests use a mock model, never the network, and cover every route. It runs as a desktop window (npm run desktop) and `npm start` serves it on the port in the PORT environment variable. Finish when npm test and npm run check pass.',
   path: '/',
@@ -73,7 +79,7 @@ if (values.preset) {
 }
 // nodejs, notes and chat are made by create-acrylblends; since 0.8 every one of them is a Cordis app, like the blend setups.
 const CREATED_SETUPS = ['nodejs', 'notes', 'chat']
-const SETUPS = ['blend', 'blend-desktop', 'nodejs', 'notes', 'chat']
+const SETUPS = ['blend', 'blend-desktop', 'nodejs', 'notes', 'chat', 'byo']
 if (!SETUPS.includes(values.setup)) {
   console.error(`unknown setup "${values.setup}" (${SETUPS.join(', ')})`)
   process.exit(2)
@@ -123,7 +129,7 @@ const DRIVERS = {
       '--permission-mode',
       'acceptEdits',
       '--allowedTools',
-      'Read,Edit,Write,Glob,Grep,Bash(npm *),Bash(npx *),Bash(node *),Bash(ls *),Bash(cat *),Bash(.acryl/bin/acryl *),Bash(./.acryl/bin/acryl *)',
+      'Read,Edit,Write,Glob,Grep,Bash(npm *),Bash(npx *),Bash(node *),Bash(ls *),Bash(cat *),Bash(.acryl/bin/acryl *),Bash(./.acryl/bin/acryl *),Bash(curl *)',
       '--disallowedTools',
       'WebFetch,WebSearch',
     ],
@@ -143,6 +149,8 @@ const DRIVERS = {
       '--ephemeral',
       '-s',
       'workspace-write',
+      // The byo task installs an npm package and talks to the running app on loopback.
+      ...(values.preset === 'byo' ? ['-c', 'sandbox_workspace_write.network_access=true'] : []),
       '-C',
       app,
       task,
@@ -296,7 +304,7 @@ async function attempt(name) {
           'init',
           'app',
           '--template',
-          values.template,
+          values.setup === 'byo' ? 'agent' : values.template,
           ...(values.setup === 'blend-desktop' ? ['--desktop'] : []),
           '-y',
         ],
@@ -328,7 +336,16 @@ async function attempt(name) {
   if (name === 'codex') {
     const sandboxed = run(
       program,
-      ['sandbox', '-c', 'sandbox_mode="workspace-write"', '--', 'npm', 'test'],
+      [
+        'sandbox',
+        '-c',
+        'sandbox_mode="workspace-write"',
+        // The same network setting the agent itself gets (the byo task installs a package and talks to the running app on loopback).
+        ...(values.preset === 'byo' ? ['-c', 'sandbox_workspace_write.network_access=true'] : []),
+        '--',
+        'npm',
+        'test',
+      ],
       app,
       { env: clean },
     )
@@ -338,6 +355,13 @@ async function attempt(name) {
         pass: false,
         note: `the fresh app's tests fail inside Codex's sandbox: ${(sandboxed.stdout + sandboxed.stderr).trim().split('\n').slice(-6).join(' | ').slice(0, 400)}`,
       }
+  }
+  // The byo setup: the guide's own starting point, running. The port and its suite are in the app, the default provider and a consumer run as plugins.
+  let byoApp
+  if (values.preset === 'byo') {
+    const started = await startByoApp(app, clean, acrylblends)
+    if (!started.ok) return { name, pass: false, note: `byo setup: ${started.note}` }
+    byoApp = started
   }
   const agentEnv = { ...env }
   const secrets = []
@@ -395,9 +419,19 @@ async function attempt(name) {
     .map((line) => line.slice(3))
   const touchedTests = changed.some((file) => file.startsWith('test/'))
   const wroteTsx = changed.filter((file) => /\.tsx$/.test(file))
-  const touchedSource = changed.some((file) => file.startsWith('src/') || file === 'blend.yaml')
-  const route =
-    values.task === DEFAULT_TASK || values.preset ? await probeRoute(app, clean) : 'not probed'
+  const touchedSource = changed.some(
+    (file) => file.startsWith('src/') || file.startsWith('plugins/') || file === 'blend.yaml',
+  )
+  let route
+  if (byoApp) {
+    const probe = await probeByo(app, clean, byoApp)
+    console.log(`  byo (${name}):\n    ${probe.steps.join('\n    ')}`)
+    route = probe.ok ? 'ok' : 'FAIL'
+    byoApp.child.kill('SIGTERM')
+  } else {
+    route =
+      values.task === DEFAULT_TASK || values.preset ? await probeRoute(app, clean) : 'not probed'
+  }
   // Part 2 of spec 049: restart, fresh clone, no secret in git status.
   let lifecycle = { ok: true, steps: [] }
   if (values.part2) {

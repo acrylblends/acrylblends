@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readFileSync, statSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { UsageError } from './init'
@@ -8,18 +8,27 @@ import {
   copyPlugin,
   LEGACY_WARNING,
   type LibraryPlugin,
+  libraryRoot,
   PLUGINS_DIR,
   pluginsFolder,
   readLibrary,
 } from './library'
-import { appendGitignore, mergeDependencies, mergeOpener, mergeTooling } from './project'
+import {
+  appendGitignore,
+  mergeDependencies,
+  mergeImports,
+  mergeOpener,
+  mergeTooling,
+} from './project'
 
 export interface AddOptions {
   readonly names: readonly string[]
   readonly directory: string | undefined
+  /** Also copy the port's conformance suite (`src/conformance.ts`) and the `vitest` it runs on: what a provider of your own must pass. */
+  readonly suite: boolean
 }
 
-/** Parse `add <plugin...> [--dir <app>]`. */
+/** Parse `add <plugin...> [--dir <app>] [--suite]`. */
 export function parseAddOptions(argv: readonly string[]): AddOptions {
   let parsed: ReturnType<typeof parse>
   try {
@@ -29,7 +38,11 @@ export function parseAddOptions(argv: readonly string[]): AddOptions {
   }
   if (parsed.positionals.length === 0)
     throw new UsageError('add needs at least one plugin name (see "acrylblends plugins")')
-  return { names: parsed.positionals, directory: parsed.values.dir }
+  return {
+    names: parsed.positionals,
+    directory: parsed.values.dir,
+    suite: parsed.values.suite === true,
+  }
 }
 
 const parse = (argv: readonly string[]) =>
@@ -37,7 +50,7 @@ const parse = (argv: readonly string[]) =>
     args: [...argv],
     allowPositionals: true,
     strict: true,
-    options: { dir: { type: 'string' } },
+    options: { dir: { type: 'string' }, suite: { type: 'boolean' } },
   })
 
 const present = (appDir: string, name: string) => existsSync(join(pluginsFolder(appDir).dir, name))
@@ -83,7 +96,7 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     .map((name) => (name === 'kv' ? 'acryl-kv-json' : name))
     .map((name) => (name === 'desktop' && plain ? 'desktop-web' : name))
   if (names.length === 0) return 0
-  const already = names.filter((name) => present(appDir, name))
+  const already = options.suite ? [] : names.filter((name) => present(appDir, name))
   if (already.length > 0) {
     io.stderr.write(
       `error: the app already has ${already
@@ -103,6 +116,12 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
   const addedDependencies: string[] = []
   for (const plugin of toCopy) {
     copyPlugin(plugin, appDir)
+    if (plugin.imports)
+      mergeImports(
+        appDir,
+        plugin.imports,
+        relative(appDir, pluginsFolder(appDir).dir).split(sep).join('/'),
+      )
     addedDependencies.push(...mergeDependencies(appDir, plugin.dependencies))
     const tooling = mergeTooling(appDir, plugin)
     appendGitignore(appDir, plugin.gitignore)
@@ -114,6 +133,10 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
         `new scripts: ${tooling.scripts.map((name) => `npm run ${name}`).join(', ')}\n`,
       )
   }
+  if (options.suite) {
+    const refused = copySuites(names, appDir, addedDependencies, io)
+    if (refused !== 0) return refused
+  }
   io.stdout.write(`added ${toCopy.map((plugin) => plugin.name).join(', ')} to ${appDir}\n`)
   if (addedDependencies.length > 0)
     io.stdout.write(`new dependencies: ${addedDependencies.join(', ')} (run npm install)\n`)
@@ -122,6 +145,38 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
       `\n${plugin.name}: ${plugin.mount ?? `import it from '../plugins/${plugin.name}/index.ts' and mount it in src/app.ts`}\n`,
     )
   }
+  return 0
+}
+
+/** The vitest the suites run on (the version this package is tested with). */
+const SUITE_RUNNER = { vitest: '5.0.3' }
+
+/**
+ * Copy the conformance suite of each named port next to its source (`plugins/<name>/src/conformance.ts`), and add `vitest` to the app's development
+ * dependencies. The suite is left out of a normal copy because an app that only uses a port has no use for it. Returns the exit code: 1 when a plugin has none.
+ */
+function copySuites(names: readonly string[], appDir: string, added: string[], io: Io): number {
+  const copies: Array<{ from: string; to: string }> = []
+  // The suite belongs to the port: `add kv --suite` (acryl-kv-json, or acryl-kv-db) brings the suite of acryl-kv.
+  const ports = [
+    ...new Set(names.map((name) => name.replace(/^(acryl-(?:kv|db))(?:-.*)?$/u, '$1'))),
+  ]
+  const library = readLibrary()
+  for (const name of ports) {
+    const suite = library.get(name)?.suite
+    const from = suite === undefined ? '' : join(libraryRoot(), name, suite)
+    if (suite === undefined || !existsSync(from)) {
+      io.stderr.write(`error: ${name} has no conformance suite (the ports db and kv do)\n`)
+      return 1
+    }
+    copies.push({ from, to: join(pluginsFolder(appDir).dir, name, suite) })
+  }
+  for (const { from, to } of copies) {
+    mkdirSync(dirname(to), { recursive: true })
+    copyFileSync(from, to)
+    io.stdout.write(`added the conformance suite ${relative(appDir, to).split(sep).join('/')}\n`)
+  }
+  added.push(...mergeTooling(appDir, { devDependencies: SUITE_RUNNER }).devDependencies)
   return 0
 }
 

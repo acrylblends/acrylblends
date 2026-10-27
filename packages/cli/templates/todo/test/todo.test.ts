@@ -1,17 +1,22 @@
 import assert from 'node:assert/strict'
+import { mkdirSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { type App, createApp, readManifest } from '../src/app.ts'
 
+/** Throwaway homes live inside the project (`.acrylblends/` is ignored by git): a sandboxed agent may not write to the system temp folder. */
+const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
+mkdirSync(scratch, { recursive: true })
+
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
-/** Boot the app on any free port with its data in `home`, run the test, always stop it. */
-async function withApp(home: string, run: (app: App) => Promise<void>) {
-  const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0))
+/** Boot the app with its data in `home`, run the test, always stop it. In process by default (`app.root.router.request`); `listen` starts the real server on any free port. */
+async function withApp(home: string, run: (app: App) => Promise<void>, listen = false) {
+  const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0), { listen })
   try {
     await run(app)
   } finally {
@@ -20,7 +25,7 @@ async function withApp(home: string, run: (app: App) => Promise<void>) {
 }
 
 async function withHome(run: (home: string) => Promise<void>) {
-  const home = await mkdtemp(join(tmpdir(), 'todo-test-'))
+  const home = await mkdtemp(join(scratch, 'todo-test-'))
   try {
     await run(home)
   } finally {
@@ -29,7 +34,7 @@ async function withHome(run: (home: string) => Promise<void>) {
 }
 
 const send = (app: App, method: string, path: string, body?: unknown) =>
-  fetch(`${app.url}${path}`, {
+  app.root.router.request(`${path}`, {
     method,
     headers: { 'content-type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -53,21 +58,41 @@ test('creates, completes, lists and deletes', () =>
     }),
   ))
 
-test('a change from a foreign origin is refused; a plain request from this machine works', () =>
-  withHome((home) =>
-    withApp(home, async (app) => {
-      const post = (headers: Record<string, string>) =>
-        fetch(`${app.url}/todo/api`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', ...headers },
-          body: JSON.stringify({ title: 'x' }),
-        })
-      assert.equal((await post({ origin: 'http://evil.example' })).status, 403)
-      assert.equal((await post({ origin: 'null' })).status, 403)
-      assert.equal((await post({})).status, 201)
-      assert.equal((await post({ origin: new URL(app.url).origin })).status, 201)
-    }),
-  ))
+/** A sandbox may forbid listening on a port (Codex's workspace-write does). The one test that needs a real connection (the origin check looks at who connected) is skipped there, and says so. */
+const canListen = await new Promise<boolean>((done) => {
+  const probe = createServer()
+  probe.once('error', () => done(false))
+  probe.listen(0, '127.0.0.1', () => probe.close(() => done(true)))
+})
+const skip = canListen ? false : 'this environment does not allow listening on a port'
+if (!canListen)
+  console.log(
+    `skipped: the test that starts the real server (${skip}); every other test ran in process`,
+  )
+
+test(
+  'a change from a foreign origin is refused; a plain request from this machine works',
+  { skip },
+  () =>
+    withHome((home) =>
+      withApp(
+        home,
+        async (app) => {
+          const post = (headers: Record<string, string>) =>
+            fetch(`${app.url}/todo/api`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', ...headers },
+              body: JSON.stringify({ title: 'x' }),
+            })
+          assert.equal((await post({ origin: 'http://evil.example' })).status, 403)
+          assert.equal((await post({ origin: 'null' })).status, 403)
+          assert.equal((await post({})).status, 201)
+          assert.equal((await post({ origin: new URL(app.url).origin })).status, 201)
+        },
+        true,
+      ),
+    ),
+)
 
 test('rejects bad input and unknown ids', () =>
   withHome((home) =>
@@ -114,7 +139,7 @@ test('serves the page, and streams the list: now, and again on every change', ()
       assert.match(await page.text(), /<title>Todo<\/title>/)
 
       const controller = new AbortController()
-      const stream = await fetch(`${app.url}/todo/events`, { signal: controller.signal })
+      const stream = await app.root.router.request(`/todo/events`, { signal: controller.signal })
       const reader = stream.body!.getReader()
       const decoder = new TextDecoder()
       let text = ''

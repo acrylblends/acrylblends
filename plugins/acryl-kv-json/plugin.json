@@ -9,5 +9,8 @@
     "@deepseek-ai/schemastery": "3.18.4"
   },
   "mount": "mount it after instance: root.plugin(kvJson, {}) (the file is kv.json in the app home, or set path); then a plugin that declares inject: ['kv'] calls await ctx.kv.set('theme', 'dark') and ctx.kv.update('visits', (n) => (n ?? 0) + 1)",
-  "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"]
+  "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"],
+  "imports": {
+    "#acryl-kv-json": "acryl-kv-json/src/index.ts"
+  }
 }

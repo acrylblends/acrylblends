@@ -9,5 +9,8 @@
     "@deepseek-ai/schemastery": "3.18.4"
   },
   "mount": "mount it after instance: root.plugin(dbSqlite, { migrations: 'migrations' }) with the migrations/ folder (001-name.sql, ...) next to src/; then a plugin that declares inject: ['db'] calls await ctx.db.all('SELECT ...', value)",
-  "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"]
+  "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"],
+  "imports": {
+    "#acryl-db-sqlite": "acryl-db-sqlite/src/index.ts"
+  }
 }
