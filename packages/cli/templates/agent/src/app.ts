@@ -57,6 +57,7 @@ export function readManifest(values?: Readonly<Record<string, ParameterValue>>) 
 
 export interface App {
   readonly root: Context
+  /** The address the server listens on; empty when the app was made with `listen: false`. */
   readonly url: string
   stop(): Promise<void>
 }
@@ -71,19 +72,22 @@ export async function createApp(
     values?: Readonly<Record<string, ParameterValue>>
     /** A real model (any OpenAI-compatible API) in place of the offline scripted one. */
     model?: OpenAIConfig
+    /** Start the HTTP server (default). Tests pass `false` and call `app.root.router.request(path)`: it needs no port, so it also runs where a sandbox forbids listening. */
+    listen?: boolean
   } = {},
 ): Promise<App> {
   const read = readManifest(options.values)
-  // The door is a development tool: its row is left out when NODE_ENV=production or ACRYL_DOOR=off. One process at a time serves a folder's door, so the tests set ACRYL_DOOR=off.
-  const manifest =
-    process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off'
-      ? {
-          ...read,
-          plugins: read.plugins.map((row) =>
-            row.use === 'acryl-door' ? { ...row, disabled: true } : row,
-          ),
-        }
-      : read
+  // Rows left out: the server (and so the door, which needs it) when the app is reached in process; the door in production and with ACRYL_DOOR=off (one process at a time
+  // serves a folder's door, so the tests that start several apps set it).
+  const listen = options.listen !== false
+  const leaveOut = new Set<string>()
+  if (!listen) leaveOut.add('acryl-node-server').add('acryl-door')
+  if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off')
+    leaveOut.add('acryl-door')
+  const manifest = {
+    ...read,
+    plugins: read.plugins.map((row) => (leaveOut.has(row.use) ? { ...row, disabled: true } : row)),
+  }
   const extensionsDir = join(chosen.root, 'plugins')
   // One release of grace: an app made before 0.7.8 kept what the agent wrote in `extensions/`. It is still installed, with a warning.
   const legacyDir = join(chosen.root, 'extensions')
@@ -115,7 +119,7 @@ export async function createApp(
   ]
   return {
     root,
-    url: root.nodeServer.url,
+    url: listen ? root.nodeServer.url : '',
     async stop() {
       for (const fiber of [...fibers].reverse()) await fiber.dispose()
     },

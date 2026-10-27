@@ -1,20 +1,23 @@
 import assert from 'node:assert/strict'
+import { mkdirSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { type App, createApp } from '../src/app.ts'
 
-// One process at a time serves a folder's door; these tests start several apps in the same folder.
-process.env.ACRYL_DOOR = 'off'
+/** Throwaway homes live inside the project (`.acrylblends/` is ignored by git): a sandboxed agent may not write to the system temp folder. */
+const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
+mkdirSync(scratch, { recursive: true })
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 async function withApp(run: (app: App) => Promise<void>) {
-  const home = await mkdtemp(join(tmpdir(), 'agent-test-'))
-  const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0))
+  const home = await mkdtemp(join(scratch, 'agent-test-'))
+  const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
+    listen: false,
+  })
   try {
     await run(app)
   } finally {
@@ -24,7 +27,7 @@ async function withApp(run: (app: App) => Promise<void>) {
 }
 
 const ask = (app: App, body: unknown) =>
-  fetch(`${app.url}/ask`, {
+  app.root.router.request(`/ask`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
