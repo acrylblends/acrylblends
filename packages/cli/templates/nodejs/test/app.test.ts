@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
+import { mkdirSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -8,11 +8,15 @@ import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { type App, createApp } from '../src/app.ts'
 import { APP_NAME } from '../src/routes.ts'
 
+/** Throwaway homes and databases live inside the project (`.acrylblends/` is ignored by git), because a sandboxed agent may not write to the system temp folder. */
+const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
+mkdirSync(scratch, { recursive: true })
+
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 /** Boot the app in a throwaway home on any free port, run the test, always stop it and remove the home. */
 async function withApp(run: (app: App) => Promise<void>) {
-  const home = await mkdtemp(join(tmpdir(), 'app-test-'))
+  const home = await mkdtemp(join(scratch, 'app-test-'))
   const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0))
   try {
     await run(app)

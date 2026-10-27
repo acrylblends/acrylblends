@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+/** Throwaway homes and databases live inside the project (`.acrylblends/` is ignored by git), because a sandboxed agent may not write to the system temp folder. */
+const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
+mkdirSync(scratch, { recursive: true })
 
 /** Start `src/main.ts` the way `npm start` does, on a port the system chooses, and read the address it prints. */
 async function start(env: Record<string, string> = {}) {
-  const home = mkdtempSync(join(tmpdir(), 'server-test-'))
+  const home = mkdtempSync(join(scratch, 'server-test-'))
   const child = spawn(
     process.execPath,
     ['--import', './plugins/acryl-node-server/src/register.ts', 'src/main.ts'],

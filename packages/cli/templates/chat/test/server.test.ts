@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+/** Throwaway homes and databases live inside the project (`.acrylblends/` is ignored by git), because a sandboxed agent may not write to the system temp folder. */
+const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
+mkdirSync(scratch, { recursive: true })
 
 /** Start `src/main.ts` the way `npm start` does, on a port the system chooses, and read the address it prints. */
 async function start(env: Record<string, string> = {}) {
@@ -15,8 +19,8 @@ async function start(env: Record<string, string> = {}) {
       env: {
         ...process.env,
         PORT: '0',
-        ACRYLBLENDS_HOME: mkdtempSync(join(tmpdir(), 'chat-home-')),
-        CHAT_DB: join(mkdtempSync(join(tmpdir(), 'chat-')), 'chat.sqlite'),
+        ACRYLBLENDS_HOME: mkdtempSync(join(scratch, 'chat-home-')),
+        CHAT_DB: join(mkdtempSync(join(scratch, 'chat-')), 'chat.sqlite'),
         ...env,
       },
       stdio: ['ignore', 'pipe', 'inherit'],

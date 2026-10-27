@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
+import { mkdirSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +11,10 @@ import { createApp as boot } from '../src/app.ts'
 import { createApp } from '../src/chat-app.ts'
 import type { Llm } from '../src/llm.ts'
 
+/** Throwaway homes and databases live inside the project (`.acrylblends/` is ignored by git), because a sandboxed agent may not write to the system temp folder. */
+const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
+mkdirSync(scratch, { recursive: true })
+
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 /**
@@ -20,7 +24,7 @@ const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 const stops: (() => Promise<void>)[] = []
 after(() => Promise.all(stops.map((stop) => stop())))
 async function booted() {
-  const home = await mkdtemp(join(tmpdir(), 'chat-test-'))
+  const home = await mkdtemp(join(scratch, 'chat-test-'))
   const app = await boot(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
     database: join(home, 'test.sqlite'),
   })
