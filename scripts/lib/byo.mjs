@@ -1,6 +1,6 @@
 // The gate of spec 049 slice 15 ("bring your own tool"): an agent follows docs/framework/guides/bring-your-own-tool.md alone and swaps a provider of the kv port into a RUNNING app
 // through the door. This module makes the guide's starting point (the port and its suite in the app, the default provider and a consumer running as plugins) and checks the result.
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'

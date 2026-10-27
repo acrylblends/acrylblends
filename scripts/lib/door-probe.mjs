@@ -153,8 +153,13 @@ export async function probeDoor(app, env, { tags = false } = {}) {
       cookie,
     )
 
-    browser = spawn(chrome, chromeFlags(profile, devPort), { stdio: 'ignore' })
-    const cdp = await until(() => devtools(devPort), 20_000)
+    // A cold headless Chrome on a busy runner can be slow or fail to start once: try twice, 30 s each.
+    let cdp
+    for (let attempt = 0; attempt < 2 && cdp === undefined; attempt++) {
+      browser = spawn(chrome, chromeFlags(profile, devPort), { stdio: 'ignore' })
+      cdp = await until(() => devtools(devPort), 30_000)
+      if (cdp === undefined) browser.kill('SIGKILL')
+    }
     if (!step('headless Chrome opens', cdp !== undefined)) return { ok: false, steps }
     await cdp.send('Network.enable')
     await cdp.send('Network.setCookie', {

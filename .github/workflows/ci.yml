@@ -6,7 +6,7 @@ name: CI
 #    Node 22 and 24. The SQLite provider and the JSON-file store follow the operating system's file locking and rename rules, so one runner proves neither.
 on:
   push:
-    branches: [main, '063-*']
+    branches: [main, '[0-9][0-9][0-9]-*']
   pull_request:
   workflow_dispatch:
 

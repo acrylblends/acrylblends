@@ -100,8 +100,13 @@ try {
 
   const devPort = 20000 + Math.floor(Math.random() * 20000)
   const profile = join(scratch, 'chrome')
-  browser = spawn(chrome, chromeFlags(profile, devPort), { stdio: 'ignore' })
-  const cdp = await until(() => devtools(devPort), 20_000)
+  // A cold headless Chrome on a busy runner can be slow or fail to start once: try twice, 30 s each.
+  let cdp
+  for (let attempt = 0; attempt < 2 && cdp === undefined; attempt++) {
+    browser = spawn(chrome, chromeFlags(profile, devPort), { stdio: 'ignore' })
+    cdp = await until(() => devtools(devPort), 30_000)
+    if (cdp === undefined) browser.kill('SIGKILL')
+  }
   if (!cdp) fail('headless Chrome did not open')
   const evaluate = async (expression) => {
     const r = await cdp.send('Runtime.evaluate', {
