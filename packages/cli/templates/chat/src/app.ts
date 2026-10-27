@@ -5,6 +5,7 @@ import * as db from '../plugins/acryl-db-sqlite/src/index.ts'
 import * as door from '../plugins/acryl-door/src/index.ts'
 import * as nodeServer from '../plugins/acryl-node-server/src/index.ts'
 import * as router from '../plugins/acryl-router/src/index.ts'
+import { extensions } from '../plugins/extensions/index.ts'
 import { type AppInstance, instance } from '../plugins/instance/index.ts'
 import {
   blueprintsIn,
@@ -21,6 +22,7 @@ export const registry = {
   'acryl-db-sqlite': db,
   'acryl-node-server': nodeServer,
   'acryl-door': door,
+  extensions,
   routes,
 }
 
@@ -71,30 +73,29 @@ export interface AppOptions {
  * `migrations/`; the one place that names the SQLite provider is this file (`acrylblends check-deps`), so a different provider is a change here.
  */
 export async function createApp(chosen: AppInstance, options: AppOptions = {}): Promise<App> {
-  const manifest = readManifest(options.values)
+  const read = readManifest(options.values)
   const listen = options.listen
+  // Rows left out: the server (and the door, which needs it) when the app is reached in process; the door when it is switched off; live plugin installs in production.
+  const leaveOut = new Set<string>()
+  if (listen === false) leaveOut.add('acryl-node-server').add('acryl-door')
+  if (!doorEnabled()) leaveOut.add('acryl-door')
+  if (process.env.NODE_ENV === 'production') leaveOut.add('extensions')
+  const manifest = without(read, ...leaveOut)
   const file = options.database ?? 'data/chat.sqlite'
   const root = new Context()
   const first = root.plugin(instance, chosen)
   await first.await()
   const fibers: Fiber[] = [
     first,
-    ...(await compose(
-      root,
-      listen === false
-        ? without(manifest, 'acryl-node-server', 'acryl-door')
-        : doorEnabled()
-          ? manifest
-          : without(manifest, 'acryl-door'),
-      registry,
-      {
-        db: {
-          path: isAbsolute(file) ? file : resolve(projectRoot, file),
-          migrations: join(projectRoot, 'migrations'),
-        },
-        server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 },
+    ...(await compose(root, manifest, registry, {
+      db: {
+        path: isAbsolute(file) ? file : resolve(projectRoot, file),
+        migrations: join(projectRoot, 'migrations'),
       },
-    )),
+      // What is installed while the app runs lives in plugins/, next to the plugins copied from the library (plugins/library.json lists those, so they are not installed twice).
+      extensions: { sources: [{ dir: join(projectRoot, 'plugins'), trust: 'install' }] },
+      server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 },
+    })),
   ]
   return {
     root,
