@@ -3,8 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { createApp } from '../src/app.ts'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
+import { createApp } from '../src/app.ts'
 
 /** The agent extends the running app through POST /ask; a restart keeps what it built. */
 test('the agent builds, updates, protects and removes a plugin in the running app, and a restart keeps it', async () => {
