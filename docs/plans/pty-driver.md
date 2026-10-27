@@ -17,7 +17,7 @@ The panel's drivers run `claude -p`, `codex exec`, `pi -p`: one message in, one 
 - Transport: a WebSocket per session on `/api/driver-pty/<id>` (same-origin check and token as the panel's `ask`; development only; off with `NODE_ENV=production` or `ACRYL_DOOR=off`). Binary frames for terminal data, JSON frames for `resize` and `exit`. The page side is xterm.js loaded from the plugin's client folder (served by `clientModules`, no bundler), shown as a second tab of the panel.
 - One session at a time per app, like the panel's one run; a second start is refused with 409. The session ends when the page closes, the program exits, or Stop is pressed (SIGHUP, then SIGKILL after 2 s, by process group).
 - Audit: start, exit and the program name go to `.acryl/audit/driver-pty.jsonl`. Keystrokes are not logged (they can contain secrets); the door already audits what the agent does.
-- Page reload: `extensions/changed` events reload the page as the panel does today; the terminal session survives a reload (the session lives on the server; the page re-attaches by id and replays the last 64 KB of scrollback).
+- Page reload: when a plugin is installed or removed the page reloads the page as the panel does today; the terminal session survives a reload (the session lives on the server; the page re-attaches by id and replays the last 64 KB of scrollback).
 
 ## The native module
 
