@@ -4,20 +4,11 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createServer as createHttp } from 'node:http'
-import { createServer } from 'node:net'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { freePort } from './port.mjs'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const freePort = () =>
-  new Promise((resolve, reject) => {
-    const s = createServer()
-    s.once('error', reject)
-    s.listen(0, '127.0.0.1', () => {
-      const { port } = s.address()
-      s.close(() => resolve(port))
-    })
-  })
 async function until(fn, ms) {
   const end = Date.now() + ms
   while (Date.now() < end) {

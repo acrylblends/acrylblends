@@ -3,21 +3,12 @@
 // browser that session's cookie over the DevTools protocol. Returns { ok, steps } and never throws.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
-import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { freePort } from './port.mjs'
 import { startGroup, stopGroup } from './proc.mjs'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const freePort = () =>
-  new Promise((resolve, reject) => {
-    const s = createServer()
-    s.once('error', reject)
-    s.listen(0, '127.0.0.1', () => {
-      const { port } = s.address()
-      s.close(() => resolve(port))
-    })
-  })
 async function until(fn, ms, every = 400) {
   const end = Date.now() + ms
   while (Date.now() < end) {

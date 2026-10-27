@@ -6,10 +6,10 @@
 //   node scripts/verify-byo-tool.mjs [path to the guide]
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { freePort } from './lib/port.mjs'
 import { startGroup, stopGroup } from './lib/proc.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -22,15 +22,6 @@ const fail = (message) => {
   throw new Error(`verify-byo-tool: ${message}`)
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const freePort = () =>
-  new Promise((resolvePort, reject) => {
-    const s = createServer()
-    s.once('error', reject)
-    s.listen(0, '127.0.0.1', () => {
-      const { port } = s.address()
-      s.close(() => resolvePort(port))
-    })
-  })
 
 const guide = readFileSync(guidePath, 'utf8')
 const blocks = [...guide.matchAll(/```(\w+)[^\n]*\n([\s\S]*?)```/gu)].map((m) => ({

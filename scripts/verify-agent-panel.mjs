@@ -8,6 +8,7 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
+import { freePort } from './lib/port.mjs'
 import { startGroup, stopGroup } from './lib/proc.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -84,7 +85,7 @@ try {
   run('npm', ['run', 'check'], app)
   log('the panel is added to a fresh agent app, which type-checks')
 
-  const port = 20000 + Math.floor(Math.random() * 20000)
+  const port = await freePort()
   server = startGroup('npm', ['start'], {
     cwd: app,
     env: { ...serverEnv, PORT: String(port) },
@@ -94,7 +95,7 @@ try {
   server.stdout.on('data', (c) => (output += c))
   server.stderr.on('data', (c) => (output += c))
   const base = await until(async () => /listening on (http:\/\/\S+)/u.exec(output)?.[1], 40_000)
-  if (!base) fail(`the app did not start:\n${output}`)
+  if (!base) fail(`the app did not start on port ${port}:\n${output}`)
   const pid = server.pid
   if ((await fetch(`${base}/hello`)).status !== 404) fail('/hello exists before the agent built it')
 
