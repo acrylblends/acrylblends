@@ -30,7 +30,13 @@ async function start(env: Record<string, string> = {}) {
     process.execPath,
     ['--import', './plugins/acryl-node-server/src/register.ts', 'src/main.ts'],
     {
-      env: { ...process.env, ACRYLBLENDS_HOME: home, ACRYLBLENDS_PORT: '0', ...env },
+      env: {
+        ...process.env,
+        ACRYLBLENDS_HOME: home,
+        ACRYLBLENDS_PORT: '0',
+        ACRYL_DOOR: 'off',
+        ...env,
+      },
       stdio: ['ignore', 'pipe', 'inherit'],
     },
   )

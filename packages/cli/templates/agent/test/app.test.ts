@@ -8,6 +8,9 @@ import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { type App, createApp } from '../src/app.ts'
 import { APP_NAME } from '../src/routes.ts'
 
+// One process at a time serves a folder's door; these tests start several apps in the same folder.
+process.env.ACRYL_DOOR = 'off'
+
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 /** Boot the app in a throwaway home on any free port, run the test, always stop it and remove the home. */

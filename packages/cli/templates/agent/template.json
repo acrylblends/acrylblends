@@ -11,6 +11,7 @@
     "extensions",
     "builder",
     "manifest",
-    "save"
+    "save",
+    "acryl-door"
   ]
 }

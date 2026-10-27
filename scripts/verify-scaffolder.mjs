@@ -1,15 +1,4 @@
 #!/usr/bin/env node
-/**
- * Prove each template works the way a user runs it:
- *
- *  1. build the CLI and run `acrylblends init` for real into an empty temp directory
- *  2. a second `init` into the same directory must refuse and change nothing
- *  3. the generated package.json depends at run time only on the named packages (constitution III)
- *  4. npm install, `npm run check` (types), `npm test`, boot it with `npm start` in a throwaway home, request its routes,
- *     stop it with SIGINT, and confirm its data stayed in that home
- *
- * Needs the network for the install step. Fails on the first problem.
- */
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
   existsSync,
@@ -22,6 +11,18 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+/**
+ * Prove each template works the way a user runs it:
+ *
+ *  1. build the CLI and run `acrylblends init` for real into an empty temp directory
+ *  2. a second `init` into the same directory must refuse and change nothing
+ *  3. the generated package.json depends at run time only on the named packages (constitution III)
+ *  4. npm install, `npm run check` (types), `npm test`, boot it with `npm start` in a throwaway home, request its routes,
+ *     stop it with SIGINT, and confirm its data stayed in that home
+ *
+ * Needs the network for the install step. Fails on the first problem.
+ */
+import { probeDoor } from './lib/door-probe.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const cliDir = join(root, 'packages', 'cli')
@@ -41,6 +42,22 @@ const fail = (message) => {
 
 const capture = (command, args, options = {}) =>
   execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options })
+
+/** True once `url` answers with any status, within `timeoutMs`. */
+async function waitForOk(url, timeoutMs = 30_000) {
+  const end = Date.now() + timeoutMs
+  while (Date.now() < end) {
+    if (
+      await fetch(url, { redirect: 'manual' }).then(
+        () => true,
+        () => false,
+      )
+    )
+      return true
+    await new Promise((r) => setTimeout(r, 400))
+  }
+  return false
+}
 
 function waitForUrl(child, timeoutMs = 60_000) {
   return new Promise((done, reject) => {
@@ -755,6 +772,40 @@ spec:
     )
     if (!/^200 .*javascript/.test(production.trim()))
       fail(`${kind}: production serving of dist/client answered ${production}`)
+    // The door: the running app writes `.acryl/bin/acryl` and answers `brief`; for notes a real browser is opened and the signed-in page is read through `look`.
+    {
+      const port = 20000 + Math.floor(Math.random() * 20000)
+      const server = spawn(npm, ['start'], {
+        cwd: notes,
+        env: { ...process.env, PORT: String(port) },
+        stdio: 'ignore',
+      })
+      try {
+        const up = await waitForOk(`http://127.0.0.1:${port}/`)
+        if (!up) fail(`${kind}: npm start did not serve for the door check`)
+        const brief = spawnSync(join(notes, '.acryl', 'bin', 'acryl'), ['brief'], {
+          cwd: notes,
+          encoding: 'utf8',
+        })
+        if (brief.status !== 0 || !/Verbs:/.test(brief.stdout))
+          fail(`${kind}: .acryl/bin/acryl brief failed: ${brief.stdout}${brief.stderr}`)
+        const ignored = spawnSync('git', ['init', '-q'], { cwd: notes })
+        const staged = spawnSync('git', ['add', '-A', '--dry-run'], {
+          cwd: notes,
+          encoding: 'utf8',
+        })
+        if (ignored.status !== 0 || /\.acryl\//.test(staged.stdout))
+          fail(`${kind}: git add -A would stage .acryl/: ${staged.stdout}`)
+        rmSync(join(notes, '.git'), { recursive: true, force: true })
+      } finally {
+        server.kill('SIGTERM')
+      }
+      if (kind === 'notes') {
+        const door = await probeDoor(notes, process.env, { tags: false })
+        if (!door.ok) fail(`notes: the door step failed:\n${door.steps.join('\n')}`)
+        if (door.skipped) log(door.steps.at(-1))
+      }
+    }
     // The dependency rule: a driver imported in a route file is named by file and line, and the template's own check passes without it.
     writeFileSync(
       join(notes, 'src', 'planted.ts'),

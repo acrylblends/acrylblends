@@ -32,6 +32,7 @@ async function start(env: Record<string, string> = {}) {
       env: {
         ...process.env,
         PORT: '0',
+        ACRYL_DOOR: 'off',
         ACRYLBLENDS_HOME: mkdtempSync(join(scratch, 'chat-home-')),
         CHAT_DB: join(mkdtempSync(join(scratch, 'chat-')), 'chat.sqlite'),
         ...env,

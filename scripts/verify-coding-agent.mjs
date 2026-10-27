@@ -22,6 +22,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { probeChat } from './lib/chat-probe.mjs'
+import { probeDoor } from './lib/door-probe.mjs'
 import { probeNotes } from './lib/notes-probe.mjs'
 import { part2 } from './lib/part2.mjs'
 
@@ -122,7 +123,7 @@ const DRIVERS = {
       '--permission-mode',
       'acceptEdits',
       '--allowedTools',
-      'Read,Edit,Write,Glob,Grep,Bash(npm *),Bash(npx *),Bash(node *),Bash(ls *),Bash(cat *)',
+      'Read,Edit,Write,Glob,Grep,Bash(npm *),Bash(npx *),Bash(node *),Bash(ls *),Bash(cat *),Bash(.acryl/bin/acryl *),Bash(./.acryl/bin/acryl *)',
       '--disallowedTools',
       'WebFetch,WebSearch',
     ],
@@ -382,6 +383,8 @@ async function attempt(name) {
     input: '',
   })
   const seconds = Math.round((Date.now() - started) / 1000)
+  // Kept beside the app so a failed run can be read (the agent's own output; the key is never in it).
+  writeFileSync(join(dir, 'agent-output.txt'), `${result.stdout}\n--- stderr\n${result.stderr}`)
   for (const path of secrets) rmSync(path, { recursive: true, force: true })
   const test = run('npm', ['test'], app, { env: clean })
   const check = run('npm', ['run', 'check'], app, { env: clean })
@@ -406,6 +409,10 @@ async function attempt(name) {
     }
     lifecycle = await part2(app, clean, {
       probe: (dir) => probeRoute(dir, clean),
+      door:
+        values.preset === 'tags' || values.preset === 'notes'
+          ? (dir) => probeDoor(dir, clean, { tags: Boolean(PRESETS[values.preset].tags) })
+          : undefined,
       install,
       secrets: [agentEnv.DEEPSEEK_API_KEY ?? ''],
       clone: join(dir, 'clone'),

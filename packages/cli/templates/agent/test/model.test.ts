@@ -11,6 +11,9 @@ import { createApp } from '../src/app.ts'
 /** A plugin no scripted command knows: the model writes it from scratch. */
 const COUNTER = `import type { Context } from '@deepseek-ai/cordis'
 import { Acryl } from 'acrylblends'
+
+// One process at a time serves a folder's door; these tests start several apps in the same folder.
+process.env.ACRYL_DOOR = 'off'
 export const name = 'counter'
 export const inject = ['router']
 export function apply(ctx: Context) {
