@@ -160,3 +160,6 @@ docs/.generated/
 
 # Demo apps and the showcase run (local only, see demos/README.md)
 demos/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

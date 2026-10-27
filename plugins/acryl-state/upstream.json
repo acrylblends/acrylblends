@@ -2,7 +2,7 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-state",
-    "commit": "4aaf9072c4d73f3b614a217ff54b8eb5a0598ea5"
+    "commit": "11a31f2cecbe64c86705a351f70b58de210a6ec0"
   },
   "vendored": [
     "src",
