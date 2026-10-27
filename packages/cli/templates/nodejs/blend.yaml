@@ -17,6 +17,9 @@ spec:
       name: acryl-router
     - id: routes
       name: routes
+    # Plugins installed while the app runs (the door's `plugin add`): development only, src/app.ts leaves it out when NODE_ENV=production.
+    - id: extensions
+      name: extensions
     - id: server
       name: acryl-node-server
       config:

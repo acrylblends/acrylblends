@@ -836,6 +836,40 @@ spec:
         })
         if (brief.status !== 0 || !/Verbs:/.test(brief.stdout))
           fail(`${kind}: .acryl/bin/acryl brief failed: ${brief.stdout}${brief.stderr}`)
+        // The plugin verbs work in every web template: `brief` does not say they are unavailable, `plugin list` answers, and a plugin added live serves its route and is gone after `plugin remove`.
+        if (/Live plugins: unavailable/.test(brief.stdout))
+          fail(`${kind}: brief says the live plugin verbs are unavailable: ${brief.stdout}`)
+        const doorJson = (...args) => {
+          const r = spawnSync(join(notes, '.acryl', 'bin', 'acryl'), [...args, '--json'], {
+            cwd: notes,
+            encoding: 'utf8',
+          })
+          try {
+            return JSON.parse(r.stdout)
+          } catch {
+            return fail(
+              `${kind}: .acryl/bin/acryl ${args.join(' ')} answered ${r.stdout}${r.stderr}`,
+            )
+          }
+        }
+        if (!Array.isArray(doorJson('plugin', 'list')))
+          fail(`${kind}: plugin list did not answer a list`)
+        mkdirSync(join(notes, 'plugins', 'probe'), { recursive: true })
+        writeFileSync(
+          join(notes, 'plugins', 'probe', 'index.ts'),
+          "import type { Context } from '@deepseek-ai/cordis'\nimport { Acryl } from 'acrylblends'\nexport const name = 'probe'\nexport const inject = ['router']\nexport function apply(ctx: Context) {\n  ctx.router.route('/', new Acryl().get('/probe-route', (c) => c.json({ probe: true })))\n}\n",
+        )
+        const added = doorJson('plugin', 'add', 'plugins/probe')
+        if (!added.ok || added.state !== 'active')
+          fail(`${kind}: plugin add plugins/probe: ${JSON.stringify(added)}`)
+        const served = await fetch(`http://127.0.0.1:${port}/probe-route`)
+        if (served.status !== 200)
+          fail(`${kind}: the plugin added live does not serve its route (${served.status})`)
+        if (!doorJson('plugin', 'remove', 'probe').ok) fail(`${kind}: plugin remove probe failed`)
+        if ((await fetch(`http://127.0.0.1:${port}/probe-route`)).status !== 404)
+          fail(`${kind}: the route of a removed plugin still answers`)
+        rmSync(join(notes, 'plugins', 'probe'), { recursive: true, force: true })
+        log(`${kind}: the door lists plugins, adds one live and removes it`)
         const ignored = spawnSync('git', ['init', '-q'], { cwd: notes })
         const staged = spawnSync('git', ['add', '-A', '--dry-run'], {
           cwd: notes,

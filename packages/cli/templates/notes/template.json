@@ -6,6 +6,7 @@
     "acryl-db-sqlite",
     "manifest",
     "save",
+    "extensions",
     "acryl-door"
   ]
 }
