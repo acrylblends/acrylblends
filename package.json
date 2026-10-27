@@ -11,7 +11,7 @@
     "build": "pnpm -r run build && node scripts/stage-framework.mjs",
     "test:packages": "pnpm -r --filter './plugins/acryl-*' --filter acrylblends-framework run test",
     "typecheck": "tsc -p tsconfig.json && tsc -p plugins/tsconfig.json",
-    "test": "vitest run && pnpm run test:packages && node --test \"plugins/*/test/*.test.ts\" && node --test scripts/lib/*.test.mjs",
+    "test": "vitest run && pnpm run test:packages && node --import ./scripts/workspace-source.mjs --test \"plugins/*/test/*.test.ts\" && node --test scripts/lib/*.test.mjs",
     "lint": "biome check .",
     "format": "biome check --write .",
     "verify:scaffolder": "node scripts/verify-scaffolder.mjs",
