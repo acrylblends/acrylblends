@@ -1,5 +1,6 @@
 import { t as Acryl } from "./app-D8riatvv.js";
 import { n as UpgradeWebSocket } from "./index-BvFh1Gfx.js";
+import { t as RequestError } from "./error-t4N2js2I.js";
 import { ServeStaticOptions, serveStatic } from "./node-server/serve-static.js";
 import { getConnInfo } from "./node-server/conninfo.js";
 import { AddressInfo } from "node:net";
@@ -119,13 +120,6 @@ declare const getRequestListener: (fetchCallback: FetchCallback, options?: {
   overrideGlobalObjects?: boolean;
   autoCleanupIncoming?: boolean;
 }) => (incoming: IncomingMessage | Http2ServerRequest, outgoing: ServerResponse | Http2ServerResponse) => Promise<void>;
-//#endregion
-//#region ../../plugins/acryl-node-server/src/adapter/error.d.ts
-declare class RequestError extends Error {
-  constructor(message: string, options?: {
-    cause?: unknown;
-  });
-}
 //#endregion
 //#region ../../plugins/acryl-node-server/src/client-modules.d.ts
 /** Options of {@link clientModules}. */

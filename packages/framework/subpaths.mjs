@@ -30,7 +30,7 @@ const HELPERS = ['accepts', 'adapter', 'cookie', 'dev', 'factory', 'html', 'prox
 const ADAPTERS = ['aws-lambda', 'bun', 'cloudflare-pages', 'cloudflare-workers', 'lambda-edge', 'netlify', 'service-worker', 'vercel']
 const ROUTERS = ['reg-exp-router', 'smart-router', 'trie-router', 'pattern-router', 'linear-router']
 /** `<upstream>/utils/*`: each utility module by its file name. */
-const UTILS = readdirSync(join(here, CORE, 'utils')).filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts')).map(name => name.slice(0, -3)).sort()
+const UTILS = readdirSync(join(here, CORE, 'utils')).filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts') && !name.endsWith('.d.ts')).map(name => name.slice(0, -3)).sort()
 
 /** Subpath (without `./`; `.` is the root) to source, relative to this package. */
 export const SUBPATHS = {

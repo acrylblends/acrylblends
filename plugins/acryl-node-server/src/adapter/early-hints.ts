@@ -1,4 +1,4 @@
-import type { Context, Env, MiddlewareHandler } from '../../../acryl-router/src/core/index.ts'
+import type { Context, Env, MiddlewareHandler } from 'acryl-router'
 import type { HttpBindings } from './types.ts'
 
 export type EarlyHintsOptions<E extends Env = Env> = {

@@ -442,6 +442,74 @@
       "types": "./lib/kv/db.d.ts",
       "default": "./lib/kv/db.js"
     },
+    "./db/conformance": {
+      "types": "./lib/db/conformance.d.ts",
+      "default": "./lib/db/conformance.js"
+    },
+    "./kv/conformance": {
+      "types": "./lib/kv/conformance.d.ts",
+      "default": "./lib/kv/conformance.js"
+    },
+    "./door/host": {
+      "types": "./lib/door/host.d.ts",
+      "default": "./lib/door/host.js"
+    },
+    "./door/protocol": {
+      "types": "./lib/door/protocol.d.ts",
+      "default": "./lib/door/protocol.js"
+    },
+    "./door/page": {
+      "types": "./lib/door/page.d.ts",
+      "default": "./lib/door/page.js"
+    },
+    "./cordis/router": {
+      "types": "./lib/cordis/router.d.ts",
+      "default": "./lib/cordis/router.js"
+    },
+    "./cordis/router-http": {
+      "types": "./lib/cordis/router-http.d.ts",
+      "default": "./lib/cordis/router-http.js"
+    },
+    "./cordis/state": {
+      "types": "./lib/cordis/state.d.ts",
+      "default": "./lib/cordis/state.js"
+    },
+    "./cordis/state/react": {
+      "types": "./lib/cordis/state/react.d.ts",
+      "default": "./lib/cordis/state/react.js"
+    },
+    "./cordis/inspect": {
+      "types": "./lib/cordis/inspect.d.ts",
+      "default": "./lib/cordis/inspect.js"
+    },
+    "./cordis/node-server": {
+      "types": "./lib/cordis/node-server.d.ts",
+      "default": "./lib/cordis/node-server.js"
+    },
+    "./cordis/db": {
+      "types": "./lib/cordis/db.d.ts",
+      "default": "./lib/cordis/db.js"
+    },
+    "./cordis/db-sqlite": {
+      "types": "./lib/cordis/db-sqlite.d.ts",
+      "default": "./lib/cordis/db-sqlite.js"
+    },
+    "./cordis/kv": {
+      "types": "./lib/cordis/kv.d.ts",
+      "default": "./lib/cordis/kv.js"
+    },
+    "./cordis/kv-json": {
+      "types": "./lib/cordis/kv-json.d.ts",
+      "default": "./lib/cordis/kv-json.js"
+    },
+    "./cordis/kv-db": {
+      "types": "./lib/cordis/kv-db.d.ts",
+      "default": "./lib/cordis/kv-db.js"
+    },
+    "./cordis/door": {
+      "types": "./lib/cordis/door.d.ts",
+      "default": "./lib/cordis/door.js"
+    },
     "./package.json": "./package.json",
     "./cli": {
       "types": "./dist/index.d.ts",
@@ -486,5 +554,25 @@
   "publishConfig": {
     "access": "public"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/schemastery": "~3.18.4",
+    "react": ">=18",
+    "vitest": ">=3"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "vitest": {
+      "optional": true
+    }
+  }
 }

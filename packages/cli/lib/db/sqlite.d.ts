@@ -1,4 +1,4 @@
-import { n as DbExecutor, r as SqlValue, t as Db } from "../database-D_UN6We8.js";
+import { n as DbExecutor, r as SqlValue, t as Db } from "../database-DBHdwefi.js";
 
 //#region ../../plugins/acryl-db-sqlite/src/open.d.ts
 interface OpenDbOptions {

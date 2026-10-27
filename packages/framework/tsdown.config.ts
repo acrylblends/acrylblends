@@ -36,6 +36,20 @@ const browser = (name: string): UserConfig => ({
   sourcemap: false,
 })
 
+/**
+ * The Node adapter and `client-modules` of `acryl-node-server` are plain modules (no Cordis), and they import the router by its package name, as in the plugin's own build. Resolved
+ * for the package, those two names mean the router's Cordis-free core and helpers, so no plain entry reaches Cordis; every other importer gets the router plugin itself.
+ */
+const plainRouter = {
+  name: 'plain-router',
+  resolveId(source: string, importer: string | undefined) {
+    if (importer === undefined || !/acryl-node-server\/src\/(adapter\/|client-modules\.ts)/u.test(importer)) return null
+    if (source === 'acryl-router') return here('../../plugins/acryl-router/src/core/index.ts')
+    if (source === 'acryl-router/helpers') return here('../../plugins/acryl-router/src/helpers/index.ts')
+    return null
+  },
+}
+
 export default defineConfig([{
   name: 'acrylblends-framework',
   entry: Object.fromEntries(Object.entries(SUBPATHS).map(([subpath, source]) => [entryName(subpath), source])),
@@ -48,6 +62,7 @@ export default defineConfig([{
   // not pick up a plugin's own `lib/`. The table is the `entries` of each plugin's `plugin.json`. The Cordis-free modules (the Node adapter, `client-modules`) import the router's
   // core by relative path, so nothing of the plain subpaths reaches Cordis.
   alias: pluginAliases(),
+  plugins: [plainRouter],
   // The Cordis forms and the conformance suites use these; they are optional peer dependencies of the package, never part of its output.
   neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@deepseek-ai/cosmokit', 'react', 'vitest'],
   dts: { tsconfig: here('./tsconfig.json') },

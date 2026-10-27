@@ -14,7 +14,7 @@
  */
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -142,14 +142,22 @@ try {
   if (rendered !== '<h1 class="title">Acryl!</h1>') throw new Error(`acrylblends/jsx rendered ${JSON.stringify(rendered)}`)
   report('node (server JSX from acrylblends/jsx)', 'renders <h1 class="title">Acryl!</h1>')
 
-  // One copy of Acryl: the class a plain app creates is the class the Cordis router serves, and a plain entry never loads Cordis (it is an optional peer: not installed here).
-  const once = run(process.execPath, ['--input-type=module', '-e', "import { Acryl } from 'acrylblends'; import { Acryl as served } from 'acrylblends/cordis/router'; process.stdout.write(String(Acryl === served))"], app)
-  if (once !== 'true') throw new Error('acrylblends and acrylblends/cordis/router export two different Acryl classes')
+  // The plain entries load without Cordis (an optional peer dependency: not installed here).
   for (const plain of ['acrylblends', 'acrylblends/node-server', 'acrylblends/db', 'acrylblends/db/sqlite', 'acrylblends/kv', 'acrylblends/kv/json', 'acrylblends/streaming', 'acrylblends/body-limit']) {
     const loaded = run(process.execPath, ['--input-type=module', '-e', `await import('${plain}'); process.stdout.write('ok')`], app)
     if (loaded !== 'ok') throw new Error(`${plain} did not load without Cordis installed`)
   }
-  report('one Acryl, and the plain entries load without Cordis', 'acrylblends === acrylblends/cordis/router Acryl; 8 plain entries import with no @deepseek-ai/cordis installed')
+  // The Cordis forms need their peers. One copy of Acryl: the class a plain app creates is the class the Cordis router serves.
+  for (const peer of ['@deepseek-ai/cordis', '@deepseek-ai/schemastery']) {
+    mkdirSync(join(app, 'node_modules', '@deepseek-ai'), { recursive: true })
+    // Each peer is found where a plugin that depends on it has it (pnpm keeps them per package).
+    const found = ['packages/framework', 'plugins/acryl-door', 'plugins/acryl-node-server', 'plugins/acryl-db-sqlite'].map(d => join(root, '..', '..', d, 'node_modules', peer)).find(existsSync)
+    if (found === undefined) throw new Error(`${peer} is not installed in this workspace`)
+    symlinkSync(realpathSync(found), join(app, 'node_modules', peer), 'junction')
+  }
+  const once = run(process.execPath, ['--input-type=module', '-e', "import { Acryl } from 'acrylblends'; import { Acryl as served } from 'acrylblends/cordis/router'; process.stdout.write(String(Acryl === served))"], app)
+  if (once !== 'true') throw new Error('acrylblends and acrylblends/cordis/router export two different Acryl classes')
+  report('one Acryl, and the plain entries load without Cordis', 'acrylblends and acrylblends/cordis/router export the same Acryl; 8 plain entries import with no @deepseek-ai/cordis installed')
 
   // The hosting adapters, from the packed build: each handler is called the way its platform calls it (a real API Gateway or ALB event, a Request,
   // a CloudFront event, a fetch event), with no account and no network, and must answer what the app answers.
@@ -467,7 +475,8 @@ try {
   }
   const exported = Object.keys(JSON.parse(run('node', ['-e', "process.stdout.write(JSON.stringify(require('./node_modules/acrylblends/package.json').exports))"], app))).filter(key => key !== './package.json')
   // The DOM renderer is for the browser: its types are the DOM's. Every other subpath needs no DOM library.
-  const isDom = key => key === './jsx/dom' || key.startsWith('./jsx/dom/')
+  // Browser modules: the DOM renderer, and the door's page (it reads the document).
+  const isDom = key => key === './jsx/dom' || key.startsWith('./jsx/dom/') || key === './door/page'
   const subpaths = exported.filter(key => !isDom(key))
   const domSubpaths = exported.filter(isDom)
   if (domSubpaths.length === 0) throw new Error('no acrylblends/jsx/dom subpath to typecheck')
