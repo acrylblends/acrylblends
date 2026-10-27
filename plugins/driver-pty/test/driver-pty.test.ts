@@ -354,6 +354,11 @@ const ECHO = [
   'process.stdin.on("data", (d) => process.stdout.write("typed " + JSON.stringify(String(d)) + "\\n"))',
 ].join(';')
 
+/** The new size reached the terminal. Node on Windows does not raise `resize` for a ConPTY, so there the console's own resize report (`ESC [ 8 ; rows ; cols t`) is the evidence. */
+const resized = (printed: string): boolean =>
+  /size 110x35/u.test(printed) ||
+  (process.platform === 'win32' && printed.includes('\u001b[8;35;110t'))
+
 test('a real PTY: the program sees its size, a resize, and what is typed', async (t) => {
   const spawn = await realSpawn(t)
   if (!spawn) return
@@ -366,7 +371,7 @@ test('a real PTY: the program sees its size, a resize, and what is typed', async
   const { id } = (await started.json()) as { id: string }
   const reading = readEvents(
     await real.app.router.request(`/api/driver-pty/${id}/output`, { headers: real.headers }),
-    (events) => /typed "hi/u.test(text(events)) && /size 110x35/u.test(text(events)),
+    (events) => /typed "hi/u.test(text(events)) && resized(text(events)),
   )
   await sleep(300)
   await real.post(`/${id}/resize`, { cols: 110, rows: 35 })
@@ -375,7 +380,7 @@ test('a real PTY: the program sees its size, a resize, and what is typed', async
   const events = await reading
   const shown = JSON.stringify(text(events))
   assert.match(text(events), /size 90x20/u, shown)
-  assert.match(text(events), /size 110x35/u, shown)
+  assert.ok(resized(text(events)), shown)
   assert.match(text(events), /typed "hi/u, shown)
 })
 
