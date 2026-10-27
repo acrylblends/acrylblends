@@ -161,13 +161,15 @@ function copySuites(names: readonly string[], appDir: string, added: string[], i
   const ports = [
     ...new Set(names.map((name) => name.replace(/^(acryl-(?:kv|db))(?:-.*)?$/u, '$1'))),
   ]
+  const library = readLibrary()
   for (const name of ports) {
-    const from = join(libraryRoot(), name, 'src', 'conformance.ts')
-    if (!existsSync(from)) {
+    const suite = library.get(name)?.suite
+    const from = suite === undefined ? '' : join(libraryRoot(), name, suite)
+    if (suite === undefined || !existsSync(from)) {
       io.stderr.write(`error: ${name} has no conformance suite (the ports db and kv do)\n`)
       return 1
     }
-    copies.push({ from, to: join(pluginsFolder(appDir).dir, name, 'src', 'conformance.ts') })
+    copies.push({ from, to: join(pluginsFolder(appDir).dir, name, suite) })
   }
   for (const { from, to } of copies) {
     mkdirSync(dirname(to), { recursive: true })
