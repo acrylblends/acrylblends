@@ -2,21 +2,12 @@
 // through the door. This module makes the guide's starting point (the port and its suite in the app, the default provider and a consumer running as plugins) and checks the result.
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { freePort } from './port.mjs'
 import { startGroup } from './proc.mjs'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const freePort = () =>
-  new Promise((resolvePort, reject) => {
-    const s = createServer()
-    s.once('error', reject)
-    s.listen(0, '127.0.0.1', () => {
-      const { port } = s.address()
-      s.close(() => resolvePort(port))
-    })
-  })
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 /** The code blocks of the guide whose first line is a path comment, by path. */
