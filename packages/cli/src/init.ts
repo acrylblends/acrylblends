@@ -7,6 +7,7 @@ import {
   copyTemplate,
   isValidName,
   mergeDependencies,
+  mergeImports,
   mergeTooling,
   nameFrom,
   readTemplateDesktopPath,
@@ -132,6 +133,7 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
   )
   for (const plugin of plugins) {
     copyPlugin(plugin, directory)
+    if (plugin.imports) mergeImports(directory, plugin.imports, 'plugins')
     mergeDependencies(directory, plugin.dependencies)
     mergeTooling(directory, plugin)
   }

@@ -8,5 +8,9 @@
     "@deepseek-ai/cordis": "4.0.4"
   },
   "mount": "it is the port, not a service: a plugin declares inject: ['kv'] and imports the ctx.kv type from '../plugins/acryl-kv/src/cordis.ts'; add acryl-kv-json (a file) or acryl-kv-db (your SQL database) to provide it",
-  "omit": ["src/conformance.ts", "**/*.test.*", "**/*.spec.*", "**/*.case.ts"]
+  "omit": ["src/conformance.ts", "**/*.test.*", "**/*.spec.*", "**/*.case.ts"],
+  "imports": {
+    "#acryl-kv": "acryl-kv/src/index.ts",
+    "#acryl-kv/conformance": "acryl-kv/src/conformance.ts"
+  }
 }

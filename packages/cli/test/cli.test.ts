@@ -457,6 +457,33 @@ describe('add and plugins', () => {
     expect(legacy.err()).toContain('plugins now live in one folder, plugins/')
   })
 
+  it('add kv --suite brings the conformance suite of the port and the vitest it runs on; without it the suite stays out', async () => {
+    expect(await runCli(['init', 'suited', '-y'], fakeIo().io)).toBe(0)
+    const dir = join(scratch, 'suited')
+    expect(await runCli(['add', 'kv', '--dir', dir], fakeIo().io)).toBe(0)
+    expect(existsSync(join(dir, 'plugins/acryl-kv/src/conformance.ts'))).toBe(false)
+    // The port is imported by name in tests, the type-check and plugins installed live: package.json "imports".
+    const imports = (
+      JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
+        imports: Record<string, string>
+      }
+    ).imports
+    expect(imports['#acryl-kv']).toBe('./plugins/acryl-kv/src/index.ts')
+    expect(imports['#acryl-kv-json']).toBe('./plugins/acryl-kv-json/src/index.ts')
+    expect(imports['#acryl-kv/conformance']).toBe('./plugins/acryl-kv/src/conformance.ts')
+    const session = fakeIo()
+    expect(await runCli(['add', 'kv', '--suite', '--dir', dir], session.io)).toBe(0)
+    expect(existsSync(join(dir, 'plugins/acryl-kv/src/conformance.ts'))).toBe(true)
+    expect(session.out()).toContain('plugins/acryl-kv/src/conformance.ts')
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
+      devDependencies: Record<string, string>
+    }
+    expect(pkg.devDependencies.vitest).toBeDefined()
+    const none = fakeIo()
+    expect(await runCli(['add', 'agent', '--suite', '--dir', dir], none.io)).toBe(1)
+    expect(none.err()).toContain('has no conformance suite')
+  })
+
   it('brings an external plugin folder into the app extensions, and refuses one without an entry', async () => {
     expect(await runCli(['init', 'outside', '-y'], fakeIo().io)).toBe(0)
     const app = join(scratch, 'outside')

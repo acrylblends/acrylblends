@@ -16,6 +16,8 @@ export interface LibraryPlugin {
   readonly scripts?: Readonly<Record<string, string>>
   /** Lines the app's `.gitignore` needs for this plugin (added when missing, if the app has a `.gitignore`). */
   readonly gitignore?: readonly string[]
+  /** `package.json` "imports" entries the app gets (`#acryl-kv`): a path below the plugins folder. A plugin of your own imports the port by that name, in tests and the type-check as well as when installed live. */
+  readonly imports?: Readonly<Record<string, string>>
   /** How to mount it, shown after `acrylblends add`. */
   readonly mount?: string
   /**

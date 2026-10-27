@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { instance, pinnedInstance } from '../../instance/index.ts'
 import { type ExtensionSource, extensions } from '../index.ts'
+import { routerAliases } from '../resolve.ts'
 
 /** The repository root: its node_modules has @deepseek-ai/cordis, as an app's project folder would. */
 const appRoot = fileURLToPath(new URL('../../..', import.meta.url))
@@ -303,4 +304,33 @@ test("a folder listed in library.json is the app's own import, so the source ski
   const names = root.extensions.list().map((extension) => extension.name)
   assert.deepEqual(names, ['greeter'])
   assert.deepEqual(root.extensions.pending(), [])
+})
+
+test("a plugin installed live can import the ports and providers beside it, by name and by the app's #name", () => {
+  const aliases = routerAliases()
+  for (const name of ['acryl-kv', 'acryl-kv-json', 'acryl-db']) {
+    assert.ok(aliases[name] && existsSync(aliases[name]), `${name} resolves to a file`)
+    assert.equal(aliases[`#${name}`], aliases[name])
+  }
+  assert.ok(aliases['#acryl-kv/conformance']?.endsWith('acryl-kv/src/conformance.ts'))
+})
+
+test("a plugin installed live from a home outside the app imports the port by its #name and gets the app's own module", async () => {
+  const { root, folder } = await boot()
+  const dir = join(folder, 'portuser')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    join(dir, 'index.ts'),
+    `import { Context } from '@deepseek-ai/cordis'
+import { checkKey, KV_SERVICE } from '#acryl-kv'
+export const name = 'portuser'
+export function apply(ctx: Context) {
+  checkKey('ok')
+  ctx.provide('portuser', KV_SERVICE)
+}
+`,
+  )
+  const result = await root.extensions.install(dir)
+  assert.equal(result.ok, true, JSON.stringify(result))
+  assert.equal(result.state, 'active')
 })
