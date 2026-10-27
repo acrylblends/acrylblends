@@ -218,8 +218,6 @@ export async function probeDoor(app, env, { tags = false } = {}) {
     browser?.kill('SIGKILL')
     await stopGroup(server)
     await sleep(300)
-    await new Promise((done) => (server.exitCode !== null ? done() : server.once('exit', done)))
-    await sleep(300)
     rmSync(profile, { recursive: true, force: true })
   }
   return { ok: steps.every((line) => !line.startsWith('FAIL')), steps }

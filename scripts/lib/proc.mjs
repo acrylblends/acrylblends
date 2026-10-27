@@ -14,7 +14,9 @@ export async function stopGroup(child, signal = 'SIGTERM', ms = 10_000) {
     } catch {}
   }
   const exited =
-    child.exitCode !== null ? Promise.resolve() : new Promise((done) => child.once('exit', done))
+    child.exitCode !== null || child.signalCode !== null
+      ? Promise.resolve()
+      : new Promise((done) => child.once('exit', done))
   send(signal)
   await Promise.race([exited, new Promise((done) => setTimeout(done, ms))])
   send('SIGKILL')
