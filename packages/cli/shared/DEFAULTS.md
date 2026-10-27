@@ -23,11 +23,11 @@ install a second time). Do not create `src/plugins/` or `extensions/`.
 
 ## The door
 
-The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at and change the running app; it reaches only the app running from this folder. Its state (a secret and an audit log) lives under `.acryl/`, which git ignores: never commit it. If `.acryl/bin/acryl` is not here, this app has no door yet: run it with its scripts and check it with `npm test`.
+The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at and change the running app. The running app writes it, and it reaches only the app running from this folder. Its state (a secret and an audit log) lives under `.acryl/`, which git ignores: never commit it. It is on in development and off with `NODE_ENV=production` or `ACRYL_DOOR=off`; one process at a time serves a folder's door, so a second `npm start` in the same folder stops with a message that says so (the tests set `ACRYL_DOOR=off`). If `.acryl/bin/acryl` is not here, the app is not running: start it with `npm run dev` (in the background) and open its address in a browser.
 
 ```
-.acryl/bin/acryl brief                      what this app is: its plugins, where the docs are, the verbs
-.acryl/bin/acryl look                       a snapshot of the page, with refs (r1, r2, ...)
+.acryl/bin/acryl brief                      what this app is: its plugins, where the docs are, the verbs, and whether a page is open
+.acryl/bin/acryl look                       the page as text, with refs (1.1, 1.2, ...): roles, names, values, visible text
 .acryl/bin/acryl act click --ref <r>
 .acryl/bin/acryl act type --ref <r> --text <t> [--submit] [--no-clear]
 .acryl/bin/acryl act select --ref <r> --option <o>
@@ -36,5 +36,10 @@ The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at 
 .acryl/bin/acryl act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]
 .acryl/bin/acryl plugin list | add <folder> | remove <name> | reload
 .acryl/bin/acryl tool list | call --tool <name> --args '<json>'
+.acryl/bin/acryl verbs                      the verb list
 ```
-Every verb takes `--json`. `plugin add plugins/<name>` checks the plugin, installs it and makes it live without a restart. `tool call` reaches only the tools on the door's allowlist (empty by default). On Windows the command is `.acryl\bin\acryl.cmd`.
+
+- `look` and `act` need the app's page open in a browser (`brief` says `Page: not open` when it is not). Look again before each `act`: refs belong to the latest `look`.
+- A password field is not shown and cannot be typed into through the door; sign in by hand, or test the sign-in with a test.
+- Every verb takes `--json`. The exit code is 0 for done, 1 when the verb failed, 2 for a usage error and 3 when no app is running in this folder.
+- `plugin add plugins/<name>` checks the plugin, installs it and makes it live without a restart (when the app has the `extensions` plugin; `acrylblends init --template agent` does). `tool call` reaches only the tools on the door's allowlist (empty by default). On Windows the command is `.acryl\bin\acryl.cmd`.
