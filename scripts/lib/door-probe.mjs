@@ -84,8 +84,11 @@ export async function probeDoor(app, env, { tags = false } = {}) {
   const server = startGroup('npm', ['start'], {
     cwd: app,
     env: { ...env, PORT: String(port) },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
+  let output = ''
+  server.stdout.on('data', (c) => (output += c))
+  server.stderr.on('data', (c) => (output += c))
   const base = `http://127.0.0.1:${port}`
   let browser
   try {
@@ -93,6 +96,7 @@ export async function probeDoor(app, env, { tags = false } = {}) {
       !step(
         'npm start serves the port',
         (await until(() => fetch(`${base}/login`).then((r) => r.status === 200), 30_000)) === true,
+        output.slice(-600),
       )
     )
       return { ok: false, steps }
