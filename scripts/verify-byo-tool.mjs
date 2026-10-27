@@ -72,7 +72,13 @@ for (const expected of [
 const scratch = mkdtempSync(join(tmpdir(), 'byo-tool-'))
 const env = { ...process.env, npm_config_loglevel: 'error' }
 const run = (command, args, cwd) => {
-  const r = spawnSync(command, args, { cwd, env, encoding: 'utf8' })
+  let r = spawnSync(command, args, { cwd, env, encoding: 'utf8' })
+  // npm 10 (Node 22) can crash while it reworks an existing tree ("Cannot read properties of null (reading 'edgesOut')"): a clean install of the same package.json works.
+  if (r.status !== 0 && command === 'npm' && /edgesOut/u.test(r.stderr)) {
+    rmSync(join(cwd, 'node_modules'), { recursive: true, force: true })
+    rmSync(join(cwd, 'package-lock.json'), { force: true })
+    r = spawnSync(command, args, { cwd, env, encoding: 'utf8' })
+  }
   if (r.status !== 0) fail(`${command} ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
   return r.stdout
 }
