@@ -8,6 +8,7 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { devtools, findChrome } from './lib/door-probe.mjs'
+import { startGroup, stopGroup } from './lib/proc.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cli = join(root, 'packages/cli/bin/acrylblends.js')
@@ -84,7 +85,7 @@ try {
   log('the panel is added to a fresh agent app, which type-checks')
 
   const port = 20000 + Math.floor(Math.random() * 20000)
-  server = spawn('npm', ['start'], {
+  server = startGroup('npm', ['start'], {
     cwd: app,
     env: { ...serverEnv, PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -185,7 +186,7 @@ try {
   log('OK')
 } finally {
   browser?.kill('SIGKILL')
-  server?.kill('SIGTERM')
+  if (server) await stopGroup(server)
   await sleep(500)
   rmSync(scratch, { recursive: true, force: true })
 }

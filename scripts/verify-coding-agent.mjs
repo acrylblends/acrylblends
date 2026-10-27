@@ -26,6 +26,7 @@ import { probeChat } from './lib/chat-probe.mjs'
 import { probeDoor } from './lib/door-probe.mjs'
 import { probeNotes } from './lib/notes-probe.mjs'
 import { part2 } from './lib/part2.mjs'
+import { stopGroup } from './lib/proc.mjs'
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -427,7 +428,7 @@ async function attempt(name) {
     const probe = await probeByo(app, clean, byoApp)
     console.log(`  byo (${name}):\n    ${probe.steps.join('\n    ')}`)
     route = probe.ok ? 'ok' : 'FAIL'
-    byoApp.child.kill('SIGTERM')
+    await stopGroup(byoApp.child)
   } else {
     route =
       values.task === DEFAULT_TASK || values.preset ? await probeRoute(app, clean) : 'not probed'

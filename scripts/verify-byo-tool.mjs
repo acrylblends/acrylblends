@@ -10,6 +10,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { startGroup, stopGroup } from './lib/proc.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const guidePath = resolve(
@@ -103,7 +104,7 @@ try {
   const door = join(app, '.acryl', 'bin', 'acryl')
   const start = async () => {
     const port = await freePort()
-    const child = spawn('npm', ['start'], {
+    const child = startGroup('npm', ['start'], {
       cwd: app,
       env: { ...env, PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -121,8 +122,7 @@ try {
     return { child, url, port }
   }
   const stop = async (child) => {
-    child.kill('SIGTERM')
-    await new Promise((r) => child.once('exit', r))
+    await stopGroup(child)
   }
   const doorCall = (...args) => {
     const r = spawnSync(door, [...args, '--json'], { cwd: app, env, encoding: 'utf8' })
@@ -186,6 +186,6 @@ try {
   server = undefined
   log('OK')
 } finally {
-  server?.kill('SIGKILL')
+  if (server) await stopGroup(server, 'SIGKILL', 1000)
   rmSync(scratch, { recursive: true, force: true })
 }

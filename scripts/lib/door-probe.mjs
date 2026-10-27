@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { startGroup, stopGroup } from './proc.mjs'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const freePort = () =>
@@ -80,7 +81,7 @@ export async function probeDoor(app, env, { tags = false } = {}) {
   const port = await freePort()
   const devPort = await freePort()
   const profile = mkdtempSync(join(tmpdir(), 'door-probe-'))
-  const server = spawn('npm', ['start'], {
+  const server = startGroup('npm', ['start'], {
     cwd: app,
     env: { ...env, PORT: String(port) },
     stdio: 'ignore',
@@ -195,8 +196,10 @@ export async function probeDoor(app, env, { tags = false } = {}) {
     step('the door step ran', false, error.message)
   } finally {
     browser?.kill('SIGKILL')
-    server.kill('SIGTERM')
-    await sleep(500)
+    await stopGroup(server)
+    await sleep(300)
+    await new Promise((done) => (server.exitCode !== null ? done() : server.once('exit', done)))
+    await sleep(300)
     rmSync(profile, { recursive: true, force: true })
   }
   return { ok: steps.every((line) => !line.startsWith('FAIL')), steps }

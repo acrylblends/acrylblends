@@ -879,7 +879,12 @@ spec:
           fail(`${kind}: git add -A would stage .acryl/: ${staged.stdout}`)
         rmSync(join(notes, '.git'), { recursive: true, force: true })
       } finally {
+        // One process at a time serves a folder's door: the next start waits until this one is gone.
+        const gone = new Promise((done) =>
+          server.exitCode !== null ? done() : server.once('exit', done),
+        )
         server.kill('SIGTERM')
+        await gone
       }
       if (kind === 'notes') {
         const door = await probeDoor(notes, process.env, { tags: false })
