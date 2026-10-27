@@ -77,7 +77,9 @@ export async function createApp(
   const legacyDir = join(chosen.root, 'extensions')
   const legacy = existsSync(legacyDir)
   if (legacy)
-    console.warn('warning: extensions/ is the old folder for plugins the agent writes; move them to plugins/ ("git mv extensions/<name> plugins/<name>"). extensions/ is read for this release only.')
+    console.warn(
+      'warning: extensions/ is the old folder for plugins the agent writes; move them to plugins/ ("git mv extensions/<name> plugins/<name>"). extensions/ is read for this release only.',
+    )
   const root = new Context()
   const first = root.plugin(instance, chosen)
   await first.await()

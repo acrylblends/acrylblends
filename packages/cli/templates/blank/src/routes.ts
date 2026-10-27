@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { aboutPage } from './about.tsx'
 import { Acryl } from '../plugins/acryl-router/src/index.ts'
+import { aboutPage } from './about.tsx'
 
 export const APP_NAME = '__APP_NAME__'
 

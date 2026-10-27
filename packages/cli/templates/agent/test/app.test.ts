@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { type App, createApp } from '../src/app.ts'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
+import { type App, createApp } from '../src/app.ts'
 import { APP_NAME } from '../src/routes.ts'
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))

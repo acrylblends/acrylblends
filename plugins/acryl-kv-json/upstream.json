@@ -2,7 +2,7 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-kv-json",
-    "commit": "f8e385e4389fe2fdc6fd2a4366a7f2a7389faacb"
+    "commit": "f132283c43337f5e1d58dfbbbc15786efb5e756c"
   },
   "vendored": [
     "src",
@@ -10,7 +10,7 @@
     "LICENSE"
   ],
   "rewrittenSpecifiers": 6,
-  "digest": "sha256:d8e3e7f9c98399d0f21f29f91323b4ce57646e59e312d4175978259d618a88cf",
+  "digest": "sha256:10613b53bdcf15cce86d6dce5e606d0cd93367cc2569b7603cbf157ebc557548",
   "testsNotRun": {
     "tests/loader.spec.ts": "loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install; the plain opener it wraps is tested here by open.spec.ts and conformance.spec.ts",
     "tests/crash.spec.ts": "kills a child process that imports the package build (lib/), which a copy vendored into an app does not have; it runs in ACRYL",
