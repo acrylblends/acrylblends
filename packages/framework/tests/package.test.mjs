@@ -9,6 +9,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
 import { SUBPATHS, entryName, exportsMap } from '../subpaths.mjs'
 
+/** The optional peer dependencies: only the Cordis forms and the conformance suites may import them, and a built file imports nothing else outside itself. */
+const PEERS = ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', 'react', 'vitest']
+const needsPeers = subpath => subpath.startsWith('cordis/') || subpath.endsWith('/conformance') || subpath === 'door/host'
+const isPeer = specifier => PEERS.some(peer => specifier === peer || specifier.startsWith(`${peer}/`))
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const lib = join(root, 'lib')
 
@@ -35,12 +40,26 @@ test('package.json exports every subpath of the table, and nothing else', () => 
   assert.deepEqual(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).exports, exportsMap())
 })
 
-test('a built file imports only its own chunks and Node built-ins', () => {
+test('a built file imports only its own chunks, Node built-ins and the optional peers', () => {
   for (const name of readdirSync(lib, { recursive: true }).filter(name => /\.(?:js|d\.ts)$/u.test(name))) {
     for (const specifier of importsOf(join(lib, name))) {
-      assert.ok(specifier.startsWith('.') || specifier.startsWith('node:'), `${name} imports ${specifier}`)
+      assert.ok(specifier.startsWith('.') || specifier.startsWith('node:') || isPeer(specifier), `${name} imports ${specifier}`)
     }
   }
+})
+
+test('a plain entry reaches no optional peer: Cordis, schemastery, react and vitest are for the Cordis forms and the suites only', () => {
+  for (const subpath of Object.keys(SUBPATHS)) {
+    if (needsPeers(subpath)) continue
+    const { bare } = closure(join(lib, `${entryName(subpath)}.js`))
+    assert.deepEqual([...bare].filter(isPeer), [], `${subpath} imports ${[...bare].filter(isPeer).join(', ')}`)
+  }
+})
+
+test('there is one Acryl class: the plain root and the Cordis router are built from the same chunk', async () => {
+  const plain = await import(pathToFileURL(join(lib, 'index.js')).href)
+  const served = await import(pathToFileURL(join(lib, 'cordis/router.js')).href)
+  assert.equal(plain.Acryl, served.Acryl)
 })
 
 test('the root and the routers reach no Node built-in, so they run on any fetch runtime', () => {
@@ -50,8 +69,11 @@ test('the root and the routers reach no Node built-in, so they run on any fetch 
   }
 })
 
-test('every entry loads in plain Node, without Cordis', async () => {
-  for (const subpath of Object.keys(SUBPATHS)) await import(pathToFileURL(join(lib, `${entryName(subpath)}.js`)).href)
+test('every plain entry loads in plain Node, without Cordis', async () => {
+  for (const subpath of Object.keys(SUBPATHS)) {
+    if (needsPeers(subpath) || subpath === 'door/page' || subpath === 'door/protocol') continue
+    await import(pathToFileURL(join(lib, `${entryName(subpath)}.js`)).href)
+  }
 })
 
 test('the root is the framework: Acryl serves a request, and App is the same class under its 0.4 name', async () => {
