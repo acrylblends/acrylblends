@@ -1,0 +1,1 @@
+{"plugins": ["instance", "acryl-router", "acryl-node-server", "acryl-db-sqlite", "manifest", "save"]}
