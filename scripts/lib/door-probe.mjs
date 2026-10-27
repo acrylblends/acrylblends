@@ -97,6 +97,7 @@ export async function probeDoor(app, env, { tags = false } = {}) {
   const steps = []
   const step = (name, ok, detail = '') => {
     steps.push(`${ok ? 'ok' : 'FAIL'} ${name}${detail && !ok ? ` (${detail})` : ''}`)
+    if (process.env.CI) console.log(`door-probe: ${ok ? 'ok' : 'FAIL'} ${name}`)
     return ok
   }
   const chrome = findChrome()
