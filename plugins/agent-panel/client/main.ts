@@ -4,7 +4,7 @@ const PREFIX = '/api/agent-panel'
 
 interface Session {
   token: string
-  drivers: string[]
+  drivers: Array<{ name: string; kind: 'chat' | 'terminal' }>
 }
 interface PanelEvent {
   event: string
@@ -65,7 +65,12 @@ async function start(): Promise<void> {
   shadow.innerHTML = `<style>${css}</style>
     <button class="open" type="button">Ask the agent</button>
     <section aria-label="Agent panel">
-      <header><strong>Agent</strong><select aria-label="Agent">${session.drivers.map((d) => `<option>${d}</option>`).join('')}</select><button class="close" type="button" aria-label="Close">×</button></header>
+      <header><strong>Agent</strong><select aria-label="Agent">${session.drivers
+        .filter((d) => d.kind === 'chat')
+        .map((d) => `<option>${d.name}</option>`)
+        .join(
+          '',
+        )}</select><button class="close" type="button" aria-label="Close">×</button></header>
       <div id="log" role="log"></div>
       <form><textarea aria-label="Message" placeholder="What should the app do?"></textarea>
         <div class="row"><button class="send" type="submit">Send</button><button class="stop" type="button" disabled>Stop</button></div></form>
