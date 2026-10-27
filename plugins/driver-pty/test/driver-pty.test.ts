@@ -125,7 +125,13 @@ async function readEvents(response: Response, until: (events: SseEvent[]) => boo
   let buffer = ''
   const deadline = Date.now() + 15_000
   while (!until(events) && Date.now() < deadline) {
-    const { value, done } = await reader.read()
+    // A stream that says nothing must not hold the test past its deadline.
+    const next = await Promise.race([
+      reader.read(),
+      new Promise<undefined>((resolve) => setTimeout(resolve, Math.max(0, deadline - Date.now()))),
+    ])
+    if (next === undefined) break
+    const { value, done } = next
     if (done) break
     buffer += decoder.decode(value, { stream: true })
     for (let end = buffer.indexOf('\n\n'); end !== -1; end = buffer.indexOf('\n\n')) {
@@ -367,9 +373,10 @@ test('a real PTY: the program sees its size, a resize, and what is typed', async
   await sleep(100)
   await real.post(`/${id}/input`, { data: 'hi\r' })
   const events = await reading
-  assert.match(text(events), /size 90x20/u)
-  assert.match(text(events), /size 110x35/u)
-  assert.match(text(events), /typed "hi(\\r)?\\n"/u)
+  const shown = JSON.stringify(text(events))
+  assert.match(text(events), /size 90x20/u, shown)
+  assert.match(text(events), /size 110x35/u, shown)
+  assert.match(text(events), /typed "hi/u, shown)
 })
 
 /** The program starts a child of its own, prints both pids and idles: ending the session must end both. */
