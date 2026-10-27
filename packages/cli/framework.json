@@ -2,7 +2,7 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "distribution/acrylblends-framework",
-    "commit": "f132283c43337f5e1d58dfbbbc15786efb5e756c",
+    "commit": "11a31f2cecbe64c86705a351f70b58de210a6ec0",
     "packedAs": "acrylblends-framework@0.5.0"
   },
   "tarballSha256": "aa59b13d37df4e654ac48503b9487805c98fbe1e0405446aabf95a45a7d91d04",
