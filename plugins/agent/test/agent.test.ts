@@ -102,3 +102,72 @@ test('with tasks mounted, a run is a durable task that owns one task per tool ca
   )
   rmSync(home, { recursive: true, force: true })
 })
+
+/** A model step that never answers on its own; it settles only when its signal aborts (or, with `ignoresSignal`, never). */
+const hang = (signal?: AbortSignal) =>
+  new Promise<never>((_, reject) =>
+    signal?.addEventListener('abort', () => reject(new Error('stopped'))),
+  )
+
+test('aborting during a model call ends the run cancelled, at once', async () => {
+  const root = await boot()
+  let seen: AbortSignal | undefined
+  root.model.complete = (input) => {
+    seen = input.signal
+    return new Promise(() => {}) // a model that ignores its signal cannot hold the run
+  }
+  const stop = new AbortController()
+  const run = root.agent.run('slow', { signal: stop.signal })
+  setTimeout(() => stop.abort(), 10)
+  const result = await run
+  assert.deepEqual([result.status, result.steps, result.trace.length], ['cancelled', 0, 0])
+  assert.equal(seen?.aborted, true)
+})
+
+test('aborting during a tool call ends the run cancelled and the trace says so', async () => {
+  const root = await boot()
+  let toolSignal: AbortSignal | undefined
+  root.tools.register('slow', {
+    description: 'never ends on its own',
+    run: (_input, options) => {
+      toolSignal = options?.signal
+      return hang(options?.signal)
+    },
+  })
+  scripted(root.model)?.teach(() => ({ tool: 'slow', input: null }))
+  const stop = new AbortController()
+  const run = root.agent.run('use the slow tool', { signal: stop.signal })
+  setTimeout(() => stop.abort(), 10)
+  const result = await run
+  assert.equal(result.status, 'cancelled')
+  assert.deepEqual(
+    result.trace.map((call) => [call.tool, call.error]),
+    [['slow', 'cancelled']],
+  )
+  assert.equal(toolSignal?.aborted, true)
+})
+
+test('a signal that is already aborted ends the run before the first step', async () => {
+  const root = await boot()
+  const result = await root.agent.run('add 2 3', { signal: AbortSignal.abort() })
+  assert.deepEqual([result.status, result.steps, result.trace.length], ['cancelled', 0, 0])
+})
+
+test('with tasks mounted, a run cancelled by its signal is recorded as failed, not left running', async () => {
+  const root = await boot()
+  const events: string[] = []
+  const task = (kind: string) => ({
+    id: kind,
+    signal: new AbortController().signal,
+    progress() {},
+    complete: () => void events.push(`${kind} complete`),
+    fail: (error: unknown) => void events.push(`${kind} fail ${String(error)}`),
+  })
+  root.provide('tasks', { start: (kind: string) => task(kind) })
+  root.model.complete = () => new Promise(() => {})
+  const stop = new AbortController()
+  const run = root.agent.run('slow', { signal: stop.signal })
+  setTimeout(() => stop.abort(), 10)
+  assert.equal((await run).status, 'cancelled')
+  assert.deepEqual(events, ['agent-run fail the run was cancelled'])
+})

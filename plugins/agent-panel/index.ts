@@ -177,7 +177,10 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
         audit({ ask: 'start', driver, characters: message.length })
         try {
           if (driver === 'agent') {
-            const result = await ctx.agent.run(message)
+            // Stop in the page closes the stream; that cancels the run (the model call or tool in flight is dropped).
+            const cancel = new AbortController()
+            stream.onAbort(() => cancel.abort())
+            const result = await ctx.agent.run(message, { signal: cancel.signal })
             for (const call of result.trace)
               await send('tool', {
                 tool: call.tool,
