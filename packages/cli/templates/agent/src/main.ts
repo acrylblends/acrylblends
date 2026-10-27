@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
+import { selectInstance } from '../plugins/instance/index.ts'
+import { modelConfigFrom } from '../plugins/openai/index.ts'
 import { createApp } from './app.ts'
-import { selectInstance } from './plugins/instance/index.ts'
-import { modelConfigFrom } from './plugins/openai/index.ts'
 import { APP_NAME } from './routes.ts'
 
 // The composition root: the one place that reads the environment. selectInstance chooses where the app lives;

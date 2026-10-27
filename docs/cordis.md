@@ -52,7 +52,7 @@ assert.deepEqual(started, ['consumer'])
 ```
 
 Await fibers in dependency order: `fiber.await()` on a fiber that is still pending returns before it has started. The
-templates' `src/plugins/manifest` (`compose`) awaits each fiber after the plugins it injects.
+templates' `plugins/manifest` (`compose`) awaits each fiber after the plugins it injects.
 
 ## Effects clean up after the plugin
 

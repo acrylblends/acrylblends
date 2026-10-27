@@ -17,7 +17,7 @@ import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { windowOptions } from './window.ts'
 
-const projectRoot = fileURLToPath(new URL('../../..', import.meta.url))
+const projectRoot = fileURLToPath(new URL('../..', import.meta.url))
 const manifest = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8')) as {
   name?: string
   acrylblends?: { desktopPath?: string }
@@ -73,7 +73,7 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     // The hook above is registered before the app's modules are loaded, so the app may have .tsx pages: they are loaded here, not as a static import.
-    const { default: acrylApp, close } = (await import('../../app.ts')) as {
+    const { default: acrylApp, close } = (await import('../../src/app.ts')) as {
       default: { fetch: Parameters<typeof serve>[0]['fetch'] }
       close?: () => Promise<void>
     }

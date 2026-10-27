@@ -46,7 +46,7 @@ ACRYLBLENDS_MODEL_URL=http://127.0.0.1:11434/v1 ACRYLBLENDS_MODEL=qwen2.5-coder 
 curl -X POST <url>/ask -H 'content-type: application/json' -d '{"question":"add a GET /time route that returns the time"}'
 ```
 
-Either way the agent wrote a Cordis plugin into `extensions/hello/`, installed it into the running app, and checked that its route
+Either way the agent wrote a Cordis plugin into `plugins/hello/`, installed it into the running app, and checked that its route
 answers before reporting it live. See [Extending a running app](agent/extending-apps.md).
 
 ## Add plugins
@@ -76,8 +76,7 @@ public remote. Nothing is committed when it refuses.
 | `blend.yaml` | the app as data: plugin rows, config, parameters ([manifest](blends/manifest.md)) |
 | `src/app.ts` | the registry of plugins your code provides; mounts the manifest |
 | `src/routes.ts` | your own plugin |
-| `src/plugins/` | plugins copied from the library; yours to edit |
-| `extensions/` | plugins installed while the app runs (`agent` template); part of your app |
+| `plugins/` | every plugin of the app: copied from the library (listed in `plugins/library.json`) or written by you or the agent; all yours to edit |
 | `.acrylblends/` | the app's data: settings, installed-extension state, the extension ledger, task records (not committed) |
 
 Set `ACRYLBLENDS_HOME` to keep the data elsewhere and `ACRYLBLENDS_PORT` to choose the first port tried (`0` for any free port).

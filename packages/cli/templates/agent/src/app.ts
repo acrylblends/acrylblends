@@ -1,23 +1,24 @@
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
-import * as nodeServer from './plugins/acryl-node-server/src/index.ts'
-import * as router from './plugins/acryl-router/src/index.ts'
-import * as state from './plugins/acryl-state/src/index.ts'
-import { agent, memory, model, tools } from './plugins/agent/index.ts'
-import { builder } from './plugins/builder/index.ts'
-import { extensions } from './plugins/extensions/index.ts'
-import { type AppInstance, instance } from './plugins/instance/index.ts'
+import * as nodeServer from '../plugins/acryl-node-server/src/index.ts'
+import * as router from '../plugins/acryl-router/src/index.ts'
+import * as state from '../plugins/acryl-state/src/index.ts'
+import { agent, memory, model, tools } from '../plugins/agent/index.ts'
+import { builder } from '../plugins/builder/index.ts'
+import { extensions } from '../plugins/extensions/index.ts'
+import { type AppInstance, instance } from '../plugins/instance/index.ts'
 import {
   blueprintsIn,
   compose,
   loadManifest,
   type ParameterValue,
-} from './plugins/manifest/index.ts'
-import { type OpenAIConfig, openai } from './plugins/openai/index.ts'
-import { sandboxPlugin } from './plugins/sandbox/index.ts'
-import { save } from './plugins/save/index.ts'
-import { tasks } from './plugins/tasks/index.ts'
+} from '../plugins/manifest/index.ts'
+import { type OpenAIConfig, openai } from '../plugins/openai/index.ts'
+import { sandboxPlugin } from '../plugins/sandbox/index.ts'
+import { save } from '../plugins/save/index.ts'
+import { tasks } from '../plugins/tasks/index.ts'
 import { routes } from './routes.ts'
 
 /** The plugins this app's code provides. `blend.yaml` chooses, orders and configures them. */
@@ -59,7 +60,7 @@ export interface App {
 }
 
 /**
- * The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. The app's own `extensions/`
+ * The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. The app's `plugins/`
  * folder is trusted to install at start, and is where the builder writes.
  */
 export async function createApp(
@@ -71,7 +72,14 @@ export async function createApp(
   } = {},
 ): Promise<App> {
   const manifest = readManifest(options.values)
-  const extensionsDir = join(chosen.root, 'extensions')
+  const extensionsDir = join(chosen.root, 'plugins')
+  // One release of grace: an app made before 0.7.8 kept what the agent wrote in `extensions/`. It is still installed, with a warning.
+  const legacyDir = join(chosen.root, 'extensions')
+  const legacy = existsSync(legacyDir)
+  if (legacy)
+    console.warn(
+      'warning: extensions/ is the old folder for plugins the agent writes; move them to plugins/ ("git mv extensions/<name> plugins/<name>"). extensions/ is read for this release only.',
+    )
   const root = new Context()
   const first = root.plugin(instance, chosen)
   await first.await()
@@ -83,7 +91,12 @@ export async function createApp(
       // Runtime values the manifest cannot hold: the manifest's own digest (every task records it), and who may install.
       tasks: { manifest: `sha256:${manifest.digest}` },
       // The `approval` parameter in blend.yaml (the extensions row) turns this source into one that asks.
-      extensions: { sources: [{ dir: extensionsDir, trust: 'install' }] },
+      extensions: {
+        sources: [
+          { dir: extensionsDir, trust: 'install' },
+          ...(legacy ? [{ dir: legacyDir, trust: 'install' as const }] : []),
+        ],
+      },
       builder: { dir: extensionsDir },
       server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0, hostname: chosen.host },
     })),

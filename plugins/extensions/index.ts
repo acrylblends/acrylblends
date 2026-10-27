@@ -55,8 +55,24 @@ export interface ExtensionSource {
   readonly trust: Trust
 }
 
+/** The library copies a plugins folder holds (`library.json`, written by `acrylblends add`): the app mounts them itself, so they are not extensions. */
+function libraryCopies(dir: string): ReadonlySet<string> {
+  try {
+    const listed = (
+      JSON.parse(readFileSync(join(dir, 'library.json'), 'utf8')) as { plugins?: unknown }
+    ).plugins
+    return new Set(
+      Array.isArray(listed)
+        ? listed.filter((name): name is string => typeof name === 'string')
+        : [],
+    )
+  } catch {
+    return new Set()
+  }
+}
+
 export interface ExtensionsConfig {
-  /** Where extension folders may come from. Defaults to `<app home>/extensions`, trusted to install. */
+  /** Where extension folders may come from. An app passes its `plugins/` folder (library copies listed in its `library.json` are skipped). Defaults to `<app home>/extensions`, trusted to install, for a service used without an app folder. */
   sources?: readonly ExtensionSource[]
   /** When true, every source that would install by itself asks for approval instead (`ask`). */
   approval?: boolean
@@ -373,11 +389,13 @@ export class Extensions extends Service {
     const found: Array<{ name: string; dir: string; trust: Trust }> = []
     for (const source of this.sources) {
       if (!existsSync(source.dir)) continue
+      const library = libraryCopies(source.dir)
       for (const entry of readdirSync(source.dir, { withFileTypes: true })) {
         const dir = join(source.dir, entry.name)
         if (
           entry.isDirectory() &&
           NAME.test(entry.name) &&
+          !library.has(entry.name) &&
           ENTRIES.some((file) => existsSync(join(dir, file)))
         ) {
           if (!found.some((other) => other.name === entry.name))

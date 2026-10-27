@@ -212,7 +212,7 @@ const reply = await app.request('${path}')
 process.exit(${check} ? 0 : 1)
 `
     : `import { createApp } from './src/app.ts'
-import { pinnedInstance, withPort } from './src/plugins/instance/index.ts'
+import { pinnedInstance, withPort } from './plugins/instance/index.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -228,7 +228,7 @@ process.exit(ok ? 0 : 1)
   // The app is started the way its own scripts start it: with the register hook, so a .tsx page loads.
   const hook = PLAIN_SETUPS.includes(values.setup)
     ? 'acrylblends/node-server/register'
-    : './src/plugins/acryl-node-server/src/register.ts'
+    : './plugins/acryl-node-server/src/register.ts'
   const probe = run('node', ['--import', hook, file], app, { env, timeout: 60_000 })
   rmSync(file, { force: true })
   return probe.status === 0 ? 'ok' : 'FAIL'

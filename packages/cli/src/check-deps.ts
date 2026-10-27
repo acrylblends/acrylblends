@@ -29,13 +29,18 @@ const DRIVERS = [
 const OPENERS = ['acrylblends/db/sqlite', 'acryl-db-sqlite']
 /** The desktop shell is where Electron lives (`acrylblends add desktop` copies it). */
 const ELECTRON = 'electron'
-const ELECTRON_HOMES = ['src/plugins/desktop/', 'src/plugins/desktop-web/']
+const ELECTRON_HOMES = [
+  'plugins/desktop/',
+  'plugins/desktop-web/',
+  'src/plugins/desktop/',
+  'src/plugins/desktop-web/',
+]
 /** The provider plugins themselves may import what they wrap. */
-const PROVIDER_HOMES = ['src/plugins/acryl-db-sqlite/']
+const PROVIDER_HOMES = ['plugins/acryl-db-sqlite/', 'src/plugins/acryl-db-sqlite/']
 
 const SOURCE = /\.(?:[cm]?[jt]s|[jt]sx)$/u
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'lib', 'build', 'coverage'])
-const ROOTS = ['src', 'test', 'tests', 'extensions']
+const ROOTS = ['src', 'test', 'tests', 'plugins', 'extensions']
 
 export interface Violation {
   readonly file: string
@@ -149,7 +154,7 @@ const GUIDE = 'docs/framework/guides/data.md#why-the-database-is-opened-in-one-p
 
 function advice(violation: Violation, openers: readonly string[]): string {
   if (violation.kind === 'electron')
-    return `"${violation.specifier}" is the desktop shell's: only src/plugins/desktop (added with "acrylblends add desktop") imports electron`
+    return `"${violation.specifier}" is the desktop shell's: only plugins/desktop (added with "acrylblends add desktop") imports electron`
   const where =
     openers.length > 0
       ? openers.join(', ')

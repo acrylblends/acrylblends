@@ -15,5 +15,5 @@
     "jsx": "react-jsx",
     "jsxImportSource": "#acryl-jsx"
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "plugins"]
 }

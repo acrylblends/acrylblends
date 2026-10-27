@@ -7,9 +7,12 @@ import { basename, dirname, join, resolve } from "node:path";
 * memory and resolves the `kv` port with the function that closes it. The Cordis plugin is a thin wrapper over this, so both run one code
 * path. This entry imports nothing from Cordis.
 *
-* Every write queues behind the writes before it and persists the whole map: serialize to a temporary file in the same folder, flush it,
-* rename it over the file, and flush the folder where the platform allows. The call resolves after the rename, so a crash leaves the old file
-* or the new one, never half of one. One process owns the file: two writers would overwrite each other.
+* Every write persists the whole map: serialize to a temporary file in the same folder, flush it, rename it over the file, and flush the
+* folder where the platform allows. The call resolves after the rename, so a crash leaves the old file or the new one, never half of one.
+* Writes are grouped: the calls made in one turn of the event loop, and those that queue while a file write is in flight, are applied in
+* call order and persisted together by one write, so a burst of calls costs one flush and one rename, not one each (on Windows each costs
+* tens of milliseconds). One process owns the
+* file: two writers would overwrite each other.
 */
 /** The file's own format version, for a later change of layout. */
 const FORMAT = 1;
@@ -80,7 +83,12 @@ async function openKv(options) {
 	let state = await load(file);
 	let closed = false;
 	let sequence = 0;
-	let tail = Promise.resolve();
+	/** Calls waiting for the next file write, in call order. */
+	let queue = [];
+	/** Whether the loop that writes the queue runs; cleared by the loop itself, so a call queued after it ends starts a new one. */
+	let draining = false;
+	/** The latest loop, for `close` to wait on. */
+	let drained = Promise.resolve();
 	const guard = () => {
 		if (closed) throw new Error(`acryl-kv-json: ${file} is closed`);
 	};
@@ -103,18 +111,66 @@ async function openKv(options) {
 		}
 		await flushFolder(dirname(file));
 	};
-	/** Run a change after every earlier one; the map it works on becomes the state only once it is on disk. */
+	/**
+	* Write the queue until it is empty. Each round takes every call queued so far and applies them in order to one copy of the state. A call
+	* whose change throws rejects with its error and changes nothing, and the others in the round still apply. The copy becomes the state
+	* only once it is on disk. A failed file write rejects every call in its round and leaves the state as it was.
+	*/
+	const drain = async () => {
+		try {
+			await Promise.resolve();
+			await rounds();
+		} finally {
+			draining = false;
+		}
+	};
+	const rounds = async () => {
+		while (queue.length > 0) {
+			const round = queue;
+			queue = [];
+			const draft = new Map(state);
+			const applied = [];
+			for (const call of round) {
+				let change;
+				try {
+					change = call.change((key) => draft.get(key));
+				} catch (error) {
+					call.reject(error);
+					continue;
+				}
+				if (change.text === void 0) draft.delete(change.key);
+				else draft.set(change.key, change.text);
+				applied.push({
+					call,
+					result: change.result
+				});
+			}
+			if (applied.length === 0) continue;
+			try {
+				await persist(draft);
+			} catch (error) {
+				for (const { call } of applied) call.reject(error);
+				continue;
+			}
+			state = draft;
+			for (const { call, result } of applied) call.resolve(result);
+		}
+	};
+	/** Queue one change behind every earlier call; it resolves once a file write that contains it is on disk. */
 	const write = (change) => {
 		guard();
-		const task = tail.then(async () => {
-			const draft = new Map(state);
-			const result = change(draft);
-			await persist(draft);
-			state = draft;
-			return result;
+		const done = new Promise((resolveCall, rejectCall) => {
+			queue.push({
+				change,
+				resolve: resolveCall,
+				reject: rejectCall
+			});
 		});
-		tail = task.catch(() => void 0);
-		return task;
+		if (!draining) {
+			draining = true;
+			drained = drain();
+		}
+		return done;
 	};
 	return {
 		kv: {
@@ -127,24 +183,31 @@ async function openKv(options) {
 			async set(key, value) {
 				checkKey(key);
 				const text = encodeValue(value);
-				await write((draft) => {
-					draft.set(key, text);
-				});
+				await write(() => ({
+					key,
+					text,
+					result: void 0
+				}));
 			},
 			async update(key, change) {
 				checkKey(key);
-				return write((draft) => {
-					const text = draft.get(key);
+				return write((read) => {
+					const text = read(key);
 					const encoded = encodeValue(runChange(change, text === void 0 ? void 0 : decodeValue(text)));
-					draft.set(key, encoded);
-					return decodeValue(encoded);
+					return {
+						key,
+						text: encoded,
+						result: decodeValue(encoded)
+					};
 				});
 			},
 			async delete(key) {
 				checkKey(key);
-				await write((draft) => {
-					draft.delete(key);
-				});
+				await write(() => ({
+					key,
+					text: void 0,
+					result: void 0
+				}));
 			},
 			async list(prefix = "") {
 				guard();
@@ -153,7 +216,7 @@ async function openKv(options) {
 		},
 		close: async () => {
 			closed = true;
-			await tail;
+			await drained;
 		}
 	};
 }

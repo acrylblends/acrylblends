@@ -1,9 +1,17 @@
 import { cpSync, existsSync, readFileSync, statSync } from 'node:fs'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { UsageError } from './init'
 import type { Io } from './io'
-import { closure, copyPlugin, type LibraryPlugin, readLibrary } from './library'
+import {
+  closure,
+  copyPlugin,
+  LEGACY_WARNING,
+  type LibraryPlugin,
+  PLUGINS_DIR,
+  pluginsFolder,
+  readLibrary,
+} from './library'
 import { appendGitignore, mergeDependencies, mergeOpener, mergeTooling } from './project'
 
 export interface AddOptions {
@@ -32,7 +40,7 @@ const parse = (argv: readonly string[]) =>
     options: { dir: { type: 'string' } },
   })
 
-const present = (appDir: string, name: string) => existsSync(join(appDir, 'src', 'plugins', name))
+const present = (appDir: string, name: string) => existsSync(join(pluginsFolder(appDir).dir, name))
 
 /**
  * Copy library plugins into an existing app, with the plugins they require, and add their npm packages to its package.json.
@@ -46,6 +54,7 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     )
     return 1
   }
+  if (pluginsFolder(appDir).legacy) io.stderr.write(`${LEGACY_WARNING}\n`)
   // A path is an external plugin folder; anything else is a library plugin name.
   const external = options.names.filter((name) => /[\\/]/.test(name) || name.startsWith('.'))
   for (const folder of external) {
@@ -53,7 +62,7 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     if (code !== 0) return code
   }
   // The desktop shell has two forms: the Blend app (it needs the `instance` plugin) and a plain Acryl app (`export default app`); `desktop` means the one that fits.
-  const plain = !existsSync(join(appDir, 'src', 'plugins', 'instance'))
+  const plain = !existsSync(join(pluginsFolder(appDir).dir, 'instance'))
   if (plain && options.names.includes('db')) {
     io.stderr.write(
       'error: "db" is the Cordis plugin for a Blend app. A plain Acryl app opens its database with openDb from "acrylblends/db/sqlite" (see docs/framework/guides/data.md)\n',
@@ -77,7 +86,14 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
   const already = names.filter((name) => present(appDir, name))
   if (already.length > 0) {
     io.stderr.write(
-      `error: the app already has ${already.map((name) => `src/plugins/${name}`).join(', ')}\n`,
+      `error: the app already has ${already
+        .map(
+          (name) =>
+            `${relative(appDir, join(pluginsFolder(appDir).dir, name))
+              .split(sep)
+              .join('/')}`,
+        )
+        .join(', ')}\n`,
     )
     return 1
   }
@@ -103,7 +119,7 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     io.stdout.write(`new dependencies: ${addedDependencies.join(', ')} (run npm install)\n`)
   for (const plugin of toCopy.filter((plugin) => names.includes(plugin.name))) {
     io.stdout.write(
-      `\n${plugin.name}: ${plugin.mount ?? `import it from './plugins/${plugin.name}/index.ts' and mount it in src/app.ts`}\n`,
+      `\n${plugin.name}: ${plugin.mount ?? `import it from '../plugins/${plugin.name}/index.ts' and mount it in src/app.ts`}\n`,
     )
   }
   return 0
@@ -113,7 +129,7 @@ const PLUGIN_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 
 /**
  * Bring an external plugin folder (a package made with the builder's package_plugin, or any folder with an index.ts that exports a
- * Cordis plugin) into the app's `extensions/`, where the extensions plugin installs it like any other: checked, staged, started,
+ * Cordis plugin) into the app's `plugins/`, where the extensions plugin installs it like any other: checked, staged, started,
  * verified. Its runtime dependencies are not installed here; they are reported so the user adds them deliberately.
  */
 function addExternal(folder: string, appDir: string, io: Io): number {
@@ -139,9 +155,12 @@ function addExternal(folder: string, appDir: string, io: Io): number {
     )
     return 1
   }
-  const target = join(appDir, 'extensions', name)
+  const target = join(
+    pluginsFolder(appDir).legacy ? join(appDir, 'extensions') : join(appDir, PLUGINS_DIR),
+    name,
+  )
   if (existsSync(target)) {
-    io.stderr.write(`error: the app already has extensions/${name}\n`)
+    io.stderr.write(`error: the app already has ${relative(appDir, target).split(sep).join('/')}\n`)
     return 1
   }
   cpSync(folder, target, {
@@ -149,7 +168,7 @@ function addExternal(folder: string, appDir: string, io: Io): number {
     filter: (path) => !/[\\/](node_modules|\.git)([\\/]|$)/.test(path.slice(folder.length)),
   })
   io.stdout.write(
-    `added external plugin ${name} to ${join(appDir, 'extensions')}; it installs at the next start\n`,
+    `added external plugin ${name} to ${dirname(target)}; it installs at the next start\n`,
   )
   const dependencies = Object.keys(manifest.dependencies ?? {})
   if (dependencies.length > 0)

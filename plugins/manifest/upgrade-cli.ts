@@ -65,6 +65,6 @@ const parse = (argv: readonly string[]) =>
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   process.exitCode = runUpgrade(
     process.argv.slice(2),
-    resolve(fileURLToPath(new URL('../../..', import.meta.url))),
+    resolve(fileURLToPath(new URL('../..', import.meta.url))),
   )
 }

@@ -16,7 +16,7 @@ export const HELP = `acrylblends ${VERSION} - scaffold Cordis apps
 Usage:
   acrylblends init [dir] [options]       Create a Cordis app in an empty or new directory
   acrylblends add <plugin...> [--dir d]  Copy library plugins (and what they require) into an app;
-                                      a folder path brings an external plugin into its extensions/
+                                      a folder path brings an external plugin into its plugins/
   acrylblends plugins                    List the plugin library
   acrylblends build-client [root] [out]  Compile the client modules once for production (src/client to dist/client)
   acrylblends kv import <kv.json> <db>   Move a JSON-file kv store into the kv table of a SQLite database [--overwrite] [--table t] [--migrations dir]

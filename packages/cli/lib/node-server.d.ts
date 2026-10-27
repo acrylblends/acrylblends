@@ -136,7 +136,7 @@ interface ClientModulesOptions {
   readonly compiled?: string | undefined;
   /** At most this many bytes of compiled modules are kept in memory (least recently served first out); 16 MiB when not given. */
   readonly cacheBytes?: number | undefined;
-  /** The folder holding `jsx-dom.js` and `client.js`; the framework's own when not given. */
+  /** The folder holding `jsx-dom.js`, `client.js` and `read-sse.js`; the framework's own when not given. */
   readonly runtimeDir?: string | undefined;
 }
 /** Options of {@link buildClientModules}. */
@@ -145,7 +145,7 @@ interface BuildClientModulesOptions {
   readonly root: string;
   /** Where the compiled modules go, at the same relative paths and file names; it must not lie inside `root`. */
   readonly outDir: string;
-  /** The folder holding `jsx-dom.js` and `client.js`; the framework's own when not given. */
+  /** The folder holding `jsx-dom.js`, `client.js` and `read-sse.js`; the framework's own when not given. */
   readonly runtimeDir?: string | undefined;
 }
 /**
@@ -159,7 +159,7 @@ interface BuildClientModulesOptions {
 declare function clientModules(options: ClientModulesOptions): Acryl;
 /**
  * Compile a folder of client modules once, for a production that has no `typescript`: each module is written to `outDir` at the same
- * relative path and file name (so the page's URLs stay the same), compiled exactly as {@link clientModules} compiles it, and the two
+ * relative path and file name (so the page's URLs stay the same), compiled exactly as {@link clientModules} compiles it, and the three
  * browser files are copied to `outDir/@acrylblends/`. Files already in `outDir` that no source produces are left there.
  * @param options - the source folder and the output folder.
  * @returns the paths written, relative to `outDir`.

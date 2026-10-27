@@ -94,7 +94,7 @@ export function readTemplateDesktopPath(templateDir: string): string | undefined
   return (JSON.parse(readFileSync(file, 'utf8')) as { desktopPath?: string }).desktopPath
 }
 
-/** Record where the desktop window opens in package.json (`acrylblends.desktopPath`), read by `src/plugins/desktop/main.ts`. */
+/** Record where the desktop window opens in package.json (`acrylblends.desktopPath`), read by `plugins/desktop/main.ts`. */
 export function writeDesktopPath(appDir: string, path: string): void {
   const file = join(appDir, 'package.json')
   const manifest = JSON.parse(readFileSync(file, 'utf8')) as {
@@ -197,9 +197,19 @@ export function writeAgentFiles(
   const own = existsSync(join(templateDir, 'AGENTS.md'))
     ? readFileSync(join(templateDir, 'AGENTS.md'), 'utf8')
     : ''
-  writeFileSync(join(target, 'AGENTS.md'), `${core}${own}`.replaceAll('__APP_NAME__', name))
-  writeFileSync(join(target, 'CLAUDE.md'), '@AGENTS.md\n')
-  return ['AGENTS.md', 'CLAUDE.md']
+  const defaults = readFileSync(join(sharedDir, 'DEFAULTS.md'), 'utf8')
+  const text = `${core}${defaults}${own}`.replaceAll('__APP_NAME__', name)
+  // AGENTS.md and CLAUDE.md are the same text; the one skill is written where each kind of agent looks for skills.
+  writeFileSync(join(target, 'AGENTS.md'), text)
+  writeFileSync(join(target, 'CLAUDE.md'), text)
+  const skill = readFileSync(join(sharedDir, 'SKILL.md'), 'utf8').replaceAll('__APP_NAME__', name)
+  const written = ['AGENTS.md', 'CLAUDE.md']
+  for (const folder of ['.claude/skills/app-guide', '.agents/skills/app-guide']) {
+    mkdirSync(join(target, folder), { recursive: true })
+    writeFileSync(join(target, folder, 'SKILL.md'), skill)
+    written.push(`${folder}/SKILL.md`)
+  }
+  return written
 }
 
 /**

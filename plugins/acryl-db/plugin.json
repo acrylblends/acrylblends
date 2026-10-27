@@ -7,6 +7,6 @@
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.4"
   },
-  "mount": "it is the port, not a service: a plugin declares inject: ['db'] and imports its types from './plugins/acryl-db/src/index.ts' (or the ctx.db type from './plugins/acryl-db/src/cordis.ts'); add acryl-db-sqlite to provide it",
+  "mount": "it is the port, not a service: a plugin declares inject: ['db'] and imports its types from '../plugins/acryl-db/src/index.ts' (or the ctx.db type from '../plugins/acryl-db/src/cordis.ts'); add acryl-db-sqlite to provide it",
   "omit": ["src/conformance.ts", "**/*.test.*", "**/*.case.ts"]
 }

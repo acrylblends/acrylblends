@@ -1,16 +1,16 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
-import * as nodeServer from './plugins/acryl-node-server/src/index.ts'
-import * as router from './plugins/acryl-router/src/index.ts'
-import * as state from './plugins/acryl-state/src/index.ts'
-import { type AppInstance, instance } from './plugins/instance/index.ts'
+import * as nodeServer from '../plugins/acryl-node-server/src/index.ts'
+import * as router from '../plugins/acryl-router/src/index.ts'
+import * as state from '../plugins/acryl-state/src/index.ts'
+import { type AppInstance, instance } from '../plugins/instance/index.ts'
 import {
   blueprintsIn,
   compose,
   loadManifest,
   type ParameterValue,
-} from './plugins/manifest/index.ts'
+} from '../plugins/manifest/index.ts'
 import * as todo from './todo.ts'
 
 /** The plugins this app's code provides. `blend.yaml` chooses, orders and configures them. */

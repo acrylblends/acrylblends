@@ -514,7 +514,7 @@ spec:
   for (const name of ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', 'yaml']) {
     if (!grownDeps.includes(name)) fail(`add settings: ${name} was not added to package.json`)
   }
-  if (!existsSync(join(grown, 'src', 'plugins', 'settings', 'index.ts')))
+  if (!existsSync(join(grown, 'plugins', 'settings', 'index.ts')))
     fail('add settings: the plugin was not copied')
   capture(npm, ['install', '--no-audit', '--no-fund'], { cwd: grown })
   capture(npm, ['run', 'check'], { cwd: grown })
@@ -533,7 +533,7 @@ spec:
   ])
   capture(process.execPath, [cli, 'add', 'db', '--dir', withDb])
   for (const name of ['acryl-db', 'acryl-db-sqlite'])
-    if (!existsSync(join(withDb, 'src', 'plugins', name, 'src', 'index.ts')))
+    if (!existsSync(join(withDb, 'plugins', name, 'src', 'index.ts')))
       fail(`add db: ${name} was not copied`)
   capture(npm, ['install', '--no-audit', '--no-fund'], { cwd: withDb })
   capture(npm, ['run', 'check'], { cwd: withDb })
@@ -547,8 +547,8 @@ spec:
     [
       "import { Context } from '@deepseek-ai/cordis'",
       "import { join } from 'node:path'",
-      "import * as sqlite from './src/plugins/acryl-db-sqlite/src/index.ts'",
-      "import type {} from './src/plugins/acryl-db/src/cordis.ts'",
+      "import * as sqlite from './plugins/acryl-db-sqlite/src/index.ts'",
+      "import type {} from './plugins/acryl-db/src/cordis.ts'",
       'const root = new Context()',
       "root.plugin(sqlite, { path: join(process.cwd(), 'probe.sqlite'), migrations: join(process.cwd(), 'migrations') })",
       'let seen = 0',
@@ -567,18 +567,18 @@ spec:
   })
   // The dependency rule: the app as `add db` leaves it passes; a driver planted in a plugin is named by file and line.
   capture(process.execPath, [cli, 'check-deps'], { cwd: withDb })
-  mkdirSync(join(withDb, 'src', 'plugins', 'things'), { recursive: true })
+  mkdirSync(join(withDb, 'plugins', 'things'), { recursive: true })
   writeFileSync(
-    join(withDb, 'src', 'plugins', 'things', 'index.ts'),
+    join(withDb, 'plugins', 'things', 'index.ts'),
     "export const inject = ['db']\nimport { DatabaseSync } from 'node:sqlite'\nexport { DatabaseSync }\n",
   )
   const planted = spawnSync(process.execPath, [cli, 'check-deps'], {
     cwd: withDb,
     encoding: 'utf8',
   })
-  if (planted.status !== 1 || !planted.stderr.includes('src/plugins/things/index.ts:2:'))
+  if (planted.status !== 1 || !planted.stderr.includes('plugins/things/index.ts:2:'))
     fail(`add db: check-deps did not name the planted import: ${planted.status} ${planted.stderr}`)
-  rmSync(join(withDb, 'src', 'plugins', 'things'), { recursive: true, force: true })
+  rmSync(join(withDb, 'plugins', 'things'), { recursive: true, force: true })
   log(
     'add db: the port and the SQLite provider copied, installed, type-check, and a plugin that injects db reads and writes through numbered migrations',
   )
@@ -596,7 +596,7 @@ spec:
   ])
   capture(process.execPath, [cli, 'add', 'kv', '--dir', withKv])
   for (const name of ['acryl-kv', 'acryl-kv-json'])
-    if (!existsSync(join(withKv, 'src', 'plugins', name, 'src', 'index.ts')))
+    if (!existsSync(join(withKv, 'plugins', name, 'src', 'index.ts')))
       fail(`add kv: ${name} was not copied`)
   capture(npm, ['install', '--no-audit', '--no-fund'], { cwd: withKv })
   capture(npm, ['run', 'check'], { cwd: withKv })
@@ -605,8 +605,8 @@ spec:
     [
       "import { Context } from '@deepseek-ai/cordis'",
       "import { join } from 'node:path'",
-      "import * as kvJson from './src/plugins/acryl-kv-json/src/index.ts'",
-      "import type {} from './src/plugins/acryl-kv/src/cordis.ts'",
+      "import * as kvJson from './plugins/acryl-kv-json/src/index.ts'",
+      "import type {} from './plugins/acryl-kv/src/cordis.ts'",
       'const root = new Context()',
       "root.plugin(kvJson, { path: join(process.cwd(), 'probe-kv.json') })",
       'let seen = 0',
@@ -648,7 +648,7 @@ spec:
     desktopPackage.dependencies?.electron !== undefined
   )
     fail('desktop: electron must be a development dependency only')
-  if (!/electron src\/plugins\/desktop\/main\.ts/.test(desktopPackage.scripts?.desktop ?? ''))
+  if (!/electron plugins\/desktop\/main\.ts/.test(desktopPackage.scripts?.desktop ?? ''))
     fail('desktop: the desktop script is missing')
   if (desktopPackage.acrylblends?.desktopPath !== '/todo')
     fail('desktop: the todo window must open on /todo')
@@ -662,7 +662,7 @@ spec:
     )
   for (const file of appSource(join(desktop, 'src')))
     if (/from 'electron'/.test(readFileSync(file, 'utf8')))
-      fail(`desktop: ${file} imports electron; only src/plugins/desktop may`)
+      fail(`desktop: ${file} imports electron; only plugins/desktop may`)
   capture(npm, ['install', '--no-audit', '--no-fund'], {
     cwd: desktop,
     env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' },
@@ -727,7 +727,7 @@ spec:
       cwd: notes,
       env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' },
     })
-    if (!existsSync(join(notes, 'src', 'plugins', 'desktop-web', 'main.ts')))
+    if (!existsSync(join(notes, 'plugins', 'desktop-web', 'main.ts')))
       fail(`${kind}: add desktop did not add the plain-app shell`)
     capture(npm, ['run', 'check'], { cwd: notes })
     capture(npm, ['test'], { cwd: notes })

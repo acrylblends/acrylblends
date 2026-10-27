@@ -14,7 +14,7 @@ import type {} from '../instance/index.ts'
 import { builderRules } from './script.ts'
 
 export interface BuilderConfig {
-  /** Where the agent writes extensions. Defaults to `<project>/extensions`. Must be one of the extensions sources. */
+  /** Where the agent writes extensions. Defaults to `<project>/plugins`. Must be one of the extensions sources. */
   dir?: string
   /** Where `package_plugin` writes standalone packages. Defaults to `<project>/plugin-packages`. */
   packagesDir?: string
@@ -64,7 +64,7 @@ export const builder = {
   name: 'builder',
   inject: ['extensions', 'tools', 'appInstance'],
   apply(ctx: Context, config: BuilderConfig) {
-    const dir = resolve(config?.dir ?? join(ctx.appInstance.root, 'extensions'))
+    const dir = resolve(config?.dir ?? join(ctx.appInstance.root, 'plugins'))
     if (!ctx.extensions.sources.some((source) => resolve(source.dir) === dir)) {
       throw new BuilderError(
         `the builder writes into ${dir}, which is not an extensions source; add it to the extensions plugin's sources`,

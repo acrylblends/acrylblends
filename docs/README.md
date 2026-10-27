@@ -26,7 +26,7 @@ ACRYLBLENDS is the public ACRYL framework, in two parts.
 
 [framework/README.md](framework/README.md) is ACRYL's own text, copied here as it is. Do not edit it in this repository: change it in ACRYL and run `scripts/sync-framework.mjs`.
 `pnpm run verify:framework` fails when a page differs from the digest recorded in `framework/upstream.json`. The pages write `import { Acryl } from 'acrylblends'`; in a
-generated Blend app the same names are the vendored plugin source in `src/plugins/acryl-router/src/` (see the app's `AGENTS.md`).
+generated Blend app the same names are the vendored plugin source in `plugins/acryl-router/src/` (see the app's `AGENTS.md`).
 
 ## Our own pages
 
@@ -36,6 +36,7 @@ generated Blend app the same names are the vendored plugin source in `src/plugin
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
+- [Release notes 0.7.8](release-notes/0.7.8.md) - one `plugins/` folder, `AGENTS.md` and `CLAUDE.md` with the app-guide skill, `acrylblends/read-sse`
 - [Release notes 0.7.7](release-notes/0.7.7.md) - `kv`: JSON documents for tiny apps; `acrylblends kv import`
 - [Release notes 0.7.6](release-notes/0.7.6.md) - `acrylblends check-deps`: app code takes the db port, one file opens the database
 - [Release notes 0.7.5](release-notes/0.7.5.md) - the `db` port and numbered migrations; the notes and chat templates use them

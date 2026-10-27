@@ -7,5 +7,5 @@
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.4"
   },
-  "mount": "mount it after agent and extensions: root.plugin(builder, { dir: join(root, 'extensions') }); dir must be an extensions source"
+  "mount": "mount it after agent and extensions: root.plugin(builder, { dir: join(root, 'plugins') }); dir must be an extensions source"
 }

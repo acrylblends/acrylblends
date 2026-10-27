@@ -1,7 +1,7 @@
 # The plugin library
 
 Each plugin is plain Cordis code in `plugins/<name>/` of this repository. `acrylblends init` and `acrylblends add` copy it into
-your app's `src/plugins/<name>/` with the plugins it requires. Every one is tested in this repository with `node:test`
+your app's `plugins/<name>/` with the plugins it requires. Every one is tested in this repository with `node:test`
 against a real Cordis context, including disposal.
 
 | Plugin | Service | From ACRYL |
@@ -107,10 +107,10 @@ has a tool registry. It never reads, stores or asks for a token: git and gh use 
 
 ## desktop
 
-An Electron window on the app's own server. `acrylblends init my-app --desktop` (or `acrylblends add desktop` in an existing app) adds `src/plugins/desktop`, `electron` as a development
+An Electron window on the app's own server. `acrylblends init my-app --desktop` (or `acrylblends add desktop` in an existing app) adds `plugins/desktop`, `electron` as a development
 dependency and the script `npm run desktop`. `npm run desktop` picks the app's instance as `npm run dev` does, keeps Electron's user data inside the app's own home (`.acrylblends/electron`,
 never the user's application-data folder), starts `createApp` in the Electron main process, opens one window with a locked-down renderer (context isolation, no Node, sandbox) on the app's address
 (`/todo` for the todo template: `acrylblends.desktopPath` in `package.json`), keeps navigation on the app's own origin (other links open in the system browser), and ends the process when the window
-closes, after the server stopped. A second launch of the same app focuses the first. The app's own code never imports `electron`; only `src/plugins/desktop` does. `user-data.ts` and `shutdown.ts` are
+closes, after the server stopped. A second launch of the same app focuses the first. The app's own code never imports `electron`; only `plugins/desktop` does. `user-data.ts` and `shutdown.ts` are
 vendored from ACRYL Desktop with a recorded digest (`upstream.json`). Run from source only for now; packaging a distributable app is not part of it. `npm install` does not download Electron's binary (Electron 44 dropped its install script): the
 `electron` command downloads it the first time `npm run desktop` runs (about 100 MB, once per machine; `ELECTRON_MIRROR` and `ELECTRON_CACHE` apply). If that download is blocked, run `npx install-electron` where you can reach the mirror.
