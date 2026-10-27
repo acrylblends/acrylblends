@@ -6,10 +6,10 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { Acryl, HTTPException } from './plugins/acryl-router/src/index.ts'
-import { bodyLimit, loopbackOnly, trimTrailingSlash } from './plugins/acryl-router/src/middleware/index.ts'
-import { schemaValidator, streamSSE, type StandardSchema } from './plugins/acryl-router/src/helpers/index.ts'
-import type {} from './plugins/acryl-state/src/index.ts'
+import { Acryl, HTTPException } from '../plugins/acryl-router/src/index.ts'
+import { bodyLimit, loopbackOnly, trimTrailingSlash } from '../plugins/acryl-router/src/middleware/index.ts'
+import { schemaValidator, streamSSE, type StandardSchema } from '../plugins/acryl-router/src/helpers/index.ts'
+import type {} from '../plugins/acryl-state/src/index.ts'
 import { PAGE } from './page.ts'
 
 /** Stable Cordis plugin name, equal to the package name and the Loader row id. */

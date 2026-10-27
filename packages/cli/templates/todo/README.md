@@ -24,4 +24,4 @@ The routes only answer a caller on this machine: a request from another site's p
 Open `$URL/todo` for the page. Stop the app and start it again: the list is still there (`<home>/todo.json`, `.acrylblends/` unless `ACRYLBLENDS_HOME` says otherwise).
 
 - `blend.yaml` is the app as data. `npm run lock` records what it is built from; `npm run save` commits it, refusing secrets and public remotes for a private app.
-- The framework plugins are in `src/plugins/acryl-*/src`. Do not edit them: they are ACRYL's, vendored; the text that explains them is in the ACRYLBLENDS docs.
+- The framework plugins are in `plugins/acryl-*/src`. Do not edit them: they are ACRYL's, vendored; the text that explains them is in the ACRYLBLENDS docs.

@@ -1,7 +1,7 @@
 /**
  * `npm run lock`: write `blend.lock.json` (formatVersion 3, the lock ACRYL writes too) next to the manifest, recording what the app is
  * built from: the manifest's identity and digest, the Blueprint it was resolved over, its resolved parameters and rows, and a content
- * digest of every plugin folder in `src/plugins/` and every extension in `extensions/`. Commit it; a diff of the lock is a review of
+ * digest of every plugin folder in `plugins/`. Commit it; a diff of the lock is a review of
  * what changed.
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -69,7 +69,11 @@ export function writeLock(appRoot: string): LockV3 {
       version: document.metadata.version,
       digest: manifestDigest(text),
     },
-    modules: [...localModules(appRoot, 'src/plugins'), ...localModules(appRoot, 'extensions')],
+    modules: [
+      ...localModules(appRoot, 'plugins'),
+      ...localModules(appRoot, 'src/plugins'),
+      ...localModules(appRoot, 'extensions'),
+    ],
     ...(lineage
       ? {
           lineage: {
@@ -86,7 +90,7 @@ export function writeLock(appRoot: string): LockV3 {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const appRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)))
+  const appRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)))
   const locked = writeLock(appRoot)
   console.log(
     `wrote ${LOCK_FILE}: ${locked.rows.length} rows, ${locked.modules.length} local plugins`,

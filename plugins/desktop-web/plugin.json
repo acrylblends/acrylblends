@@ -9,9 +9,9 @@
     "electron": "44.9.3"
   },
   "scripts": {
-    "desktop": "electron src/plugins/desktop-web/main.ts"
+    "desktop": "electron plugins/desktop-web/main.ts"
   },
   "gitignore": [".acrylblends/"],
   "omit": ["**/*.test.*"],
-  "mount": "nothing to mount: run `npm install`, then `npm run desktop` (the window opens on the app's own server; every electron call is in src/plugins/desktop-web)"
+  "mount": "nothing to mount: run `npm install`, then `npm run desktop` (the window opens on the app's own server; every electron call is in plugins/desktop-web)"
 }

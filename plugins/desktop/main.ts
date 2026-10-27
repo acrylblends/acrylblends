@@ -10,14 +10,14 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, shell } from 'electron'
-import type { App } from '../../app.ts'
+import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
 import { selectInstance } from '../instance/index.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { windowOptions } from './window.ts'
 
-const projectRoot = fileURLToPath(new URL('../../..', import.meta.url))
+const projectRoot = fileURLToPath(new URL('../..', import.meta.url))
 const chosen = selectInstance({ projectRoot, env: process.env })
 
 /** Where the window opens: `acrylblends.desktopPath` in package.json (the todo template sets `/todo`), else the root. */
@@ -65,7 +65,7 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     // The hook above is registered before the app's modules are loaded, so the app may have .tsx pages: they are loaded here, not as a static import.
-    const { createApp } = await import('../../app.ts')
+    const { createApp } = await import('../../src/app.ts')
     running = await createApp(chosen)
     const origin = new URL(running.url).origin
     window = new BrowserWindow(windowOptions({ title: chosen.name }))

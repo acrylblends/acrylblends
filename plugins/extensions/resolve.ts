@@ -4,7 +4,7 @@
  * module inside the staging folder, resolves the same name from the app's project folder. Uses Node's public `module.registerHooks`
  * (ACRYL needed the same fallback on Deno); the returned function removes the hook.
  *
- * The framework plugins are not packages in an app (they are source under `src/plugins/`), so `aliases` names the files a framework specifier such as
+ * The framework plugins are not packages in an app (they are source under `plugins/`), so `aliases` names the files a framework specifier such as
  * `acryl-router` stands for. A staged plugin then imports the same module the app itself runs, so `App` is the very class the router mounts.
  */
 import { existsSync, mkdirSync, realpathSync } from 'node:fs'

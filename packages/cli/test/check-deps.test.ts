@@ -113,14 +113,14 @@ describe('findViolations', () => {
   })
   it('lets only the desktop shell import electron, and the provider plugin its own wrap', () => {
     const dir = app({
-      'src/plugins/desktop/main.ts': "import { app } from 'electron'\n",
-      'src/plugins/acryl-db-sqlite/src/index.ts':
+      'plugins/desktop/main.ts': "import { app } from 'electron'\n",
+      'plugins/acryl-db-sqlite/src/index.ts':
         "import { openDb } from './open.ts'\nimport 'acryl-db-sqlite/open'\n",
-      'src/plugins/mine/index.ts': "import 'electron'\nimport 'acryl-db-sqlite'\n",
+      'plugins/mine/index.ts': "import 'electron'\nimport 'acryl-db-sqlite'\n",
     })
     expect(findViolations(dir).map((v) => `${v.file}:${v.line}:${v.kind}`)).toEqual([
-      'src/plugins/mine/index.ts:1:electron',
-      'src/plugins/mine/index.ts:2:opener',
+      'plugins/mine/index.ts:1:electron',
+      'plugins/mine/index.ts:2:opener',
     ])
   })
 })

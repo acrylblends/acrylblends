@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createApp } from '../src/app.ts'
-import { pinnedInstance, withPort } from '../src/plugins/instance/index.ts'
+import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 
 /** A plugin no scripted command knows: the model writes it from scratch. */
 const COUNTER = `import type { Context } from '@deepseek-ai/cordis'

@@ -266,7 +266,7 @@ export const TEMPLATE_SOURCES = {
   todo: {
     dir: 'packages/cli/templates/todo',
     /** Where the framework plugins sit in a generated app, relative to the app folder. */
-    pluginsRoot: 'src/plugins',
+    pluginsRoot: 'plugins',
     files: {
       'examples/acryl-todo/src/index.ts': 'src/todo.ts',
       'examples/acryl-todo/src/page.ts': 'src/page.ts',
@@ -275,7 +275,7 @@ export const TEMPLATE_SOURCES = {
   /** The package's own README (the npm page): ACRYL writes it with its examples type-checked against the packed framework, so it is synced and digest-checked, never edited here. */
   cliReadme: {
     dir: 'packages/cli',
-    pluginsRoot: 'src/plugins',
+    pluginsRoot: 'plugins',
     files: {
       'distribution/acrylblends-framework/README.md': 'README.md',
     },
@@ -283,7 +283,7 @@ export const TEMPLATE_SOURCES = {
   /** Two pure pieces of ACRYL Desktop (spec 018): the isolated Electron user-data folder and the bounded, escalating shutdown. They import nothing but `node:path`. */
   desktop: {
     dir: 'plugins/desktop',
-    pluginsRoot: 'src/plugins',
+    pluginsRoot: 'plugins',
     files: {
       'apps/acryl-desktop/src/shell/desktop-user-data.ts': 'user-data.ts',
       'apps/acryl-desktop/src/shell/shutdown.ts': 'shutdown.ts',
@@ -292,7 +292,7 @@ export const TEMPLATE_SOURCES = {
   /** The same two files for the desktop shell of a plain Acryl app (`desktop-web`). */
   desktopWeb: {
     dir: 'plugins/desktop-web',
-    pluginsRoot: 'src/plugins',
+    pluginsRoot: 'plugins',
     files: {
       'apps/acryl-desktop/src/shell/desktop-user-data.ts': 'user-data.ts',
       'apps/acryl-desktop/src/shell/shutdown.ts': 'shutdown.ts',

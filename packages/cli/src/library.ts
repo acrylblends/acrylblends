@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readdirSync, readFileSync } from 'node:fs'
+import { cpSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -119,16 +119,44 @@ export function closure(
   return ordered
 }
 
-/** Copy one library plugin's source into `<app>/src/plugins/<name>/`. Throws when that folder already exists. */
+/** The one folder every plugin of an app lives in, library copies and the ones an agent writes. */
+export const PLUGINS_DIR = 'plugins'
+/** Where apps made before 0.7.8 kept library copies; still understood for one release. */
+export const LEGACY_PLUGINS_DIR = join('src', 'plugins')
+/** The list of library copies in the plugins folder; the extensions plugin installs every other folder there. */
+export const LIBRARY_LIST = 'library.json'
+
+/** The plugins folder of an app: `plugins/`, or `src/plugins/` for an app that still has the old layout (and no `plugins/`). */
+export function pluginsFolder(appDir: string): { dir: string; legacy: boolean } {
+  const legacy =
+    existsSync(join(appDir, LEGACY_PLUGINS_DIR)) && !existsSync(join(appDir, PLUGINS_DIR))
+  return { dir: join(appDir, legacy ? LEGACY_PLUGINS_DIR : PLUGINS_DIR), legacy }
+}
+
+/** The warning for an app with the old layout. */
+export const LEGACY_WARNING =
+  'warning: this app keeps its plugins in src/plugins/ (and extensions/); plugins now live in one folder, plugins/. Move them with "git mv src/plugins plugins", fix the paths in tsconfig.json, package.json and src/, and see docs/framework/agents/index.md. The old layout is read for this release only.'
+
+function recordLibraryCopy(folder: string, name: string): void {
+  const file = join(folder, LIBRARY_LIST)
+  const names: string[] = existsSync(file)
+    ? (JSON.parse(readFileSync(file, 'utf8')) as { plugins: string[] }).plugins
+    : []
+  if (!names.includes(name)) names.push(name)
+  writeFileSync(file, `${JSON.stringify({ plugins: names.sort() }, null, 2)}\n`)
+}
+
+/** Copy one library plugin's source into `<app>/plugins/<name>/`. Throws when that folder already exists. */
 export function copyPlugin(
   plugin: LibraryPlugin,
   appDir: string,
   root: string = libraryRoot(),
 ): string {
-  const target = join(appDir, 'src', 'plugins', plugin.name)
+  const folder = pluginsFolder(appDir)
+  const target = join(folder.dir, plugin.name)
   if (existsSync(target))
     throw new LibraryError(
-      `src/plugins/${plugin.name} already exists; remove it first to copy a fresh one`,
+      `${relativeName(appDir, target)} already exists; remove it first to copy a fresh one`,
     )
   const source = join(root, plugin.name)
   cpSync(source, target, {
@@ -140,5 +168,12 @@ export function copyPlugin(
       )
     },
   })
+  if (!folder.legacy) recordLibraryCopy(folder.dir, plugin.name)
   return target
 }
+
+const relativeName = (appDir: string, path: string) =>
+  path
+    .slice(appDir.length + 1)
+    .split(sep)
+    .join('/')

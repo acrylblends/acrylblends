@@ -26,7 +26,7 @@ ACRYLBLENDS is the public ACRYL framework, in two parts.
 
 [framework/README.md](framework/README.md) is ACRYL's own text, copied here as it is. Do not edit it in this repository: change it in ACRYL and run `scripts/sync-framework.mjs`.
 `pnpm run verify:framework` fails when a page differs from the digest recorded in `framework/upstream.json`. The pages write `import { Acryl } from 'acrylblends'`; in a
-generated Blend app the same names are the vendored plugin source in `src/plugins/acryl-router/src/` (see the app's `AGENTS.md`).
+generated Blend app the same names are the vendored plugin source in `plugins/acryl-router/src/` (see the app's `AGENTS.md`).
 
 ## Our own pages
 

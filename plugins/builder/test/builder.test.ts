@@ -25,7 +25,7 @@ async function boot() {
     app.plugin(instance, pinnedInstance(home, { root })),
     app.plugin(router),
     app.plugin(state),
-    app.plugin(extensions, { sources: [{ dir: join(root, 'extensions'), trust: 'install' }] }),
+    app.plugin(extensions, { sources: [{ dir: join(root, 'plugins'), trust: 'install' }] }),
     app.plugin(model),
     app.plugin(tools),
     app.plugin(memory),
@@ -67,7 +67,7 @@ test('the agent builds a route plugin, updates it, survives a broken update, and
   assert.equal(await ask('list plugins'), 'hello (active)')
   assert.equal(await ask('remove plugin hello'), 'hello: done.')
   assert.equal((await get('/hello')).status, 404)
-  assert.equal(existsSync(join(root, 'extensions', 'hello')), false)
+  assert.equal(existsSync(join(root, 'plugins', 'hello')), false)
 })
 
 test('package_plugin turns an extension into a standalone package with Cordis as a peer', async () => {
@@ -114,7 +114,7 @@ test('the builder refuses to write anywhere that is not an extensions source', a
 
 test('a plugin installed live reads a service as a property (ctx.router) and builds its routes with the acrylblends of the app', async () => {
   const { app, root } = await boot()
-  const dir = join(root, 'extensions', 'probe')
+  const dir = join(root, 'plugins', 'probe')
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, 'index.ts'),
@@ -136,7 +136,7 @@ export function apply(ctx) {
 test("a live plugin's check runs with the plugin context: ctx.router reads as in apply, and a failing check rolls the install back", async () => {
   const { app, root } = await boot()
   const write = (name: string, status: number) => {
-    const dir = join(root, 'extensions', name)
+    const dir = join(root, 'plugins', name)
     mkdirSync(dir, { recursive: true })
     writeFileSync(
       join(dir, 'index.ts'),
@@ -170,7 +170,7 @@ export async function check(ctx) {
 
 test('a live plugin renders a page with acrylblends/jsx (the call JSX compiles to; Node does not compile JSX syntax)', async () => {
   const { app, root } = await boot()
-  const dir = join(root, 'extensions', 'about')
+  const dir = join(root, 'plugins', 'about')
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, 'index.ts'),

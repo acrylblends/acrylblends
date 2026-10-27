@@ -111,7 +111,23 @@ describe('create', () => {
         )
       for (const file of all(dir).filter((f) => !f.includes('/docs/')))
         expect(readFileSync(file, 'utf8'), file).not.toMatch(/__[A-Z_]+__/)
-      expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe('@AGENTS.md\n')
+      const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
+      expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe(agents)
+      // One skill, the same text wherever an agent looks for it, pointing to the docs and the door.
+      const skill = readFileSync(join(dir, '.claude/skills/app-guide/SKILL.md'), 'utf8')
+      expect(readFileSync(join(dir, '.agents/skills/app-guide/SKILL.md'), 'utf8')).toBe(skill)
+      expect(skill).toMatch(/^---\nname: app-guide\ndescription: .+\n---\n/u)
+      expect(skill).toContain('docs/framework/README.md')
+      expect(skill).toContain('.acryl/bin/acryl')
+      // The gate of slice 11: the generated text names one plugin folder, and the door's state is ignored by git.
+      for (const text of [agents, skill])
+        expect(
+          text
+            .replaceAll('Do not create `src/plugins/` or `extensions/`.', '')
+            .replaceAll('There is no `src/plugins/` and no `extensions/`.', ''),
+        ).not.toMatch(/src\/plugins|extensions\//u)
+      expect(agents).toContain('## Defaults you can swap')
+      expect(readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')).toContain('.acryl/')
       expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('docs/framework/README.md')
       expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain(
         "jsx('h1', { class: 'title' }, 'Hello')",

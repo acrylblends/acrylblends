@@ -82,7 +82,20 @@ describe('a coding agent in a generated app', () => {
       expect(agents).toContain('docs/framework/README.md')
       expect(agents).not.toContain('__APP_NAME__')
       expect(agents).toContain(`## This app (${template})`)
-      expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe('@AGENTS.md\n')
+      expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe(agents)
+      expect(agents).toContain('## Defaults you can swap')
+      const skill = readFileSync(join(dir, '.claude/skills/app-guide/SKILL.md'), 'utf8')
+      expect(readFileSync(join(dir, '.agents/skills/app-guide/SKILL.md'), 'utf8')).toBe(skill)
+      expect(skill).toContain(`Working in app-${template}`)
+      // One plugin folder: the generated text names no second one except to forbid it.
+      for (const text of [agents, skill])
+        expect(
+          text.replace(
+            /Do not create `src\/plugins\/` or `extensions\/`\.|There is no `src\/plugins\/` and no `extensions\/`\./gu,
+            '',
+          ),
+        ).not.toMatch(/src\/plugins|extensions\//u)
+      expect(readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')).toContain('.acryl/')
       for (const page of [
         'README.md',
         'api/routing.md',
@@ -154,7 +167,7 @@ describe('vendored framework plugins', () => {
     const app = mkdtempSync(join(tmpdir(), 'vendored-copy-'))
     try {
       for (const plugin of closure(['acryl-state'], library)) copyPlugin(plugin, app)
-      const copied = (path: string) => existsSync(join(app, 'src', 'plugins', path))
+      const copied = (path: string) => existsSync(join(app, 'plugins', path))
       expect(copied('acryl-router/src/index.ts')).toBe(true)
       expect(copied('acryl-state/src/index.ts')).toBe(true)
       expect(copied('acryl-state/upstream.json')).toBe(true)
@@ -218,7 +231,7 @@ describe('omit patterns', () => {
         app,
         library,
       )
-      const copied = (path: string) => existsSync(join(app, 'src', 'plugins', 'demo', path))
+      const copied = (path: string) => existsSync(join(app, 'plugins', 'demo', path))
       expect(copied('src/index.ts')).toBe(true)
       expect(copied('src/core/app.ts')).toBe(true)
       expect(copied('src/core/app.test.ts')).toBe(false)
@@ -282,13 +295,13 @@ describe('init', () => {
     const dir = join(scratch, 'plain')
     expect(manifest(dir).name).toBe('plain')
     expect(readFileSync(join(dir, 'src/routes.ts'), 'utf8')).toContain("APP_NAME = 'plain'")
-    expect(existsSync(join(dir, 'src/plugins/instance/index.ts'))).toBe(true)
+    expect(existsSync(join(dir, 'plugins/instance/index.ts'))).toBe(true)
     for (const plugin of ['acryl-router', 'acryl-router-http', 'acryl-node-server'])
-      expect(existsSync(join(dir, 'src/plugins', plugin, 'src/index.ts'))).toBe(true)
-    expect(existsSync(join(dir, 'src/plugins/agent'))).toBe(false)
-    expect(existsSync(join(dir, 'src/plugins/acryl-router/plugin.json'))).toBe(false)
-    expect(existsSync(join(dir, 'src/plugins/acryl-router/tests'))).toBe(false)
-    expect(existsSync(join(dir, 'src/plugins/acryl-router/upstream.json'))).toBe(true)
+      expect(existsSync(join(dir, 'plugins', plugin, 'src/index.ts'))).toBe(true)
+    expect(existsSync(join(dir, 'plugins/agent'))).toBe(false)
+    expect(existsSync(join(dir, 'plugins/acryl-router/plugin.json'))).toBe(false)
+    expect(existsSync(join(dir, 'plugins/acryl-router/tests'))).toBe(false)
+    expect(existsSync(join(dir, 'plugins/acryl-router/upstream.json'))).toBe(true)
     expect(existsSync(join(dir, '.gitignore'))).toBe(true)
     expect(existsSync(join(dir, 'template.json'))).toBe(false)
     expect(manifest(dir).dependencies).toEqual({
@@ -315,7 +328,7 @@ describe('init', () => {
   it('copies the agent template when asked on the terminal', async () => {
     const session = fakeIo({ answers: ['', 'agent', 'n'] })
     expect(await runCli(['init', 'asked'], session.io)).toBe(0)
-    expect(existsSync(join(scratch, 'asked/src/plugins/agent/agent.ts'))).toBe(true)
+    expect(existsSync(join(scratch, 'asked/plugins/agent/agent.ts'))).toBe(true)
     expect(session.out()).toContain('created asked (agent)')
   })
 
@@ -356,11 +369,11 @@ describe('the desktop shell', () => {
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
     expect(pkg.devDependencies.electron).toBe('44.9.3')
     expect(pkg.dependencies.electron).toBeUndefined()
-    expect(pkg.scripts.desktop).toBe('electron src/plugins/desktop/main.ts')
+    expect(pkg.scripts.desktop).toBe('electron plugins/desktop/main.ts')
     expect(pkg.acrylblends).toEqual({ desktopPath: '/todo' })
     for (const file of ['main.ts', 'window.ts', 'user-data.ts', 'shutdown.ts', 'upstream.json'])
-      expect(existsSync(join(dir, 'src/plugins/desktop', file))).toBe(true)
-    expect(existsSync(join(dir, 'src/plugins/desktop/plugin.json'))).toBe(false)
+      expect(existsSync(join(dir, 'plugins/desktop', file))).toBe(true)
+    expect(existsSync(join(dir, 'plugins/desktop/plugin.json'))).toBe(false)
   })
 
   it('a plain init has no electron, and add desktop brings it later without replacing a script the app has', async () => {
@@ -395,11 +408,11 @@ describe('the desktop shell in a plain Acryl app', () => {
     writeFileSync(join(dir, '.gitignore'), 'node_modules/\n')
     expect(await runCli(['add', 'desktop', '--dir', dir], fakeIo().io)).toBe(0)
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
-    expect(pkg.scripts).toEqual({ desktop: 'electron src/plugins/desktop-web/main.ts', dev: 'x' })
+    expect(pkg.scripts).toEqual({ desktop: 'electron plugins/desktop-web/main.ts', dev: 'x' })
     expect(pkg.devDependencies.electron).toBe('44.9.3')
-    expect(existsSync(join(dir, 'src/plugins/desktop-web/main.ts'))).toBe(true)
-    expect(existsSync(join(dir, 'src/plugins/instance'))).toBe(false)
-    expect(existsSync(join(dir, 'src/plugins/desktop'))).toBe(false)
+    expect(existsSync(join(dir, 'plugins/desktop-web/main.ts'))).toBe(true)
+    expect(existsSync(join(dir, 'plugins/instance'))).toBe(false)
+    expect(existsSync(join(dir, 'plugins/desktop'))).toBe(false)
     expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toBe('node_modules/\n.acrylblends/\n')
     // Adding it again changes nothing and is refused.
     expect(await runCli(['add', 'desktop', '--dir', dir], fakeIo().io)).toBe(1)
@@ -412,14 +425,33 @@ describe('add and plugins', () => {
     const dir = join(scratch, 'grows')
     const first = fakeIo()
     expect(await runCli(['add', 'agent', '--dir', dir], first.io)).toBe(0)
-    expect(existsSync(join(dir, 'src/plugins/agent/index.ts'))).toBe(true)
+    expect(existsSync(join(dir, 'plugins/agent/index.ts'))).toBe(true)
     expect(first.out()).toContain('added agent')
     const again = fakeIo()
     expect(await runCli(['add', 'agent', '--dir', dir], again.io)).toBe(1)
-    expect(again.err()).toContain('already has src/plugins/agent')
+    expect(again.err()).toContain('already has plugins/agent')
     const nowhere = fakeIo()
     expect(await runCli(['add', 'agent', '--dir', join(scratch, 'missing')], nowhere.io)).toBe(1)
     expect(nowhere.err()).toContain('is not an app')
+  })
+
+  it('records library copies in plugins/library.json, and keeps copying into src/plugins for an app that still has the old layout', async () => {
+    expect(await runCli(['init', 'grows2', '-y'], fakeIo().io)).toBe(0)
+    const dir = join(scratch, 'grows2')
+    expect(await runCli(['add', 'agent', '--dir', dir], fakeIo().io)).toBe(0)
+    const listed = JSON.parse(readFileSync(join(dir, 'plugins/library.json'), 'utf8')) as {
+      plugins: string[]
+    }
+    expect(listed.plugins).toContain('agent')
+    expect(listed.plugins).toContain('instance')
+    const old = join(scratch, 'old')
+    mkdirSync(join(old, 'src/plugins'), { recursive: true })
+    writeFileSync(join(old, 'package.json'), '{"name":"old"}\n')
+    const legacy = fakeIo()
+    expect(await runCli(['add', 'agent', '--dir', old], legacy.io)).toBe(0)
+    expect(existsSync(join(old, 'src/plugins/agent/index.ts'))).toBe(true)
+    expect(existsSync(join(old, 'plugins'))).toBe(false)
+    expect(legacy.err()).toContain('plugins now live in one folder, plugins/')
   })
 
   it('brings an external plugin folder into the app extensions, and refuses one without an entry', async () => {
@@ -437,7 +469,7 @@ describe('add and plugins', () => {
     )
     const session = fakeIo()
     expect(await runCli(['add', external, '--dir', app], session.io)).toBe(0)
-    expect(existsSync(join(app, 'extensions/my-plugin/index.ts'))).toBe(true)
+    expect(existsSync(join(app, 'plugins/my-plugin/index.ts'))).toBe(true)
     expect(session.out()).toContain('it uses left')
     const again = fakeIo()
     expect(await runCli(['add', external, '--dir', app], again.io)).toBe(1)

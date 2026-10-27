@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { saveFolder } from './index.ts'
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const appRoot = fileURLToPath(new URL('../../..', import.meta.url))
+  const appRoot = fileURLToPath(new URL('../..', import.meta.url))
   const result = saveFolder(appRoot, process.argv.slice(2).join(' ').trim() || 'save the app')
   if (result.status === 'refused') {
     console.error(`not saved: ${result.reason}`)

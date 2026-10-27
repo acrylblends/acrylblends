@@ -118,4 +118,23 @@ describe('docs: the extension contract in agent/extending-apps.md', () => {
       rmSync(project, { recursive: true, force: true })
     }
   })
+
+  it('names one plugin folder, plugins/: no page tells a reader to use src/plugins/ or extensions/', () => {
+    // A page may say the old folders are gone or give the move; any other mention is a second folder.
+    const allowed =
+      /There is no `src\/plugins\/` and no `extensions\/`\.|Do not create `src\/plugins\/` or `extensions\/`\.|git mv (?:src\/plugins plugins|extensions\/<name> plugins\/<name>)|reads its `src\/plugins\/` and\s+`extensions\/`|the old folders?/gu
+    const offenders = linked
+      .filter(({ name }) => !name.includes('release-notes'))
+      .flatMap(({ name, text }) =>
+        text
+          .replace(allowed, '')
+          .split('\n')
+          .flatMap((line, index) =>
+            /(?:^|[^\w/@.-])(?:src\/plugins|extensions)\//u.test(line)
+              ? [`${name}:${index + 1}: ${line.trim().slice(0, 100)}`]
+              : [],
+          ),
+      )
+    expect(offenders).toEqual([])
+  })
 })

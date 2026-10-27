@@ -6,7 +6,7 @@ on macOS, Windows and Linux.
 
 ## An extension
 
-An extension is a folder in an extensions source (the app's `extensions/` by default) whose name is the plugin's name, with
+An extension is a folder in an extensions source (the app's `plugins/` folder) whose name is the plugin's name, with
 an `index.ts` that exports a Cordis plugin:
 
 <!-- extension: hello -->
@@ -81,7 +81,7 @@ is refused and the new version needs its own request. A version approved once st
 
 At startup, Extensions installs again what was installed, and installs new folders only from sources marked
 `trust: 'install'`; folders in a source marked `trust: 'list'` are only reported (`pending()`), because code that arrived
-through a `git pull` should not run until someone asks. The app's own `extensions/` is trusted: it is the app's code,
+through a `git pull` should not run until someone asks. The app's own `plugins/` is trusted: it is the app's code,
 committed with it, type-checked with `npm run check`.
 
 ## The builder
@@ -102,10 +102,10 @@ reads the tool descriptions; the offline scripted model knows these commands:
 
 ## Internal and external plugins
 
-A plugin the agent builds lives in the app's own `extensions/` (internal). To share it, ask the agent to package it
+A plugin the agent builds lives in the app's own `plugins/` (internal). To share it, ask the agent to package it
 (`package_plugin { name }`, or the scripted command `package plugin <name>`): it becomes a standalone package in
 `plugin-packages/<name>/`, with `@deepseek-ai/cordis` as a peer dependency (never a second installed copy). Any app takes an
-external plugin in with `acrylblends add <folder>`, which copies it into that app's `extensions/`, where it installs at the
+external plugin in with `acrylblends add <folder>`, which copies it into that app's `plugins/`, where it installs at the
 next start through the same checks.
 
 ## What to look at

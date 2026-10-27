@@ -287,3 +287,20 @@ test('an approved extension starts again after a restart without asking', async 
   assert.equal(second.root.get('greeting'), 'hello')
   assert.deepEqual(second.root.extensions.approvals(), [])
 })
+
+test("a folder listed in library.json is the app's own import, so the source skips it and installs the rest", async () => {
+  const home = mkdtempSync(join(tmpdir(), 'extensions-test-'))
+  cleanup.unshift(() => rmSync(home, { recursive: true, force: true }))
+  const plugins = join(home, 'plugins')
+  writeGreeter(plugins, 'hello')
+  mkdirSync(join(plugins, 'copied'), { recursive: true })
+  writeFileSync(
+    join(plugins, 'copied', 'index.ts'),
+    'export const name = "copied"\nexport function apply() { throw new Error("mounted twice") }\n',
+  )
+  writeFileSync(join(plugins, 'library.json'), JSON.stringify({ plugins: ['copied'] }))
+  const { root } = await boot({ home, sources: () => [{ dir: plugins, trust: 'install' }] })
+  const names = root.extensions.list().map((extension) => extension.name)
+  assert.deepEqual(names, ['greeter'])
+  assert.deepEqual(root.extensions.pending(), [])
+})

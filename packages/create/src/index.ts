@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import {
+  copyFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -16,6 +17,13 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { findSecrets } from '@webboxes/app-persistence'
 import { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST } from './names'
+import {
+  defaultsSection,
+  doorSection,
+  pluginsSection,
+  skillText,
+  writeSelfKnowledge,
+} from './self-knowledge'
 import {
   type Fetchers,
   fetchSource,
@@ -299,6 +307,9 @@ Run it with \`${run}\`. The routes are in \`${template === 'bun' ? 'src/index.ts
 so test a route with \`await app.request('/path')\` and no server.${desktopNote}
 
 ${notesStructure}${chatStructure}
+${defaultsSection(template, PACKAGE)}
+${pluginsSection(PACKAGE)}
+${doorSection()}
 ## Things that surprise people
 
 - A page mounted at \`/x\` answers \`/x\`, not \`/x/\` (trailing slashes are strict); \`trimTrailingSlash()\` redirects.
@@ -341,8 +352,9 @@ function copyTemplate(
     }
   }
   walk(join(templatesRoot(), template), target, '')
-  writeFileSync(join(target, 'AGENTS.md'), agentsText(template, name))
-  writeFileSync(join(target, 'CLAUDE.md'), '@AGENTS.md\n')
+  written.push(
+    ...writeSelfKnowledge(target, agentsText(template, name), skillText(name, template, PACKAGE)),
+  )
   copyDocs(target)
   return written
 }
@@ -428,7 +440,7 @@ async function createFromSource(
         `# ${name}\n\nAn ${CLASS} app made from the template "${manifest.name}": ${manifest.description}\n\nThe framework's API is in \`docs/framework/\` (start at \`docs/framework/README.md\`).\n`,
       )
     if (!existsSync(join(staged, 'CLAUDE.md')))
-      writeFileSync(join(staged, 'CLAUDE.md'), '@AGENTS.md\n')
+      copyFileSync(join(staged, 'AGENTS.md'), join(staged, 'CLAUDE.md'))
     const found = findSecrets(textFiles(staged))
     if (found.length > 0) {
       io.stderr.write(
