@@ -123,7 +123,7 @@ const DRIVERS = {
       '--permission-mode',
       'acceptEdits',
       '--allowedTools',
-      'Read,Edit,Write,Glob,Grep,Bash(npm *),Bash(npx *),Bash(node *),Bash(ls *),Bash(cat *)',
+      'Read,Edit,Write,Glob,Grep,Bash(npm *),Bash(npx *),Bash(node *),Bash(ls *),Bash(cat *),Bash(.acryl/bin/acryl *),Bash(./.acryl/bin/acryl *)',
       '--disallowedTools',
       'WebFetch,WebSearch',
     ],
@@ -383,6 +383,8 @@ async function attempt(name) {
     input: '',
   })
   const seconds = Math.round((Date.now() - started) / 1000)
+  // Kept beside the app so a failed run can be read (the agent's own output; the key is never in it).
+  writeFileSync(join(dir, 'agent-output.txt'), `${result.stdout}\n--- stderr\n${result.stderr}`)
   for (const path of secrets) rmSync(path, { recursive: true, force: true })
   const test = run('npm', ['test'], app, { env: clean })
   const check = run('npm', ['run', 'check'], app, { env: clean })
