@@ -1,14 +1,4 @@
-import { execFileSync } from 'node:child_process'
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -28,7 +18,7 @@ import {
 } from '../src/index'
 
 const repo = resolve(import.meta.dirname, '..', '..', '..')
-const cliVersion = (
+const _cliVersion = (
   JSON.parse(readFileSync(join(repo, 'packages', 'cli', 'package.json'), 'utf8')) as {
     version: string
   }
@@ -77,18 +67,28 @@ describe('README', () => {
 describe('options', () => {
   it('parses the flags and rejects bad ones', () => {
     expect(
-      parseCreateOptions(['my-app', '--template', 'bun', '--install', '--pm', 'pnpm', '-y']),
+      parseCreateOptions(['my-app', '--template', 'notes', '--install', '--pm', 'pnpm', '-y']),
     ).toEqual({
       directory: 'my-app',
-      template: 'bun',
+      template: 'notes',
       install: true,
       pm: 'pnpm',
       yes: true,
+      source: undefined,
     })
     expect(() => parseCreateOptions(['--template', 'vercel'])).toThrow(UsageError)
-    expect(() => parseCreateOptions(['--template', 'deno'])).toThrow(UsageError)
+    expect(() => parseCreateOptions(['--template', 'bun'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['--pm', 'pip'])).toThrow(UsageError)
     expect(parseCreateOptions(['a', 'github:o/r']).source).toBe('github:o/r')
+    // A bare name that is a built-in template means --template; only github:, @scope/ and .tgz are sources.
+    for (const name of TEMPLATES) {
+      const bare = parseCreateOptions(['a', name])
+      expect(bare.template).toBe(name)
+      expect(bare.source).toBeUndefined()
+    }
+    expect(parseCreateOptions(['a', '@scope/tpl']).source).toBe('@scope/tpl')
+    expect(parseCreateOptions(['a', './t.tgz']).source).toBe('./t.tgz')
+    expect(() => parseCreateOptions(['a', 'notes', '--template', 'chat'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['a', 'b', 'c'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['--nope'])).toThrow(UsageError)
   })
@@ -99,83 +99,38 @@ describe('options', () => {
 })
 
 describe('create', () => {
-  it.each(['nodejs', 'notes', 'chat', 'bun'] as const)(
-    '%s: files, no placeholders, AGENTS.md, CLAUDE.md and the docs inside',
+  it.each(TEMPLATES)(
+    "%s: is made by the framework package's own init, as a Cordis app (blend.yaml, plugins/)",
     async (template) => {
       const s = fakeIo()
       expect(await runCreate([`app-${template}`, '--template', template, '-y'], s.io)).toBe(0)
-      const dir = join(scratch, `app-${template}`)
-      const all = (d: string): string[] =>
-        readdirSync(d, { withFileTypes: true }).flatMap((e) =>
-          e.isDirectory() ? all(join(d, e.name)) : [join(d, e.name)],
-        )
-      for (const file of all(dir).filter((f) => !f.includes('/docs/')))
-        expect(readFileSync(file, 'utf8'), file).not.toMatch(/__[A-Z_]+__/)
-      const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
-      expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe(agents)
-      // One skill, the same text wherever an agent looks for it, pointing to the docs and the door.
-      const skill = readFileSync(join(dir, '.claude/skills/app-guide/SKILL.md'), 'utf8')
-      expect(readFileSync(join(dir, '.agents/skills/app-guide/SKILL.md'), 'utf8')).toBe(skill)
-      expect(skill).toMatch(/^---\nname: app-guide\ndescription: .+\n---\n/u)
-      expect(skill).toContain('docs/framework/README.md')
-      expect(skill).not.toContain('.acryl/bin')
-      // The gate of slice 11: the generated text names one plugin folder, and the door's state is ignored by git.
-      for (const text of [agents, skill])
-        expect(
-          text
-            .replaceAll('Do not create `src/plugins/` or `extensions/`.', '')
-            .replaceAll('There is no `src/plugins/` and no `extensions/`.', ''),
-        ).not.toMatch(/src\/plugins|extensions\//u)
-      expect(agents).toContain('## Defaults you can swap')
-      // A plain app has no door command, so its text must not send an agent to one.
-      expect(agents).not.toContain('.acryl/bin')
-      expect(readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')).toContain('.acryl/')
-      expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('docs/framework/README.md')
-      expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain(
-        "jsx('h1', { class: 'title' }, 'Hello')",
-      )
-      expect(existsSync(join(dir, 'docs/framework/README.md'))).toBe(true)
-      expect(existsSync(join(dir, 'docs/framework/UPSTREAM.md'))).toBe(false)
-      expect(s.out()).toContain(`created app-${template}`)
+      expect(s.runs).toHaveLength(1)
+      expect(s.runs[0]?.args.slice(1)).toEqual([
+        'init',
+        join(scratch, `app-${template}`),
+        '--template',
+        template === 'acryl-app' ? 'agent' : template,
+        '--name',
+        `app-${template}`,
+        '--yes',
+      ])
+      expect(s.out()).toContain(`cd app-${template}`)
     },
   )
 
-  it('notes: AGENTS.md describes the structure and points at the deploy page; nodejs has no such section', async () => {
-    await runCreate(['shipped', '--template', 'notes', '-y'], fakeIo().io)
-    const notes = readFileSync(join(scratch, 'shipped', 'AGENTS.md'), 'utf8')
-    expect(notes).toContain('## Before you ship')
-    expect(notes).toContain('docs/framework/getting-started/deploy.md')
-    expect(notes).toContain('src/notes-app.ts')
-    expect(notes).toContain('check-deps')
-    expect(
-      JSON.parse(readFileSync(join(scratch, 'shipped', 'package.json'), 'utf8')).acryl.opener,
-    ).toBe('src/db.ts')
-    await runCreate(['plain', '--template', 'nodejs', '-y'], fakeIo().io)
-    expect(readFileSync(join(scratch, 'plain', 'AGENTS.md'), 'utf8')).not.toContain(
-      'Before you ship',
-    )
-  })
-
-  it('nodejs: the generated app type-checks against the real framework package', async () => {
-    await runCreate(['typed', '--template', 'nodejs', '-y'], fakeIo().io)
-    const dir = join(scratch, 'typed')
-    // The real package, resolved through its own exports map as an installed app would.
-    mkdirSync(join(dir, 'node_modules'), { recursive: true })
-    symlinkSync(join(repo, 'packages', 'cli'), join(dir, 'node_modules', PACKAGE), 'dir')
-    const config = JSON.parse(readFileSync(join(dir, 'tsconfig.json'), 'utf8'))
-    config.compilerOptions.typeRoots = [join(repo, 'node_modules', '@types')]
-    config.include = ['src', 'test']
-    writeFileSync(join(dir, 'tsconfig.check.json'), JSON.stringify(config))
-    execFileSync(join(repo, 'node_modules/.bin/tsc'), ['-p', join(dir, 'tsconfig.check.json')], {
-      encoding: 'utf8',
-      stdio: 'pipe',
-    })
-  })
-
-  it('nodejs: the dependency range is stamped from the framework release this package carries, so a new app never installs an older one', async () => {
-    await runCreate(['ranged', '--template', 'nodejs', '-y'], fakeIo().io)
-    const pkg = JSON.parse(readFileSync(join(scratch, 'ranged', 'package.json'), 'utf8'))
-    expect(pkg.dependencies).toEqual({ [PACKAGE]: `^${cliVersion}`, typescript: '6.0.3' })
+  it('a bare template name after the directory is the same as --template', async () => {
+    const s = fakeIo()
+    expect(await runCreate(['my-app', 'notes'], s.io)).toBe(0)
+    expect(s.err()).toBe('')
+    expect(s.runs[0]?.args.slice(1)).toEqual([
+      'init',
+      join(scratch, 'my-app'),
+      '--template',
+      'notes',
+      '--name',
+      'my-app',
+      '--yes',
+    ])
   })
 
   it('refuses a folder that is not empty and changes nothing', async () => {
@@ -184,31 +139,18 @@ describe('create', () => {
     const s = fakeIo()
     expect(await runCreate(['full', '-y'], s.io)).toBe(1)
     expect(readdirSync(join(scratch, 'full'))).toEqual(['x.txt'])
-  })
-
-  it('acryl-app: delegates to the acrylblends command with the agent template', async () => {
-    const s = fakeIo()
-    expect(await runCreate(['agentic', '--template', 'acryl-app', '-y'], s.io)).toBe(0)
-    expect(s.runs[0]?.args.slice(1)).toEqual([
-      'init',
-      join(scratch, 'agentic'),
-      '--template',
-      'agent',
-      '--name',
-      'agentic',
-      '--yes',
-    ])
+    expect(s.runs).toEqual([])
   })
 
   it('installs with the chosen package manager, and asks when it can', async () => {
-    const s = fakeIo(['asked-app', 'bun'], true)
+    const s = fakeIo(['asked-app', 'chat'], true)
     expect(await runCreate(['--install', '--pm', 'pnpm'], s.io)).toBe(0)
-    expect(s.runs[0]).toMatchObject({
+    expect(s.runs[0]?.args).toContain('chat')
+    expect(s.runs[1]).toMatchObject({
       command: 'pnpm',
       args: ['install'],
       cwd: join(scratch, 'asked-app'),
     })
-    expect(existsSync(join(scratch, 'asked-app', 'src', 'index.ts'))).toBe(true)
   })
 
   it('exits 2 with help on a usage error, and prints help and version', async () => {
@@ -218,6 +160,6 @@ describe('create', () => {
     const h = fakeIo()
     expect(await runCreate(['--help'], h.io)).toBe(0)
     expect(h.out()).toContain(`npm create ${PACKAGE}@latest`)
-    expect(TEMPLATES).toEqual(['nodejs', 'notes', 'chat', 'bun', 'acryl-app'])
+    expect(TEMPLATES).toEqual(['nodejs', 'notes', 'chat', 'acryl-app'])
   })
 })

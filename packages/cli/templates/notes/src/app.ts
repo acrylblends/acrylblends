@@ -14,7 +14,12 @@ import {
 import { routes } from './routes.ts'
 
 /** The plugins this app's code provides. `blend.yaml` chooses, orders and configures them. */
-export const registry = { 'acryl-router': router, 'acryl-db-sqlite': db, 'acryl-node-server': nodeServer, routes }
+export const registry = {
+  'acryl-router': router,
+  'acryl-db-sqlite': db,
+  'acryl-node-server': nodeServer,
+  routes,
+}
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
@@ -38,7 +43,7 @@ export interface App {
 
 export interface AppOptions {
   readonly values?: Readonly<Record<string, ParameterValue>>
-  /** The SQLite file, relative to the app folder; `:memory:` for a database that lives and dies with the process (tests). Default: ${'data/notes.sqlite'}. */
+  /** The SQLite file, relative to the app folder; an absolute path is used as it is (tests give a file in a throwaway home). Default: ${'data/notes.sqlite'}. */
   readonly database?: string
 }
 
@@ -56,7 +61,7 @@ export async function createApp(chosen: AppInstance, options: AppOptions = {}): 
     first,
     ...(await compose(root, manifest, registry, {
       db: {
-        path: file === ':memory:' || isAbsolute(file) ? file : resolve(projectRoot, file),
+        path: isAbsolute(file) ? file : resolve(projectRoot, file),
         migrations: join(projectRoot, 'migrations'),
       },
       server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 },

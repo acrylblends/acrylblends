@@ -1,8 +1,8 @@
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { Acryl } from '../plugins/acryl-router/src/index.ts'
 import { clientModules } from '../plugins/acryl-node-server/src/client-modules.ts'
+import { Acryl } from '../plugins/acryl-router/src/index.ts'
 import { aboutPage, counterPage } from './page.tsx'
 
 /** The browser builds of the DOM renderer and the typed client, shipped by the `acrylblends` package this app depends on. */
@@ -32,6 +32,9 @@ export const routes = {
   inject: ['router'],
   apply(ctx: Context) {
     ctx.router.route('/', pages)
-    ctx.router.route('/client', clientModules({ root: 'src/client', compiled: 'dist/client', runtimeDir }))
+    ctx.router.route(
+      '/client',
+      clientModules({ root: 'src/client', compiled: 'dist/client', runtimeDir }),
+    )
   },
 }

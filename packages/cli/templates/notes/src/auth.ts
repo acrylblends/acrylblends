@@ -1,6 +1,6 @@
-import type { Db } from '../plugins/acryl-db/src/index.ts'
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
+import type { Db } from '../plugins/acryl-db/src/index.ts'
 
 const scryptAsync = promisify(scrypt) as (
   password: string,

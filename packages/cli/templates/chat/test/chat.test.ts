@@ -1,34 +1,37 @@
-import type { Db } from '../plugins/acryl-db/src/index.ts'
-import type {} from '../plugins/acryl-db/src/cordis.ts'
-import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
-import { createApp as boot } from '../src/app.ts'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+import type {} from '../plugins/acryl-db/src/cordis.ts'
+import type { Db } from '../plugins/acryl-db/src/index.ts'
+import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
+import { createApp as boot } from '../src/app.ts'
 import { createApp } from '../src/chat-app.ts'
 import type { Llm } from '../src/llm.ts'
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 /**
- * A fresh database in memory with the real migrations, opened by the app's own `db` row (the whole Cordis app boots, so the test exercises the same
+ * A fresh database file in a throwaway home with the real migrations, opened by the app's own `db` row (the whole Cordis app boots, so the test exercises the same
  * composition as production). Every app is stopped, and its home removed, when the tests end.
  */
 const stops: (() => Promise<void>)[] = []
 after(() => Promise.all(stops.map((stop) => stop())))
-async function memoryDb(): Promise<Db> {
+async function booted() {
   const home = await mkdtemp(join(tmpdir(), 'chat-test-'))
   const app = await boot(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
-    database: ':memory:',
+    database: join(home, 'test.sqlite'),
   })
   stops.push(async () => {
     await app.stop()
     await rm(home, { recursive: true, force: true })
   })
-  return app.root.db
+  return app
+}
+async function memoryDb(): Promise<Db> {
+  return (await booted()).root.db
 }
 
 /** A model that answers with fixed pieces and records what it was asked. */
@@ -179,4 +182,12 @@ test('when the client goes away the model call is aborted and what arrived is ke
     rows.map((r) => `${r.role}:${r.content}`),
     ['user:hi', 'assistant:first '],
   )
+})
+
+test('the chat page loads its client component, served by the running app', async () => {
+  const running = await booted()
+  const module = await fetch(`${running.url}/client/chat.tsx`)
+  assert.equal(module.status, 200)
+  assert.match(module.headers.get('content-type') ?? '', /javascript/)
+  assert.equal((await fetch(`${running.url}/client/@acrylblends/jsx-dom.js`)).status, 200)
 })

@@ -1,9 +1,10 @@
-import { Acryl } from '../plugins/acryl-router/src/index.ts'
 import type { Db } from '../plugins/acryl-db/src/index.ts'
-import { clientModules } from '../plugins/acryl-node-server/src/client-modules.ts'
-import { runtimeDir } from './runtime.ts'
-import { type StandardSchema, schemaValidator } from '../plugins/acryl-router/src/helpers/index.ts'
-import { streamSSE } from '../plugins/acryl-router/src/helpers/index.ts'
+import {
+  type StandardSchema,
+  schemaValidator,
+  streamSSE,
+} from '../plugins/acryl-router/src/helpers/index.ts'
+import { Acryl } from '../plugins/acryl-router/src/index.ts'
 import { chatStore } from './db.ts'
 import { type Llm, openAiCompatible } from './llm.ts'
 import { chatPage } from './page.tsx'
@@ -96,6 +97,5 @@ export function createApp(db: Db, llm: Llm = openAiCompatible) {
     })
   })
 
-  app.route('/client', clientModules({ root: 'src/client', compiled: 'dist/client', runtimeDir }))
   return app
 }

@@ -12,7 +12,9 @@ const chosen = selectInstance({
     ...process.env,
   },
 })
-const app = await createApp(chosen, { ...(process.env.CHAT_DB ? { database: process.env.CHAT_DB } : {}) })
+const app = await createApp(chosen, {
+  ...(process.env.CHAT_DB ? { database: process.env.CHAT_DB } : {}),
+})
 console.log(`listening on ${app.url} (data in ${chosen.home})`)
 
 // Stop taking requests, let the ones in flight finish, then close the database (the db plugin does, when it is disposed) and exit.

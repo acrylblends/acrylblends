@@ -6,8 +6,8 @@ and swap it at the one place that mounts it.
 
 | Choice | Default | To swap it |
 | --- | --- | --- |
-| Records | none until you add one: `npx acrylblends add db` mounts the `db` port on SQLite | mount another provider of `db` in `src/app.ts`; plugins use `ctx.db` and do not change |
-| Small state | none until you add one: `npx acrylblends add kv` mounts the `kv` port on one JSON file | mount `acryl-kv-db` (the same port over `db`) or a provider of your own |
+| Records | the `db` port on SQLite (already mounted in the notes and chat templates; elsewhere `npx acrylblends add db`) | mount another provider of `db` in `src/app.ts`; plugins use `ctx.db` and do not change |
+| Small state | the `kv` port on one JSON file (`npx acrylblends add kv`) | mount `acryl-kv-db` (the same port over `db`) or a provider of your own |
 | Server | Node (`acryl-node-server`) | mount the adapter of another runtime in `src/app.ts` |
 | Window | the browser | `npx acrylblends add desktop` adds an Electron window on the same server |
 

@@ -1,13 +1,14 @@
-import type { Context } from '../plugins/acryl-router/src/index.ts'
-import { Acryl } from '../plugins/acryl-router/src/index.ts'
-import { deleteCookie, getCookie, setCookie } from '../plugins/acryl-router/src/helpers/index.ts'
-import { csrf } from '../plugins/acryl-router/src/middleware/index.ts'
 import type { Db } from '../plugins/acryl-db/src/index.ts'
-import { createMiddleware } from '../plugins/acryl-router/src/helpers/index.ts'
-import { HTTPException } from '../plugins/acryl-router/src/index.ts'
-import { clientModules } from '../plugins/acryl-node-server/src/client-modules.ts'
-import { runtimeDir } from './runtime.ts'
-import { schemaValidator } from '../plugins/acryl-router/src/helpers/index.ts'
+import {
+  createMiddleware,
+  deleteCookie,
+  getCookie,
+  schemaValidator,
+  setCookie,
+} from '../plugins/acryl-router/src/helpers/index.ts'
+import type { Context } from '../plugins/acryl-router/src/index.ts'
+import { Acryl, HTTPException } from '../plugins/acryl-router/src/index.ts'
+import { csrf } from '../plugins/acryl-router/src/middleware/index.ts'
 import { authStore, verifyPassword } from './auth.ts'
 import { notesStore } from './db.ts'
 import { checkCredentials, checkNote, NoteSchema } from './schema.ts'
@@ -200,7 +201,5 @@ export function createApp(
   })
 
   app.route('/api/notes', createApi(db))
-  // Client components without a bundler: src/client is compiled when the browser asks; `npm run build` compiles it once for production.
-  app.route('/client', clientModules({ root: 'src/client', compiled: 'dist/client', runtimeDir }))
   return app
 }
