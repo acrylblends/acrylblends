@@ -223,8 +223,8 @@
     },
     "tests/adapter/server.test.ts": {
       "upstreamSha256": "5d268474b4d8c887cea01e7d752942da60fbc3a7749f02c4a37c8ad80c9900f7",
-      "sha256": "fbb2a2b9321f1f1a97a6f06cc8aacf3ab1b139e4100473d0bb801a82f5bcde44",
-      "deviation": "The renamed body 'Hello Acryl!' is 12 bytes: its content-length and etag expectations are recomputed for it. The /readable-stream route enqueues its second chunk only after the client has received the first: upstream enqueues both back to back, and TCP on Windows joins the two writes into one read, so the two-chunk expectation depended on timing. The ipv6 test passes hostname '::' and a free port: serve() listens on 127.0.0.1 unless told otherwise."
+      "sha256": "55e7f0081597c77134b44b9c758c098a4558df530f8350fce765e54327b1285b",
+      "deviation": "The renamed body 'Hello Acryl!' is 12 bytes: its content-length and etag expectations are recomputed for it. The /readable-stream route enqueues its second chunk only after the client has received the first: upstream enqueues both back to back, and TCP on Windows joins the two writes into one read, so the two-chunk expectation depended on timing. The ipv6 test passes hostname '::' and a free port: serve() listens on 127.0.0.1 unless told otherwise. The memory leak tests collect repeatedly for up to 2 s until the registry has seen every controller go: one collection followed by a 10 ms wait did not reach it on a loaded CI runner."
     },
     "tests/adapter/setup.ts": {
       "upstreamSha256": "8a6d290d6676db280ef22fffc4d7847f768cbadcf445391213273b970bd6d6af",

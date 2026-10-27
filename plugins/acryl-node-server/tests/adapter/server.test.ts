@@ -1232,6 +1232,14 @@ describe('Memory leak test', () => {
     await new Promise(() => {}) // never resolve
   })
 
+  /** Collects until the registry has seen every request's controller go, for at most 2 s: one collection right after the response is not guaranteed to reach it on a loaded runner. */
+  const collected = async () => {
+    for (let waited = 0; waited < 2000 && counter !== 0; waited += 20) {
+      global.gc?.()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+  }
+
   beforeEach(() => {
     counter = 0
     reqReadyPromise = new Promise<void>((r) => {
@@ -1255,8 +1263,7 @@ describe('Memory leak test', () => {
 
   it('Should not have memory leak - GET /', async () => {
     await requestServer(server, { method: 'GET', path: '/' })
-    global.gc?.()
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await collected()
     expect(counter).toBe(0)
   })
 
@@ -1267,8 +1274,7 @@ describe('Memory leak test', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ foo: 'bar' }),
     })
-    global.gc?.()
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await collected()
     expect(counter).toBe(0)
   })
 
@@ -1289,8 +1295,7 @@ describe('Memory leak test', () => {
     await resPromise
     await new Promise((resolve) => setTimeout(resolve, 10))
 
-    global.gc?.()
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await collected()
     expect(counter).toBe(0)
   })
 })
