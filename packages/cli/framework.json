@@ -2,12 +2,12 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "distribution/acrylblends-framework",
-    "commit": "11a31f2cecbe64c86705a351f70b58de210a6ec0",
+    "commit": "20bdc263d6f0f8febbd967007bda4cf4a802efd2",
     "packedAs": "acrylblends-framework@0.5.0"
   },
-  "tarballSha256": "aa59b13d37df4e654ac48503b9487805c98fbe1e0405446aabf95a45a7d91d04",
+  "tarballSha256": "681fabae4f44153230013b542cdb9392f5a11126f86160600490cfde067c326a",
   "package": "acrylblends",
   "subpaths": 109,
   "files": 277,
-  "digest": "sha256:ed9b670bfee7495416fc6dfde326b6736d5da71b7c06ea17d5394e4e4a19e663"
+  "digest": "sha256:87b8b83e7ac21298ab7a2787a291f60796c40c0bc105d709d72fa6a1efc70eb4"
 }

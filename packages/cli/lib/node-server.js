@@ -835,6 +835,7 @@ const drainIncoming = (incoming) => {
 		bytesRead += chunk.length;
 		if (bytesRead > MAX_DRAIN_BYTES) forceClose();
 	};
+	incoming.removeAllListeners("data");
 	incoming.on("data", onData);
 	incoming.on("end", cleanup);
 	incoming.on("error", cleanup);
