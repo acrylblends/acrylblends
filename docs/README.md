@@ -35,6 +35,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [The plugin library](plugins.md) - every plugin: what it does, its service, its config, where it came from
 - [Releasing](releasing.md) - the steps of a release and the rule that its gates run the installed package
 - [The PTY driver (plan)](plans/pty-driver.md) - M8: a coding agent in a real terminal inside the app folder, acting through the door
+- [WebSocket upgrades on the router (plan)](plans/router-websocket.md) - spec 047 T009: upgrade routes owned by the mounting plugin
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
