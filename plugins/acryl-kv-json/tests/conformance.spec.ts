@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describeKvConformance, type KvUnderTest } from '../../acryl-kv/src/conformance.ts'
+import { describeKvConformance, type KvUnderTest } from 'acryl-kv/conformance'
 import { afterAll } from 'vitest'
 import { openKv } from '../src/open.ts'
 

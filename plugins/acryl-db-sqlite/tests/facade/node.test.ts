@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DbExecutor } from "../../../acryl-db/src/index.ts";
+import type { DbExecutor } from "acryl-db";
 import { openNodeSqliteDatabase } from "../../src/facade/node.ts";
 
 describe("Node SQLite driver", () => {

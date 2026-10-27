@@ -1,5 +1,13 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { createRequire } from 'node:module'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -126,14 +134,24 @@ describe('framework docs: code', () => {
     const appPaths = JSON.parse(
       readFileSync(join(root, 'packages', 'cli', 'templates', 'agent', 'tsconfig.json'), 'utf8'),
     ).compilerOptions.paths as Record<string, string[]>
-    const pluginPaths = Object.fromEntries(
+    const pluginPaths: Record<string, string[]> = Object.fromEntries(
       Object.entries(appPaths).map(([key, targets]) => [
         key,
         targets.map((t) =>
-          join(root, 'plugins', 'acryl-router', t.replace('./src/plugins/acryl-router/', '')),
+          join(root, 'plugins', 'acryl-router', t.replace('./plugins/acryl-router/', '')),
         ),
       ]),
     )
+    // The framework plugins by their package names (`acryl-state`, `acryl-router/middleware`): the source in plugins/, from each plugin's `entries`.
+    for (const name of readdirSync(join(root, 'plugins')).filter((n) => n.startsWith('acryl-'))) {
+      const manifest = join(root, 'plugins', name, 'plugin.json')
+      if (!existsSync(manifest)) continue
+      const entries =
+        (JSON.parse(readFileSync(manifest, 'utf8')) as { entries?: Record<string, string> })
+          .entries ?? {}
+      for (const [subpath, file] of Object.entries(entries))
+        pluginPaths[`${name}${subpath}`] = [join(root, 'plugins', name, file)]
+    }
     const programs: {
       name: string
       blocks: Block[]

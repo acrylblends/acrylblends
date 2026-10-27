@@ -10,5 +10,8 @@
   },
   "mount": "mount it after acryl-node-server and extensions in development builds: root.plugin(door); add <script type=\"module\" src=\"/api/acryl-door/page.js\"></script> to the pages; the command is .acryl/bin/acryl",
   "gitignore": [".acryl/"],
-  "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"]
+  "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"],
+  "entries": {
+    "": "src/index.ts"
+  }
 }

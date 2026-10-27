@@ -6,6 +6,7 @@ import type { Io } from './io'
 import {
   closure,
   copyPlugin,
+  copyRewritten,
   LEGACY_WARNING,
   type LibraryPlugin,
   libraryRoot,
@@ -148,8 +149,11 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
   return 0
 }
 
-/** The vitest the suites run on (the version this package is tested with). */
-const SUITE_RUNNER = { vitest: '5.0.3' }
+/**
+ * The vitest the suites run on. 3.2.x, not the newest: npm 10 (the npm of Node 22) crashes on the dependency tree of vitest 4 and 5 ("Cannot read properties of null (reading
+ * 'edgesOut')"), and the suites use only `describe`, `it` and `expect`, which are the same in all of them. An app on a newer npm may raise it.
+ */
+const SUITE_RUNNER = { vitest: '3.2.4' }
 
 /**
  * Copy the conformance suite of each named port next to its source (`plugins/<name>/src/conformance.ts`), and add `vitest` to the app's development
@@ -173,12 +177,16 @@ function copySuites(names: readonly string[], appDir: string, added: string[], i
   }
   for (const { from, to } of copies) {
     mkdirSync(dirname(to), { recursive: true })
-    copyFileSync(from, to)
+    copyRewritten(from, to, pluginOf(to), suiteOf(to))
     io.stdout.write(`added the conformance suite ${relative(appDir, to).split(sep).join('/')}\n`)
   }
   added.push(...mergeTooling(appDir, { devDependencies: SUITE_RUNNER }).devDependencies)
   return 0
 }
+
+/** The plugin folder name and the file inside it, from a path below the plugins folder (`.../plugins/acryl-kv/src/conformance.ts`). */
+const pluginOf = (path: string): string => path.split(sep).slice(-3, -2)[0] ?? ''
+const suiteOf = (path: string): string => path.split(sep).slice(-2).join('/')
 
 const PLUGIN_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 

@@ -5,7 +5,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { RouterHttpService } from '../../acryl-router/src/index.ts'
+import type { RouterHttpService } from 'acryl-router'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { serve } from './serve.ts'
 

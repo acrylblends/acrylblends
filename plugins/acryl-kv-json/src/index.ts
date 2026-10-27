@@ -10,7 +10,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { KV_SERVICE } from '../../acryl-kv/src/index.ts'
+import { KV_SERVICE } from 'acryl-kv'
 import { openKv } from './open.ts'
 
 export { openKv, type OpenKvOptions } from './open.ts'

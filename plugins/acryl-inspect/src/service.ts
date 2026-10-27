@@ -5,8 +5,8 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import { loopbackOnly } from '../../acryl-router/src/middleware/index.ts'
-import { Acryl } from '../../acryl-router/src/index.ts'
+import { loopbackOnly } from 'acryl-router/middleware'
+import { Acryl } from 'acryl-router'
 import { explain, ownerOf, renderReports, reportFiber, type FiberView, type PluginReport } from './report.ts'
 
 declare module '@deepseek-ai/cordis' {

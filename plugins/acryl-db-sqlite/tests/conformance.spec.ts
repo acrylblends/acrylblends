@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describeDbConformance } from '../../acryl-db/src/conformance.ts'
+import { describeDbConformance } from 'acryl-db/conformance'
 import { afterAll } from 'vitest'
 import { openDb } from '../src/open.ts'
 

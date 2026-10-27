@@ -8,8 +8,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import { css, Style } from '../src/helpers/index.ts'
 import { Acryl, apply, name } from '../src/index.ts'
-import { Suspense } from '../src/core/jsx/index.ts'
-import { renderToReadableStream } from '../src/core/jsx/streaming.ts'
+import { Suspense } from 'acryl-router/jsx'
+import { renderToReadableStream } from 'acryl-router/jsx/streaming'
 
 const contexts: Context[] = []
 const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))

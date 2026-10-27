@@ -1,5 +1,5 @@
 import { B as NotFoundHandler, L as MiddlewareHandler, O as Handler, Q as ValidationTargets, V as NotFoundResponse, X as ToSchema, Y as Schema, Z as TypedResponse, a as ExecutionContext, j as Input, n as ContextRenderer, r as ContextVariableMap, s as AcrylRequest, t as Context, v as Env, y as ErrorHandler, z as Next } from "./context-DS3fYyG-.js";
 import { t as Acryl } from "./app-D8riatvv.js";
 import { c as InferRequestType, i as ClientRequestOptions, l as InferResponseType } from "./types-zNxyEpG2.js";
-import { n as AppRequest, t as App } from "./index-CTy4N7ng.js";
+import { n as AppRequest, t as App } from "./deprecated-CTy4N7ng.js";
 export { Acryl, type AcrylRequest, App, type AppRequest, type ClientRequestOptions, Context, type ContextRenderer, type ContextVariableMap, type Env, type ErrorHandler, type ExecutionContext, type Handler, type InferRequestType, type InferResponseType, type Input, type MiddlewareHandler, type Next, type NotFoundHandler, type NotFoundResponse, type Schema, type ToSchema, type TypedResponse, type ValidationTargets };

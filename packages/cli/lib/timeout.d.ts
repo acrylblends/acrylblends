@@ -1,5 +1,5 @@
 import { L as MiddlewareHandler, t as Context } from "./context-DS3fYyG-.js";
-import { HTTPException } from "./http-exception.js";
+import { t as HTTPException } from "./http-exception-kpGJkmpi.js";
 
 //#region ../../plugins/acryl-router/src/core/middleware/timeout/index.d.ts
 type HTTPExceptionFunction = (context: Context) => HTTPException;

@@ -24,8 +24,8 @@ ACRYLBLENDS is the public ACRYL framework, in two parts.
 
 ## The framework docs (generated)
 
-[framework/README.md](framework/README.md) is ACRYL's own text, copied here as it is. Do not edit it in this repository: change it in ACRYL and run `scripts/sync-framework.mjs`.
-`pnpm run verify:framework` fails when a page differs from the digest recorded in `framework/upstream.json`. The pages write `import { Acryl } from 'acrylblends'`; in a
+[framework/README.md](framework/README.md) is the framework's own text, kept in this repository and shipped inside every new app.
+`pnpm run verify:framework` fails when the exports map of the package is out of date. The pages write `import { Acryl } from 'acrylblends'`; in a
 generated Blend app the same names are the vendored plugin source in `plugins/acryl-router/src/` (see the app's `AGENTS.md`).
 
 ## Our own pages
@@ -36,6 +36,8 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
+- [Release notes 0.9.1](release-notes/0.9.1.md) - a fix: apps made by the installed command line start again
+- [Release notes 0.9.0](release-notes/0.9.0.md) - the framework's home: the Cordis forms as subpaths, one `Acryl`, the source and its history here
 - [Release notes 0.8.1](release-notes/0.8.1.md) - the door's plugin verbs work in every web template
 - [Release notes 0.8.0](release-notes/0.8.0.md) - every template a Cordis app, the door (`.acryl/bin/acryl`), `clientModules` inside a sub-app
 - [Release notes 0.7.8](release-notes/0.7.8.md) - one `plugins/` folder, `AGENTS.md` and `CLAUDE.md` with the app-guide skill, `acrylblends/read-sse`

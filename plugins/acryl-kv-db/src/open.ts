@@ -8,10 +8,10 @@
  * code point in the end, whatever collation the database sorts with.
  */
 
-import type { Db } from '../../acryl-db/src/index.ts'
-import { checkKey, codePoints, compareKeys, decodeValue, encodeValue, type Kv, runChange } from '../../acryl-kv/src/index.ts'
+import type { Db } from 'acryl-db'
+import { checkKey, codePoints, compareKeys, decodeValue, encodeValue, type Kv, runChange } from 'acryl-kv'
 
-export type { Kv } from '../../acryl-kv/src/index.ts'
+export type { Kv } from 'acryl-kv'
 
 export interface KvOnDbOptions {
   /** The table that holds the documents. Defaults to `kv`; a plain SQL identifier. */

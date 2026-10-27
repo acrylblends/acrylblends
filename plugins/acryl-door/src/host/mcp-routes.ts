@@ -4,7 +4,7 @@
  * operator client sends. The same guard as the operator's routes: loopback, this run's secret.
  */
 
-import { Acryl } from '../../../acryl-router/src/index.ts'
+import { Acryl } from 'acryl-router'
 import { UiControlError } from '../page/protocol.ts'
 import type { Door } from './door.ts'
 import { DoorError } from './door.ts'

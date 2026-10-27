@@ -10,7 +10,7 @@ import { join, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Context, type FiberState } from '@deepseek-ai/cordis'
 import { Loader } from '@deepseek-ai/cordis-plugin-loader'
-import type { Db } from '../../acryl-db/src/index.ts'
+import type { Db } from 'acryl-db'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openNodeSqliteDatabase } from '../src/index.ts'
 

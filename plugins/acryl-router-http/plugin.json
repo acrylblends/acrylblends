@@ -8,5 +8,8 @@
     "@deepseek-ai/cordis": "4.0.4"
   },
   "mount": "not mounted: it is the library behind acryl-node-server",
-  "omit": ["**/*.test.*", "**/*.case.ts"]
+  "omit": ["**/*.test.*", "**/*.case.ts"],
+  "entries": {
+    "": "src/index.ts"
+  }
 }

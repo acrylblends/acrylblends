@@ -13,5 +13,10 @@
     "#acryl-db": "acryl-db/src/index.ts",
     "#acryl-db/conformance": "acryl-db/src/conformance.ts"
   },
-  "suite": "src/conformance.ts"
+  "suite": "src/conformance.ts",
+  "entries": {
+    "": "src/index.ts",
+    "/cordis": "src/cordis.ts",
+    "/conformance": "src/conformance.ts"
+  }
 }

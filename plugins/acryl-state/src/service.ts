@@ -6,9 +6,9 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import { Acryl, type Context as RequestContext } from '../../acryl-router/src/index.ts'
-import { streamSSE } from '../../acryl-router/src/helpers/index.ts'
-import { loopbackOnly, methodNotAllowed } from '../../acryl-router/src/middleware/index.ts'
+import { Acryl, type Context as RequestContext } from 'acryl-router'
+import { streamSSE } from 'acryl-router/helpers'
+import { loopbackOnly, methodNotAllowed } from 'acryl-router/middleware'
 import { createCell, createDerived, type Cell, type ReadonlyCell } from './cell.ts'
 
 declare module '@deepseek-ai/cordis' {

@@ -10,8 +10,8 @@ import { join, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Context, type FiberState } from '@deepseek-ai/cordis'
 import { Loader } from '@deepseek-ai/cordis-plugin-loader'
-import type { Kv } from '../../acryl-kv/src/index.ts'
-import type {} from '../../acryl-kv/src/cordis.ts'
+import type { Kv } from 'acryl-kv'
+import type {} from 'acryl-kv/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const PENDING = 0 as FiberState.PENDING

@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openDb } from '../../acryl-db-sqlite/src/open.ts'
-import { describeKvConformance, type KvUnderTest } from '../../acryl-kv/src/conformance.ts'
+import { openDb } from 'acryl-db-sqlite/open'
+import { describeKvConformance, type KvUnderTest } from 'acryl-kv/conformance'
 import { afterAll } from 'vitest'
 import { kvOnDb } from '../src/open.ts'
 

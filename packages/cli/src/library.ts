@@ -1,6 +1,7 @@
-import { cpSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { type EntryTable, entryTable, rewriteSpecifiers } from './rewrite'
 
 /** One entry of the plugin library: `plugins/<name>/plugin.json` in this repository. */
 export interface LibraryPlugin {
@@ -18,6 +19,8 @@ export interface LibraryPlugin {
   readonly gitignore?: readonly string[]
   /** The port's conformance suite, a path inside the plugin: shipped in the package, but copied into an app only by `acrylblends add <plugin> --suite` (it needs vitest). */
   readonly suite?: string
+  /** What other library plugins may import from this one: the import name after the plugin's own (`''`, `/middleware`) and the file it stands for. Used to rewrite `acryl-*` imports when a plugin is copied. */
+  readonly entries?: Readonly<Record<string, string>>
   /** `package.json` "imports" entries the app gets (`#acryl-kv`): a path below the plugins folder. A plugin of your own imports the port by that name, in tests and the type-check as well as when installed live. */
   readonly imports?: Readonly<Record<string, string>>
   /** How to mount it, shown after `acrylblends add`. */
@@ -163,19 +166,66 @@ export function copyPlugin(
       `${relativeName(appDir, target)} already exists; remove it first to copy a fresh one`,
     )
   const source = join(root, plugin.name)
+  // A framework package (it has a package.json in the repository) is copied as its source: `src/` and the licence; the package shipped by npm already holds only that. Its
+  // `plugin.json` lists `entries`, and the imports of such a plugin are rewritten to relative paths, in the repository and in the installed package alike.
+  const isPackage = existsSync(join(source, 'package.json'))
+  const entries = plugin.entries === undefined ? undefined : entryTable(readLibrary(root))
   cpSync(source, target, {
     recursive: true,
     filter: (path) => {
-      const inside = path.slice(source.length + 1)
+      const inside = path
+        .slice(source.length + 1)
+        .split(sep)
+        .join('/')
+      if (
+        isPackage &&
+        inside !== '' &&
+        inside !== 'LICENSE' &&
+        inside !== 'src' &&
+        !inside.startsWith('src/')
+      )
+        return false
       return (
         !(dirname(path) === source && LIBRARY_ONLY.has(inside)) &&
         !isOmitted(inside, plugin.omit) &&
-        inside.split(sep).join('/') !== plugin.suite
+        inside !== plugin.suite
       )
     },
   })
+  if (entries) rewriteTree(join(target, 'src'), plugin.name, 'src', entries)
   if (!folder.legacy) recordLibraryCopy(folder.dir, plugin.name)
   return target
+}
+
+/** Rewrite the `acryl-*` imports of every TypeScript file below `dir` (the plugin's `src/`) to relative paths. */
+function rewriteTree(dir: string, plugin: string, inside: string, entries: EntryTable): void {
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry)
+    if (statSync(path).isDirectory()) rewriteTree(path, plugin, `${inside}/${entry}`, entries)
+    else if (/\.(?:ts|tsx|mts)$/u.test(entry))
+      writeFileSync(
+        path,
+        rewriteSpecifiers(readFileSync(path, 'utf8'), `${plugin}/${inside}/${entry}`, entries),
+      )
+  }
+}
+
+/** Copy one file of a library plugin (a conformance suite) with its `acryl-*` imports rewritten, as `copyPlugin` does for the rest. */
+export function copyRewritten(
+  from: string,
+  to: string,
+  plugin: string,
+  inside: string,
+  root: string = libraryRoot(),
+): void {
+  writeFileSync(
+    to,
+    rewriteSpecifiers(
+      readFileSync(from, 'utf8'),
+      `${plugin}/${inside}`,
+      entryTable(readLibrary(root)),
+    ),
+  )
 }
 
 const relativeName = (appDir: string, path: string) =>

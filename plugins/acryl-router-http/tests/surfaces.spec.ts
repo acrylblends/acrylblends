@@ -7,7 +7,7 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
-import { Acryl, apply as routerApply, name as routerName } from '../../acryl-router/src/index.ts'
+import { Acryl, apply as routerApply, name as routerName } from 'acryl-router'
 import { afterEach, describe, expect, it } from 'vitest'
 import { apply as httpApply, inject as httpInject, name as httpName } from '../src/index.ts'
 

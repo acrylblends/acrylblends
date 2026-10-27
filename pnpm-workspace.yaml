@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - plugins/acryl-*
 allowBuilds:
   esbuild: true
   msw: false

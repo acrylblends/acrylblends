@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { startGroup } from './proc.mjs'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const freePort = () =>
@@ -59,7 +60,7 @@ export async function startByoApp(app, env, acrylblends) {
       writeFileSync(join(app, path), files.get(path))
     }
     const port = await freePort()
-    const child = spawn('npm', ['start'], {
+    const child = startGroup('npm', ['start'], {
       cwd: app,
       env: { ...env, PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe'],

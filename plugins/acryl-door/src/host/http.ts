@@ -5,8 +5,8 @@
  */
 
 import { timingSafeEqual } from 'node:crypto'
-import { Acryl, type Context, type MiddlewareHandler } from '../../../acryl-router/src/index.ts'
-import { bodyLimit, loopbackAuthority, loopbackOnly, methodNotAllowed } from '../../../acryl-router/src/middleware/index.ts'
+import { Acryl, type Context, type MiddlewareHandler } from 'acryl-router'
+import { bodyLimit, loopbackAuthority, loopbackOnly, methodNotAllowed } from 'acryl-router/middleware'
 
 /** Every door route lives below this path. */
 export const DOOR_PREFIX = '/api/acryl-door'

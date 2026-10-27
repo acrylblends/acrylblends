@@ -6,10 +6,10 @@
  * This entry imports nothing from Cordis.
  */
 
-import { applyMigrations, MIGRATIONS_TABLE, readMigrationFiles, type Db, type SqlValue } from '../../acryl-db/src/index.ts'
+import { applyMigrations, MIGRATIONS_TABLE, readMigrationFiles, type Db, type SqlValue } from 'acryl-db'
 import { openNodeSqliteDatabase } from './facade/node.ts'
 
-export type { Db, DbExecutor, SqlValue } from '../../acryl-db/src/index.ts'
+export type { Db, DbExecutor, SqlValue } from 'acryl-db'
 
 export interface OpenDbOptions {
   /** The database file, its folder created if missing; `:memory:` for a database that lives until `close`. */

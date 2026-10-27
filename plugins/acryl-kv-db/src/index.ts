@@ -8,7 +8,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { KV_SERVICE } from '../../acryl-kv/src/index.ts'
+import { KV_SERVICE } from 'acryl-kv'
 import { kvOnDb } from './open.ts'
 
 export { kvOnDb, type KvOnDbOptions } from './open.ts'

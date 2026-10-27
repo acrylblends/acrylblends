@@ -4,7 +4,7 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
-import { Acryl, apply as routerApply, name as routerName } from '../../acryl-router/src/index.ts'
+import { Acryl, apply as routerApply, name as routerName } from 'acryl-router'
 import { afterEach, describe, expect, it } from 'vitest'
 import { apply, name, type PluginReport } from '../src/index.ts'
 

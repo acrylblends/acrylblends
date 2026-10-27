@@ -14,7 +14,7 @@ import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type {} from '../../acryl-router/src/index.ts'
+import type {} from 'acryl-router'
 import { Request as AdapterRequest } from './adapter/request.ts'
 import { createAdaptorServer } from './adapter/server.ts'
 

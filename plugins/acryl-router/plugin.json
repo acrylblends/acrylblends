@@ -9,5 +9,15 @@
     "@deepseek-ai/schemastery": "3.18.4"
   },
   "mount": "root.plugin(router); then in your own plugin: inject: ['router'] and ctx.router.get('/path', (c) => c.json({ ok: true }))",
-  "omit": ["**/*.test.*", "**/*.case.ts"]
+  "omit": ["**/*.test.*", "**/*.case.ts"],
+  "entries": {
+    "": "src/index.ts",
+    "/middleware": "src/middleware/index.ts",
+    "/helpers": "src/helpers/index.ts",
+    "/client": "src/client.ts",
+    "/jsx": "src/core/jsx/index.ts",
+    "/jsx/jsx-runtime": "src/core/jsx/jsx-runtime.ts",
+    "/jsx/jsx-dev-runtime": "src/core/jsx/jsx-dev-runtime.ts",
+    "/jsx/streaming": "src/core/jsx/streaming.ts"
+  }
 }

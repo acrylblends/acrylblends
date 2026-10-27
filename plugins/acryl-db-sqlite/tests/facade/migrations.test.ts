@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyMigrations, type Migration, validateSchemaPrefix } from "../../../acryl-db/src/index.ts";
+import { applyMigrations, type Migration, validateSchemaPrefix } from "acryl-db";
 import { openNodeSqliteDatabase } from "../../src/facade/node.ts";
 
 describe("SQLite migrations", () => {

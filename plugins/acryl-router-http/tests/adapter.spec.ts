@@ -6,10 +6,10 @@
 
 import { Context, type FiberState } from '@deepseek-ai/cordis'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
-import { apply as routerApply, name as routerName } from '../../acryl-router/src/index.ts'
+import { apply as routerApply, name as routerName } from 'acryl-router'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Acryl, connectionOf, type RouterHttpService } from '../../acryl-router/src/index.ts'
-import { methodNotAllowed } from '../../acryl-router/src/middleware/index.ts'
+import { Acryl, connectionOf, type RouterHttpService } from 'acryl-router'
+import { methodNotAllowed } from 'acryl-router/middleware'
 import { apply, inject, name } from '../src/index.ts'
 
 const PENDING = 0 as FiberState.PENDING

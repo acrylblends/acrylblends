@@ -13,9 +13,9 @@
 
 import { mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
-import { checkKey, compareKeys, decodeValue, encodeValue, type Kv, type KvOpened, runChange } from '../../acryl-kv/src/index.ts'
+import { checkKey, compareKeys, decodeValue, encodeValue, type Kv, type KvOpened, runChange } from 'acryl-kv'
 
-export type { Kv, KvOpened } from '../../acryl-kv/src/index.ts'
+export type { Kv, KvOpened } from 'acryl-kv'
 
 export interface OpenKvOptions {
   /** The JSON file; its folder is created if missing. */

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
-import { Acryl, apply as routerApply, name as routerName } from '../../acryl-router/src/index.ts'
+import { Acryl, apply as routerApply, name as routerName } from 'acryl-router'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CompileCache, buildClientModules, clientModules } from '../src/client-modules.ts'
 

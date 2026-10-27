@@ -10,6 +10,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { startGroup, stopGroup } from './lib/proc.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const guidePath = resolve(
@@ -71,7 +72,13 @@ for (const expected of [
 const scratch = mkdtempSync(join(tmpdir(), 'byo-tool-'))
 const env = { ...process.env, npm_config_loglevel: 'error' }
 const run = (command, args, cwd) => {
-  const r = spawnSync(command, args, { cwd, env, encoding: 'utf8' })
+  let r = spawnSync(command, args, { cwd, env, encoding: 'utf8' })
+  // npm 10 (Node 22) can crash while it reworks an existing tree ("Cannot read properties of null (reading 'edgesOut')"): a clean install of the same package.json works.
+  if (r.status !== 0 && command === 'npm' && /edgesOut/u.test(r.stderr)) {
+    rmSync(join(cwd, 'node_modules'), { recursive: true, force: true })
+    rmSync(join(cwd, 'package-lock.json'), { force: true })
+    r = spawnSync(command, args, { cwd, env, encoding: 'utf8' })
+  }
   if (r.status !== 0) fail(`${command} ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
   return r.stdout
 }
@@ -103,7 +110,7 @@ try {
   const door = join(app, '.acryl', 'bin', 'acryl')
   const start = async () => {
     const port = await freePort()
-    const child = spawn('npm', ['start'], {
+    const child = startGroup('npm', ['start'], {
       cwd: app,
       env: { ...env, PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -121,8 +128,7 @@ try {
     return { child, url, port }
   }
   const stop = async (child) => {
-    child.kill('SIGTERM')
-    await new Promise((r) => child.once('exit', r))
+    await stopGroup(child)
   }
   const doorCall = (...args) => {
     const r = spawnSync(door, [...args, '--json'], { cwd: app, env, encoding: 'utf8' })
@@ -186,6 +192,6 @@ try {
   server = undefined
   log('OK')
 } finally {
-  server?.kill('SIGKILL')
+  if (server) await stopGroup(server, 'SIGKILL', 1000)
   rmSync(scratch, { recursive: true, force: true })
 }

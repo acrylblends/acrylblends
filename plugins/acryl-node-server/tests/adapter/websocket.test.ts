@@ -1,4 +1,4 @@
-import { Acryl } from '../../../acryl-router/src/index.ts'
+import { Acryl } from 'acryl-router'
 import { WebSocket, WebSocketServer } from 'ws'
 import { connect } from 'node:net'
 import type { AddressInfo } from 'node:net'
