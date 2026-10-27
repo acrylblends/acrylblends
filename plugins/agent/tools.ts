@@ -3,7 +3,8 @@ import type { Context } from '@deepseek-ai/cordis'
 /** One tool: what it does (for the model) and how to run it. */
 export interface Tool {
   readonly description: string
-  run(input: unknown): unknown | Promise<unknown>
+  /** `options.signal` aborts when the run is cancelled; a tool that can stop its work listens to it. */
+  run(input: unknown, options?: { signal?: AbortSignal }): unknown | Promise<unknown>
 }
 
 /** The tool registry. A plugin registers its tools inside `ctx.effect`, so they leave with it. */
@@ -11,7 +12,7 @@ export interface Tools {
   /** Register a tool. Returns the function that removes it. */
   register(name: string, tool: Tool): () => void
   list(): Array<{ name: string; description: string }>
-  call(name: string, input: unknown): Promise<unknown>
+  call(name: string, input: unknown, options?: { signal?: AbortSignal }): Promise<unknown>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -31,10 +32,10 @@ export function tools(ctx: Context) {
     },
     list: () =>
       [...table.entries()].map(([name, tool]) => ({ name, description: tool.description })),
-    async call(name, input) {
+    async call(name, input, options) {
       const tool = table.get(name)
       if (!tool) throw new Error(`unknown tool "${name}"`)
-      return await tool.run(input)
+      return await tool.run(input, options)
     },
   }
   ctx.provide('tools', registry)

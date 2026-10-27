@@ -22,6 +22,8 @@ export interface ModelInput {
   }>
   /** The tools the model may call. */
   readonly tools?: ReadonlyArray<{ readonly name: string; readonly description: string }>
+  /** Aborts when the run is cancelled: a provider that can stop its request passes this on. */
+  readonly signal?: AbortSignal
 }
 
 /** What the agent needs from a model. Replace this plugin with a real provider when you have one. */
