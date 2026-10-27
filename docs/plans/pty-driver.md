@@ -1,6 +1,6 @@
 # The PTY driver (M8, spec 046 T029)
 
-Status: design, revised after review (SSE transport, typed session kinds, disposal, vendored xterm.js, Windows). Target 2026-10-29 20:00 CET. Builds on the agent panel's headless drivers (`plugins/agent-panel`).
+Status: built (steps 1-5), released in 0.10.0. Design, revised after review (SSE transport, typed session kinds, disposal, vendored xterm.js, Windows). Target 2026-10-29 20:00 CET. Builds on the agent panel's headless drivers (`plugins/agent-panel`).
 
 ## What it is
 
