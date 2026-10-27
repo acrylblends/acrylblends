@@ -166,9 +166,10 @@ export function copyPlugin(
       `${relativeName(appDir, target)} already exists; remove it first to copy a fresh one`,
     )
   const source = join(root, plugin.name)
-  // A framework package (it has a package.json) is copied as its source: `src/` and the licence. Its build files, tests and manifest are the repository's own.
+  // A framework package (it has a package.json in the repository) is copied as its source: `src/` and the licence; the package shipped by npm already holds only that. Its
+  // `plugin.json` lists `entries`, and the imports of such a plugin are rewritten to relative paths, in the repository and in the installed package alike.
   const isPackage = existsSync(join(source, 'package.json'))
-  const entries = isPackage ? entryTable(readLibrary(root)) : undefined
+  const entries = plugin.entries === undefined ? undefined : entryTable(readLibrary(root))
   cpSync(source, target, {
     recursive: true,
     filter: (path) => {

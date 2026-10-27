@@ -36,6 +36,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
+- [Release notes 0.9.1](release-notes/0.9.1.md) - a fix: apps made by the installed command line start again
 - [Release notes 0.9.0](release-notes/0.9.0.md) - the framework's home: the Cordis forms as subpaths, one `Acryl`, the source and its history here
 - [Release notes 0.8.1](release-notes/0.8.1.md) - the door's plugin verbs work in every web template
 - [Release notes 0.8.0](release-notes/0.8.0.md) - every template a Cordis app, the door (`.acryl/bin/acryl`), `clientModules` inside a sub-app
