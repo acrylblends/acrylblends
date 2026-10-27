@@ -7,6 +7,12 @@ import type {} from '../plugins/tasks/index.ts'
 
 export const APP_NAME = '__APP_NAME__'
 
+/** The door's page script (`.acryl/bin/acryl look` and `act`), in development only: `src/app.ts` leaves the door out in production and with ACRYL_DOOR=off. */
+const DOOR_TAG =
+  process.env.NODE_ENV !== 'production' && process.env.ACRYL_DOOR !== 'off'
+    ? '<script type="module" src="/api/acryl-door/page.js"></script>'
+    : ''
+
 /**
  * The app's own routes on the router: `POST /ask` for the agent; `GET /extensions` and `GET /tasks` to observe what it did (every run is a
  * durable task owning one task per tool call); `POST /tasks/cancel`. What changes is also streamed: `GET /api/state/tasks/events` and
@@ -25,7 +31,14 @@ export const routes = {
     }
     const app = new Acryl()
       .use(bodyLimit({ maxSize: 64 * 1024 }))
-      .get('/', (c) => c.json({ app: APP_NAME, ok: true }))
+      // A browser gets a page (the door's and the agent panel's script tags are added where they are mounted); everything else gets the JSON.
+      .get('/', (c) =>
+        (c.req.header('accept') ?? '').includes('text/html')
+          ? c.html(
+              `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${APP_NAME}</title></head><body><h1>${APP_NAME}</h1><p>This app runs an agent. Ask it for a feature (<code>POST /ask</code>), or add the chat panel with <code>npx acrylblends add agent-panel</code>.</p>${DOOR_TAG}</body></html>`,
+            )
+          : c.json({ app: APP_NAME, ok: true }),
+      )
       .get('/health', (c) => c.json({ ok: true }))
       .get('/extensions', (c) =>
         c.json({

@@ -17,6 +17,7 @@ against a real Cordis context, including disposal.
 | [tasks](#tasks) | `tasks` | idea from Pi Durable |
 | [manifest](#manifest) | functions, no service | `runtime/blends-core` |
 | [save](#save) | a tool for the agent | `runtime/app-persistence` |
+| [agent-panel](#agent-panel) | none (a chat panel in the page) | - |
 
 ## instance
 
@@ -104,6 +105,22 @@ Reads and validates `blend.yaml`, ACRYL's Blend format: Blueprints, and Blends t
 
 `saveApp` over two ports (git and the hosting service), the secret scan, `npm run save`, and a `save_app` tool when the app
 has a tool registry. It never reads, stores or asks for a token: git and gh use your own credential helpers.
+
+## agent-panel
+
+A chat panel inside the running app (spec 049 slice 14). `npx acrylblends add agent-panel` copies it (with the agent family it needs) into an app made from the `agent` template; add a row
+`- id: agent-panel` / `name: agent-panel` to `blend.yaml` **before** the `routes` row and `'agent-panel': panel` to the registry in `src/app.ts` (the line `acrylblends add` prints). Open the app in a browser:
+a button at the corner opens a side panel. Write what you want; the panel's agent builds it **through the same door** (`.acryl/bin/acryl`, see the app's `AGENTS.md`), and when a plugin was installed or
+removed the page reloads, so the feature shows with no restart.
+
+- **Drivers.** The select in the panel offers the app's own agent (`agent`: the offline scripted model, or a real one from `OPENAI_*` / `DEEPSEEK_API_KEY`, with the `builder` tools and the `door_*` tools),
+  and each of `claude`, `codex` and `pi` that is installed on the machine (`pi` also needs `DEEPSEEK_API_KEY`), started headless in the app folder with your message as its prompt. A key is read from the environment the
+  app was started in and is never stored.
+- **Safety.** Development only: it does nothing with `NODE_ENV=production` or `ACRYL_DOOR=off`. A page gets a token from `GET /api/agent-panel/session`, which answers only the app's own page (`Sec-Fetch-Site:
+  same-origin`, or an `Origin` equal to the `Host`); `POST /api/agent-panel/ask` needs that token, and one run goes at a time. Every ask is written to `.acryl/audit/agent-panel.jsonl` without its text.
+- **Stop.** For `claude`, `codex` and `pi` the button ends the program. The app's own agent has no cancel yet: Stop ends the stream and the run finishes in the background.
+- The gate: `node scripts/verify-agent-panel.mjs [--driver claude|codex|pi]` adds the panel to a fresh `agent` app, opens it in headless Chrome, sends "create route hello /hello Hello" from the panel, and checks that `/hello`
+  answers, the page reloaded, and the process is the same one.
 
 ## desktop
 

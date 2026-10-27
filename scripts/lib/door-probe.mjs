@@ -39,7 +39,7 @@ export function findChrome() {
 }
 
 /** Evaluate calls over the DevTools protocol of the one page of `port`. */
-async function devtools(port) {
+export async function devtools(port) {
   const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
   const page = targets.find((t) => t.type === 'page')
   const ws = new WebSocket(page.webSocketDebuggerUrl)
