@@ -45,7 +45,8 @@ try {
   for (const template of ['nodejs', 'notes', 'chat', 'acryl-app']) {
     const app = join(scratch, `app-${template}`)
     run(bin('create-acrylblends'), [app, '--template', template, '-y'], scratch)
-    run('npm', ['install', '--no-audit', '--no-fund'], app)
+    // The new app asks for the version of acrylblends it was made with, which may not be published yet: install the tarball (npm then records it).
+    run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], app)
     run('npm', ['test'], app, { ACRYL_DOOR: 'off' })
     run('npm', ['run', 'check'], app)
     log(`${template}: made by the installed command, its tests and type-check pass`)
