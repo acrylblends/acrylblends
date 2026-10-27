@@ -43,24 +43,50 @@ export function findChrome() {
 export async function devtools(port) {
   const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
   const page = targets.find((t) => t.type === 'page')
+  if (page === undefined) throw new Error('the browser has no page yet')
   const ws = new WebSocket(page.webSocketDebuggerUrl)
-  await new Promise((r) => ws.addEventListener('open', r))
+  await new Promise((resolve, reject) => {
+    ws.addEventListener('open', resolve)
+    ws.addEventListener('error', () => reject(new Error('the DevTools connection failed')))
+  })
   let id = 0
-  const send = (method, params = {}) =>
-    new Promise((resolve) => {
+  // A call that never gets its answer (the browser died, the connection closed) rejects instead of leaving the script waiting with nothing pending.
+  const send = (method, params = {}, ms = 30_000) =>
+    new Promise((resolve, reject) => {
       const mine = ++id
+      const done = (finish) => (value) => {
+        clearTimeout(timer)
+        ws.removeEventListener('message', on)
+        ws.removeEventListener('close', onClose)
+        finish(value)
+      }
       const on = (event) => {
         const message = JSON.parse(event.data)
-        if (message.id === mine) {
-          ws.removeEventListener('message', on)
-          resolve(message)
-        }
+        if (message.id === mine) done(resolve)(message)
       }
+      const onClose = () =>
+        done(reject)(new Error(`the browser closed the connection during ${method}`))
+      const timer = setTimeout(
+        () => done(reject)(new Error(`${method} got no answer in ${ms} ms`)),
+        ms,
+      )
       ws.addEventListener('message', on)
+      ws.addEventListener('close', onClose)
       ws.send(JSON.stringify({ id: mine, method, params }))
     })
   return { send, close: () => ws.close() }
 }
+
+/** The flags a headless Chrome needs; on a CI runner (a container, a sandboxed user namespace) its own sandbox cannot start. */
+export const chromeFlags = (profile, devPort) => [
+  '--headless=new',
+  '--disable-gpu',
+  '--no-first-run',
+  ...(process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : []),
+  `--user-data-dir=${profile}`,
+  `--remote-debugging-port=${devPort}`,
+  'about:blank',
+]
 
 /**
  * @param app the app folder (a created app, finished by the agent)
@@ -126,18 +152,7 @@ export async function probeDoor(app, env, { tags = false } = {}) {
       cookie,
     )
 
-    browser = spawn(
-      chrome,
-      [
-        '--headless=new',
-        '--disable-gpu',
-        '--no-first-run',
-        `--user-data-dir=${profile}`,
-        `--remote-debugging-port=${devPort}`,
-        'about:blank',
-      ],
-      { stdio: 'ignore' },
-    )
+    browser = spawn(chrome, chromeFlags(profile, devPort), { stdio: 'ignore' })
     const cdp = await until(() => devtools(devPort), 20_000)
     if (!step('headless Chrome opens', cdp !== undefined)) return { ok: false, steps }
     await cdp.send('Network.enable')

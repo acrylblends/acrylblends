@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { devtools, findChrome } from './lib/door-probe.mjs'
+import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
 import { startGroup, stopGroup } from './lib/proc.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -100,18 +100,7 @@ try {
 
   const devPort = 20000 + Math.floor(Math.random() * 20000)
   const profile = join(scratch, 'chrome')
-  browser = spawn(
-    chrome,
-    [
-      '--headless=new',
-      '--disable-gpu',
-      '--no-first-run',
-      `--user-data-dir=${profile}`,
-      `--remote-debugging-port=${devPort}`,
-      'about:blank',
-    ],
-    { stdio: 'ignore' },
-  )
+  browser = spawn(chrome, chromeFlags(profile, devPort), { stdio: 'ignore' })
   const cdp = await until(() => devtools(devPort), 20_000)
   if (!cdp) fail('headless Chrome did not open')
   const evaluate = async (expression) => {
