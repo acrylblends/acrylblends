@@ -27,6 +27,7 @@ async function booted() {
   const home = await mkdtemp(join(scratch, 'chat-test-'))
   const app = await boot(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
     database: join(home, 'test.sqlite'),
+    listen: false,
   })
   stops.push(async () => {
     await app.stop()
@@ -190,8 +191,8 @@ test('when the client goes away the model call is aborted and what arrived is ke
 
 test('the chat page loads its client component, served by the running app', async () => {
   const running = await booted()
-  const module = await fetch(`${running.url}/client/chat.tsx`)
+  const module = await running.root.router.request('/client/chat.tsx')
   assert.equal(module.status, 200)
   assert.match(module.headers.get('content-type') ?? '', /javascript/)
-  assert.equal((await fetch(`${running.url}/client/@acrylblends/jsx-dom.js`)).status, 200)
+  assert.equal((await running.root.router.request('/client/@acrylblends/jsx-dom.js')).status, 200)
 })

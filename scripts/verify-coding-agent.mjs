@@ -322,12 +322,12 @@ async function attempt(name) {
   run('npm', ['install', '--no-audit', '--no-fund'], app, { env: clean })
   if (run('npm', ['test'], app, { env: clean }).status !== 0)
     return { name, pass: false, note: "the fresh app's own tests fail" }
-  // The tests must also pass where the agent runs them: Codex's sandbox forbids writing to the system temp folder, so a template whose tests need it
+  // The tests must also pass where the agent runs them: Codex's workspace-write sandbox forbids the system temp folder and listening on a port, so a template whose tests need either
   // would leave the agent unable to check its work (found 2026-10-27, notes on Cordis).
   if (name === 'codex') {
-    const sandboxed = run(program, ['sandbox', '--', 'npm', 'test'], app, { env: clean })
+    const sandboxed = run(program, ['sandbox', '-c', 'sandbox_mode="workspace-write"', '--', 'npm', 'test'], app, { env: clean })
     if (sandboxed.status !== 0)
-      return { name, pass: false, note: "the fresh app's tests fail inside Codex's sandbox" }
+      return { name, pass: false, note: `the fresh app's tests fail inside Codex's sandbox: ${(sandboxed.stdout + sandboxed.stderr).trim().split("\n").slice(-6).join(" | ").slice(0, 400)}` }
   }
   const agentEnv = { ...env }
   const secrets = []

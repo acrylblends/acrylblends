@@ -30,8 +30,19 @@ export function readManifest(values?: Readonly<Record<string, ParameterValue>>) 
   })
 }
 
+/** The manifest without its server row: the app is then reached in process, through `root.router.request`. */
+function withoutServer<M extends { plugins: readonly { use: string }[] }>(manifest: M): M {
+  return {
+    ...manifest,
+    plugins: manifest.plugins.map((row) =>
+      row.use === 'acryl-node-server' ? { ...row, disabled: true } : row,
+    ),
+  }
+}
+
 export interface App {
   readonly root: Context
+  /** The address the server listens on; empty when the app was made with `listen: false`. */
   readonly url: string
   stop(): Promise<void>
 }
@@ -39,21 +50,22 @@ export interface App {
 /** The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. */
 export async function createApp(
   chosen: AppInstance,
-  options: { values?: Readonly<Record<string, ParameterValue>> } = {},
+  options: { values?: Readonly<Record<string, ParameterValue>>; listen?: boolean } = {},
 ): Promise<App> {
   const manifest = readManifest(options.values)
+  const listen = options.listen
   const root = new Context()
   const first = root.plugin(instance, chosen)
   await first.await()
   const fibers: Fiber[] = [
     first,
-    ...(await compose(root, manifest, registry, {
+    ...(await compose(root, listen === false ? withoutServer(manifest) : manifest, registry, {
       server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 },
     })),
   ]
   return {
     root,
-    url: root.nodeServer.url,
+    url: listen === false ? '' : root.nodeServer.url,
     async stop() {
       for (const fiber of [...fibers].reverse()) await fiber.dispose()
     },
