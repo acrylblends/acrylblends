@@ -826,6 +826,8 @@ spec:
         cwd: notes,
         env: { ...process.env, PORT: String(port) },
         stdio: 'ignore',
+        // Its own process group, so stopCleanly stops npm and node together (npm alone does not pass the signal on to node on Linux).
+        detached: process.platform !== 'win32',
       })
       try {
         const up = await waitForOk(`http://127.0.0.1:${port}/`)
@@ -880,11 +882,7 @@ spec:
         rmSync(join(notes, '.git'), { recursive: true, force: true })
       } finally {
         // One process at a time serves a folder's door: the next start waits until this one is gone.
-        const gone = new Promise((done) =>
-          server.exitCode !== null ? done() : server.once('exit', done),
-        )
-        server.kill('SIGTERM')
-        await gone
+        await stopCleanly(server)
       }
       if (kind === 'notes') {
         const door = await probeDoor(notes, process.env, { tags: false })

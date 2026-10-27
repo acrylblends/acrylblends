@@ -96,7 +96,7 @@ export async function probeDoor(app, env, { tags = false } = {}) {
       !step(
         'npm start serves the port',
         (await until(() => fetch(`${base}/login`).then((r) => r.status === 200), 30_000)) === true,
-        output.slice(-600),
+        output.slice(0, 1500),
       )
     )
       return { ok: false, steps }
