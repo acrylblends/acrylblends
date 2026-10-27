@@ -18,6 +18,10 @@ const canListen = await new Promise<boolean>((done) => {
   probe.listen(0, '127.0.0.1', () => probe.close(() => done(true)))
 })
 const skip = canListen ? false : 'this environment does not allow listening on a port'
+if (!canListen)
+  console.log(
+    `skipped: the tests that start the real server (${skip}); every other test ran in process`,
+  )
 
 /** Start `src/main.ts` the way `npm start` does, on a port the system chooses, and read the address it prints. */
 async function start(env: Record<string, string> = {}) {
