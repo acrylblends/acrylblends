@@ -33,6 +33,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Getting started](getting-started.md) - create an app, run it, add plugins, lock it, save it
 - [The desktop shell](desktop.md) - `--desktop`, `npm run desktop`: an Electron window on the app's own server
 - [The plugin library](plugins.md) - every plugin: what it does, its service, its config, where it came from
+- [Releasing](releasing.md) - the steps of a release and the rule that its gates run the installed package
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
