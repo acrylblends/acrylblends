@@ -80,6 +80,12 @@ export const PLUGINS = {
         'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
       'tests/page/visible-text.spec.ts':
         'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
+      'tests/host/door.spec.ts':
+        'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
+      'tests/host/verbs.spec.ts':
+        'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
+      'tests/host/shim.spec.ts':
+        'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
       'tests/host/loader.spec.ts':
         'loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install',
     },

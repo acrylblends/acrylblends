@@ -2,21 +2,24 @@
   "source": {
     "repo": "acryldev/acryl",
     "path": "plugins/acryl-door",
-    "commit": "a9c917b6bccf13a01dd6d5f3c6dc58332d25bde8"
+    "commit": "4aaf9072c4d73f3b614a217ff54b8eb5a0598ea5"
   },
   "vendored": [
     "src",
     "tests",
     "LICENSE"
   ],
-  "rewrittenSpecifiers": 12,
-  "digest": "sha256:331211abe3201441d46f987ac10d04aab0038f19ea666a4b6d37d61a0f9c389b",
+  "rewrittenSpecifiers": 13,
+  "digest": "sha256:90f0731ebb2e6d8a7c29e6f1e6f250cb2eb719b6622e5d9e5655281947584d6c",
   "testsNotRun": {
     "tests/page/accessible-name-hidden.spec.ts": "needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser",
     "tests/page/channel.spec.ts": "needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser",
     "tests/page/driver.spec.ts": "needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser",
     "tests/page/indicator.spec.ts": "needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser",
     "tests/page/visible-text.spec.ts": "needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser",
+    "tests/host/door.spec.ts": "needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser",
+    "tests/host/verbs.spec.ts": "needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser",
+    "tests/host/shim.spec.ts": "needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser",
     "tests/host/loader.spec.ts": "loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install"
   },
   "notice": [
