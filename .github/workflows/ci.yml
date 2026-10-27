@@ -61,3 +61,5 @@ jobs:
       - run: pnpm run verify:framework
       - run: pnpm run typecheck
       - run: pnpm run test:packages
+      # The real terminal (node-pty) on every OS, Windows included: a load failure fails here with its reason, it is not skipped.
+      - run: pnpm run test:driver-pty

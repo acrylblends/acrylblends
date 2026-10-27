@@ -51,6 +51,8 @@ export interface Drivers {
   register(driver: Driver): () => void
   list(): Driver[]
   get(name: string): Driver | undefined
+  /** Whether a request may use the drivers' endpoints: it comes from the app's own page and carries the panel's token. */
+  authorized(headers: Headers): boolean
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -59,7 +61,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-export function createDrivers(): Drivers {
+export function createDrivers(authorized: (headers: Headers) => boolean = () => true): Drivers {
   const table = new Map<string, Driver>()
   return {
     register(driver) {
@@ -69,12 +71,13 @@ export function createDrivers(): Drivers {
     },
     list: () => [...table.values()],
     get: (name) => table.get(name),
+    authorized,
   }
 }
 
 /** Provide the registry on `ctx` (the panel does). */
-export function provideDrivers(ctx: Context): Drivers {
-  const registry = createDrivers()
+export function provideDrivers(ctx: Context, authorized: (headers: Headers) => boolean): Drivers {
+  const registry = createDrivers(authorized)
   ;(ctx as Context).provide('drivers', registry)
   return registry
 }

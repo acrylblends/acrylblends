@@ -63,7 +63,10 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
       // The audit never stops a run.
     }
   }
-  const registry = provideDrivers(ctx)
+  const registry = provideDrivers(
+    ctx,
+    (headers) => fromOwnPage(headers) && headers.get('x-agent-panel-token') === token,
+  )
   ctx.effect(() => registry.register(agentDriver(ctx)))
   for (const program of availableHeadless(config.drivers))
     ctx.effect(() => registry.register(headlessDriver(program, root)))

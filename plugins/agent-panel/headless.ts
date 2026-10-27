@@ -55,7 +55,7 @@ export function command(
   }
 }
 
-function onPath(program: string): boolean {
+export function onPath(program: string): boolean {
   const found = spawnSync(process.platform === 'win32' ? 'where' : 'which', [program], {
     encoding: 'utf8',
   })
