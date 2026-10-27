@@ -118,7 +118,7 @@ describe('create', () => {
       expect(readFileSync(join(dir, '.agents/skills/app-guide/SKILL.md'), 'utf8')).toBe(skill)
       expect(skill).toMatch(/^---\nname: app-guide\ndescription: .+\n---\n/u)
       expect(skill).toContain('docs/framework/README.md')
-      expect(skill).toContain('.acryl/bin/acryl')
+      expect(skill).not.toContain('.acryl/bin')
       // The gate of slice 11: the generated text names one plugin folder, and the door's state is ignored by git.
       for (const text of [agents, skill])
         expect(
@@ -127,7 +127,8 @@ describe('create', () => {
             .replaceAll('There is no `src/plugins/` and no `extensions/`.', ''),
         ).not.toMatch(/src\/plugins|extensions\//u)
       expect(agents).toContain('## Defaults you can swap')
-      expect(agents).toContain('.acryl/bin/acryl act click --ref <r>')
+      // A plain app has no door command, so its text must not send an agent to one.
+      expect(agents).not.toContain('.acryl/bin')
       expect(readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')).toContain('.acryl/')
       expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('docs/framework/README.md')
       expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain(

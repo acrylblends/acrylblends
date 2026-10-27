@@ -3,34 +3,13 @@ import { dirname, join } from 'node:path'
 
 /**
  * What an app tells the agent that works in it (spec 049, slice 11): `AGENTS.md` and `CLAUDE.md` (the same text), and one skill that points
- * to `docs/framework/` and to the door. The files are written from this module only, so the three can never disagree.
+ * to `docs/framework/`. The door is Cordis-only for now, so a plain app's text does not mention it. The files are written from this module only, so the three can never disagree.
  */
 
 type Template = 'nodejs' | 'notes' | 'chat' | 'bun'
 
 /** Where an agent looks for a skill: Claude Code reads `.claude/skills`, Codex and others read `.agents/skills`. The text is the same. */
 export const SKILL_FOLDERS = ['.claude/skills/app-guide', '.agents/skills/app-guide'] as const
-
-/** Every mention of the door is this one line, so its final wording changes in one place. */
-export const DOOR_LINE =
-  'The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at and change the running app; it reaches only the app running from this folder. Its state (a secret and an audit log) lives under `.acryl/`, which git ignores: never commit it. If `.acryl/bin/acryl` is not here, this app has no door yet: run it with its scripts and check it with `npm test`.'
-
-/** The verbs of the door, as the door itself lists them with `brief`. */
-export const DOOR_VERBS = [
-  '```',
-  '.acryl/bin/acryl brief                      what this app is: its plugins, where the docs are, the verbs',
-  '.acryl/bin/acryl look                       a snapshot of the page, with refs (r1, r2, ...)',
-  '.acryl/bin/acryl act click --ref <r>',
-  '.acryl/bin/acryl act type --ref <r> --text <t> [--submit] [--no-clear]',
-  '.acryl/bin/acryl act select --ref <r> --option <o>',
-  '.acryl/bin/acryl act press --key <Enter|Escape|...>',
-  '.acryl/bin/acryl act scroll [--ref <r>] --direction up|down [--amount <n>]',
-  '.acryl/bin/acryl act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]',
-  '.acryl/bin/acryl plugin list | add <folder> | remove <name> | reload',
-  ".acryl/bin/acryl tool list | call --tool <name> --args '<json>'",
-  '```',
-  "Every verb takes `--json`. `plugin add plugins/<name>` checks the plugin, installs it and makes it live without a restart. `tool call` reaches only the tools on the door's allowlist (empty by default). On Windows the command is `.acryl\\bin\\acryl.cmd`.",
-].join('\n')
 
 /** The defaults of an app made from this template, each with the one place that swaps it. */
 function defaultRows(template: Template, pkg: string): string[] {
@@ -83,16 +62,6 @@ there; a plugin you or an agent write goes there too. Do not create \`src/plugin
 `
 }
 
-/** The door, as far as it is decided. */
-export function doorSection(): string {
-  return `## The door
-
-${DOOR_LINE}
-
-${DOOR_VERBS}
-`
-}
-
 /** The text of the one skill. It repeats nothing of the docs; it says where to look and how to work. */
 export function skillText(name: string, template: Template, pkg: string): string {
   return `---
@@ -107,7 +76,7 @@ description: How to change, run and check the ${name} app. Use it before adding 
 2. **Make the change small.** A route is a function from \`Request\` to \`Response\`: test it with \`await app.request('/path')\`. ${template === 'notes' || template === 'chat' ? 'A change to the data is the next numbered file in `migrations/`; never edit one that has run.' : 'Keep new code in `src/` next to the code it extends.'}
 3. **One plugin folder.** A plugin lives in \`plugins/<name>/\` (\`${pkg} add <name>\` copies a library plugin there). There is no \`src/plugins/\` and no \`extensions/\`.
 4. **Defaults are swappable.** The database, the key-value store, the server and the window are plugins behind ports. The table "Defaults you can swap" in \`AGENTS.md\` names each default and the one file that changes it. Never reach around a port to a driver: \`${pkg} check-deps\` fails the check.
-5. **Look at the running app.** ${DOOR_LINE} Start with \`.acryl/bin/acryl brief\`, then \`look\` for the page and \`act\` to click or type on it; the full list is in \`AGENTS.md\`.
+5. **Look at the running app.** Start it with its dev script, open it in a browser, and check the page; the app has no door command yet, so do not look for one.
 6. **Done means checked.** \`npm test\` and \`npm run check\` pass, and the change shows in the running app after a restart. No secret goes in a file or in \`git status\`: keys come from environment variables.
 `
 }

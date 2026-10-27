@@ -17,13 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { findSecrets } from '@webboxes/app-persistence'
 import { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST } from './names'
-import {
-  defaultsSection,
-  doorSection,
-  pluginsSection,
-  skillText,
-  writeSelfKnowledge,
-} from './self-knowledge'
+import { defaultsSection, pluginsSection, skillText, writeSelfKnowledge } from './self-knowledge'
 import {
   type Fetchers,
   fetchSource,
@@ -309,7 +303,6 @@ so test a route with \`await app.request('/path')\` and no server.${desktopNote}
 ${notesStructure}${chatStructure}
 ${defaultsSection(template, PACKAGE)}
 ${pluginsSection(PACKAGE)}
-${doorSection()}
 ## Things that surprise people
 
 - A page mounted at \`/x\` answers \`/x\`, not \`/x/\` (trailing slashes are strict); \`trimTrailingSlash()\` redirects.
