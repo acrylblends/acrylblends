@@ -22,6 +22,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { probeChat } from './lib/chat-probe.mjs'
+import { probeDoor } from './lib/door-probe.mjs'
 import { probeNotes } from './lib/notes-probe.mjs'
 import { part2 } from './lib/part2.mjs'
 
@@ -406,6 +407,10 @@ async function attempt(name) {
     }
     lifecycle = await part2(app, clean, {
       probe: (dir) => probeRoute(dir, clean),
+      door:
+        values.preset === 'tags' || values.preset === 'notes'
+          ? (dir) => probeDoor(dir, clean, { tags: Boolean(PRESETS[values.preset].tags) })
+          : undefined,
       install,
       secrets: [agentEnv.DEEPSEEK_API_KEY ?? ''],
       clone: join(dir, 'clone'),

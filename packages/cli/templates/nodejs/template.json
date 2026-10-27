@@ -1,1 +1,3 @@
-{ "plugins": ["instance", "acryl-router", "acryl-node-server", "manifest", "save"] }
+{
+  "plugins": ["instance", "acryl-router", "acryl-node-server", "manifest", "save", "acryl-door"]
+}

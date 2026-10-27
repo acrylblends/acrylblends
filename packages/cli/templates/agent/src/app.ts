@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
+import * as door from '../plugins/acryl-door/src/index.ts'
 import * as nodeServer from '../plugins/acryl-node-server/src/index.ts'
 import * as router from '../plugins/acryl-router/src/index.ts'
 import * as state from '../plugins/acryl-state/src/index.ts'
@@ -36,6 +37,7 @@ export const registry = {
   sandbox: sandboxPlugin,
   routes,
   'acryl-node-server': nodeServer,
+  'acryl-door': door,
 }
 
 /** The manifest next to this app's source. */
@@ -71,7 +73,17 @@ export async function createApp(
     model?: OpenAIConfig
   } = {},
 ): Promise<App> {
-  const manifest = readManifest(options.values)
+  const read = readManifest(options.values)
+  // The door is a development tool: its row is left out when NODE_ENV=production or ACRYL_DOOR=off. One process at a time serves a folder's door, so the tests set ACRYL_DOOR=off.
+  const manifest =
+    process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off'
+      ? {
+          ...read,
+          plugins: read.plugins.map((row) =>
+            row.use === 'acryl-door' ? { ...row, disabled: true } : row,
+          ),
+        }
+      : read
   const extensionsDir = join(chosen.root, 'plugins')
   // One release of grace: an app made before 0.7.8 kept what the agent wrote in `extensions/`. It is still installed, with a warning.
   const legacyDir = join(chosen.root, 'extensions')

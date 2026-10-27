@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { type App, createApp } from '../src/app.ts'
 
+// One process at a time serves a folder's door; these tests start several apps in the same folder.
+process.env.ACRYL_DOOR = 'off'
+
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 async function withApp(run: (app: App) => Promise<void>) {

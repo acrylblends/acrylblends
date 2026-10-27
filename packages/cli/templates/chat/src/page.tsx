@@ -1,4 +1,5 @@
 import type { Conversation, Message } from './db.ts'
+import { doorEnabled } from './door.ts'
 
 export const chatPage = (
   conversations: Conversation[],
@@ -33,6 +34,7 @@ export const chatPage = (
         </div>
         <div id="chat" data-conversation={current ? String(current.id) : ''} />
         <script type="module" src="/client/chat.tsx" />
+        {doorEnabled() ? <script type="module" src="/api/acryl-door/page.js" /> : null}
       </body>
     </html>
   ).toString()

@@ -18,7 +18,7 @@ const SECRET_PATHS =
 const SECRET_TEXT =
   /(sk-[A-Za-z0-9]{20,}|Bearer [A-Za-z0-9._-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)/u
 
-export async function part2(app, env, { probe, install, secrets = [], clone }) {
+export async function part2(app, env, { probe, install, secrets = [], clone, door }) {
   const steps = []
   const step = (name, ok, detail = '') => {
     steps.push(`${ok ? 'ok' : 'FAIL'} ${name}${detail && !ok ? ` (${detail})` : ''}`)
@@ -34,11 +34,11 @@ export async function part2(app, env, { probe, install, secrets = [], clone }) {
       badPath.length === 0,
       badPath.join(', '),
     )
-    const door = join(app, '.acryl', 'door.json')
+    const doorFile = join(app, '.acryl', 'door.json')
     const known = [...secrets]
-    if (existsSync(door)) {
+    if (existsSync(doorFile)) {
       try {
-        const secret = JSON.parse(readFileSync(door, 'utf8')).secret
+        const secret = JSON.parse(readFileSync(doorFile, 'utf8')).secret
         if (typeof secret === 'string' && secret.length > 8) known.push(secret)
       } catch {}
     }
@@ -57,6 +57,13 @@ export async function part2(app, env, { probe, install, secrets = [], clone }) {
       dirty === '',
       dirty.split('\n')[0],
     )
+
+    // 1b. The door: the feature is read off the running page through `.acryl/bin/acryl look` (the agent's way to check its work).
+    if (door) {
+      const checked = await door(app)
+      for (const line of checked.steps)
+        steps.push(`${line.startsWith('ok ') || line.startsWith('FAIL ') ? line : `ok ${line}`}`)
+    }
 
     // 2. A restart: the same folder, started again, still serves the feature.
     step(

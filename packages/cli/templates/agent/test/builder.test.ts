@@ -6,6 +6,9 @@ import { test } from 'node:test'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { createApp } from '../src/app.ts'
 
+// One process at a time serves a folder's door; these tests start several apps in the same folder.
+process.env.ACRYL_DOOR = 'off'
+
 /** The agent extends the running app through POST /ask; a restart keeps what it built. */
 test('the agent builds, updates, protects and removes a plugin in the running app, and a restart keeps it', async () => {
   const project = await mkdtemp(join(tmpdir(), 'builder-project-'))

@@ -33,7 +33,7 @@ export const PLUGINS = {
     },
   },
   'acryl-node-server': {
-    entries: { '': 'src/index.ts' },
+    entries: { '': 'src/index.ts', '/client-modules': 'src/client-modules.ts' },
     testsNotRun: {
       'tests/client-modules.spec.ts':
         "links typescript from the plugin's own node_modules (ACRYL's workspace layout); clientModules and build-client are exercised here by the templates' tests and verify:scaffolder",
@@ -64,6 +64,24 @@ export const PLUGINS = {
     testsNotRun: {
       'tests/loader.spec.ts':
         'loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install; the plain opener it wraps is tested here by open.spec.ts and conformance.spec.ts',
+    },
+  },
+  // The door (spec 049 slice 9): an agent looks at the running page, acts on it and installs plugins live, through `.acryl/bin/acryl`.
+  'acryl-door': {
+    entries: { '': 'src/index.ts' },
+    testsNotRun: {
+      'tests/page/accessible-name-hidden.spec.ts':
+        'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
+      'tests/page/channel.spec.ts':
+        'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
+      'tests/page/driver.spec.ts':
+        'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
+      'tests/page/indicator.spec.ts':
+        'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
+      'tests/page/visible-text.spec.ts':
+        'needs jsdom, a development dependency of ACRYL that generated apps do not install; it runs in ACRYL, and verify:scaffolder walks the door in a real browser',
+      'tests/host/loader.spec.ts':
+        'loads the plugin through the real Loader (@deepseek-ai/cordis-plugin-loader), which generated apps do not install',
     },
   },
   'acryl-kv': {

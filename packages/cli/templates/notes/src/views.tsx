@@ -1,4 +1,5 @@
 import type { Note } from './db.ts'
+import { doorEnabled } from './door.ts'
 import { BODY_MAX, TITLE_MAX } from './schema.ts'
 
 const counterScript = `
@@ -53,6 +54,7 @@ const Layout = ({
       {children}
       <script dangerouslySetInnerHTML={{ __html: counterScript }} />
       <script type="module" src="/client/counter.tsx" />
+      {doorEnabled() ? <script type="module" src="/api/acryl-door/page.js" /> : null}
     </body>
   </html>
 )

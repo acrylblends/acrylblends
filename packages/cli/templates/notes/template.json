@@ -5,6 +5,7 @@
     "acryl-node-server",
     "acryl-db-sqlite",
     "manifest",
-    "save"
+    "save",
+    "acryl-door"
   ]
 }
