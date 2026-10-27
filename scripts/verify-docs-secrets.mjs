@@ -14,7 +14,9 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const HOME = join(dirname(fileURLToPath(import.meta.url)), '..')
+/** The folder whose tracked files are scanned: this repository; the test points it at a scratch repository. */
+const ROOT = process.env.VERIFY_SECRETS_ROOT ?? HOME
 
 /** What is scanned: the folders acrylblends copies into apps or prints in its docs, without tests. */
 const SCANNED = [
@@ -46,7 +48,7 @@ function trackedFiles() {
 }
 
 // create-acrylblends depends on @webboxes/app-persistence; resolve it from there.
-const { findSecrets } = createRequire(join(ROOT, 'packages', 'create', 'package.json'))(
+const { findSecrets } = createRequire(join(HOME, 'packages', 'create', 'package.json'))(
   '@webboxes/app-persistence',
 )
 const files = trackedFiles()
