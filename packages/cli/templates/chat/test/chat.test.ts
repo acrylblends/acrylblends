@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
+import { mkdirSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +11,10 @@ import { createApp as boot } from '../src/app.ts'
 import { createApp } from '../src/chat-app.ts'
 import type { Llm } from '../src/llm.ts'
 
+/** Throwaway homes and databases live inside the project (`.acrylblends/` is ignored by git), because a sandboxed agent may not write to the system temp folder. */
+const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
+mkdirSync(scratch, { recursive: true })
+
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 /**
@@ -20,9 +24,10 @@ const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 const stops: (() => Promise<void>)[] = []
 after(() => Promise.all(stops.map((stop) => stop())))
 async function booted() {
-  const home = await mkdtemp(join(tmpdir(), 'chat-test-'))
+  const home = await mkdtemp(join(scratch, 'chat-test-'))
   const app = await boot(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
     database: join(home, 'test.sqlite'),
+    listen: false,
   })
   stops.push(async () => {
     await app.stop()
@@ -186,8 +191,8 @@ test('when the client goes away the model call is aborted and what arrived is ke
 
 test('the chat page loads its client component, served by the running app', async () => {
   const running = await booted()
-  const module = await fetch(`${running.url}/client/chat.tsx`)
+  const module = await running.root.router.request('/client/chat.tsx')
   assert.equal(module.status, 200)
   assert.match(module.headers.get('content-type') ?? '', /javascript/)
-  assert.equal((await fetch(`${running.url}/client/@acrylblends/jsx-dom.js`)).status, 200)
+  assert.equal((await running.root.router.request('/client/@acrylblends/jsx-dom.js')).status, 200)
 })

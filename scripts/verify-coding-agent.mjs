@@ -23,6 +23,7 @@ import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { probeChat } from './lib/chat-probe.mjs'
 import { probeNotes } from './lib/notes-probe.mjs'
+import { part2 } from './lib/part2.mjs'
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -32,6 +33,7 @@ const { values, positionals } = parseArgs({
     task: { type: 'string', default: 'add a /customers/count route with a test' },
     setup: { type: 'string', default: 'blend' },
     preset: { type: 'string' },
+    part2: { type: 'boolean', default: false },
   },
 })
 /** Named tasks, each with a probe of the finished app. */
@@ -68,8 +70,9 @@ if (values.preset) {
   }
   values.task = PRESETS[values.preset].task
 }
-const PLAIN_SETUPS = ['nodejs', 'notes']
-const SETUPS = ['blend', 'blend-desktop', 'nodejs', 'notes']
+// nodejs, notes and chat are made by create-acrylblends; since 0.8 every one of them is a Cordis app, like the blend setups.
+const CREATED_SETUPS = ['nodejs', 'notes', 'chat']
+const SETUPS = ['blend', 'blend-desktop', 'nodejs', 'notes', 'chat']
 if (!SETUPS.includes(values.setup)) {
   console.error(`unknown setup "${values.setup}" (${SETUPS.join(', ')})`)
   process.exit(2)
@@ -197,21 +200,7 @@ async function probeRoute(app, env) {
   const check = preset
     ? "reply.status === 200 && /html/.test(reply.headers.get('content-type') ?? '') && /</.test(await reply.clone().text())"
     : "reply.status === 200 && typeof (await reply.clone().json()).count === 'number'"
-  const script = PLAIN_SETUPS.includes(values.setup)
-    ? values.setup === 'notes'
-      ? `import { openNotesDb } from './src/db.ts'
-import { createApp } from './src/notes-app.ts'
-const { db, close } = await openNotesDb(':memory:')
-const reply = await createApp(db).request('${path}')
-const ok = ${check}
-await close()
-process.exit(ok ? 0 : 1)
-`
-      : `import app from './src/app.ts'
-const reply = await app.request('${path}')
-process.exit(${check} ? 0 : 1)
-`
-    : `import { createApp } from './src/app.ts'
+  const script = `import { createApp } from './src/app.ts'
 import { pinnedInstance, withPort } from './plugins/instance/index.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -226,9 +215,7 @@ process.exit(ok ? 0 : 1)
   const file = join(app, 'gate-probe.ts')
   writeFileSync(file, script)
   // The app is started the way its own scripts start it: with the register hook, so a .tsx page loads.
-  const hook = PLAIN_SETUPS.includes(values.setup)
-    ? 'acrylblends/node-server/register'
-    : './plugins/acryl-node-server/src/register.ts'
+  const hook = './plugins/acryl-node-server/src/register.ts'
   const probe = run('node', ['--import', hook, file], app, { env, timeout: 60_000 })
   rmSync(file, { force: true })
   return probe.status === 0 ? 'ok' : 'FAIL'
@@ -282,7 +269,7 @@ async function attempt(name) {
     { env: clean },
   )
   const acrylblends = join(dir, 'node_modules/.bin/acrylblends')
-  const created = PLAIN_SETUPS.includes(values.setup)
+  const created = CREATED_SETUPS.includes(values.setup)
     ? process.env.CREATE_ACRYLBLENDS_BIN
       ? // Before a release: the create package of this checkout instead of the published one.
         run(
@@ -316,7 +303,7 @@ async function attempt(name) {
         { env: clean },
       )
   if (created.status !== 0) return { name, pass: false, note: `init failed: ${created.stderr}` }
-  if (PLAIN_SETUPS.includes(values.setup))
+  if (CREATED_SETUPS.includes(values.setup))
     run(
       'npm',
       [
@@ -335,6 +322,22 @@ async function attempt(name) {
   run('npm', ['install', '--no-audit', '--no-fund'], app, { env: clean })
   if (run('npm', ['test'], app, { env: clean }).status !== 0)
     return { name, pass: false, note: "the fresh app's own tests fail" }
+  // The tests must also pass where the agent runs them: Codex's workspace-write sandbox forbids the system temp folder and listening on a port, so a template whose tests need either
+  // would leave the agent unable to check its work (found 2026-10-27, notes on Cordis).
+  if (name === 'codex') {
+    const sandboxed = run(
+      program,
+      ['sandbox', '-c', 'sandbox_mode="workspace-write"', '--', 'npm', 'test'],
+      app,
+      { env: clean },
+    )
+    if (sandboxed.status !== 0)
+      return {
+        name,
+        pass: false,
+        note: `the fresh app's tests fail inside Codex's sandbox: ${(sandboxed.stdout + sandboxed.stderr).trim().split('\n').slice(-6).join(' | ').slice(0, 400)}`,
+      }
+  }
   const agentEnv = { ...env }
   const secrets = []
   let isolation = 'scratch HOME, minimal environment, PATH scrubbed'
@@ -392,7 +395,25 @@ async function attempt(name) {
   const touchedSource = changed.some((file) => file.startsWith('src/') || file === 'blend.yaml')
   const route =
     values.task === DEFAULT_TASK || values.preset ? await probeRoute(app, clean) : 'not probed'
+  // Part 2 of spec 049: restart, fresh clone, no secret in git status.
+  let lifecycle = { ok: true, steps: [] }
+  if (values.part2) {
+    const install = (dir) => {
+      const first = run('npm', ['install', '--no-audit', '--no-fund'], dir, { env: clean })
+      if (first.status !== 0 || !spec.endsWith('.tgz')) return first.status
+      return run('npm', ['install', resolve(spec), '--no-audit', '--no-fund'], dir, { env: clean })
+        .status
+    }
+    lifecycle = await part2(app, clean, {
+      probe: (dir) => probeRoute(dir, clean),
+      install,
+      secrets: [agentEnv.DEEPSEEK_API_KEY ?? ''],
+      clone: join(dir, 'clone'),
+    })
+    console.log(`  part 2 (${name}):\n    ${lifecycle.steps.join('\n    ')}`)
+  }
   const pass =
+    lifecycle.ok &&
     result.status === 0 &&
     test.status === 0 &&
     check.status === 0 &&

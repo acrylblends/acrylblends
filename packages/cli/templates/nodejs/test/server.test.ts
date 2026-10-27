@@ -1,14 +1,27 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+/** Throwaway homes and databases live inside the project (`.acrylblends/` is ignored by git), because a sandboxed agent may not write to the system temp folder. */
+const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
+mkdirSync(scratch, { recursive: true })
+
+/** A sandbox may forbid listening on a port (Codex's workspace-write does); the tests that start the real server are skipped there, and every other test runs in process. */
+const canListen = await new Promise<boolean>((done) => {
+  const probe = createServer()
+  probe.once('error', () => done(false))
+  probe.listen(0, '127.0.0.1', () => probe.close(() => done(true)))
+})
+const skip = canListen ? false : 'this environment does not allow listening on a port'
 
 /** Start `src/main.ts` the way `npm start` does, on a port the system chooses, and read the address it prints. */
 async function start(env: Record<string, string> = {}) {
-  const home = mkdtempSync(join(tmpdir(), 'server-test-'))
+  const home = mkdtempSync(join(scratch, 'server-test-'))
   const child = spawn(
     process.execPath,
     ['--import', './plugins/acryl-node-server/src/register.ts', 'src/main.ts'],
@@ -31,7 +44,7 @@ async function start(env: Record<string, string> = {}) {
   return { child, address, home }
 }
 
-test('the server listens on 127.0.0.1 unless HOST says otherwise', async () => {
+test('the server listens on 127.0.0.1 unless HOST says otherwise', { skip }, async () => {
   const { child, address, home } = await start()
   try {
     assert.match(address, /^http:\/\/127\.0\.0\.1:\d+$/)
@@ -43,7 +56,7 @@ test('the server listens on 127.0.0.1 unless HOST says otherwise', async () => {
 })
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-  test(`${signal} stops the server cleanly and frees the port`, async () => {
+  test(`${signal} stops the server cleanly and frees the port`, { skip }, async () => {
     const { child, address, home } = await start()
     try {
       assert.equal((await fetch(address)).status, 200)
