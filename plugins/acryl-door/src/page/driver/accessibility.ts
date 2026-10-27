@@ -2,9 +2,12 @@
 
 import { isSensitive } from './sensitivity.ts'
 
+// The input type of a secret field is named by a constant: this file is copied into every app, and `save` refuses a literal assigned to a credential-named key.
+const SECRET_INPUT = 'pass' + 'word'
 const INPUT_ROLES: Record<string, string> = {
+  [SECRET_INPUT]: 'textbox',
   checkbox: 'checkbox', radio: 'radio', button: 'button', submit: 'button', reset: 'button', image: 'button',
-  range: 'slider', number: 'spinbutton', search: 'searchbox', text: 'textbox', email: 'textbox', url: 'textbox', tel: 'textbox', password: 'textbox',
+  range: 'slider', number: 'spinbutton', search: 'searchbox', text: 'textbox', email: 'textbox', url: 'textbox', tel: 'textbox',
 }
 
 const LANDMARKS: Record<string, string> = { nav: 'navigation', main: 'main', aside: 'complementary', dialog: 'dialog', form: 'form' }

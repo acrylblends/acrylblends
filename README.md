@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/acrylblends-logo.png" alt="ACRYLBLENDS" width="120">
+  <img src="https://acrylblends.github.io/logo/mark.png" alt="ACRYLBLENDS" width="120">
 </p>
 
 <h1 align="center">ACRYLBLENDS</h1>

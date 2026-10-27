@@ -4,7 +4,7 @@
 // the consumer of the port keeps working across the swap (pending while no provider exists, active again after), in the same process, and the swap survives a restart.
 //
 //   node scripts/verify-byo-tool.mjs [path to the guide]
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
