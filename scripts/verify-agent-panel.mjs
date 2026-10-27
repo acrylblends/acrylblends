@@ -3,8 +3,8 @@
 // The gate of spec 049 slice 14: in a fresh agent app with the panel added, a real (headless) Chrome opens the page, the message "create route hello /hello Hello" is sent from the
 // panel, the agent builds the feature, the page reloads, and /hello answers Hello, in the same process (no restart). Uses the app's offline scripted agent: no key, no network.
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { devtools, findChrome } from './lib/door-probe.mjs'
@@ -47,6 +47,13 @@ const run = (command, args, cwd) => {
   if (r.status !== 0) fail(`${command} ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
   return r.stdout
 }
+// pi is driven with DeepSeek: its key is read from the usual place into that one process's environment, as the product test does, and never printed.
+const serverEnv = { ...env }
+if (driverArg === 'pi') {
+  const keyFile = join(homedir(), '.secure-storage/llmproviders/deepseek/deepseek.json')
+  if (!existsSync(keyFile)) fail(`no DeepSeek key at ${keyFile}`)
+  serverEnv.DEEPSEEK_API_KEY = JSON.parse(readFileSync(keyFile, 'utf8')).deepseek_api_key
+}
 let server
 let browser
 try {
@@ -79,7 +86,7 @@ try {
   const port = 20000 + Math.floor(Math.random() * 20000)
   server = spawn('npm', ['start'], {
     cwd: app,
-    env: { ...env, PORT: String(port) },
+    env: { ...serverEnv, PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let output = ''
@@ -112,6 +119,10 @@ try {
       returnByValue: true,
       awaitPromise: true,
     })
+    if (r.result?.exceptionDetails)
+      fail(
+        `in the page: ${r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text}`,
+      )
     return r.result?.result?.value
   }
   await cdp.send('Page.enable')
