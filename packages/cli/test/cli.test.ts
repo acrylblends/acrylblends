@@ -154,6 +154,7 @@ describe('library', () => {
       '@deepseek-ai/schemastery',
       '@webboxes/app-persistence',
       '@webboxes/blends-core',
+      'node-pty',
       'yaml',
     ])
     for (const plugin of readLibrary().values()) {

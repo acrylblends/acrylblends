@@ -107,8 +107,8 @@ test("only the app's own page gets a session, and the token is needed to ask", a
   )
   const session = (await (
     await app.router.request('/api/agent-panel/session', { headers: OWN })
-  ).json()) as { token: string; drivers: string[] }
-  assert.deepEqual(session.drivers, ['agent'])
+  ).json()) as { token: string; drivers: Array<{ name: string; kind: string }> }
+  assert.deepEqual(session.drivers, [{ name: 'agent', kind: 'chat' }])
   assert.match(session.token, /^[0-9a-f]{48}$/u)
   const ask = (headers: Record<string, string>, body: unknown) =>
     app.router.request('/api/agent-panel/ask', {
@@ -184,4 +184,74 @@ test('it is a development tool: with NODE_ENV=production or ACRYL_DOOR=off it ad
     assert.equal(existsSync(join(root, '.acryl')), false)
     await cleanup.pop()?.()
   }
+})
+
+test('another plugin adds a chat driver to the registry; the panel lists it, runs it, and drops it when the plugin goes', async () => {
+  const { app } = await boot()
+  const session = async () =>
+    (await (await app.router.request('/api/agent-panel/session', { headers: OWN })).json()) as {
+      token: string
+      drivers: Array<{ name: string; kind: string }>
+    }
+  const fiber = app.plugin({
+    name: 'echo-driver',
+    inject: ['drivers'],
+    apply(ctx: Context) {
+      ctx.effect(() =>
+        ctx.drivers.register({
+          kind: 'chat',
+          name: 'echo',
+          async *start({ message }) {
+            yield { event: 'text', data: { text: `echo: ${message}` } }
+          },
+        }),
+      )
+    },
+  })
+  await fiber.await()
+  const listed = await session()
+  assert.deepEqual(
+    listed.drivers.map((d) => d.name),
+    ['agent', 'echo'],
+  )
+  const response = await app.router.request('/api/agent-panel/ask', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...OWN, 'x-agent-panel-token': listed.token },
+    body: JSON.stringify({ message: 'hi', driver: 'echo' }),
+  })
+  const events = await eventsOf(response)
+  assert.deepEqual(
+    events.map((e) => [e.event, e.data.text ?? e.data.changed]),
+    [
+      ['text', 'echo: hi'],
+      ['done', false],
+    ],
+  )
+  await fiber.dispose()
+  assert.deepEqual(
+    (await session()).drivers.map((d) => d.name),
+    ['agent'],
+  )
+})
+
+test('a plugin that injects drivers is pending while no panel is mounted, and starts when the panel arrives', async () => {
+  const app = new Context()
+  let registered = false
+  const fiber = app.plugin({
+    name: 'late-driver',
+    inject: ['drivers'],
+    apply(ctx: Context) {
+      ctx.effect(() => {
+        registered = true
+        return () => {}
+      })
+    },
+  })
+  await fiber.await().catch(() => {})
+  assert.equal(registered, false)
+  const { createDrivers } = await import('../drivers.ts')
+  app.provide('drivers', createDrivers())
+  await new Promise((r) => setTimeout(r, 20))
+  assert.equal(registered, true)
+  await fiber.dispose()
 })

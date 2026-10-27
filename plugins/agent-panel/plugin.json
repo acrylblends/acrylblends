@@ -12,7 +12,7 @@
     "instance"
   ],
   "inject": ["router", "agent", "extensions", "appInstance"],
-  "provides": [],
+  "provides": ["drivers"],
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.4"
   },

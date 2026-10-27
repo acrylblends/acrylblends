@@ -56,6 +56,16 @@ try {
   run('npm', ['install', '--no-audit', '--no-fund'], blank)
   run('npm', ['test'], blank, { ACRYL_DOOR: 'off' })
   log('todo: made by the installed command, its tests pass')
+  // The agent panel and the PTY driver, added by the installed command: copied, installed (node-pty from the registry) and type-checked.
+  const agentApp = join(scratch, 'app-agent')
+  run(bin('acrylblends'), ['init', agentApp, '--template', 'agent', '-y'], scratch)
+  run(bin('acrylblends'), ['add', 'agent-panel'], agentApp)
+  run(bin('acrylblends'), ['add', 'driver-pty'], agentApp)
+  run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], agentApp)
+  run('npm', ['run', 'check'], agentApp)
+  log(
+    'agent: agent-panel and driver-pty added by the installed command, installed and type-checked',
+  )
   log('OK')
 } catch (error) {
   console.error(

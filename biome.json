@@ -14,6 +14,7 @@
       "!.claude",
       "!**/*.md",
       "!plugins/acryl-*",
+      "!plugins/driver-pty/client/vendor",
       "!packages/framework",
       "!packages/cli/lib",
       "!packages/cli/templates/todo/src/todo.ts",

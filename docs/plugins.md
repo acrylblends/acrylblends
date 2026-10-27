@@ -17,7 +17,8 @@ against a real Cordis context, including disposal.
 | [tasks](#tasks) | `tasks` | idea from Pi Durable |
 | [manifest](#manifest) | functions, no service | `runtime/blends-core` |
 | [save](#save) | a tool for the agent | `runtime/app-persistence` |
-| [agent-panel](#agent-panel) | none (a chat panel in the page) | - |
+| [agent-panel](#agent-panel) | `drivers` (a chat panel in the page) | - |
+| [driver-pty](#driver-pty) | none (terminal drivers for the panel) | node-pty, xterm.js |
 
 ## instance
 
@@ -113,7 +114,7 @@ A chat panel inside the running app (spec 049 slice 14). `npx acrylblends add ag
 a button at the corner opens a side panel. Write what you want; the panel's agent builds it **through the same door** (`.acryl/bin/acryl`, see the app's `AGENTS.md`), and when a plugin was installed or
 removed the page reloads, so the feature shows with no restart.
 
-- **Drivers.** The select in the panel offers the app's own agent (`agent`: the offline scripted model, or a real one from `OPENAI_*` / `DEEPSEEK_API_KEY`, with the `builder` tools and the `door_*` tools),
+- **Drivers.** The panel provides a `drivers` registry; every driver is one of two kinds, `chat` (a message in, text and tool events out) or `terminal` (a real terminal, see [driver-pty](#driver-pty)); the panel shows the chat or the terminal by kind. The select in the panel offers the app's own agent (`agent`: the offline scripted model, or a real one from `OPENAI_*` / `DEEPSEEK_API_KEY`, with the `builder` tools and the `door_*` tools),
   and each of `claude`, `codex` and `pi` that is installed on the machine (`pi` also needs `DEEPSEEK_API_KEY`), started headless in the app folder with your message as its prompt. A key is read from the environment the
   app was started in and is never stored.
 - **Safety.** Development only: it does nothing with `NODE_ENV=production` or `ACRYL_DOOR=off`. A page gets a token from `GET /api/agent-panel/session`, which answers only the app's own page (`Sec-Fetch-Site:
@@ -121,6 +122,22 @@ removed the page reloads, so the feature shows with no restart.
 - **Stop.** For `claude`, `codex` and `pi` the button ends the program. For the app's own agent, Stop cancels the run: the model call or tool in flight is dropped and the run ends `cancelled` (`agent.run(question, { signal })`; a task record, when the app records tasks, is marked failed).
 - The gate: `node scripts/verify-agent-panel.mjs [--driver claude|codex|pi]` adds the panel to a fresh `agent` app, opens it in headless Chrome, sends "create route hello /hello Hello" from the panel, and checks that `/hello`
   answers, the page reloaded, and the process is the same one.
+
+## driver-pty
+
+A coding agent in a real terminal inside the running app (M8). `npx acrylblends add driver-pty` copies the plugin (and installs `node-pty`) into an app that has [agent-panel](#agent-panel); add a row
+`- id: driver-pty` / `name: driver-pty` to `blend.yaml` **after** the `agent-panel` row and `'driver-pty': driverPty` to the registry in `src/app.ts`. The panel then offers `pty:claude`, `pty:codex` and
+`pty:pi` (the ones installed on the machine) next to its chat drivers; choosing one swaps the chat for the program's own terminal (xterm.js), in the app folder with `.acryl/bin` on its `PATH`, so the agent
+works in its interactive mode and acts through the door as the headless drivers do. `config.programs` (`{ node: ['agent.mjs'] }`) offers other programs as `pty:<name>`.
+
+- **Transport.** Server-sent events down, POST up (no WebSocket): `POST /api/driver-pty/sessions`, `GET /api/driver-pty/<id>/output` (events with ids; a reconnect replays from `Last-Event-ID` out of a
+  64 KB ring buffer), `POST .../input` (keystrokes batched per animation frame), `.../resize`, `.../stop`. The same own-page check and token as the panel; one terminal at a time.
+- **Reload.** When a plugin is installed or removed while the terminal is open the page reloads, and the panel shows the same terminal again with its output.
+- **Disposal.** Every process is started inside one `ctx.effect`; its disposer ends the process group (the console on Windows), closes the streams and writes the audit line (`.acryl/audit/driver-pty.jsonl`,
+  never the keystrokes). Unloading the plugin leaves no process behind. Development only, like the panel.
+- **No PTY here.** `node-pty` ships prebuilds for macOS, Linux and Windows; if it cannot load (a sandbox that forbids PTYs) the plugin logs why and offers no `pty:*` driver.
+- The gate: `node scripts/verify-driver-pty.mjs` adds both plugins to a fresh `agent` app, opens the terminal in headless Chrome, and a scripted program in the PTY installs a plugin through the door; the page
+  reloads and re-attaches. `pnpm run test:driver-pty` runs the plugin's tests with a real PTY on Linux, macOS and Windows. Design: [the PTY driver plan](plans/pty-driver.md).
 
 ## desktop
 
