@@ -149,8 +149,11 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
   return 0
 }
 
-/** The vitest the suites run on (the version this package is tested with). */
-const SUITE_RUNNER = { vitest: '5.0.3' }
+/**
+ * The vitest the suites run on. 3.2.x, not the newest: npm 10 (the npm of Node 22) crashes on the dependency tree of vitest 4 and 5 ("Cannot read properties of null (reading
+ * 'edgesOut')"), and the suites use only `describe`, `it` and `expect`, which are the same in all of them. An app on a newer npm may raise it.
+ */
+const SUITE_RUNNER = { vitest: '3.2.4' }
 
 /**
  * Copy the conformance suite of each named port next to its source (`plugins/<name>/src/conformance.ts`), and add `vitest` to the app's development
