@@ -13,7 +13,24 @@ export const SKILL_FOLDERS = ['.claude/skills/app-guide', '.agents/skills/app-gu
 
 /** Every mention of the door is this one line, so its final wording changes in one place. */
 export const DOOR_LINE =
-  'The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at and change the running app; its state lives under `.acryl/`, which git ignores. If `.acryl/bin/acryl` is not here, this app has no door yet: run it with its scripts and check it with `npm test`.'
+  'The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at and change the running app; it reaches only the app running from this folder. Its state (a secret and an audit log) lives under `.acryl/`, which git ignores: never commit it. If `.acryl/bin/acryl` is not here, this app has no door yet: run it with its scripts and check it with `npm test`.'
+
+/** The verbs of the door, as the door itself lists them with `brief`. */
+export const DOOR_VERBS = [
+  '```',
+  '.acryl/bin/acryl brief                      what this app is: its plugins, where the docs are, the verbs',
+  '.acryl/bin/acryl look                       a snapshot of the page, with refs (r1, r2, ...)',
+  '.acryl/bin/acryl act click --ref <r>',
+  '.acryl/bin/acryl act type --ref <r> --text <t> [--submit] [--no-clear]',
+  '.acryl/bin/acryl act select --ref <r> --option <o>',
+  '.acryl/bin/acryl act press --key <Enter|Escape|...>',
+  '.acryl/bin/acryl act scroll [--ref <r>] --direction up|down [--amount <n>]',
+  '.acryl/bin/acryl act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]',
+  '.acryl/bin/acryl plugin list | add <folder> | remove <name> | reload',
+  ".acryl/bin/acryl tool list | call --tool <name> --args '<json>'",
+  '```',
+  "Every verb takes `--json`. `plugin add plugins/<name>` checks the plugin, installs it and makes it live without a restart. `tool call` reaches only the tools on the door's allowlist (empty by default). On Windows the command is `.acryl\\bin\\acryl.cmd`.",
+].join('\n')
 
 /** The defaults of an app made from this template, each with the one place that swaps it. */
 function defaultRows(template: Template, pkg: string): string[] {
@@ -71,6 +88,8 @@ export function doorSection(): string {
   return `## The door
 
 ${DOOR_LINE}
+
+${DOOR_VERBS}
 `
 }
 
@@ -85,20 +104,16 @@ description: How to change, run and check the ${name} app. Use it before adding 
 
 1. **Read first.** \`AGENTS.md\` in this folder says how the app is laid out. The framework's API is in \`docs/framework/\`: start at \`docs/framework/README.md\`, and
    \`docs/framework/api/summary.md\` is the one-page summary. Parts the docs mark "not yet available" are not in the package.
-2. **Make the change small.** A route is a function from \`Request\` to \`Response\`: test it with \`await app.request('/path')\`. ${template === 'notes' || template === 'chat' ? 'A change to the data is the next numbered file in \`migrations/\`; never edit one that has run.' : 'Keep new code in \`src/\` next to the code it extends.'}
+2. **Make the change small.** A route is a function from \`Request\` to \`Response\`: test it with \`await app.request('/path')\`. ${template === 'notes' || template === 'chat' ? 'A change to the data is the next numbered file in `migrations/`; never edit one that has run.' : 'Keep new code in `src/` next to the code it extends.'}
 3. **One plugin folder.** A plugin lives in \`plugins/<name>/\` (\`${pkg} add <name>\` copies a library plugin there). There is no \`src/plugins/\` and no \`extensions/\`.
 4. **Defaults are swappable.** The database, the key-value store, the server and the window are plugins behind ports. The table "Defaults you can swap" in \`AGENTS.md\` names each default and the one file that changes it. Never reach around a port to a driver: \`${pkg} check-deps\` fails the check.
-5. **Look at the running app.** ${DOOR_LINE}
+5. **Look at the running app.** ${DOOR_LINE} Start with \`.acryl/bin/acryl brief\`, then \`look\` for the page and \`act\` to click or type on it; the full list is in \`AGENTS.md\`.
 6. **Done means checked.** \`npm test\` and \`npm run check\` pass, and the change shows in the running app after a restart. No secret goes in a file or in \`git status\`: keys come from environment variables.
 `
 }
 
 /** Write the same text to `AGENTS.md` and `CLAUDE.md`, and the skill to every folder an agent looks in. */
-export function writeSelfKnowledge(
-  target: string,
-  agentsText: string,
-  skill: string,
-): string[] {
+export function writeSelfKnowledge(target: string, agentsText: string, skill: string): string[] {
   const written = ['AGENTS.md', 'CLAUDE.md']
   writeFileSync(join(target, 'AGENTS.md'), agentsText)
   writeFileSync(join(target, 'CLAUDE.md'), agentsText)

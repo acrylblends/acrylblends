@@ -23,5 +23,18 @@ install a second time). Do not create `src/plugins/` or `extensions/`.
 
 ## The door
 
-The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at and change the running app; its state lives under `.acryl/`, which git ignores. If
-`.acryl/bin/acryl` is not here, this app has no door yet: run it with its scripts and check it with `npm test`.
+The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at and change the running app; it reaches only the app running from this folder. Its state (a secret and an audit log) lives under `.acryl/`, which git ignores: never commit it. If `.acryl/bin/acryl` is not here, this app has no door yet: run it with its scripts and check it with `npm test`.
+
+```
+.acryl/bin/acryl brief                      what this app is: its plugins, where the docs are, the verbs
+.acryl/bin/acryl look                       a snapshot of the page, with refs (r1, r2, ...)
+.acryl/bin/acryl act click --ref <r>
+.acryl/bin/acryl act type --ref <r> --text <t> [--submit] [--no-clear]
+.acryl/bin/acryl act select --ref <r> --option <o>
+.acryl/bin/acryl act press --key <Enter|Escape|...>
+.acryl/bin/acryl act scroll [--ref <r>] --direction up|down [--amount <n>]
+.acryl/bin/acryl act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]
+.acryl/bin/acryl plugin list | add <folder> | remove <name> | reload
+.acryl/bin/acryl tool list | call --tool <name> --args '<json>'
+```
+Every verb takes `--json`. `plugin add plugins/<name>` checks the plugin, installs it and makes it live without a restart. `tool call` reaches only the tools on the door's allowlist (empty by default). On Windows the command is `.acryl\bin\acryl.cmd`.

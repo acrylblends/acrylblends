@@ -127,6 +127,7 @@ describe('create', () => {
             .replaceAll('There is no `src/plugins/` and no `extensions/`.', ''),
         ).not.toMatch(/src\/plugins|extensions\//u)
       expect(agents).toContain('## Defaults you can swap')
+      expect(agents).toContain('.acryl/bin/acryl act click --ref <r>')
       expect(readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')).toContain('.acryl/')
       expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('docs/framework/README.md')
       expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain(
