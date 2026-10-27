@@ -18,6 +18,13 @@ function shipped(path) {
     return false
   const [plugin, ...rest] = inside
   if (plugin === undefined || rest.length === 0) return true
+  // A framework package (it has a package.json) ships as its source: the manifest, the licence and `src/`. Its build files and tests are the repository's own.
+  if (
+    existsSync(join(from, plugin, 'package.json')) &&
+    !['plugin.json', 'LICENSE'].includes(rest.join('/')) &&
+    rest[0] !== 'src'
+  )
+    return false
   if (!omitOf.has(plugin)) {
     const manifest = join(from, plugin, 'plugin.json')
     omitOf.set(

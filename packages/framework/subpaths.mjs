@@ -18,6 +18,7 @@ const DB_SQLITE = '../../plugins/acryl-db-sqlite/src'
 const KV = '../../plugins/acryl-kv/src'
 const KV_JSON = '../../plugins/acryl-kv-json/src'
 const KV_DB = '../../plugins/acryl-kv-db/src'
+const P = '../../plugins'
 
 const MIDDLEWARE = [
   'basic-auth', 'bearer-auth', 'body-limit', 'cache', 'combine', 'compress', 'context-storage', 'cors', 'csrf', 'etag', 'ip-restriction',
@@ -82,6 +83,27 @@ export const SUBPATHS = {
   'kv': `${KV}/index.ts`,
   'kv/json': `${KV_JSON}/open.ts`,
   'kv/db': `${KV_DB}/open.ts`,
+  // The conformance suites a provider of a port passes (spec 049): they run on vitest, an optional peer dependency.
+  'db/conformance': `${DB}/conformance.ts`,
+  'kv/conformance': `${KV}/conformance.ts`,
+  // The door's three parts that other packages build on: the host API, the page protocol and the page API (browser code).
+  'door/host': `${P}/acryl-door/src/host/api.ts`,
+  'door/protocol': `${P}/acryl-door/src/page/protocol.ts`,
+  'door/page': `${P}/acryl-door/src/page/api.ts`,
+  // The Cordis forms (spec 049 slice 17): each framework plugin as a module of the package. `@deepseek-ai/cordis` (and `@deepseek-ai/schemastery`) are optional peer dependencies:
+  // an app that imports only the plain subpaths never loads them. They share their chunks with the plain subpaths, so `new Acryl()` from 'acrylblends' is the class `cordis/router` mounts.
+  'cordis/router': `${ROUTER}/index.ts`,
+  'cordis/router-http': `${P}/acryl-router-http/src/index.ts`,
+  'cordis/state': `${P}/acryl-state/src/index.ts`,
+  'cordis/state/react': `${P}/acryl-state/src/react.ts`,
+  'cordis/inspect': `${P}/acryl-inspect/src/index.ts`,
+  'cordis/node-server': `${P}/acryl-node-server/src/index.ts`,
+  'cordis/db': `${DB}/cordis.ts`,
+  'cordis/db-sqlite': `${DB_SQLITE}/index.ts`,
+  'cordis/kv': `${KV}/cordis.ts`,
+  'cordis/kv-json': `${KV_JSON}/index.ts`,
+  'cordis/kv-db': `${KV_DB}/index.ts`,
+  'cordis/door': `${P}/acryl-door/src/index.ts`,
 }
 
 /** The build entry name of a subpath: the file stem under `lib/`. */

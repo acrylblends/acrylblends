@@ -12,5 +12,9 @@
   "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"],
   "imports": {
     "#acryl-kv-json": "acryl-kv-json/src/index.ts"
+  },
+  "entries": {
+    "": "src/index.ts",
+    "/open": "src/open.ts"
   }
 }

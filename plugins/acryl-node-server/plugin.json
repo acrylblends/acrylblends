@@ -9,5 +9,9 @@
     "@deepseek-ai/schemastery": "3.18.4"
   },
   "mount": "root.plugin(router); root.plugin(nodeServer, { port: 3000, hostname: '127.0.0.1', scan: 20 }); ctx.nodeServer.url",
-  "omit": ["**/*.test.*", "**/*.case.ts"]
+  "omit": ["**/*.test.*", "**/*.case.ts"],
+  "entries": {
+    "": "src/index.ts",
+    "/client-modules": "src/client-modules.ts"
+  }
 }

@@ -163,3 +163,8 @@ demos/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Build output of the framework packages (rebuilt by pnpm run build)
+plugins/acryl-*/lib/
+packages/framework/lib/
+plugins/acryl-*/src/**/*.d.ts

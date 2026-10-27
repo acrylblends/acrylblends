@@ -13,21 +13,15 @@
       "!.specify",
       "!.claude",
       "!**/*.md",
-      "!plugins/acryl-*/src",
-      "!plugins/acryl-*/tests",
-      "!plugins/acryl-*/upstream.json",
-      "!docs/framework/upstream.json",
+      "!plugins/acryl-*",
+      "!packages/framework",
       "!packages/cli/lib",
       "!packages/cli/templates/todo/src/todo.ts",
       "!packages/cli/templates/todo/src/page.ts",
-      "!packages/cli/templates/todo/upstream.json",
-      "!packages/cli/upstream.json",
       "!plugins/desktop/user-data.ts",
       "!plugins/desktop/shutdown.ts",
-      "!plugins/desktop/upstream.json",
       "!plugins/desktop-web/user-data.ts",
-      "!plugins/desktop-web/shutdown.ts",
-      "!plugins/desktop-web/upstream.json"
+      "!plugins/desktop-web/shutdown.ts"
     ]
   },
   "formatter": {

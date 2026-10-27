@@ -6,6 +6,7 @@ import type { Io } from './io'
 import {
   closure,
   copyPlugin,
+  copyRewritten,
   LEGACY_WARNING,
   type LibraryPlugin,
   libraryRoot,
@@ -173,12 +174,16 @@ function copySuites(names: readonly string[], appDir: string, added: string[], i
   }
   for (const { from, to } of copies) {
     mkdirSync(dirname(to), { recursive: true })
-    copyFileSync(from, to)
+    copyRewritten(from, to, pluginOf(to), suiteOf(to))
     io.stdout.write(`added the conformance suite ${relative(appDir, to).split(sep).join('/')}\n`)
   }
   added.push(...mergeTooling(appDir, { devDependencies: SUITE_RUNNER }).devDependencies)
   return 0
 }
+
+/** The plugin folder name and the file inside it, from a path below the plugins folder (`.../plugins/acryl-kv/src/conformance.ts`). */
+const pluginOf = (path: string): string => path.split(sep).slice(-3, -2)[0] ?? ''
+const suiteOf = (path: string): string => path.split(sep).slice(-2).join('/')
 
 const PLUGIN_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 

@@ -1,4 +1,4 @@
-import type { GetConnInfo } from 'acryl-router/helpers'
+import type { GetConnInfo } from '../../../acryl-router/src/helpers/index.ts'
 import type { HttpBindings } from './types.ts'
 
 /**

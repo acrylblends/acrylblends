@@ -32,7 +32,7 @@ environment; it returns a frozen `AppInstance` with `root` (the project folder),
 request to the router; config `{ port, hostname, scan }`, provides `ctx.nodeServer.url`), `acryl-state` (observable cells, read as JSON and streamed as server-sent
 events at `/api/state/<key>` and `/api/state/<key>/events`), `acryl-inspect` (what every plugin requires, provides and registers) and `acryl-router-http` (the
 `serve()` that `acryl-node-server` uses) are ACRYL's framework, vendored here as they are. Their text is in [framework/](framework/README.md); their source is
-`plugins/acryl-*/src`, never edited in this repository (see `scripts/sync-framework.mjs`).
+`plugins/acryl-*`, whose source lives in this repository (with the history it had in ACRYL); `acrylblends init` and `add` copy their `src/` into an app.
 
 `acryl-db` (the `db` port: types, numbered migrations) and `acryl-db-sqlite` (the SQLite provider; one `node:sqlite` file, `data.sqlite` in the app home unless `path` is set,
 the app's `migrations/` folder applied on start) come with `acrylblends add db` in a Blend app. A plugin declares `inject: ['db']` and calls `await ctx.db.all('SELECT ...', value)`;
@@ -128,6 +128,6 @@ An Electron window on the app's own server. `acrylblends init my-app --desktop` 
 dependency and the script `npm run desktop`. `npm run desktop` picks the app's instance as `npm run dev` does, keeps Electron's user data inside the app's own home (`.acrylblends/electron`,
 never the user's application-data folder), starts `createApp` in the Electron main process, opens one window with a locked-down renderer (context isolation, no Node, sandbox) on the app's address
 (`/todo` for the todo template: `acrylblends.desktopPath` in `package.json`), keeps navigation on the app's own origin (other links open in the system browser), and ends the process when the window
-closes, after the server stopped. A second launch of the same app focuses the first. The app's own code never imports `electron`; only `plugins/desktop` does. `user-data.ts` and `shutdown.ts` are
-vendored from ACRYL Desktop with a recorded digest (`upstream.json`). Run from source only for now; packaging a distributable app is not part of it. `npm install` does not download Electron's binary (Electron 44 dropped its install script): the
+closes, after the server stopped. A second launch of the same app focuses the first. The app's own code never imports `electron`; only `plugins/desktop` does. `user-data.ts` and `shutdown.ts` came
+from ACRYL Desktop. Run from source only for now; packaging a distributable app is not part of it. `npm install` does not download Electron's binary (Electron 44 dropped its install script): the
 `electron` command downloads it the first time `npm run desktop` runs (about 100 MB, once per machine; `ELECTRON_MIRROR` and `ELECTRON_CACHE` apply). If that download is blocked, run `npx install-electron` where you can reach the mirror.

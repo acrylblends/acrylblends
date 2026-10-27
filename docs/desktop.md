@@ -34,8 +34,7 @@ user-data folder (added to `.gitignore`).
 
 ## Where the code is
 
-`plugins/desktop/`: `main.ts` (the steps above), `window.ts` (the window options), and `user-data.ts` and `shutdown.ts`, vendored from ACRYL Desktop with a recorded commit and digest in
-`upstream.json`. `electron` is a development dependency, and only that folder imports it: the app's own code never does, so a different shell is a change in one place. An app with the `agent`
+`plugins/desktop/`: `main.ts` (the steps above), `window.ts` (the window options), and `user-data.ts` and `shutdown.ts` (which came from ACRYL Desktop). `electron` is a development dependency, and only that folder imports it: the app's own code never does, so a different shell is a change in one place. An app with the `agent`
 template shows the agent's pages, and the routes it installs live, in the same window.
 
 ## Checking it

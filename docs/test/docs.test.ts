@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const docs = join(root, 'docs')
-/** Every page under docs/, as a path like `agent/extending-apps.md`. docs/framework is a generated copy of ACRYL's text (see scripts/sync-framework.mjs). */
+/** Every page under docs/, as a path like `agent/extending-apps.md`. docs/framework is the framework's own text. */
 const allPages = (dir = ''): string[] =>
   readdirSync(join(docs, dir), { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory()

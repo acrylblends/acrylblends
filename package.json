@@ -8,15 +8,16 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "pnpm -r run build",
+    "build": "pnpm -r run build && node scripts/stage-framework.mjs",
+    "test:packages": "pnpm -r --filter './plugins/acryl-*' --filter acrylblends-framework run test",
     "typecheck": "tsc -p tsconfig.json && tsc -p plugins/tsconfig.json",
-    "test": "vitest run && node --test \"plugins/*/test/*.test.ts\" && node --test scripts/lib/*.test.mjs",
+    "test": "vitest run && pnpm run test:packages && node --test \"plugins/*/test/*.test.ts\" && node --test scripts/lib/*.test.mjs",
     "lint": "biome check .",
     "format": "biome check --write .",
     "verify:scaffolder": "node scripts/verify-scaffolder.mjs",
     "check": "pnpm run lint && pnpm run build && pnpm run verify:framework && pnpm run typecheck && pnpm run test && pnpm run verify:scaffolder && pnpm run verify:byo && pnpm run verify:panel && pnpm run verify:tarball",
     "verify:model": "node scripts/verify-real-model.mjs",
-    "verify:framework": "node scripts/verify-framework-sync.mjs",
+    "verify:framework": "node scripts/stage-framework.mjs --check",
     "verify:byo": "node scripts/verify-byo-tool.mjs",
     "verify:panel": "node scripts/verify-agent-panel.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs"

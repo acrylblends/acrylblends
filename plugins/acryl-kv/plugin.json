@@ -13,5 +13,10 @@
     "#acryl-kv": "acryl-kv/src/index.ts",
     "#acryl-kv/conformance": "acryl-kv/src/conformance.ts"
   },
-  "suite": "src/conformance.ts"
+  "suite": "src/conformance.ts",
+  "entries": {
+    "": "src/index.ts",
+    "/cordis": "src/cordis.ts",
+    "/conformance": "src/conformance.ts"
+  }
 }

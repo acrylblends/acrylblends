@@ -142,6 +142,15 @@ try {
   if (rendered !== '<h1 class="title">Acryl!</h1>') throw new Error(`acrylblends/jsx rendered ${JSON.stringify(rendered)}`)
   report('node (server JSX from acrylblends/jsx)', 'renders <h1 class="title">Acryl!</h1>')
 
+  // One copy of Acryl: the class a plain app creates is the class the Cordis router serves, and a plain entry never loads Cordis (it is an optional peer: not installed here).
+  const once = run(process.execPath, ['--input-type=module', '-e', "import { Acryl } from 'acrylblends'; import { Acryl as served } from 'acrylblends/cordis/router'; process.stdout.write(String(Acryl === served))"], app)
+  if (once !== 'true') throw new Error('acrylblends and acrylblends/cordis/router export two different Acryl classes')
+  for (const plain of ['acrylblends', 'acrylblends/node-server', 'acrylblends/db', 'acrylblends/db/sqlite', 'acrylblends/kv', 'acrylblends/kv/json', 'acrylblends/streaming', 'acrylblends/body-limit']) {
+    const loaded = run(process.execPath, ['--input-type=module', '-e', `await import('${plain}'); process.stdout.write('ok')`], app)
+    if (loaded !== 'ok') throw new Error(`${plain} did not load without Cordis installed`)
+  }
+  report('one Acryl, and the plain entries load without Cordis', 'acrylblends === acrylblends/cordis/router Acryl; 8 plain entries import with no @deepseek-ai/cordis installed')
+
   // The hosting adapters, from the packed build: each handler is called the way its platform calls it (a real API Gateway or ALB event, a Request,
   // a CloudFront event, a fetch event), with no account and no network, and must answer what the app answers.
   writeFileSync(join(app, 'adapters.mjs'), [

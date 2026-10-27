@@ -4,5 +4,6 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["packages/*/src", "packages/*/test", "docs/test"]
+  "include": ["packages/*/src", "packages/*/test", "docs/test"],
+  "exclude": ["packages/framework"]
 }

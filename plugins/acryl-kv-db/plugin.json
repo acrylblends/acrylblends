@@ -12,5 +12,9 @@
   "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"],
   "imports": {
     "#acryl-kv-db": "acryl-kv-db/src/index.ts"
+  },
+  "entries": {
+    "": "src/index.ts",
+    "/open": "src/open.ts"
   }
 }
