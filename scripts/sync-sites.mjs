@@ -89,7 +89,7 @@ try {
     rmSync(dir, { recursive: true, force: true })
     run(
       'git',
-      [...credential, 'clone', '-q', '--depth', '1', `https://github.com/${site.repo}.git`, dir],
+      [...credential, 'clone', '-q', '--depth', '40', `https://github.com/${site.repo}.git`, dir],
       work,
     )
     const target = join(dir, 'src', 'docs', 'framework')
