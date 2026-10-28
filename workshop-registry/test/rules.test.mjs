@@ -193,3 +193,12 @@ describe('is the entry a sound starter', { skip }, () => {
     }
   })
 })
+
+test('a whole app in the wrong folder is one line, not one per file', () => {
+  const { pr } = entryTree('alice.hello')
+  const rows = Array.from({ length: 300 }, (_, n) => ['added', `blends/bob.hello/src/file-${n}.ts`])
+  const result = check('alice', rows, pr)
+  assert.equal(result.status, 1)
+  assert.equal(result.stdout.trim().split('\n').length, 1, result.stdout)
+  assert.match(result.stdout, /blends\/bob\.hello\/: the folder belongs to "bob"/)
+})

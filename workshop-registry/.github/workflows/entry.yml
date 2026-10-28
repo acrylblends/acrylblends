@@ -81,7 +81,7 @@ jobs:
       - name: Say why it was refused
         if: steps.rules.outputs.failed == '1' || steps.entry.outputs.failed == '1'
         run: |
-          { echo "This pull request was not merged:"; echo; cat problems.md; echo; echo "Fix it and push again; the check runs again. The rules are in [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md)."; } > comment.md
+          { echo "This pull request was not merged:"; echo; cat problems.md; echo; echo "Fix it and push again; the check runs again. The rules are in [CONTRIBUTING.md](https://github.com/$REPO/blob/main/CONTRIBUTING.md)."; } > comment.md
           gh pr comment "$PR" --repo "$REPO" --body-file comment.md
           exit 1
 

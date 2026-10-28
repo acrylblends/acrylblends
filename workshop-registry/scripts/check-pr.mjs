@@ -24,6 +24,13 @@ if (!values.login || !values.changed || !values.pr) {
 }
 const login = values.login.toLowerCase()
 const problems = []
+/** One line per kind of problem, not per file: a pull request that adds a whole app in the wrong folder says so once. */
+const seen = new Set()
+const refuse = (key, message) => {
+  if (seen.has(key)) return
+  seen.add(key)
+  problems.push(message)
+}
 const rows = readFileSync(values.changed, 'utf8')
   .split('\n')
   .filter(Boolean)
@@ -39,12 +46,13 @@ const ENTRY = /^blends\/([a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*)\/(.+)$/u
 const folders = new Set()
 for (const { status, path, previous } of rows) {
   if (path.split('/').includes('..') || path.includes('\\') || path.startsWith('/')) {
-    problems.push(`${path}: a path that leaves its folder`)
+    refuse(`escape:${path}`, `${path}: a path that leaves its folder`)
     continue
   }
   const match = ENTRY.exec(path)
   if (!match) {
-    problems.push(
+    refuse(
+      `outside:${path}`,
       `${path}: a pull request may change only blends/${login}.<name>/ (this file is outside it)`,
     )
     continue
@@ -52,13 +60,17 @@ for (const { status, path, previous } of rows) {
   const [, folder] = match
   folders.add(folder)
   if (folder.split('.')[0] !== login)
-    problems.push(
-      `${path}: the folder ${folder} belongs to "${folder.split('.')[0]}", and this pull request is from ${values.login}; an entry is named ${login}.<name>`,
+    refuse(
+      `owner:${folder}`,
+      `blends/${folder}/: the folder belongs to "${folder.split('.')[0]}", and this pull request is from ${values.login}; an entry is named ${login}.<name> (first file: ${path})`,
     )
   if (status === 'renamed' || previous !== undefined) {
     const from = ENTRY.exec(previous ?? '')
     if (!from || from[1] !== folder)
-      problems.push(`${path}: moved here from ${previous}; a file may not move between folders`)
+      refuse(
+        `move:${folder}`,
+        `${path}: moved here from ${previous}; a file may not move between folders`,
+      )
   }
 }
 if (folders.size > 1)
@@ -81,16 +93,18 @@ if (problems.length === 0 && id !== undefined) {
       const path = join(dir, name)
       const info = lstatSync(path)
       if (info.isSymbolicLink())
-        problems.push(`${path.slice(values.pr.length + 1)}: a link; links are not allowed`)
+        refuse(`link:${path}`, `${path.slice(values.pr.length + 1)}: a link; links are not allowed`)
       else if (info.isDirectory()) walk(path)
     }
   }
   walk(base)
 }
 
-if (values.out) writeFileSync(values.out, problems.map((problem) => `- ${problem}`).join('\n'))
+const shown = problems.slice(0, 20)
+if (problems.length > shown.length) shown.push(`... and ${problems.length - shown.length} more`)
+if (values.out) writeFileSync(values.out, shown.map((problem) => `- ${problem}`).join('\n'))
 if (problems.length > 0) {
-  for (const problem of problems) console.log(`refused ${problem}`)
+  for (const problem of shown) console.log(`refused ${problem}`)
   process.exit(1)
 }
 console.log(id)
