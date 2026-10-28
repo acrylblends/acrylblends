@@ -815,7 +815,11 @@ spec:
         '-e',
         `import { join } from 'node:path'; import { tmpdir } from 'node:os'; import { mkdtempSync } from 'node:fs'; import { createApp } from './src/app.ts'; import { pinnedInstance, withPort } from './plugins/instance/index.ts'; const home = mkdtempSync(join(tmpdir(), 'prod-')); const app = await createApp(withPort(pinnedInstance(home, { root: process.cwd() }), 0), { database: join(home, 'x.sqlite') }); const r = await fetch(app.url + '/client/${clientFile[kind]}'); console.log(r.status, r.headers.get('content-type')); await app.stop(); process.exit(0)`,
       ],
-      { cwd: notes, env: { ...process.env, NODE_ENV: 'production' } },
+      // The chat template is closed in production unless it is made public on purpose; this check is about the compiled client being served, so it names the chat.
+      {
+        cwd: notes,
+        env: { ...process.env, NODE_ENV: 'production', ACRYL_PRODUCTION_KEEP: 'chat' },
+      },
     )
     if (!/^200 .*javascript/.test(production.trim()))
       fail(`${kind}: production serving of dist/client answered ${production}`)
