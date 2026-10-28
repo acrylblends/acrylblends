@@ -120,8 +120,8 @@ its own repository: `--registry <git URL or folder>` reads starters from there i
 **Your app** belongs to you and lives in your repository: `npm run save` commits it and pushes to its remote. It refuses a file that looks like
 a secret, and refuses to push a private app to a public remote.
 
-Before an app goes on a server: with `NODE_ENV=production` the door, the agent panel and the PTY driver start nothing, but the `agent` template
-still mounts its own agent, builder and extensions rows. Start from one of the other five templates, or remove those rows from its `blend.yaml`
+Before an app goes on a server: with `NODE_ENV=production` the door, the agent panel and the PTY driver start nothing, the `agent` template leaves its agent, builder and extensions rows out
+(`ACRYL_PRODUCTION_KEEP` names the ones to keep, with a warning), and the `chat` template is closed until it has a `CHAT_ACCESS_TOKEN`
 - see [What runs in production](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/production.md).
 
 **A starter** other people can pull is a pull request to the registry repository: add `registry/blends/<id>/` with a `blend.yaml` (`kind: Blueprint`,
@@ -135,9 +135,11 @@ without a registry at all, is in
 An app carries its framework plugins as source, so a new release moves them in place and leaves your own code alone:
 
 ```sh
-npx acrylblends upgrade --dry-run   # the plan: what would be replaced
-npx acrylblends upgrade             # an edited file stops it with the diff, unless --force
+npx acrylblends@latest upgrade --dry-run   # the plan: what would be replaced
+npx acrylblends@latest upgrade             # an edited file stops it with the diff, unless --force
 ```
+
+Write `@latest`: a bare `npx acrylblends upgrade` runs the copy the app has installed, and an app made before 1.0 has an old one with no `upgrade` verb (it prints its help and exits 0, so it looks as if it worked).
 
 ## Use it as a library
 
