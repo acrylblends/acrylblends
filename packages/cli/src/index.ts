@@ -29,3 +29,4 @@ export {
   templateDir,
   templatesRoot,
 } from './templates'
+export { parseUpgradeOptions, type UpgradeOptions, upgrade } from './upgrade'

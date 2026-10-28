@@ -56,6 +56,7 @@ They are enabled as they are built.
 | Copy a pattern | [Guides](guides/best-practices.md), [Validation](guides/validation.md), [Testing](guides/testing.md), [Data, migrations and choosing a store](guides/data.md), [Forms, sessions and a database](guides/forms-and-sessions.md), [Client components without a bundler](guides/client-modules.md), [Bring your own tool](guides/bring-your-own-tool.md) |
 | Use Acryl inside a Cordis app | [Acryl in a Cordis app](cordis/acryl-in-a-cordis-app.md), [Plugin lifecycle](cordis/plugin-lifecycle.md), [Mounting](cordis/mounting.md) |
 | Move from the 0.3 router calls | [Migration from 0.3](cordis/migration-from-0-3.md) |
+| Move to 1.0 (`acrylblends upgrade`) | [Migration to 1.0](cordis/migration-to-1-0.md) |
 | Move from the 0.4 names (`App`) | [Migration from 0.4](cordis/migration-from-0-4.md) |
 
 The license of these pages and of the framework source they describe is in [LICENSE](LICENSE).

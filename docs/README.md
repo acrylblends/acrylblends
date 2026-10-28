@@ -15,6 +15,7 @@ ACRYLBLENDS is the public ACRYL framework, in two parts.
 | Use the framework: handlers, routing, middleware | [Framework documentation](framework/README.md), [Getting started](framework/getting-started/basic.md) |
 | Look up a call | [API summary](framework/api/summary.md), [Routing](framework/api/routing.md), [Context](framework/api/context.md), [Request](framework/api/request.md) |
 | Use the framework inside a Cordis app | [Acryl in a Cordis app](framework/cordis/acryl-in-a-cordis-app.md), [Mounting](framework/cordis/mounting.md), [Plugin lifecycle](framework/cordis/plugin-lifecycle.md) |
+| Move to 1.0 | [Migration to 1.0](framework/cordis/migration-to-1-0.md) |
 | Move from 0.4 or 0.3 | [Migration from 0.4](framework/cordis/migration-from-0-4.md), [Migration from 0.3](framework/cordis/migration-from-0-3.md) |
 | Create a Blend app and run it | [Getting started](getting-started.md) |
 | Let an agent extend my running app | [Extending a running app](agent/extending-apps.md) |
