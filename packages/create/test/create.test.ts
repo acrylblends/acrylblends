@@ -135,6 +135,7 @@ describe('create', () => {
         '--name',
         `app-${template}`,
         '--yes',
+        '--no-next',
       ])
       expect(s.out()).toContain(`cd app-${template}`)
     },
@@ -152,6 +153,7 @@ describe('create', () => {
       '--name',
       'my-app',
       '--yes',
+      '--no-next',
     ])
   })
 

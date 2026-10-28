@@ -288,6 +288,7 @@ describe('command line', () => {
       template: 'agent',
       install: undefined,
       desktop: false,
+      quietNext: false,
       yes: true,
     })
     expect(parseInitOptions(['--desktop']).desktop).toBe(true)

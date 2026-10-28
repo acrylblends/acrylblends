@@ -425,7 +425,17 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
     // Every template is a Cordis app, made by the framework package's own `init` (blend.yaml, plugins/, AGENTS.md, CLAUDE.md, the skill, the docs).
     const code = await io.run(
       process.execPath,
-      [acrylblendsBin(), 'init', target, '--template', template, '--name', name, '--yes'],
+      [
+        acrylblendsBin(),
+        'init',
+        target,
+        '--template',
+        template,
+        '--name',
+        name,
+        '--yes',
+        '--no-next',
+      ],
       io.cwd,
     )
     if (code !== 0) return 1
