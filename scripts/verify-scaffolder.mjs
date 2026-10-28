@@ -712,7 +712,7 @@ spec:
     desktopPackage.dependencies?.electron !== undefined
   )
     fail('desktop: electron must be a development dependency only')
-  if (!/electron plugins\/desktop\/main\.ts/.test(desktopPackage.scripts?.desktop ?? ''))
+  if (!/node plugins\/desktop\/launch\.ts/.test(desktopPackage.scripts?.desktop ?? ''))
     fail('desktop: the desktop script is missing')
   if (desktopPackage.acrylblends?.desktopPath !== '/todo')
     fail('desktop: the todo window must open on /todo')
