@@ -18,8 +18,8 @@ import { streamSSE } from '../acryl-router/src/helpers/index.ts'
 import { Acryl } from '../acryl-router/src/index.ts'
 import type {} from '../agent/index.ts'
 import type {} from '../extensions/index.ts'
-import { provideDrivers } from './drivers.ts'
 import { agentDriver, availableHeadless, type HeadlessName, headlessDriver } from './headless.ts'
+import { provideDrivers } from './registry.ts'
 
 export type {
   ChatDriver,

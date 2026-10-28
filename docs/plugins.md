@@ -115,7 +115,7 @@ has a tool registry. It never reads, stores or asks for a token: git and gh use 
 a button at the corner opens a side panel. Write what you want; the panel's agent builds it **through the same door** (`.acryl/bin/acryl`, see the app's `AGENTS.md`), and when a plugin was installed or
 removed the page reloads, so the feature shows with no restart.
 
-- **Drivers.** The panel provides a `drivers` registry; every driver is one of two kinds, `chat` (a message in, text and tool events out) or `terminal` (a real terminal, see [driver-pty](#driver-pty)); the panel shows the chat or the terminal by kind. The select in the panel offers the app's own agent (`agent`: the offline scripted model, or a real one from `OPENAI_*` / `DEEPSEEK_API_KEY`, with the `builder` tools and the `door_*` tools),
+- **Drivers.** The panel provides a `drivers` registry (the contract is `acrylblends/drivers`); every driver is one of two kinds, `chat` (a message in, text and tool events out) or `terminal` (a real terminal, see [driver-pty](#driver-pty)); the panel shows the chat or the terminal by kind. The select in the panel offers the app's own agent (`agent`: the offline scripted model, or a real one from `OPENAI_*` / `DEEPSEEK_API_KEY`, with the `builder` tools and the `door_*` tools),
   and each of `claude`, `codex` and `pi` that is installed on the machine (`pi` also needs `DEEPSEEK_API_KEY`), started headless in the app folder with your message as its prompt. A key is read from the environment the
   app was started in and is never stored.
 - **Safety.** Development only: it does nothing with `NODE_ENV=production` or `ACRYL_DOOR=off`. A page gets a token from `GET /api/agent-panel/session`, which answers only the app's own page (`Sec-Fetch-Site:

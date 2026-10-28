@@ -332,6 +332,10 @@
       "types": "./lib/kv/conformance.d.ts",
       "default": "./lib/kv/conformance.js"
     },
+    "./drivers": {
+      "types": "./lib/drivers.d.ts",
+      "default": "./lib/drivers.js"
+    },
     "./door/host": {
       "types": "./lib/door/host.d.ts",
       "default": "./lib/door/host.js"

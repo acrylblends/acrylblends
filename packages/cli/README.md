@@ -275,6 +275,7 @@ See [Node.js](https://github.com/acryldev/acryl/blob/main/docs/framework/getting
 | `acrylblends/proxy`, `acrylblends/dev` | the proxy helper and the dev helpers (`showRoutes`, `inspectRoutes`, `getRouterName`) |
 | `acrylblends/jsx` | JSX on the server: `jsxImportSource: 'acrylblends/jsx'`, `.tsx` files run on Node with `node --import acrylblends/node-server/register`, with `jsx/streaming`, and `acrylblends/jsx-renderer` for a layout behind `c.render` ([JSX guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/jsx.md)) |
 | `acrylblends/jsx/dom` | JSX in the browser: hooks and `render` (needs the DOM library) ([client components](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/jsx-dom.md)); on Node, `clientModules` serves them to the browser without a bundler ([guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/client-modules.md)) |
+| `acrylblends/drivers` | the driver contract of the agent panel (`ChatDriver`, `TerminalDriver`, `Drivers`), for plugins that add an agent to the panel |
 | `acrylblends/css` | CSS in JSX: `css`, `cx`, `keyframes`, `Style` ([CSS helper](https://github.com/acryldev/acryl/blob/main/docs/framework/helpers/css.md)) |
 | `acrylblends/node-server` | `serve`, `createAdaptorServer`, `getRequestListener`; with `node-server/serve-static`, `node-server/conninfo`, and `node-server/register` (compiles `.tsx` with the app's `typescript`); `clientModules` and `buildClientModules` (client components without a bundler) |
 

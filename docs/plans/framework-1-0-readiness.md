@@ -92,7 +92,7 @@ Node is the primary runtime and is public and gated; Bun is optional; Deno is de
 | Step | Work | Status |
 | --- | --- | --- |
 | a | Git tags and GitHub releases for 0.3 to 0.11, backfilled from the commits of the published tarballs | done: 27 tags and 27 GitHub releases (acrylblends 0.3.0 to 0.11.0), 20 create-acrylblends tags |
-| b | The exports cut and the `PUBLIC` / `INTERNAL` test | done: exports cut to 95 public subpaths, PUBLIC / EXPERIMENTAL / INTERNAL lists and test, Bun smoke gate in CI |
+| b | The exports cut and the `PUBLIC` / `INTERNAL` test | done: exports cut to 96 public subpaths (with `acrylblends/drivers`), PUBLIC / EXPERIMENTAL / INTERNAL lists and test, Bun smoke gate in CI |
 | c | Docs: the published import names (`acrylblends/cordis/...`) everywhere; the unified templates | done: published import names in the docs, one template list in both commands |
 | d | `acrylblends upgrade` (replace the vendored framework plugins in an app with the current version, show the diff, refuse when local edits would be lost unless `--force`), one migration guide to 1.0, an upgrade test on 0.9.1 and 0.10.0 fixtures | done: `acrylblends upgrade`, the lock, the hash history, the migration guide, tests and `verify:packed` on apps made by 0.9.1 and 0.10.0 |
 | e | The experimental labels and the production page with its test | done: the door plugin gates itself on production, the production page, the labels, the production test |

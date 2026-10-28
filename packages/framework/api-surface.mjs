@@ -110,6 +110,8 @@ export const PUBLIC = [
   'db/conformance',
   'kv/conformance',
 ],
+  // The driver contract the agent panel and the driver plugins (`driver-pty`, `driver-acp`) are written against.
+  'drivers',
   // The door (experimental, development only).
   ...[
   'door/host',

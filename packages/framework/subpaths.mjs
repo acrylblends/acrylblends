@@ -91,6 +91,8 @@ export const SUBPATHS = {
   // The conformance suites a provider of a port passes (spec 049): they run on vitest, an optional peer dependency.
   'db/conformance': `${DB}/conformance.ts`,
   'kv/conformance': `${KV}/conformance.ts`,
+  // The driver contract (spec 046 T028/T029): `ChatDriver`, `ChatEvent`, `TerminalDriver`, `TerminalSession`, `Drivers` and `createDrivers`, with no Cordis in it. The agent panel and the driver plugins write against it.
+  'drivers': `${P}/agent-panel/drivers.ts`,
   // The door's three parts that other packages build on: the host API, the page protocol and the page API (browser code).
   'door/host': `${P}/acryl-door/src/host/api.ts`,
   'door/protocol': `${P}/acryl-door/src/page/protocol.ts`,
