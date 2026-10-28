@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Make the acrylblends-native starters of the public registry from this checkout's templates, so what the registry offers is what `acrylblends init` makes today:
-//   node scripts/make-registry-starters.mjs <registry folder>
+//   node scripts/make-registry-starters.mjs <registry folder> [--only <id>] [--cli <acrylblends.js>]
+// `--only` makes one starter; `--cli` makes them with an installed `acrylblends` instead of this checkout's (the packed-install gate).
 // Each starter is a whole app under blends/<id>/ (the app without node_modules, data and the framework docs, which `create-acrylblends` adds back), with a blend.yaml that validates
 // for distribution (public, licensed, categorised, described) and an acryl.template.json, which is what marks an entry as an app for the acrylblends runtime.
 import { spawnSync } from 'node:child_process'
@@ -19,9 +20,15 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const registry = process.argv[2] === undefined ? undefined : resolve(process.argv[2])
+const args = process.argv.slice(2)
+const option = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
+const registry = args[0] === undefined || args[0].startsWith('--') ? undefined : resolve(args[0])
+const only = option('--only')
+const cli = option('--cli') ?? join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
 if (registry === undefined || !existsSync(join(registry, 'index.json'))) {
-  console.error('usage: node scripts/make-registry-starters.mjs <registry folder with index.json>')
+  console.error(
+    'usage: node scripts/make-registry-starters.mjs <registry folder with index.json> [--only <id>] [--cli <acrylblends.js>]',
+  )
   process.exit(2)
 }
 
@@ -57,12 +64,14 @@ const STARTERS = [
 
 const work = mkdtempSync(join(tmpdir(), 'registry-starters-'))
 try {
-  for (const starter of STARTERS) {
+  for (const starter of STARTERS.filter(
+    (candidate) => only === undefined || candidate.id === only,
+  )) {
     const app = join(work, starter.template)
     const made = spawnSync(
       process.execPath,
       [
-        join(root, 'packages', 'cli', 'bin', 'acrylblends.js'),
+        cli,
         'init',
         app,
         '--template',

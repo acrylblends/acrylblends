@@ -52,6 +52,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 0.9.1](release-notes/0.9.1.md) - a fix: apps made by the installed command line start again
 - [Release notes 0.9.2](release-notes/0.9.2.md) - Stop cancels the app's own agent, a secrets scan in check
 - [Release notes 0.10.0](release-notes/0.10.0.md) - driver-pty: a coding agent in a real terminal in the app, the panel's drivers as a registry
+- [Release notes 1.0.2](release-notes/1.0.2.md) - the chat template closed in production, create-acrylblends --from, the newcomer-path fixes
 - [Release notes 1.0.1](release-notes/1.0.1.md) - a security fix for the agent template in production
 - [Release notes 1.0.0](release-notes/1.0.0.md) - the 1.0 surface, acrylblends upgrade, what runs in production
 - [Release notes 0.11.0](release-notes/0.11.0.md) - WebSocket upgrades on the router, brief prints the address

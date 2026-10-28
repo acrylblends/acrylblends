@@ -101,3 +101,4 @@ Node is the primary runtime and is public and gated; Bun is optional; Deno is de
 | h | `1.0.0-rc.1` on the `next` tag, checked from the registry by the coordinator, then `1.0.0` only after Fork3's T007/T008 have run on 0.11.x | |
 | i | `1.0.0` published as `latest` | done (tag `v1.0.0`, both sites live) |
 | j | `1.0.1`: the `agent` template leaves its agent, builder and extensions rows out in production | see [After 1.0: tickets](framework-1-1-tickets.md) |
+| k | `1.0.2`: the workshop fixes (registry starters from npm alone, the newcomer path, the chat template closed in production) | see [After 1.0: tickets](framework-1-1-tickets.md) |
