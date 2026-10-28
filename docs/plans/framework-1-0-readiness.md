@@ -1,6 +1,6 @@
 # Framework 1.0 readiness
 
-Status: audit, written 2026-10-28 against `acrylblends` 0.11.0 and `create-acrylblends` 0.4.1. No code. It lists what a paying user would hit that is unfinished or rough, and marks each item **must (1.0)** or **later**. Everything here was read off the repository, the published packages or a run, not guessed; where a claim rests on a search or a count, the method is said.
+Status: audit with the decisions taken (section 6); this is milestone M10, `acrylblends` 1.0, target 2026-10-30 12:00 CET. Written 2026-10-28 against `acrylblends` 0.11.0 and `create-acrylblends` 0.4.1. No code. It lists what a paying user would hit that is unfinished or rough, and marks each item **must (1.0)** or **later**. Everything here was read off the repository, the published packages or a run, not guessed; where a claim rests on a search or a count, the method is said.
 
 ## What 1.0 would promise
 
@@ -76,3 +76,26 @@ Mechanism: a `exports` snapshot test already exists (`packages/framework/tests/p
 4. Docs: the `cordis/*` import names, the template list, the production page, the missing subpath pages.
 5. Tags, GitHub releases and the one-script site sync.
 6. After Fork3's T007/T008 run on 0.11: freeze `cordis/*` and cut 1.0.
+
+## 6. Decisions (2026-10-28, from the owner's direction through the coordinator)
+
+Node is the primary runtime and is public and gated; Bun is optional; Deno is dead.
+
+1. **Runtime adapters.** Node is public. `bun` stays as **experimental**, with one smoke gate in CI. The other non-Node adapters (`aws-lambda`, `cloudflare-pages`, `cloudflare-workers`, `lambda-edge`, `netlify`, `service-worker`, `vercel`) come out of the 1.0 exports, because no gate deploys to them; they may return later as separate plugins, each with its own gate.
+2. **`App` and `AppRequest`** are removed in 1.0, with a line in the migration guide.
+3. **`utils/*` and `acryl-base`** are internal: out of `exports`, and the exports test holds explicit `PUBLIC` and `INTERNAL` lists.
+4. **`door/*`, the agent panel, `driver-pty` and live plugin install** are labelled experimental and development-only, with a "what runs in production" page and a test. The page states exactly what the sandbox stops and what it does not.
+5. **Template names** are one list, the same in `create-acrylblends` and `acrylblends init`; every template is available through both.
+
+## 7. Order of work
+
+| Step | Work | Status |
+| --- | --- | --- |
+| a | Git tags and GitHub releases for 0.3 to 0.11, backfilled from the commits of the published tarballs | |
+| b | The exports cut and the `PUBLIC` / `INTERNAL` test | |
+| c | Docs: the published import names (`acrylblends/cordis/...`) everywhere; the unified templates | |
+| d | `acrylblends upgrade` (replace the vendored framework plugins in an app with the current version, show the diff, refuse when local edits would be lost unless `--force`), one migration guide to 1.0, an upgrade test on 0.9.1 and 0.10.0 fixtures | |
+| e | The experimental labels and the production page with its test | |
+| f | One site-sync script in the release checklist | |
+| g | Recorded real-agent runs on `notes`, `chat` and `agent` | |
+| h | `1.0.0-rc.1` on the `next` tag, checked from the registry by the coordinator, then `1.0.0` only after Fork3's T007/T008 have run on 0.11.x | |
