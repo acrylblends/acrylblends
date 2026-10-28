@@ -8,6 +8,7 @@ import type {} from '../plugins/acryl-db/src/cordis.ts'
 import type { Db } from '../plugins/acryl-db/src/index.ts'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { createApp as boot } from '../src/app.ts'
+import { chatAccess } from '../src/access.ts'
 import { createApp } from '../src/chat-app.ts'
 import type { Llm } from '../src/llm.ts'
 
@@ -195,4 +196,64 @@ test('the chat page loads its client component, served by the running app', asyn
   assert.equal(module.status, 200)
   assert.match(module.headers.get('content-type') ?? '', /javascript/)
   assert.equal((await running.root.router.request('/client/@acrylblends/jsx-dom.js')).status, 200)
+})
+
+const production = (env: Record<string, string> = {}) => chatAccess({ NODE_ENV: 'production', ...env })
+
+test('in development the chat is open and prints nothing', () => {
+  const { access, notices } = chatAccess({})
+  assert.equal(access.kind, 'open')
+  assert.deepEqual(notices, [])
+})
+
+test('in production the chat is closed until it has a token or is made public on purpose', async () => {
+  const closed = production()
+  assert.equal(closed.access.kind, 'closed')
+  assert.match(closed.notices.join(), /closed/)
+  const { llm, asked } = mock(['x'])
+  const app = createApp(await memoryDb(), llm, closed.access)
+  for (const path of ['/', '/api/conversations'])
+    assert.equal((await app.request(path)).status, 503, path)
+  assert.equal((await app.request('/api/chat', post({ message: 'hi' }))).status, 503)
+  assert.equal((await app.request('/health')).status, 200)
+  assert.equal(asked.length, 0)
+})
+
+test('with CHAT_ACCESS_TOKEN the browser must send it, as the password of a basic login', async () => {
+  const gated = production({ CHAT_ACCESS_TOKEN: 'a-long-shared-token' })
+  assert.equal(gated.access.kind, 'token')
+  assert.deepEqual(gated.notices, [])
+  const { llm, asked } = mock(['ok'])
+  const app = createApp(await memoryDb(), llm, gated.access)
+  const login = (password: string) => ({
+    ...post({ message: 'hi' }),
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Basic ${Buffer.from(`me:${password}`).toString('base64')}`,
+    },
+  })
+  assert.equal((await app.request('/api/chat', post({ message: 'hi' }))).status, 401)
+  assert.equal((await app.request('/api/chat', login('wrong'))).status, 401)
+  assert.equal((await app.request('/health')).status, 200)
+  assert.equal(asked.length, 0)
+  const ok = await app.request('/api/chat', login('a-long-shared-token'))
+  assert.equal(ok.status, 200)
+  assert.deepEqual(events(await ok.text()).map(([e]) => e), ['meta', 'token', 'done'])
+})
+
+test('ACRYL_PRODUCTION_KEEP=chat makes the chat public with a loud WARNING and a per-address rate limit', async () => {
+  const open = production({ ACRYL_PRODUCTION_KEEP: 'agent, chat', CHAT_RATE_PER_MINUTE: '2' })
+  assert.equal(open.access.kind, 'public')
+  assert.match(open.notices.join(), /^WARNING: the chat is public in production/)
+  const { llm, asked } = mock(['ok'])
+  const app = createApp(await memoryDb(), llm, open.access)
+  const send = () => app.request('/api/chat', post({ message: 'hi' }))
+  assert.equal((await (await send()).text()).includes('event: done'), true)
+  assert.equal((await send()).status, 200)
+  const limited = await send()
+  assert.equal(limited.status, 429)
+  assert.ok(Number(limited.headers.get('retry-after')) > 0)
+  assert.equal(asked.length, 2)
+  // Other routes are not counted.
+  assert.equal((await app.request('/api/conversations')).status, 200)
 })
