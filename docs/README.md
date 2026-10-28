@@ -41,6 +41,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Real-agent runs against 1.0.0-rc.1](plans/release-evidence-1-0.md) - M10 evidence: codex and pi on the agent, notes and chat starters, claude once
 - [The site patches](plans/site-patches/README.md) - patches for the hand-written pages of acrylblends.github.io (`git am`)
 - [WebSocket upgrades on the router (plan)](plans/router-websocket.md) - spec 047 T009: upgrade routes owned by the mounting plugin
+- [After 1.0: tickets](plans/framework-1-1-tickets.md) - 1.0.1 security fix, the 1.1 items with priority and order, what is parked
 - [Framework 1.0 readiness](plans/framework-1-0-readiness.md) - audit: the API surface to freeze, the missing upgrade path, what is experimental; each item must-fix or later
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
@@ -48,6 +49,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 0.9.1](release-notes/0.9.1.md) - a fix: apps made by the installed command line start again
 - [Release notes 0.9.2](release-notes/0.9.2.md) - Stop cancels the app's own agent, a secrets scan in check
 - [Release notes 0.10.0](release-notes/0.10.0.md) - driver-pty: a coding agent in a real terminal in the app, the panel's drivers as a registry
+- [Release notes 1.0.1](release-notes/1.0.1.md) - a security fix for the agent template in production
 - [Release notes 1.0.0](release-notes/1.0.0.md) - the 1.0 surface, acrylblends upgrade, what runs in production
 - [Release notes 0.11.0](release-notes/0.11.0.md) - WebSocket upgrades on the router, brief prints the address
 - [Release notes 0.9.0](release-notes/0.9.0.md) - the framework's home: the Cordis forms as subpaths, one `Acryl`, the source and its history here

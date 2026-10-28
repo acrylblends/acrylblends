@@ -107,7 +107,7 @@ test('the same app in development has all three (so the test above is sensitive)
   assert.equal((await app.router.request('/api/agent-panel/session', { headers: OWN })).status, 200)
 })
 
-test('the web templates leave the door and the live plugin install (extensions) out in production, and the agent template leaves out the door only (it is a development and demonstration app)', () => {
+test('the web templates leave the door and the live plugin install (extensions) out in production, and the agent template also leaves out its agent, builder and extensions unless ACRYL_PRODUCTION_KEEP names them', () => {
   const read = (template: string) =>
     readFileSync(
       join(
