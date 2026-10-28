@@ -19,12 +19,17 @@ if (versions.length === 0) {
 }
 const run = (command, args, cwd) => {
   const r = spawnSync(command, args, { cwd, encoding: 'utf8' })
-  if (r.status !== 0) throw new Error(`${command} ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
+  if (r.status !== 0)
+    throw new Error(`${command} ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
 }
 for (const version of versions) {
   const scratch = mkdtempSync(join(tmpdir(), 'upgrade-fixture-'))
   try {
-    run('npm', ['exec', '--yes', `acrylblends@${version}`, '--', 'init', 'app', '--template', 'agent', '-y'], scratch)
+    run(
+      'npm',
+      ['exec', '--yes', `acrylblends@${version}`, '--', 'init', 'app', '--template', 'agent', '-y'],
+      scratch,
+    )
     rmSync(join(scratch, 'app', 'docs'), { recursive: true, force: true })
     const file = join(out, `app-${version}.tgz`)
     run('tar', ['-czf', file, '-C', scratch, 'app'], scratch)

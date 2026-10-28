@@ -39,10 +39,29 @@ for (const version of versions) {
   const dir = mkdtempSync(join(tmpdir(), 'history-'))
   try {
     writeFileSync(join(dir, 'package.json'), '{"name":"history","private":true,"type":"module"}\n')
-    const install = spawnSync('npm', ['install', `acrylblends@${version}`, '--ignore-scripts', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: dir, encoding: 'utf8' })
-    if (install.status !== 0) throw new Error(`npm install acrylblends@${version} failed: ${install.stderr}`)
-    const probe = spawnSync(process.execPath, ['--input-type=module', '-e', PROBE], { cwd: dir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-    if (probe.status !== 0) throw new Error(`acrylblends@${version} could not list its plugins: ${probe.stderr.slice(0, 600)}`)
+    const install = spawnSync(
+      'npm',
+      [
+        'install',
+        `acrylblends@${version}`,
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--loglevel=error',
+      ],
+      { cwd: dir, encoding: 'utf8' },
+    )
+    if (install.status !== 0)
+      throw new Error(`npm install acrylblends@${version} failed: ${install.stderr}`)
+    const probe = spawnSync(process.execPath, ['--input-type=module', '-e', PROBE], {
+      cwd: dir,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    })
+    if (probe.status !== 0)
+      throw new Error(
+        `acrylblends@${version} could not list its plugins: ${probe.stderr.slice(0, 600)}`,
+      )
     const result = JSON.parse(probe.stdout)
     let added = 0
     for (const [plugin, files] of Object.entries(result)) {
@@ -55,11 +74,20 @@ for (const version of versions) {
         }
       }
     }
-    console.log(`build-library-history: ${version}: ${Object.keys(result).length} plugins, ${added} new hashes`)
+    console.log(
+      `build-library-history: ${version}: ${Object.keys(result).length} plugins, ${added} new hashes`,
+    )
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
 }
-const sorted = Object.fromEntries(Object.entries(history).sort(([a], [b]) => a.localeCompare(b)).map(([plugin, files]) => [plugin, Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)))]))
+const sorted = Object.fromEntries(
+  Object.entries(history)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([plugin, files]) => [
+      plugin,
+      Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b))),
+    ]),
+)
 writeFileSync(target, `${JSON.stringify(sorted)}\n`)
 console.log(`build-library-history: wrote ${target}`)
