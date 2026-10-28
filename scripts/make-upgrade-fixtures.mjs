@@ -17,8 +17,8 @@ if (versions.length === 0) {
   console.error('usage: node scripts/make-upgrade-fixtures.mjs <version>...')
   process.exit(2)
 }
-const run = (command, args, cwd) => {
-  const r = spawnSync(command, args, { cwd, encoding: 'utf8' })
+const run = (command, args, cwd, env = {}) => {
+  const r = spawnSync(command, args, { cwd, encoding: 'utf8', env: { ...process.env, ...env } })
   if (r.status !== 0)
     throw new Error(`${command} ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
 }
@@ -32,7 +32,10 @@ for (const version of versions) {
     )
     rmSync(join(scratch, 'app', 'docs'), { recursive: true, force: true })
     const file = join(out, `app-${version}.tgz`)
-    run('tar', ['-czf', file, '-C', scratch, 'app'], scratch)
+    // No AppleDouble (`._*`) entries: a macOS tar writes them for extended attributes, and they would unpack as files on Linux.
+    run('tar', ['-czf', file, '--no-xattrs', '--no-mac-metadata', '-C', scratch, 'app'], scratch, {
+      COPYFILE_DISABLE: '1',
+    })
     console.log(`make-upgrade-fixtures: ${version}: ${file} (${statSync(file).size} bytes)`)
   } finally {
     rmSync(scratch, { recursive: true, force: true })
