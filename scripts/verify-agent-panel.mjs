@@ -3,7 +3,7 @@
 // The gate of spec 049 slice 14: in a fresh agent app with the panel added, a real (headless) Chrome opens the page, the message "create route hello /hello Hello" is sent from the
 // panel, the agent builds the feature, the page reloads, and /hello answers Hello, in the same process (no restart). Uses the app's offline scripted agent: no key, no network.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -69,31 +69,9 @@ let browser
 try {
   const app = join(scratch, 'app')
   run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
-  run(process.execPath, [cli, 'add', 'agent-panel'], app)
-  if (acp) run(process.execPath, [cli, 'add', 'driver-acp'], app)
+  // `add` mounts the panel (and driver-acp) itself: the rows in blend.yaml and the entries in the registry of src/app.ts.
+  run(process.execPath, [cli, 'add', 'agent-panel', ...(acp ? ['driver-acp'] : [])], app)
   run('npm', ['install', '--no-audit', '--no-fund'], app)
-  // The mount line `acrylblends add` prints: a row before `routes`, and the plugin in the registry.
-  const yaml = join(app, 'blend.yaml')
-  writeFileSync(
-    yaml,
-    readFileSync(yaml, 'utf8').replace(
-      '    - id: routes\n',
-      `    - id: agent-panel\n      name: agent-panel\n${acp ? '    - id: driver-acp\n      name: driver-acp\n' : ''}    - id: routes\n`,
-    ),
-  )
-  const appTs = join(app, 'src', 'app.ts')
-  writeFileSync(
-    appTs,
-    readFileSync(appTs, 'utf8')
-      .replace(
-        'import * as door from',
-        `import * as panel from '../plugins/agent-panel/index.ts'\n${acp ? "import * as driverAcp from '../plugins/driver-acp/index.ts'\n" : ''}import * as door from`,
-      )
-      .replace(
-        "  'acryl-door': door,",
-        `  'acryl-door': door,\n  'agent-panel': panel,${acp ? "\n  'driver-acp': driverAcp," : ''}`,
-      ),
-  )
   run('npm', ['run', 'check'], app)
   log('the panel is added to a fresh agent app, which type-checks')
 

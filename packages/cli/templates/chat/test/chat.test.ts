@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url'
 import type {} from '../plugins/acryl-db/src/cordis.ts'
 import type { Db } from '../plugins/acryl-db/src/index.ts'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
-import { createApp as boot } from '../src/app.ts'
 import { chatAccess } from '../src/access.ts'
+import { createApp as boot } from '../src/app.ts'
 import { createApp } from '../src/chat-app.ts'
 import type { Llm } from '../src/llm.ts'
 
@@ -198,7 +198,8 @@ test('the chat page loads its client component, served by the running app', asyn
   assert.equal((await running.root.router.request('/client/@acrylblends/jsx-dom.js')).status, 200)
 })
 
-const production = (env: Record<string, string> = {}) => chatAccess({ NODE_ENV: 'production', ...env })
+const production = (env: Record<string, string> = {}) =>
+  chatAccess({ NODE_ENV: 'production', ...env })
 
 test('in development the chat is open and prints nothing', () => {
   const { access, notices } = chatAccess({})
@@ -238,7 +239,10 @@ test('with CHAT_ACCESS_TOKEN the browser must send it, as the password of a basi
   assert.equal(asked.length, 0)
   const ok = await app.request('/api/chat', login('a-long-shared-token'))
   assert.equal(ok.status, 200)
-  assert.deepEqual(events(await ok.text()).map(([e]) => e), ['meta', 'token', 'done'])
+  assert.deepEqual(
+    events(await ok.text()).map(([e]) => e),
+    ['meta', 'token', 'done'],
+  )
 })
 
 test('ACRYL_PRODUCTION_KEEP=chat makes the chat public with a loud WARNING and a per-address rate limit', async () => {

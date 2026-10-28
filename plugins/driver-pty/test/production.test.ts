@@ -135,10 +135,25 @@ test('the web templates leave the door and the live plugin install (extensions) 
   }
   // The chat template spends the model key for whoever reaches it: in production it is closed unless it has a token or is made public on purpose.
   const chatRoutes = readFileSync(
-    join(import.meta.dirname, '..', '..', '..', 'packages', 'cli', 'templates', 'chat', 'src', 'routes.ts'),
+    join(
+      import.meta.dirname,
+      '..',
+      '..',
+      '..',
+      'packages',
+      'cli',
+      'templates',
+      'chat',
+      'src',
+      'routes.ts',
+    ),
     'utf8',
   )
-  assert.match(chatRoutes, /chatAccess\(process\.env\)/u, 'chat mounts its routes without the access gate')
+  assert.match(
+    chatRoutes,
+    /chatAccess\(process\.env\)/u,
+    'chat mounts its routes without the access gate',
+  )
   const agentText = read('agent')
   assert.match(
     agentText,

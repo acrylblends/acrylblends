@@ -62,7 +62,10 @@ export function accessGate(access: Access) {
     return createMiddleware(async (c, next) => {
       if (c.req.path === '/health') return next()
       return c.json(
-        { error: 'The chat is closed. Set CHAT_ACCESS_TOKEN, or ACRYL_PRODUCTION_KEEP=chat to make it public.' },
+        {
+          error:
+            'The chat is closed. Set CHAT_ACCESS_TOKEN, or ACRYL_PRODUCTION_KEEP=chat to make it public.',
+        },
         503,
       )
     })
