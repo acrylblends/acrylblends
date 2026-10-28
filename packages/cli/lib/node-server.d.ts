@@ -1,5 +1,5 @@
 import { t as Acryl } from "./app-D8riatvv.js";
-import { a as UpgradeRouter, c as WebSocketData, i as UpgradeHubOptions, l as WebSocketLike, n as UpgradeEmitter, o as RequestError, r as UpgradeHub, s as upgradeWebSocket, t as Owner, u as WebSocketServerLike } from "./upgrade-hub-C25yjWG9.js";
+import { a as Owner, c as UpgradeHubOptions, d as upgradeWebSocket, f as WebSocketData, i as testWebSocket, l as UpgradeRouter, m as WebSocketServerLike, n as TestWebSocketOptions, o as UpgradeEmitter, p as WebSocketLike, r as TestWebSocketResult, s as UpgradeHub, t as TestSocket, u as RequestError } from "./test-websocket-DyeS50Tr.js";
 import { ServeStaticOptions, serveStatic } from "./node-server/serve-static.js";
 import { getConnInfo } from "./node-server/conninfo.js";
 import { AddressInfo } from "node:net";
@@ -125,4 +125,4 @@ declare function clientModules(options: ClientModulesOptions): Acryl;
  */
 declare function buildClientModules(options: BuildClientModulesOptions): string[];
 //#endregion
-export { type BuildClientModulesOptions, type ClientModulesOptions, type Http2Bindings, type HttpBindings, type Owner, RequestError, type ServeStaticOptions, type ServerType, UpgradeEmitter, UpgradeHub, type UpgradeHubOptions, type UpgradeRouter, type WebSocketData, type WebSocketLike, type WebSocketServerLike, buildClientModules, clientModules, createAdaptorServer, getConnInfo, getRequestListener, serve, serveStatic, upgradeWebSocket };
+export { type BuildClientModulesOptions, type ClientModulesOptions, type Http2Bindings, type HttpBindings, type Owner, RequestError, type ServeStaticOptions, type ServerType, type TestSocket, type TestWebSocketOptions, type TestWebSocketResult, UpgradeEmitter, UpgradeHub, type UpgradeHubOptions, type UpgradeRouter, type WebSocketData, type WebSocketLike, type WebSocketServerLike, buildClientModules, clientModules, createAdaptorServer, getConnInfo, getRequestListener, serve, serveStatic, testWebSocket, upgradeWebSocket };

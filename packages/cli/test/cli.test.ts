@@ -127,7 +127,7 @@ describe('library', () => {
     const names = closure(['acryl-node-server', 'instance', 'acryl-router'], readLibrary()).map(
       (plugin) => plugin.name,
     )
-    expect(names).toEqual(['acryl-router', 'acryl-router-http', 'acryl-node-server', 'instance'])
+    expect(names).toEqual(['acryl-router', 'acryl-node-server', 'instance'])
   })
 
   it('refuses an unknown plugin and names who required it', () => {
@@ -304,7 +304,7 @@ describe('init', () => {
     expect(manifest(dir).name).toBe('plain')
     expect(readFileSync(join(dir, 'src/routes.ts'), 'utf8')).toContain("APP_NAME = 'plain'")
     expect(existsSync(join(dir, 'plugins/instance/index.ts'))).toBe(true)
-    for (const plugin of ['acryl-router', 'acryl-router-http', 'acryl-node-server'])
+    for (const plugin of ['acryl-router', 'acryl-node-server'])
       expect(existsSync(join(dir, 'plugins', plugin, 'src/index.ts'))).toBe(true)
     expect(existsSync(join(dir, 'plugins/agent'))).toBe(false)
     expect(existsSync(join(dir, 'plugins/acryl-router/plugin.json'))).toBe(false)
@@ -519,7 +519,7 @@ describe('add and plugins', () => {
   it('lists the library', async () => {
     const session = fakeIo()
     expect(await runCli(['plugins'], session.io)).toBe(0)
-    expect(session.out()).toMatch(/^acryl-node-server .*requires acryl-router, acryl-router-http/m)
+    expect(session.out()).toMatch(/^acryl-node-server .*requires acryl-router\b/m)
   })
 })
 
