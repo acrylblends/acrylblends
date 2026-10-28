@@ -1,3 +1,4 @@
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -584,5 +585,26 @@ describe('add agent-panel and driver-pty', () => {
     expect(session.out()).toContain('npm approve-scripts node-pty')
     // The rows are in place for the next start; nothing else of the app changed.
     expect(rows).toContain('- id: agent\n      name: agent')
+  })
+})
+
+describe('the Node preflight', () => {
+  it('writes scripts/check-node.cjs and runs it before dev, start, test and check; it passes on this Node and says what to do on an old one', async () => {
+    expect(await runCli(['init', 'preflight', '--template', 'nodejs', '-y'], fakeIo().io)).toBe(0)
+    const dir = join(scratch, 'preflight')
+    const { scripts, engines } = manifest(dir)
+    for (const name of ['dev', 'start', 'test', 'check'])
+      expect(scripts[`pre${name}`], name).toBe('node scripts/check-node.cjs')
+    expect(engines.node).toBe('>=22.19.0')
+    const file = join(dir, 'scripts', 'check-node.cjs')
+    expect(execFileSync(process.execPath, [file], { encoding: 'utf8' })).toBe('')
+    expect(readFileSync(file, 'utf8')).toContain('Node 22.19+ needed, you have')
+    // Pretend to be Node 18: the same file, run with the version replaced.
+    const old = readFileSync(file, 'utf8').replaceAll('process.versions.node', "'18.19.1'")
+    const result = spawnSync(process.execPath, ['-e', old], { encoding: 'utf8' })
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(
+      'Node 22.19+ needed, you have 18.19.1: install it from https://nodejs.org or with nvm',
+    )
   })
 })

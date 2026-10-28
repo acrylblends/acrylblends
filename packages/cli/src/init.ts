@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util'
 import type { Io } from './io'
 import { closure, copyPlugin, readLibrary } from './library'
 import {
+  addNodePreflight,
   copyFrameworkDocs,
   copyTemplate,
   isValidName,
@@ -152,6 +153,7 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
     mergeDependencies(directory, plugin.dependencies)
     mergeTooling(directory, plugin)
   }
+  addNodePreflight(directory)
   const desktopPath = options.desktop ? readTemplateDesktopPath(templateDir(template)) : undefined
   if (desktopPath !== undefined) writeDesktopPath(directory, desktopPath)
   io.stdout.write(
