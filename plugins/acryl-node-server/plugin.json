@@ -1,7 +1,7 @@
 {
   "name": "acryl-node-server",
   "description": "The standalone HTTP server as a Cordis plugin: one node:http listener that sends every request to the router. Port, loopback host and next-free-port scan; ends open streams and frees the port when unloaded. Vendored from ACRYL.",
-  "requires": ["acryl-router", "acryl-router-http"],
+  "requires": ["acryl-router"],
   "inject": ["router"],
   "provides": ["nodeServer"],
   "dependencies": {

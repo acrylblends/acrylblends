@@ -1,6 +1,6 @@
 # WebSocket upgrades on the router (spec 047 T009)
 
-Status: design. No code yet. Requested by ACRYL's M7: its last `webServer` call sites are the workspace terminal's `registerUpgrade` and the engine-web delegate, and they cannot move until the router can take upgrades.
+Status: built, released in 0.11.0 (the design below was approved as written; the hub sits in `acryl-node-server/src/upgrade-hub.ts`, and `acryl-router-http` requires `acryl-node-server` for it). Requested by ACRYL's M7: its last `webServer` call sites are the workspace terminal's `registerUpgrade` and the engine-web delegate, and they cannot move until the router can take upgrades.
 
 ## What already exists (port, do not invent)
 

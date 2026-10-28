@@ -1,7 +1,7 @@
 import { L as MiddlewareHandler, t as Context, v as Env } from "./context-DS3fYyG-.js";
 import { r as GetConnInfo } from "./types-Dv_nV2cv.js";
 import { f as FileSystemModule, m as ToSSGAdaptorInterface } from "./index-DaJtL7ci.js";
-import { a as WSEvents, n as UpgradeWebSocket } from "./index-BvFh1Gfx.js";
+import { a as WSEvents, n as UpgradeWebSocket } from "./index-C-SklY6u.js";
 import { t as ServeStaticOptions } from "./index-CseujaYI.js";
 
 //#region ../../plugins/acryl-router/src/core/adapter/bun/serve-static.d.ts

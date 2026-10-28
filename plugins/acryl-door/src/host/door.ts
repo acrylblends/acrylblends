@@ -43,8 +43,8 @@ export interface ToolsPort {
 export interface DoorDeps {
   readonly channel: UiChannel
   readonly audit: AuditLog
-  /** The app's name and folder. */
-  readonly app: { readonly name: string; readonly root: string }
+  /** The app's name, folder and, when it listens, its address (what `brief` prints so an agent can curl the running app). */
+  readonly app: { readonly name: string; readonly root: string; readonly url?: string | undefined }
   /** Read at each call: the services may come and go while the door runs. */
   readonly extensions: () => ExtensionsPort | undefined
   readonly tools: () => ToolsPort | undefined
@@ -99,11 +99,12 @@ export class Door {
   }
 
   brief(): VerbAnswer {
-    const { name, root } = this.deps.app
+    const { name, root, url } = this.deps.app
     const read = SELF_KNOWLEDGE.filter(path => existsSync(resolve(root, path)))
     const value = {
       app: name,
       root,
+      ...(url === undefined ? {} : { url }),
       read,
       page: this.deps.channel.connected ? 'open' : 'not open',
       plugins: this.deps.extensions() === undefined ? 'unavailable' : 'available',
@@ -111,6 +112,7 @@ export class Door {
     }
     const text = [
       `App ${name} in ${root}.`,
+      ...(url === undefined ? [] : [`Address: ${url} (the running app; curl it to check a route).`]),
       read.length === 0 ? 'No AGENTS.md or skill in the folder.' : `Read first: ${read.join(', ')}.`,
       `Page: ${value.page}${value.page === 'not open' ? ' (open the app in a browser to look and act)' : ''}.`,
       `Live plugins: ${value.plugins}.`,

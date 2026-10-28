@@ -54,6 +54,8 @@ export interface WSContextInit<T = unknown> {
 
   raw?: T
   readyState: WSReadyState
+  /** Bytes queued to send and not yet written to the socket; a sender that cares about back-pressure reads it. */
+  bufferedAmount?: number
   url?: string | URL | null
   protocol?: string | null
 }
@@ -83,6 +85,9 @@ export class WSContext<T = unknown> {
   binaryType: BinaryType = 'arraybuffer'
   get readyState(): WSReadyState {
     return this.#init.readyState
+  }
+  get bufferedAmount(): number {
+    return this.#init.bufferedAmount ?? 0
   }
   url: URL | null
   protocol: string | null

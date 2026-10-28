@@ -19,11 +19,15 @@ export type WebSocketSendOptions = {
 export interface WebSocketLike {
   protocol: string
   readyState: WSReadyState
+  bufferedAmount: number
   close(code?: number, reason?: string): void
   send(data: string | ArrayBuffer | ArrayBufferView, options?: WebSocketSendOptions): void
   on(event: 'message', listener: (data: WebSocketData, isBinary: boolean) => void): this
   on(event: 'close', listener: (code: number, reason: Uint8Array) => void): this
   on(event: 'error', listener: (error: unknown) => void): this
+  on(event: 'pong', listener: () => void): this
+  ping(): void
+  terminate(): void
   off(event: 'message', listener: (data: WebSocketData, isBinary: boolean) => void): this
 }
 
@@ -41,5 +45,5 @@ export interface WebSocketServerLike {
     head: Buffer,
     callback: (ws: WebSocketLike) => void
   ): void
-  close(): void
+  close(callback?: () => void): void
 }

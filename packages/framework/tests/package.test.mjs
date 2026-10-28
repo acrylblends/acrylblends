@@ -10,7 +10,7 @@ import ts from 'typescript'
 import { SUBPATHS, entryName, exportsMap } from '../subpaths.mjs'
 
 /** The optional peer dependencies: only the Cordis forms and the conformance suites may import them, and a built file imports nothing else outside itself. */
-const PEERS = ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', 'react', 'vitest']
+const PEERS = ["@deepseek-ai/cordis", "@deepseek-ai/schemastery", "react", "vitest", "ws"]
 const needsPeers = subpath => subpath.startsWith('cordis/') || subpath.endsWith('/conformance') || subpath === 'door/host'
 const isPeer = specifier => PEERS.some(peer => specifier === peer || specifier.startsWith(`${peer}/`))
 

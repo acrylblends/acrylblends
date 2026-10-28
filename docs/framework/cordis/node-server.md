@@ -72,7 +72,29 @@ plugin that only mounted routes is different: its mount and the requests it is s
 Let the process configuration choose the address. Do not hard-code a development port in a reusable plugin: a plugin mounts routes and
 leaves the socket to whichever adapter the app runs with.
 
-## Not yet supported
+## WebSocket upgrades
 
-WebSocket upgrades under the router are a later task. The adapter's own WebSocket support exists in `src/adapter/` with its tests but is
-not wired to the router yet.
+A plugin takes WebSocket upgrades with `ctx.nodeServer.upgrades()` (or `ctx.routerHttp.upgrades()` on the Host's web server, with `ctx.routerHttp.mount(prefix, { upgrade: [paths] })` naming the exact paths). It returns the ported `upgradeWebSocket`; the route is an ordinary route with ordinary middleware in front of it:
+
+```ts
+export function apply(ctx: Context) {
+  const upgrade = ctx.nodeServer.upgrades()
+  ctx.router.route('/', new Acryl()
+    // Checks run before the upgrade: own page, loopback peer, exact Origin and Host. A refusal is a plain HTTP status with Connection: close, sent before any handshake.
+    .use('/terminal', ownPage)
+    .get('/terminal', upgrade(() => ({
+      onMessage(event, socket) {
+        if (socket.bufferedAmount < 1_000_000) socket.send(`echo ${String(event.data)}`)
+      },
+      onClose(event) {
+        // Called exactly once, whoever closed the socket.
+      },
+    }), { textOnly: true })))
+}
+```
+
+- **Limits.** Text frames only with `{ textOnly: true }` (binary frames never reach `onMessage`); `websocket.maxPayload` (default 1 MiB, a bigger frame closes the socket with 1009); no per-message compression; `socket.bufferedAmount` for back-pressure; `socket.close(code, reason)` with application codes such as 1013 or 4404 (a code the protocol forbids on the wire becomes 1011). No raw socket is exposed.
+- **Dead peers.** The server pings every `websocket.heartbeat` ms (default 30 000) and terminates a peer that did not answer the last ping. `websocket.grace` (default 2000) is how long a closing socket gets.
+- **Ownership.** The sockets a plugin's routes accepted belong to that plugin. When it unloads they are closed with 1001 within the grace (what is left is terminated), its handler sees `close` once, other plugins' sockets are untouched, and `ctx.nodeServer.sockets` counts what is still open. Stopping the server closes every socket.
+- **Needs `ws`.** `npm install ws`; an app that never upgrades does not need it.
+- **Tests.** `testWebSocket((request, env) => app.fetch(request, env), '/terminal', { headers })` from `acrylblends/node-server` runs the route and its middleware in process: a refusal answers `{ status }`, an accepted connection gives a `socket` that sends text frames, collects what the handler sent (`received`) and closes.

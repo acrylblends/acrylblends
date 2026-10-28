@@ -96,7 +96,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   const door = new Door({
     channel,
     audit,
-    app: { name: app.name, root: app.root },
+    app: { name: app.name, root: app.root, url: loopbackUrl(server.url) },
     extensions: () => ctx.get('extensions') as unknown as ExtensionsPort | undefined,
     tools: () => ctx.get('tools') as unknown as ToolsPort | undefined,
     expose: config.tools?.expose ?? [],
