@@ -63,8 +63,10 @@ These are the defects found by the walk. They are known; say so rather than lett
 - **The agent's login (C2).** The panel's `codex`/`claude` drivers use the attendee's own login. Anyone who is not logged in sees the driver and a
   failed run; `codex login` in a terminal fixes it. `pi` is offered only as a terminal driver (C3).
 - **The `todo` template (C4).** Its app is under `/todo`, so the printed URL is a 404. Not used in this workshop.
-- **Publishing target (TODO(registry-target)).** The handout publishes to the public registry today. When the workshop registry exists, swap the
-  repository in step 10's four commands and tell the room which one they are looking at.
+- **Publishing target (TODO(registry-target)).** The workshop registry is `github.com/acryldev/workshop-2026-11-20`, kept live after the event and
+  built by Blends once 1.0.2 is out; the marker comes off when the repository exists. Attendees fork it, add `blends/<github-login>.<app>/`, open a
+  pull request, and the automatic check merges it: listed in about three or four minutes. They need a GitHub account and `gh auth login`, which the
+  handout's setup block now asks for. Pulling from it is the same command with `--registry https://github.com/acryldev/workshop-2026-11-20`.
 - **Browser-only attendees (TODO(M9)).** The handout's hosted-workspace stub is empty until M9 is live; until then a browser-only attendee can follow
   along but not create an app.
 - **node-pty's install script (C5).** `npm install` warns that npm 11 blocked `node-pty`'s script. The terminal drivers still list; the workshop does

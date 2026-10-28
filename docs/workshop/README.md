@@ -17,9 +17,12 @@ are on time.
 | npm, which comes with Node | `npm -v` | `npm -v` | `npm -v` |
 | git | `git --version` | `git --version` | `git --version` |
 | a coding agent, logged in | `codex login status` or `claude --version` | same | same |
+| a GitHub account and the `gh` CLI, logged in | `gh auth status` | same | same |
 
-Install what is missing: Node from <https://nodejs.org> (the LTS), git from <https://git-scm.com>, and one agent with `npm i -g @openai/codex`
-(then `codex login` once) or Claude Code. No prior knowledge of ACRYL, Cordis or Blends is needed; every new word is explained where it appears.
+Install what is missing: Node from <https://nodejs.org> (the LTS), git from <https://git-scm.com>, the GitHub CLI (`brew install gh`, `winget
+install GitHub.cli`, or <https://cli.github.com>), and one agent with `npm i -g @openai/codex` (then `codex login` once) or Claude Code. Run
+`gh auth login` once, in any repository: step 10 publishes your app with a pull request. No prior knowledge of ACRYL, Cordis or Blends is needed;
+every new word is explained where it appears.
 
 Make a folder and open a terminal in it:
 
@@ -185,6 +188,12 @@ The same command takes a git repository or a folder: `--from github:you/starter`
 published, with its plugins, its dependencies and its `blend.yaml`, in your folder and yours to change. Nothing is installed for you: the starter's
 `Next:` block asks for the same `npm install` as step 1.
 
+For the workshop's own registry, name it:
+
+```sh
+npm create acrylblends@latest from-the-workshop -- --from <id> --registry https://github.com/acryldev/workshop-2026-11-20
+```
+
 **Stuck?** The `--` before `--from` is npm's, not ours: without it npm swallows the flag. An id that is not in the registry prints the ids it knows.
 TODO(B1): the ids of the starters this workshop uses are published with 1.0.2; the facilitator writes them on the board.
 
@@ -264,45 +273,49 @@ the migration guide; the command itself does not change.
 ## 10. Publish it, and the hero moment (8 minutes)
 
 The app you publish is `agent-app`, the one the agent changed in step 8 (keep `my-hero` too: it is yours, saved the same way). It is already a
-**starter**: `blend.yaml` names it, lists its rows, and `plugins/` holds its code. Two steps make it public.
+**starter**: `blend.yaml` names it, lists its rows, and `plugins/` holds its code. Two parts make it public: your own copy, then the registry.
 
 **Your own copy first.** `npm run save` commits the app and pushes it to its remote (it refuses a file that looks like a secret, and refuses to push a
 private app to a public remote). Create an empty repository on your git host, set it as `origin`, run `npm run save`.
 
-**The registry.** Publishing is a reviewed pull request. In `agent-app`:
+**The registry.** Publishing is a pull request, and for this workshop it is a short one. TODO(registry-target): the repository exists after 1.0.2.
 
-1. In `blend.yaml`, set `visibility: public`, add a `license`, a `category` and a one-line `description`.
-2. Clone the registry and copy your app in as an entry:
+1. In `agent-app/blend.yaml`, set `visibility: public`, add a `license`, a `category` and a one-line `description`.
+2. Fork the workshop registry and copy your app in under your GitHub login:
 
    ```sh
    cd ~/acryl-workshop
-   git clone --depth 1 https://github.com/acrylblends/acrylblends.github.io.git registry
-   mkdir -p registry/registry/blends/you.agent-app
-   cp agent-app/blend.yaml agent-app/package.json registry/registry/blends/you.agent-app/
-   cp -R agent-app/plugins registry/registry/blends/you.agent-app/plugins
+   gh repo fork acryldev/workshop-2026-11-20 --clone
+   cd workshop-2026-11-20
+   mkdir -p blends/<your-github-login>.agent-app
+   cp ../agent-app/blend.yaml ../agent-app/package.json blends/<your-github-login>.agent-app/
+   cp -R ../agent-app/plugins blends/<your-github-login>.agent-app/plugins
+   cp ../agent-app/README.md blends/<your-github-login>.agent-app/README.md
    ```
 
-3. Write `registry/registry/blends/you.agent-app/README.md`: one paragraph on what it is and how to start from it.
-4. Regenerate the index with the tool the registry's CI uses (`bun`):
+3. Commit, push and open the pull request:
 
    ```sh
-   cd registry
-   bun <blends-core>/src/bin/registry-index.ts registry --check    # refuses: the index is stale
-   bun <blends-core>/src/bin/registry-index.ts registry            # writes registry/index.json
-   bun <blends-core>/src/bin/registry-index.ts registry --check    # passes
+   git checkout -b my-agent-app
+   git add blends/<your-github-login>.agent-app
+   git commit -m "add <your-github-login>.agent-app"
+   git push -u origin my-agent-app
+   gh pr create --fill
+   ```
+
+4. An automatic check validates the entry (the same check the public registry runs), and the pull request merges. Within three or four minutes your
+   starter is listed, and anyone can start from it:
+
+   ```sh
+   npm create acrylblends@latest my-app -- --from <your-github-login>.agent-app --registry https://github.com/acryldev/workshop-2026-11-20
    ```
 
    The entry is the whole app: `blend.yaml`, `plugins/`, and the app's `package.json`, whose dependencies come with it (a starter that mounts
    `desktop` brings `electron`, so whoever pulls it does not add the shell again). No `node_modules`.
 
-5. Commit, push to your fork, open a pull request. CI validates the entry and the index, a person reviews it, and once it is merged your starter is
-   listed at <https://acrylblends.github.io/blends>; anyone can then start an app from it with `npm create acrylblends@latest my-app -- --from you.agent-app`.
-
-TODO(registry-target): the workshop publishes to <the registry the facilitators run for the event> instead of the public one; the commands above are
-the same, with that repository in place of `acrylblends/acrylblends.github.io`.
-
-**Stuck?** A YAML error names the line; the classic one is an unquoted `:` in the description. `index.json is stale` is not an error: run the same
-command without `--check`. No `bun`? `npm i -g bun`.
+**Stuck?** A YAML error names the line; the classic one is an unquoted `:` in the description. `index.json is stale` is not an error: run the
+index tool the check names, or push again once CI has rebuilt it. `gh: not found` means the GitHub CLI is not installed, and `gh auth status` saying
+not logged in means `gh auth login`.
 
 > **The hero moment.** An app you created, with a page an agent wrote for it, running as a desktop window, saved in your own repository, and published
 > as a starter in the registry so the next person can pull it with one command. Along the way you built a second app from blank, a route, a test, a JSON
