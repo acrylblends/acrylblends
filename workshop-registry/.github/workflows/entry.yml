@@ -32,13 +32,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: main
-      # The pull request: data only. Not installed, not run, no credentials left in it.
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: pr
-          persist-credentials: false
+      # The pull request: data only. Its commit is fetched from this repository's own refs/pull/N/head and unpacked with git archive and tar: nothing of it is checked out, installed
+      # or run, and no hook, filter or script of it can start. (actions/checkout refuses to check out a fork's code here, and that is the right default.)
+      - name: Read the pull request's files as data
+        run: |
+          git -C main fetch -q --depth=1 origin "refs/pull/$PR/head"
+          test "$(git -C main rev-parse FETCH_HEAD)" = "$HEAD_SHA" || { echo "the pull request changed while it was being read; run again"; exit 1; }
+          mkdir pr
+          git -C main archive FETCH_HEAD | tar -x --no-same-owner --no-same-permissions -C pr
       - uses: oven-sh/setup-bun@v2
       # The format library, from ACRYL's source until @acryl/blends-core is published on npm. Pinned to a reviewed commit.
       - uses: actions/checkout@v4
