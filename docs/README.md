@@ -38,6 +38,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [The PTY driver (plan)](plans/pty-driver.md) - M8: a coding agent in a real terminal inside the app folder, acting through the door
 - [The PTY driver with real agents](plans/pty-driver-evidence.md) - M8 evidence: claude, codex and pi each build a feature in the terminal tab
 - [The 1.0 docs claim audit](plans/docs-1-0-claim-audit.md) - every claim on the framework docs and the sites checked against the code; what was fixed
+- [Real-agent runs against 1.0.0-rc.1](plans/release-evidence-1-0.md) - M10 evidence: codex and pi on the agent, notes and chat starters, claude once
 - [The site patches](plans/site-patches/README.md) - patches for the hand-written pages of acrylblends.github.io (`git am`)
 - [WebSocket upgrades on the router (plan)](plans/router-websocket.md) - spec 047 T009: upgrade routes owned by the mounting plugin
 - [Framework 1.0 readiness](plans/framework-1-0-readiness.md) - audit: the API surface to freeze, the missing upgrade path, what is experimental; each item must-fix or later
