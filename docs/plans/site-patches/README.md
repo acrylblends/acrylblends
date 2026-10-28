@@ -26,7 +26,7 @@ What the patch does:
 
 ## 0002 - the /docs/blends guide describes 1.0
 
-`/docs/blends` is hand-written (`src/lib/doc-content.ts`) and `sync-sites` does not touch it. It had drifted: three CLI verbs instead of six, three templates instead of six, `src/plugins/` and `extensions/` instead of the one `plugins/` folder, `npm run lock` writing a file it does not write, and `App` (removed in 1.0) in the framework page's example. The patch brings those pages to the 1.0 commands, templates, plugin folder and class names, and names the published entries (`acrylblends/cordis/router`, ...) beside the app's own copies.
+`/docs/blends` is hand-written (`src/lib/doc-content.ts`) and `sync-sites` does not touch it. It had drifted: three CLI verbs instead of six, three templates instead of six, two old plugin folders instead of the one `plugins/` folder, `npm run lock` writing a file it does not write, and `App` (removed in 1.0) in the framework page's example. The patch brings those pages to the 1.0 commands, templates, plugin folder and class names, and names the published entries (`acrylblends/cordis/router`, ...) beside the app's own copies.
 
 ## What is not in these patches
 

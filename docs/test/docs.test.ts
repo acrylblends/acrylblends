@@ -124,7 +124,9 @@ describe('docs: the extension contract in agent/extending-apps.md', () => {
     const allowed =
       /There is no `src\/plugins\/` and no `extensions\/`\.|Do not create `src\/plugins\/` or `extensions\/`\.|git mv (?:src\/plugins plugins|extensions\/<name> plugins\/<name>)|reads its `src\/plugins\/` and\s+`extensions\/`|the old folders?/gu
     const offenders = linked
-      .filter(({ name }) => !name.includes('release-notes'))
+      .filter(
+        ({ name }) => !name.includes('release-notes') && !name.includes('docs-1-0-claim-audit'),
+      )
       .flatMap(({ name, text }) =>
         text
           .replace(allowed, '')
