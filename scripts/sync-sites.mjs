@@ -2,6 +2,7 @@
 // One step of the release checklist: bring both sites up to this repository. For each of acrylblends.github.io (the framework site) and acryl.dev, in a scratch clone:
 //   - copy docs/framework over the site's src/docs/framework (the sites never edit it);
 //   - on the framework site, add every release of docs/release-notes/ the site does not have yet (the entry and the list item), newest first;
+//   - apply the site's patches from docs/plans/site-patches/<site>/ (`git am`), skipping any whose subject the site already has: they carry the hand-written pages the sync does not;
 //   - build the site (so a broken page fails here, not on the live site);
 //   - commit, and with --push push to main (the Pages workflows deploy) and wait for them.
 // Without --push it stops after the build and says what it would push.
@@ -37,6 +38,7 @@ const log = (message) => console.log(`sync-sites: ${message}`)
 const SITES = [
   {
     id: 'framework',
+    patches: 'acrylblends.github.io',
     repo: 'acrylblends/acrylblends.github.io',
     releaseNotes: true,
     live: 'https://acrylblends.github.io/',
@@ -44,6 +46,7 @@ const SITES = [
   },
   {
     id: 'acryl',
+    patches: 'acryl.dev',
     repo: 'acryldev/acryldev.github.io',
     releaseNotes: false,
     live: 'https://acryl.dev/',
@@ -112,6 +115,58 @@ try {
       if (result.gaps.length > 0)
         log(`${site.id}: older release notes the site lacks, not added: ${result.gaps.join(', ')}`)
     }
+    // The site's own patches (the hand-written pages), applied in order; one the site already has (same subject) is skipped.
+    const patchDir = join(root, 'docs', 'plans', 'site-patches', site.patches)
+    if (existsSync(patchDir)) {
+      const subjects = run('git', ['log', '--format=%s'], dir).split('\n')
+      for (const file of readdirSync(patchDir)
+        .filter((name) => name.endsWith('.patch'))
+        .sort()) {
+        const patch = join(patchDir, file)
+        const subject = /^Subject: (?:\[PATCH[^\]]*\] )?(.*)$/mu
+          .exec(readFileSync(patch, 'utf8'))?.[1]
+          ?.trim()
+        if (
+          subject !== undefined &&
+          subjects.some((line) => line.startsWith(subject.slice(0, 60)))
+        ) {
+          log(`${site.id}: patch ${file} is already applied`)
+          continue
+        }
+        // The docs sync above is uncommitted work: commit it first so `git am` has a clean tree.
+        if (run('git', ['status', '--porcelain'], dir).trim() !== '') {
+          run('git', ['add', '-A'], dir)
+          run(
+            'git',
+            [
+              '-c',
+              'user.name=sync-sites',
+              '-c',
+              'user.email=sync-sites@acrylblends.invalid',
+              'commit',
+              '-q',
+              '-m',
+              `docs: framework docs and release notes re-synced (${version})`,
+            ],
+            dir,
+          )
+        }
+        run(
+          'git',
+          [
+            '-c',
+            'user.name=sync-sites',
+            '-c',
+            'user.email=sync-sites@acrylblends.invalid',
+            'am',
+            '--3way',
+            patch,
+          ],
+          dir,
+        )
+        log(`${site.id}: applied ${file}`)
+      }
+    }
     if (values['no-build'] !== true) {
       const bun = spawnSync('bun', ['--version'], { encoding: 'utf8' }).status === 0
       const pnpm = existsSync(join(dir, 'pnpm-lock.yaml'))
@@ -129,21 +184,23 @@ try {
       rmSync(join(dir, 'dist'), { recursive: true, force: true })
       log(`${site.id}: built`)
     }
-    const changed = run('git', ['status', '--porcelain'], dir).trim()
-    if (changed === '') {
+    // What there is to push: uncommitted work (committed here) and the commits already made (the docs sync before a patch, the patches).
+    const dirty = run('git', ['status', '--porcelain'], dir).trim()
+    if (dirty !== '') {
+      run('git', ['add', '-A'], dir)
+      run(
+        'git',
+        ['commit', '-q', '-m', `docs: framework docs and release notes re-synced (${version})`],
+        dir,
+      )
+    }
+    const ahead = Number(run('git', ['rev-list', '--count', 'origin/main..HEAD'], dir).trim())
+    if (ahead === 0) {
       log(`${site.id}: already up to date`)
       continue
     }
-    run('git', ['add', '-A'], dir)
-    run(
-      'git',
-      ['commit', '-q', '-m', `docs: framework docs and release notes re-synced (${version})`],
-      dir,
-    )
     if (values.push !== true) {
-      log(
-        `${site.id}: ${changed.split('\n').length} file(s) changed; not pushed (use --push). Clone kept in ${dir}`,
-      )
+      log(`${site.id}: ${ahead} commit(s) to push; not pushed (use --push). Clone kept in ${dir}`)
       continue
     }
     run('git', [...credential, 'push', '-q', 'origin', 'HEAD:main'], dir)
