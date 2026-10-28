@@ -383,11 +383,11 @@ app.get('/orders/:id', async (c) => {
 ```ts twoslash
 import { Acryl } from 'acrylblends'
 // ---cut---
-const app = new Acryl()
+const app = new Acryl<{ Bindings: { REGION: string } }>()
 
 app.get('/', (c) => {
   const region = c.env.REGION
-  // ...
+  return c.text(region)
 })
 ```
 
