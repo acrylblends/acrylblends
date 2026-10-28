@@ -1,7 +1,7 @@
 From f642d89f4818638f070693c4522533118816f0f8 Mon Sep 17 00:00:00 2001
 From: Alex Musichen <alex.musichen@gmail.com>
 Date: Wed, 28 Oct 2026 14:16:51 +0100
-Subject: [PATCH 1/2] feat(blends): the registry page shows what exists instead
+Subject: [PATCH 1/3] feat(blends): the registry page shows what exists instead
  of seven invented previews
 
 The /blends page listed seven "Preview - not published" Blends (ACRYL, Blank Canvas, Agent Workbench, Local-first Studio, Secure Ops, Data Pipeline, Release Pilot) with fictional plugin names, above the six starters that are really in the registry. A reader could not tell which half was real.

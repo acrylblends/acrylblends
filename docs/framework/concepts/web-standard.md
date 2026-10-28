@@ -4,8 +4,8 @@ Acryl uses only **Web Standards** like Fetch.
 They were originally used in the `fetch` function and consist of basic objects that handle HTTP requests and responses.
 In addition to `Requests` and `Responses`, there are `URL`, `URLSearchParam`, `Headers` and others.
 
-Cloudflare Workers, Deno, and Bun also are built upon Web Standards.
-For example, a server that returns "Hello World" could be written as below. This could run on Cloudflare Workers and Bun.
+Bun is built on Web Standards the same way.
+For example, a server that returns "Hello World" can be written as below, and it runs on Node.js and Bun.
 
 ```ts twoslash
 export default {

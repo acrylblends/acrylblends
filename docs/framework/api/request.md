@@ -364,9 +364,9 @@ app.get('/about/me', async (c) => {
 The raw [`Request`](https://developer.mozilla.org/en-US/docs/Web/API/Request) object.
 
 ```ts
-// For Cloudflare Workers
-app.post('/', async (c) => {
-  const metadata = c.req.raw.cf?.hostMetadata?
+// Hand the raw Request to an API that takes one, such as a Web-standard parser
+app.post('/upload', async (c) => {
+  const bytes = await c.req.raw.arrayBuffer()
   // ...
 })
 ```

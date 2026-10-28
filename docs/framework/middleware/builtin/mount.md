@@ -29,7 +29,7 @@ app.all('/itty-router/*', mount(ittyRouter.handle))
 
 By default, the mounted application receives a new `Request` with the matched path prefix removed from its URL. A request to `/itty-router/hello` reaches itty-router as `/hello`.
 
-The mounted application is called as `handler(request, c.env, c.executionCtx)`, the same arguments as a Cloudflare Workers `fetch` handler. Use `optionHandler` to pass different arguments.
+The mounted application is called as `handler(request, c.env, c.executionCtx)`, the three arguments a `fetch`-style handler takes. Use `optionHandler` to pass different arguments.
 
 ## Options
 

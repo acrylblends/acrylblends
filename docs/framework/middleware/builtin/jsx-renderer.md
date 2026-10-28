@@ -224,7 +224,7 @@ app.get('/page/info', (c) => {
 
 **Warning.**
 
-You can't use `useRequestContext()` with the Deno's `precompile` JSX option. Use the `react-jsx`:
+You can't use `useRequestContext()` with a JSX option that precompiles the templates ahead of the build. Use `react-jsx`:
 
 ```json
    "compilerOptions": {

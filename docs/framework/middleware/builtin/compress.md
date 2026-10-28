@@ -2,7 +2,7 @@
 
 This middleware compresses the response body, according to `Accept-Encoding` request header.
 
-> **Note.** On Cloudflare Workers and Deno Deploy, the response body will be compressed automatically, so there is no need to use this middleware.
+> **Note.** Node.js and Bun do not compress a response on their own, so this middleware is what compresses it. A host that already compresses at its edge does not need it.
 
 ## Import
 

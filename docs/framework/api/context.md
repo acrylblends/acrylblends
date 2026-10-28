@@ -362,80 +362,31 @@ app.get('/pages/my-hobbies', (c) => {
 
 ## executionCtx
 
-You can access Cloudflare Workers' specific [ExecutionContext](https://developers.cloudflare.com/workers/runtime-apis/context/).
+A host that embeds the app can pass an execution context: `waitUntil(promise)` keeps work alive after the response has been sent, and `passThroughOnException()` lets the host take over when the handler throws. The Node server passes none, so read it only in an app whose host provides one.
 
 ```ts twoslash
 import { Acryl } from 'acrylblends'
-const app = new Acryl<{
-  Bindings: {
-    KV: any
-  }
-}>()
-declare const key: string
-declare const data: string
+const app = new Acryl()
+declare const sendReceipt: Promise<void>
 // ---cut---
-// ExecutionContext object
-app.get('/foo', async (c) => {
-  c.executionCtx.waitUntil(c.env.KV.put(key, data))
-  // ...
-})
-```
-
-The `ExecutionContext` also has an [`exports`](https://developers.cloudflare.com/workers/runtime-apis/context/#exports) field. To get autocomplete with Wrangler's generated types, you can use module augmentation:
-
-```ts
-import 'acrylblends'
-
-declare module 'acrylblends' {
-  interface ExecutionContext {
-    readonly exports: Cloudflare.Exports
-  }
-}
-```
-
-## event
-
-You can access Cloudflare Workers' specific `FetchEvent`. This was used in "Service Worker" syntax. But, it is not recommended now.
-
-```ts twoslash
-import { Acryl } from 'acrylblends'
-declare const key: string
-declare const data: string
-type KVNamespace = any
-// ---cut---
-// Type definition to make type inference
-type Bindings = {
-  MY_KV: KVNamespace
-}
-
-const app = new Acryl<{ Bindings: Bindings }>()
-
-// FetchEvent object (only set when using Service Worker syntax)
-app.get('/foo', async (c) => {
-  c.event.waitUntil(c.env.MY_KV.put(key, data))
-  // ...
+// Work that must finish after the response, when the host provides a context
+app.get('/orders/:id', async (c) => {
+  c.executionCtx.waitUntil(sendReceipt)
+  return c.json({ ok: true })
 })
 ```
 
 ## env
 
-In Cloudflare Workers Environment variables, secrets, KV namespaces, D1 database, R2 bucket etc. that are bound to a worker are known as bindings.
-Regardless of type, bindings are always available as global variables and can be accessed via the context `c.env.BINDING_KEY`.
+`c.env` is the environment the host hands the app. The Node server passes `process.env`, so `c.env.MY_KEY` is the variable `MY_KEY`. A host that passes something else gives the app a type parameter, and then `c.env` is that shape.
 
 ```ts twoslash
 import { Acryl } from 'acrylblends'
-type KVNamespace = any
 // ---cut---
-// Type definition to make type inference
-type Bindings = {
-  MY_KV: KVNamespace
-}
+const app = new Acryl()
 
-const app = new Acryl<{ Bindings: Bindings }>()
-
-// Environment object for Cloudflare Workers
-app.get('/', async (c) => {
-  c.env.MY_KV.get('my-key')
+app.get('/', (c) => {
+  const region = c.env.REGION
   // ...
 })
 ```
