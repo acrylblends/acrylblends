@@ -5,7 +5,9 @@
 //   refuse      ends the turn with stopReason refusal
 //   crash       prints a reason on stderr and exits with code 3
 //   count       answers how many prompts this session has had
+//   spawn       starts a child of its own (a tool process), records its pid, and ends the turn
 // It appends its pid to FAKE_ACP_PIDS and every message both ways to FAKE_ACP_WIRE (for the schema check), and ends when its stdin closes, as an ACP agent does.
+import { spawn } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
 
 if (process.env.FAKE_ACP_PIDS) appendFileSync(process.env.FAKE_ACP_PIDS, `${process.pid}\n`)
@@ -96,6 +98,12 @@ async function prompt(id, { sessionId, prompt: blocks }) {
     case 'crash':
       process.stderr.write('boom: the fake agent crashed\n')
       return process.exit(3)
+    case 'spawn': {
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+      if (process.env.FAKE_ACP_PIDS) appendFileSync(process.env.FAKE_ACP_PIDS, `${child.pid}\n`)
+      text(sessionId, 'started')
+      return send({ id, result: { stopReason: 'end_turn' } })
+    }
     case 'count':
       text(sessionId, `prompts ${prompts}`)
       return send({ id, result: { stopReason: 'end_turn' } })

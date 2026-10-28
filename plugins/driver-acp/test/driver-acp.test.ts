@@ -188,6 +188,20 @@ test('unloading the plugin ends the agent process it started, and its drivers le
   assert.deepEqual(registry.list(), [], 'the drivers leave with the plugin')
 })
 
+test('unloading the plugin also ends what the agent started (its tool processes), not only the agent', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const { driver, fiber, started } = await boot()
+  await run(driver, 'spawn')
+  const [agent, tool] = started()
+  assert.ok(
+    agent !== undefined && tool !== undefined && alive(agent) && alive(tool),
+    'the agent and its tool process run',
+  )
+  await fiber.dispose()
+  await until(() => !alive(agent) && !alive(tool))
+})
+
 test('unloading in the middle of a turn ends the turn and the process', async () => {
   const { driver, fiber, started } = await boot()
   const events: ChatEvent[] = []

@@ -55,6 +55,8 @@ export class AcpConnection {
       stdio: ['pipe', 'pipe', 'pipe'],
       // An npm-installed agent is a `.cmd` shim on Windows, which only a shell can start.
       shell: process.platform === 'win32',
+      // Its own process group on POSIX, so closing the connection also ends what the agent started (its tools, a shell): nothing is left behind when the plugin unloads.
+      detached: process.platform !== 'win32',
       windowsHide: true,
     })
     this.ended = new Promise((resolve) => {
@@ -114,22 +116,66 @@ export class AcpConnection {
     return () => void this.#listeners.delete(listener)
   }
 
-  /** Ends the process: stdin closed, then SIGTERM, then a hard kill (the whole tree on Windows). Resolves once it is gone. */
+  /**
+   * Ends the process and what it started: stdin closed, then SIGTERM, then a hard kill, each to the whole process group on POSIX (the tree, with `taskkill /T`, on Windows).
+   * Resolves once they are gone. Safe to call again, and after the agent ended on its own (its leftovers are still cleared).
+   */
   async close(): Promise<void> {
-    if (this.#ended) return
-    const gone = (ms: number) =>
-      Promise.race([
-        this.ended.then(() => true),
-        new Promise<boolean>((done) => setTimeout(() => done(false), ms).unref()),
-      ])
-    this.#child.stdin.end()
-    if (await gone(GRACE_MS)) return
-    this.#child.kill('SIGTERM')
-    if (await gone(GRACE_MS)) return
-    if (process.platform === 'win32' && this.#child.pid !== undefined)
-      spawnSync('taskkill', ['/pid', String(this.#child.pid), '/T', '/F'], { windowsHide: true })
-    else this.#child.kill('SIGKILL')
-    await this.ended
+    if (!this.#ended) {
+      const gone = (ms: number) =>
+        Promise.race([
+          this.ended.then(() => true),
+          new Promise<boolean>((done) => setTimeout(() => done(false), ms).unref()),
+        ])
+      this.#child.stdin.end()
+      if (!(await gone(GRACE_MS))) {
+        this.#signal('SIGTERM')
+        if (!(await gone(GRACE_MS))) this.#signal('SIGKILL')
+        await this.ended
+      }
+    }
+    await this.#reapGroup()
+  }
+
+  /** A signal to the agent and, on POSIX, everything in its group. */
+  #signal(signal: 'SIGTERM' | 'SIGKILL'): void {
+    const pid = this.#child.pid
+    if (pid === undefined) return
+    if (process.platform === 'win32') {
+      if (signal === 'SIGKILL')
+        spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true })
+      else this.#child.kill(signal)
+      return
+    }
+    try {
+      process.kill(-pid, signal)
+    } catch {
+      this.#child.kill(signal)
+    }
+  }
+
+  /** On POSIX, processes the agent left in its group are ended too: SIGTERM, then SIGKILL after the grace. */
+  async #reapGroup(): Promise<void> {
+    const pid = this.#child.pid
+    if (process.platform === 'win32' || pid === undefined) return
+    const groupAlive = (): boolean => {
+      try {
+        process.kill(-pid, 0)
+        return true
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'EPERM'
+      }
+    }
+    for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
+      if (!groupAlive()) return
+      try {
+        process.kill(-pid, signal)
+      } catch {
+        return
+      }
+      for (let waited = 0; waited < GRACE_MS && groupAlive(); waited += 25)
+        await new Promise((done) => setTimeout(done, 25))
+    }
   }
 
   #send(message: unknown): void {
