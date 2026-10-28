@@ -15,23 +15,13 @@ export default {
 }
 ```
 
-Acryl uses only Web Standards, which means that Acryl can run on any runtime that supports them.
-In addition, we have a Node.js adapter. Acryl runs on these runtimes:
+Acryl uses only Web Standards, so the same application code is expected to run wherever a `fetch`-style handler can run: a platform that can call `app.fetch(request)` can serve an Acryl app. In 1.0 the framework builds, exports and gates two runtimes:
 
-- Cloudflare Workers (`workerd`)
-- Deno
-- Bun
-- Fastly Compute
-- AWS Lambda
-- Node.js
-- Vercel (edge-light)
-- WebAssembly (w/ [WebAssembly System Interface (WASI)][wasi] via [`wasi:http`][wasi-http])
+- **Node.js** (`acrylblends/node-server`): the verified runtime, on Node 22 and 24, on Linux, macOS and Windows.
+- **Bun** (`acrylblends/bun`): experimental, with one smoke gate.
 
-It also works on Netlify and other platforms.
+The adapters the upstream project had for Cloudflare Workers and Pages, Deno, Fastly Compute, AWS Lambda, Lambda@Edge, Vercel, Netlify and service workers are not part of the 1.0 package: no gate of ours deploys to them. Their ported sources stay in the repository and may return as separate plugins, each with its own gate. See [Other runtimes](../getting-started/other-runtimes.md).
 The same code runs on all platforms.
 
 Cloudflare Workers, Deno, Shopify, and others launched [WinterCG](https://wintercg.org) to discuss the possibility of using the Web Standards to enable "web-interoperability".
 Acryl will follow their steps and go for **the Standard of the Web Standards**.
-
-[wasi]: https://github.com/WebAssembly/wasi
-[wasi-http]: https://github.com/WebAssembly/wasi-http

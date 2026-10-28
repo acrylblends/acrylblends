@@ -25,7 +25,7 @@ with SQLite, small state on the `kv` port with one JSON file, the Node server, t
 
 ## What an agent can do inside a running app
 
-The `acryl-app` template (a Cordis app) also lets an agent change the app while it runs:
+The `agent` template (a Cordis app; `acryl-app` is its old name and still works) also lets an agent change the app while it runs:
 
 1. The agent writes a plugin into `plugins/<name>/index.ts`. The plugin may import `acrylblends` and the other subpaths by name.
 2. The app installs it as a child plugin, runs its `check(ctx)` with the plugin's own context, and keeps the previous version if the new one fails to start or to pass its check.
