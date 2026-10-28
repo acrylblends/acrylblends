@@ -84,7 +84,7 @@ export function pickEntry(entries: readonly RegistryEntry[], id: string): Regist
 
 /**
  * Give a pulled starter to its new owner: the manifest names the app (`acrylblends.<name>`, private), because the registry's id and its public visibility belong to the starter,
- * not to the app made from it. Changes the `metadata` lines of `blend.yaml` and nothing else; a manifest it cannot read that way is left as it is.
+ * not to the app made from it. Changes the `metadata` lines of `blend.yaml` (the id, the name, the visibility; the licence is dropped) and nothing else; a manifest it cannot read that way is left as it is.
  */
 export function ownManifest(text: string, name: string): string {
   const lines = text.split('\n')
@@ -104,5 +104,8 @@ export function ownManifest(text: string, name: string): string {
   set('id', `acrylblends.${name}`)
   set('name', name)
   set('visibility', 'private')
+  // The starter's licence is the starter's: the new app names none until its owner chooses one.
+  for (let at = end - 1; at > start; at -= 1)
+    if (/^\s+license:/.test(lines[at] ?? '')) lines.splice(at, 1)
   return lines.join('\n')
 }

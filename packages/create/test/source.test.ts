@@ -275,6 +275,7 @@ describe('starters from a registry', () => {
     expect(manifestText).toContain('id: acrylblends.mine')
     expect(manifestText).toContain('visibility: private')
     expect(manifestText).not.toContain('visibility: public')
+    expect(manifestText).not.toContain('license:')
     expect(s.out()).toContain('Next:')
     expect(s.runs).toHaveLength(0)
   })
