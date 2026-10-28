@@ -1,5 +1,8 @@
 /** The panel's own drivers, all `chat`: the app's agent, and the coding agents (`claude`, `codex`, `pi`) started headless in the app folder. */
 import { spawn, spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ChatDriver, ChatEvent } from './drivers.ts'
 
@@ -62,11 +65,30 @@ export function onPath(program: string): boolean {
   return found.status === 0
 }
 
-/** The headless programs this machine can offer: installed (pi also needs its key in the environment). */
+/** Whether pi can reach DeepSeek: the key in the environment, or the one pi stored for itself when its owner logged in (`~/.pi/agent/auth.json`, a `deepseek` entry). */
+export function piHasDeepseekKey(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir(),
+): boolean {
+  if (env.DEEPSEEK_API_KEY) return true
+  try {
+    const stored = JSON.parse(
+      readFileSync(
+        join(env.PI_CODING_AGENT_DIR ?? join(home, '.pi', 'agent'), 'auth.json'),
+        'utf8',
+      ),
+    ) as Record<string, { key?: unknown } | undefined>
+    return typeof stored.deepseek?.key === 'string' && stored.deepseek.key !== ''
+  } catch {
+    return false
+  }
+}
+
+/** The headless programs this machine can offer: installed (an executable on the PATH; a wrapper function around it is fine) and, for pi, able to reach its model. */
 export function availableHeadless(wanted?: readonly HeadlessName[]): HeadlessName[] {
   const found: HeadlessName[] = []
   for (const driver of wanted ?? (['claude', 'codex', 'pi'] as const)) {
-    if (driver === 'pi' && !process.env.DEEPSEEK_API_KEY) continue
+    if (driver === 'pi' && !piHasDeepseekKey()) continue
     if (onPath(driver)) found.push(driver)
   }
   return found

@@ -20,6 +20,7 @@ export type Source =
   | { kind: 'github'; owner: string; repo: string; ref: string | undefined }
   | { kind: 'npm'; spec: string }
   | { kind: 'tarball'; path: string }
+  | { kind: 'folder'; path: string }
 
 /** What a template says about itself in `acryl.template.json`. */
 export interface Manifest {
@@ -34,7 +35,7 @@ export class SourceError extends Error {
   override name = 'SourceError'
 }
 
-export const SOURCE_FORMS = `github:owner/repo[#ref], @scope/name[@version], or a packed .tgz file`
+export const SOURCE_FORMS = `github:owner/repo[#ref], @scope/name[@version], a packed .tgz file, or a folder (./path)`
 
 const LIMITS = { files: 5000, bytes: 50 * 1024 * 1024 }
 
@@ -50,6 +51,13 @@ export function parseSource(text: string, cwd: string): Source | undefined {
     const path = resolve(cwd, text)
     if (!existsSync(path)) throw new SourceError(`${path} does not exist`)
     return { kind: 'tarball', path }
+  }
+  // A folder is only a source when it is written as a path, so a template name is never taken for one.
+  if (/^(\.{1,2}[\\/]|[\\/]|[A-Za-z]:[\\/])/.test(text)) {
+    const path = resolve(cwd, text)
+    if (!existsSync(path) || !lstatSync(path).isDirectory())
+      throw new SourceError(`${path} is not a folder`)
+    return { kind: 'folder', path }
   }
   return undefined
 }
@@ -106,7 +114,13 @@ function extract(tarball: string, dir: string): void {
     encoding: 'utf8',
   })
   if (run.status !== 0) throw new SourceError(`could not unpack ${tarball}: ${run.stderr.trim()}`)
+  checkTree(dir)
+}
+
+/** Refuse a tree that holds a link, or is larger than the limits; the same check for an unpacked archive and a copied folder. */
+export function checkTree(dir: string): void {
   let bytes = 0
+  let count = 0
   const walk = (folder: string) => {
     for (const entry of readdirSync(folder)) {
       const path = join(folder, entry)
@@ -116,10 +130,15 @@ function extract(tarball: string, dir: string): void {
           `the template holds a symbolic link (${path.slice(dir.length + 1)}); links are not allowed`,
         )
       if (info.isDirectory()) walk(path)
-      else bytes += info.size
+      else {
+        bytes += info.size
+        count += 1
+      }
     }
   }
   walk(dir)
+  if (count > LIMITS.files)
+    throw new SourceError(`the template has more than ${LIMITS.files} files`)
   if (bytes > LIMITS.bytes)
     throw new SourceError(`the template is larger than ${LIMITS.bytes / 1024 / 1024} MB`)
 }
@@ -132,6 +151,14 @@ export async function fetchSource(
   fetchers: Fetchers,
 ): Promise<void> {
   mkdirSync(scratch, { recursive: true })
+  if (source.kind === 'folder') {
+    cpSync(source.path, dir, {
+      recursive: true,
+      filter: (path) => !/[\\/](\.git|node_modules)([\\/]|$)/.test(path.slice(source.path.length)),
+    })
+    checkTree(dir)
+    return
+  }
   let tarball: string
   if (source.kind === 'tarball') tarball = source.path
   else if (source.kind === 'npm') tarball = fetchers.pack(source.spec, scratch)

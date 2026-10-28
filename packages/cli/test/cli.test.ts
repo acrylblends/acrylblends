@@ -1,3 +1,4 @@
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -288,6 +289,7 @@ describe('command line', () => {
       template: 'agent',
       install: undefined,
       desktop: false,
+      quietNext: false,
       yes: true,
     })
     expect(parseInitOptions(['--desktop']).desktop).toBe(true)
@@ -390,7 +392,7 @@ describe('the desktop shell', () => {
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
     expect(pkg.devDependencies.electron).toBe('44.9.3')
     expect(pkg.dependencies.electron).toBeUndefined()
-    expect(pkg.scripts.desktop).toBe('electron plugins/desktop/main.ts')
+    expect(pkg.scripts.desktop).toBe('node plugins/desktop/launch.ts')
     expect(pkg.acrylblends).toEqual({ desktopPath: '/todo' })
     for (const file of ['main.ts', 'window.ts', 'user-data.ts', 'shutdown.ts'])
       expect(existsSync(join(dir, 'plugins/desktop', file))).toBe(true)
@@ -429,7 +431,7 @@ describe('the desktop shell in a plain Acryl app', () => {
     writeFileSync(join(dir, '.gitignore'), 'node_modules/\n')
     expect(await runCli(['add', 'desktop', '--dir', dir], fakeIo().io)).toBe(0)
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
-    expect(pkg.scripts).toEqual({ desktop: 'electron plugins/desktop-web/main.ts', dev: 'x' })
+    expect(pkg.scripts).toEqual({ desktop: 'node plugins/desktop-web/launch.ts', dev: 'x' })
     expect(pkg.devDependencies.electron).toBe('44.9.3')
     expect(existsSync(join(dir, 'plugins/desktop-web/main.ts'))).toBe(true)
     expect(existsSync(join(dir, 'plugins/instance'))).toBe(false)
@@ -545,5 +547,64 @@ describe('build-client', () => {
     const help = fakeIo()
     await runCli(['--help'], help.io)
     expect(help.out()).toContain('build-client')
+  })
+})
+
+describe('add agent-panel and driver-pty', () => {
+  it('refuses a blank app before copying anything, and says which rows it lacks and where they come from', async () => {
+    expect(await runCli(['init', 'blank-panel', '--template', 'blank', '-y'], fakeIo().io)).toBe(0)
+    const dir = join(scratch, 'blank-panel')
+    const refused = fakeIo()
+    expect(await runCli(['add', 'agent-panel', '--dir', dir], refused.io)).toBe(1)
+    expect(refused.err()).toContain('needs the `agent` and `extensions` rows')
+    expect(refused.err()).toContain('npm create acrylblends@latest my-app agent')
+    expect(refused.err()).toContain('Nothing was changed')
+    expect(existsSync(join(dir, 'plugins/agent-panel'))).toBe(false)
+    const pty = fakeIo()
+    expect(await runCli(['add', 'driver-pty', '--dir', dir], pty.io)).toBe(1)
+    expect(pty.err()).toContain('needs the `agent-panel` row')
+  })
+
+  it('mounts the panel and the PTY driver in an agent app: the rows and the registry, once, and says how to approve node-pty', async () => {
+    expect(
+      await runCli(['init', 'agent-panel-app', '--template', 'agent', '-y'], fakeIo().io),
+    ).toBe(0)
+    const dir = join(scratch, 'agent-panel-app')
+    const session = fakeIo()
+    expect(await runCli(['add', 'agent-panel', 'driver-pty', '--dir', dir], session.io)).toBe(0)
+    const rows = readFileSync(join(dir, 'blend.yaml'), 'utf8')
+    expect(rows).toMatch(
+      /- id: agent-panel\n {6}name: agent-panel\n {4}- id: driver-pty\n {6}name: driver-pty\n {4}- id: routes\n/u,
+    )
+    const app = readFileSync(join(dir, 'src/app.ts'), 'utf8')
+    expect(app).toContain("import * as panel from '../plugins/agent-panel/index.ts'")
+    expect(app).toContain("import * as driverPty from '../plugins/driver-pty/index.ts'")
+    expect(app).toContain("'agent-panel': panel,")
+    expect(app).toContain("'driver-pty': driverPty,")
+    expect(session.out()).toContain('mounted in blend.yaml (row agent-panel) and src/app.ts')
+    expect(session.out()).toContain('npm approve-scripts node-pty')
+    // The rows are in place for the next start; nothing else of the app changed.
+    expect(rows).toContain('- id: agent\n      name: agent')
+  })
+})
+
+describe('the Node preflight', () => {
+  it('writes scripts/check-node.cjs and runs it before dev, start, test and check; it passes on this Node and says what to do on an old one', async () => {
+    expect(await runCli(['init', 'preflight', '--template', 'nodejs', '-y'], fakeIo().io)).toBe(0)
+    const dir = join(scratch, 'preflight')
+    const { scripts, engines } = manifest(dir)
+    for (const name of ['dev', 'start', 'test', 'check'])
+      expect(scripts[`pre${name}`], name).toBe('node scripts/check-node.cjs')
+    expect(engines.node).toBe('>=22.19.0')
+    const file = join(dir, 'scripts', 'check-node.cjs')
+    expect(execFileSync(process.execPath, [file], { encoding: 'utf8' })).toBe('')
+    expect(readFileSync(file, 'utf8')).toContain('Node 22.19+ needed, you have')
+    // Pretend to be Node 18: the same file, run with the version replaced.
+    const old = readFileSync(file, 'utf8').replaceAll('process.versions.node', "'18.19.1'")
+    const result = spawnSync(process.execPath, ['-e', old], { encoding: 'utf8' })
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(
+      'Node 22.19+ needed, you have 18.19.1: install it from https://nodejs.org or with nvm',
+    )
   })
 })

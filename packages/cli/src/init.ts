@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util'
 import type { Io } from './io'
 import { closure, copyPlugin, readLibrary } from './library'
 import {
+  addNodePreflight,
   copyFrameworkDocs,
   copyTemplate,
   isValidName,
@@ -39,6 +40,8 @@ export interface InitOptions {
   install: boolean | undefined
   /** Also add the desktop shell (`add desktop`): an Electron window on the app's own server. */
   desktop: boolean
+  /** Print no "Next:" block: `create-acrylblends` runs `init` and prints its own, for the package manager it knows. */
+  quietNext: boolean
   yes: boolean
 }
 
@@ -72,6 +75,7 @@ export function parseInitOptions(argv: readonly string[]): InitOptions {
     template: named ?? alias,
     install: values.install,
     desktop: values.desktop === true,
+    quietNext: values['no-next'] === true,
     yes: values.yes === true,
   }
 }
@@ -88,6 +92,7 @@ const parse = (argv: readonly string[]) =>
       'no-agent': { type: 'boolean' },
       install: { type: 'boolean' },
       desktop: { type: 'boolean' },
+      'no-next': { type: 'boolean' },
       yes: { type: 'boolean', short: 'y' },
     },
   })
@@ -136,20 +141,23 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
     io.stderr.write(`error: ${error.message}\n`)
     return 1
   }
-  const plugins = closure(
-    [...readTemplatePlugins(templateDir(template)), ...(options.desktop ? ['desktop'] : [])],
-    readLibrary(),
-  )
+  const own = closure(readTemplatePlugins(templateDir(template)), readLibrary())
+  const plugins = options.desktop
+    ? closure([...own.map((plugin) => plugin.name), 'desktop'], readLibrary())
+    : own
+  // What only the desktop shell brought (and needs), named apart so the list does not read as if the web app had asked for it.
+  const forDesktop = plugins.filter((plugin) => !own.some((owned) => owned.name === plugin.name))
   for (const plugin of plugins) {
     copyPlugin(plugin, directory)
     if (plugin.imports) mergeImports(directory, plugin.imports, 'plugins')
     mergeDependencies(directory, plugin.dependencies)
     mergeTooling(directory, plugin)
   }
+  addNodePreflight(directory)
   const desktopPath = options.desktop ? readTemplateDesktopPath(templateDir(template)) : undefined
   if (desktopPath !== undefined) writeDesktopPath(directory, desktopPath)
   io.stdout.write(
-    `created ${name} (${template}) in ${directory}: ${files.length} files, plugins ${plugins.map((plugin) => plugin.name).join(', ')}\n`,
+    `created ${name} (${template}) in ${directory}: ${files.length} files, plugins ${own.map((plugin) => plugin.name).join(', ')}${forDesktop.length > 0 ? `; the desktop shell adds ${forDesktop.map((plugin) => plugin.name).join(', ')}, which it needs` : ''}\n`,
   )
 
   if (install && (await io.install(directory)) !== 0) {
@@ -161,6 +169,6 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
     install ? '' : '  npm install\n',
     '  npm run dev\n  npm test\n',
   ]
-  io.stdout.write(`\nNext:\n${steps.join('')}`)
+  if (!options.quietNext) io.stdout.write(`\nNext:\n${steps.join('')}`)
   return 0
 }

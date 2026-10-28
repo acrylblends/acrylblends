@@ -5,6 +5,7 @@ import {
   streamSSE,
 } from '../plugins/acryl-router/src/helpers/index.ts'
 import { Acryl } from '../plugins/acryl-router/src/index.ts'
+import { type Access, accessGate } from './access.ts'
 import { chatStore } from './db.ts'
 import { type Llm, openAiCompatible } from './llm.ts'
 import { chatPage } from './page.tsx'
@@ -32,9 +33,14 @@ const ChatSchema: StandardSchema<ChatInput> = {
   },
 }
 
-export function createApp(db: Db, llm: Llm = openAiCompatible) {
+/** `access` is who may use the chat (default: anyone, as in development and in the tests); see `src/access.ts`. */
+export function createApp(db: Db, llm: Llm = openAiCompatible, access: Access = { kind: 'open' }) {
   const store = chatStore(db)
   const app = new Acryl()
+  const gate = accessGate(access)
+  if (gate) app.use(gate)
+
+  app.get('/health', (c) => c.json({ ok: true }))
 
   app.get('/', async (c) => {
     const id = Number(c.req.query('c'))

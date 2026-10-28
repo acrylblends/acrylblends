@@ -222,3 +222,130 @@ describe('template sources', () => {
     expect(s.out()).toContain('npx acrylblends add desktop')
   })
 })
+
+describe('starters from a registry', () => {
+  const entryFiles = {
+    ...app(),
+    'blend.yaml':
+      'metadata:\n  id: acrylblends.notes-desktop\n  name: Notes with a desktop window\n  version: 0.1.0\n  license: MIT\n  visibility: public\nspec:\n  runtime: cordis\n',
+  }
+  /** A registry folder (index.json and blends/<id>/) with one starter for acrylblends and one for ACRYL. */
+  function registry(layout: 'root' | 'site' = 'root'): string {
+    const root = join(scratch, `registry-${counter++}`)
+    const base = layout === 'site' ? join(root, 'registry') : root
+    for (const [path, text] of Object.entries(entryFiles)) {
+      mkdirSync(join(base, 'blends', 'acrylblends.notes-desktop', path, '..'), { recursive: true })
+      writeFileSync(join(base, 'blends', 'acrylblends.notes-desktop', path), text)
+    }
+    mkdirSync(join(base, 'blends', 'acryl.gtd'), { recursive: true })
+    writeFileSync(join(base, 'blends', 'acryl.gtd', 'blend.yaml'), 'metadata:\n  id: acryl.gtd\n')
+    writeFileSync(
+      join(base, 'index.json'),
+      JSON.stringify({
+        formatVersion: 1,
+        entries: [
+          { id: 'acryl.gtd', name: 'GTD', version: '0.1.0', path: 'blends/acryl.gtd' },
+          {
+            id: 'acrylblends.notes-desktop',
+            name: 'Notes with a desktop window',
+            version: '0.1.0',
+            path: 'blends/acrylblends.notes-desktop',
+            runtime: 'acrylblends',
+          },
+        ],
+      }),
+    )
+    return root
+  }
+
+  it('makes an app from a starter that declares runtime acrylblends, and gives the manifest to its new owner', async () => {
+    const s = fakeIo()
+    const registryFolder = registry()
+    expect(
+      await runCreate(
+        ['mine', '--from', 'acrylblends.notes-desktop', '--registry', registryFolder, '-y'],
+        s.io,
+      ),
+      s.err(),
+    ).toBe(0)
+    expect(s.out()).toContain('created mine from acrylblends.notes-desktop 0.1.0')
+    expect(existsSync(join(scratch, 'mine', 'src', 'app.ts'))).toBe(true)
+    expect(readFileSync(join(scratch, 'mine', 'src', 'app.ts'), 'utf8')).toContain('mine on')
+    const manifestText = readFileSync(join(scratch, 'mine', 'blend.yaml'), 'utf8')
+    expect(manifestText).toContain('id: acrylblends.mine')
+    expect(manifestText).toContain('visibility: private')
+    expect(manifestText).not.toContain('visibility: public')
+    expect(manifestText).not.toContain('license:')
+    expect(s.out()).toContain('Next:')
+    expect(s.runs).toHaveLength(0)
+  })
+
+  it('reads a registry that keeps its index in a registry/ folder, like the public one', async () => {
+    const s = fakeIo()
+    expect(
+      await runCreate(
+        ['site', '--from', 'acrylblends.notes-desktop', '--registry', registry('site'), '-y'],
+        s.io,
+      ),
+      s.err(),
+    ).toBe(0)
+  })
+
+  it('refuses an ACRYL app starter in one line, and an unknown id with the ones it can make; nothing is created', async () => {
+    const acryl = fakeIo()
+    expect(
+      await runCreate(['no1', '--from', 'acryl.gtd', '--registry', registry(), '-y'], acryl.io),
+    ).toBe(1)
+    expect(acryl.err()).toContain(
+      'acryl.gtd is an ACRYL app starter: open it in the ACRYL app (https://acryl.dev). create-acrylblends makes acrylblends apps.',
+    )
+    expect(existsSync(join(scratch, 'no1'))).toBe(false)
+    const unknown = fakeIo()
+    expect(
+      await runCreate(
+        ['no2', '--from', 'nobody.thing', '--registry', registry(), '-y'],
+        unknown.io,
+      ),
+    ).toBe(1)
+    expect(unknown.err()).toContain('starters for create-acrylblends: acrylblends.notes-desktop')
+    expect(existsSync(join(scratch, 'no2'))).toBe(false)
+  })
+
+  it('reads the public registry from its repository by default, and rejects --registry without an id', async () => {
+    const downloads: string[] = []
+    const s = fakeIo({
+      download: async (url) => {
+        downloads.push(url)
+        const root = registry('site')
+        const tgz = join(scratch, `site-${counter++}.tgz`)
+        execFileSync('tar', ['-czf', tgz, '-C', scratch, `registry-${root.split('registry-')[1]}`])
+        return readFileSync(tgz)
+      },
+    })
+    expect(
+      await runCreate(['pub', '--from', 'acrylblends.notes-desktop', '-y'], s.io),
+      s.err(),
+    ).toBe(0)
+    expect(downloads).toEqual([
+      'https://codeload.github.com/acrylblends/acrylblends.github.io/tar.gz/HEAD',
+    ])
+    const bad = fakeIo()
+    expect(await runCreate(['x', 'notes', '--registry', 'github:a/b'], bad.io)).toBe(2)
+    expect(bad.err()).toContain('--registry goes with a registry id')
+  })
+
+  it('takes a template folder as a source, and refuses a folder that holds a link', async () => {
+    const folder = join(scratch, `folder-${counter++}`)
+    mkdirSync(folder, { recursive: true })
+    for (const [path, text] of Object.entries(app())) {
+      mkdirSync(join(folder, path, '..'), { recursive: true })
+      writeFileSync(join(folder, path), text)
+    }
+    const ok = fakeIo()
+    expect(await runCreate(['fromfolder', folder, '-y'], ok.io), ok.err()).toBe(0)
+    symlinkSync('/etc/passwd', join(folder, 'link'))
+    const linked = fakeIo()
+    expect(await runCreate(['linked', folder, '-y'], linked.io)).toBe(1)
+    expect(linked.err()).toContain('symbolic link')
+  })
+})

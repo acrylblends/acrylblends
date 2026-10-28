@@ -119,6 +119,65 @@ console.log('ws-check: ok')
   log(
     'agent: agent-panel and driver-pty added by the installed command, installed and type-checked',
   )
+  // A starter from a registry, made by the installed command: a local registry folder with one app for acrylblends (made by the installed `acrylblends init`, marked with an
+  // acryl.template.json) and one ACRYL starter. `create-acrylblends --from` makes the first, whose tests and type-check pass, and refuses the second in one line.
+  const registry = join(scratch, 'registry')
+  mkdirSync(registry)
+  writeFileSync(join(registry, 'index.json'), '{"formatVersion":1,"entries":[]}\n')
+  run(
+    process.execPath,
+    [
+      join(root, 'scripts', 'make-registry-starters.mjs'),
+      registry,
+      '--only',
+      'acrylblends.chat',
+      '--cli',
+      join(tools, 'node_modules', 'acrylblends', 'bin', 'acrylblends.js'),
+    ],
+    scratch,
+  )
+  mkdirSync(join(registry, 'blends', 'acryl.gtd'))
+  writeFileSync(join(registry, 'blends', 'acryl.gtd', 'blend.yaml'), 'metadata:\n  id: acryl.gtd\n')
+  writeFileSync(
+    join(registry, 'index.json'),
+    JSON.stringify({
+      formatVersion: 1,
+      entries: [
+        { id: 'acryl.gtd', name: 'GTD', version: '0.1.0', path: 'blends/acryl.gtd' },
+        {
+          id: 'acrylblends.chat',
+          name: 'Chat',
+          version: '0.1.0',
+          path: 'blends/acrylblends.chat',
+          runtime: 'acrylblends',
+        },
+      ],
+    }),
+  )
+  const pulled = join(scratch, 'app-pulled')
+  run(
+    bin('create-acrylblends'),
+    [pulled, '--from', 'acrylblends.chat', '--registry', registry, '-y'],
+    scratch,
+  )
+  run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], pulled)
+  run('npm', ['test'], pulled, { ACRYL_DOOR: 'off' })
+  run('npm', ['run', 'check'], pulled)
+  let refusal = ''
+  try {
+    run(
+      bin('create-acrylblends'),
+      [join(scratch, 'app-refused'), '--from', 'acryl.gtd', '--registry', registry, '-y'],
+      scratch,
+    )
+  } catch (error) {
+    refusal = String(error.stderr ?? '')
+  }
+  if (!refusal.includes('acryl.gtd is an ACRYL app starter'))
+    throw new Error(`the ACRYL starter was not refused in a line:\n${refusal}`)
+  log(
+    'registry: --from made an app from a runtime acrylblends entry (tests and type-check pass) and refused an ACRYL one',
+  )
   // An app made by an older published version, upgraded by the installed command: `upgrade` replaces its library plugins, and the upgraded app installs, type-checks and passes its tests.
   // The fixtures are apps made by the published 0.9.1 and 0.10.0 (`scripts/make-upgrade-fixtures.mjs`).
   for (const old of ['0.9.1', '0.10.0']) {

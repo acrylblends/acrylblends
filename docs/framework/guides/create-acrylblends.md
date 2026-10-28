@@ -54,12 +54,33 @@ bun create acrylblends@latest my-app --template nodejs
 | `[directory]` | The folder to create. It must not exist or must be empty. Asked for when it is missing. | `my-app` |
 | `[source]` | A template from outside the package: `github:owner/repo[#ref]`, `@scope/name[@version]` or a packed `.tgz` file. See [Templates from a repository or a package](#templates-from-a-repository-or-a-package). | `github:acme/starter` |
 | `--template <template>` | One of `blank`, `nodejs`, `notes`, `chat`, `todo`, `agent` (the same list as `acrylblends init --template`; `acryl-app` is accepted as `agent`). Skips the template question; a bare name after the directory means the same. | `--template notes` |
+| `--from <id \| source>` | A starter from the registry by its id (`acrylblends.notes-desktop`), or any source above. Only starters that declare `runtime: acrylblends` are made; an ACRYL app starter is refused. See [Starters from the registry](#starters-from-the-registry). | `-- --from acrylblends.notes-desktop` |
+| `--registry <source>` | Read the ids from this registry instead of the public one: `github:owner/repo` or a folder, with an `index.json` (at its root or in `registry/`). | `-- --from login.thing --registry github:acryldev/workshop-2026-11-20` |
 | `--install` | Install the dependencies with the package manager after creating the project. For a template from a source, the install scripts it will run are listed first. | `--install` |
 | `--pm <packageManager>` | The package manager for `--install`: `npm`, `pnpm`, `yarn` or `bun`. Defaults to the one that started the initializer. | `--pm pnpm` |
 | `--yes`, `-y` | Ask nothing: use `nodejs` unless `--template` is given, and the directory `acryl-app`. | `-y` |
 | `--help` | Print the arguments. | `--help` |
 
 The templates are inside the package, so creating a project needs no network except for `--install`.
+
+## Starters from the registry
+
+The [registry](https://acrylblends.github.io/blends) lists starters people published. Each is a whole app (`blend.yaml`, `plugins/`, `src/`, `package.json`, `README.md`) that other people can start from, and its index says which runtime it is for:
+
+```sh
+npm create acrylblends@latest my-notes -- --from acrylblends.notes-desktop
+cd my-notes
+npm install
+npm run dev
+```
+
+- npm needs the `--` before `--from`; with `pnpm`, `yarn` and `bun` it is not needed.
+- A starter with `runtime: acrylblends` is an `acrylblends` app: this command downloads its folder, gives the manifest to the new app (`metadata.id: acrylblends.my-notes`, `visibility: private`; the starter's id and licence stay the starter's), checks it for anything that looks like a secret, and writes it. Nothing in it is installed or run: `npm install` is yours to run, and the dependencies of the starter (a desktop starter brings `electron`) are in its `package.json`.
+- A starter for the ACRYL app (`runtime: acryl`, the older `acryl.*` entries) is refused with one line that says so, because its plugins run only inside the ACRYL app. Nothing is written.
+- An unknown id lists the starters this command can make.
+- The ids come from `https://acrylblends.github.io/registry/index.json`. `--registry github:owner/repo` reads another registry with the same layout (`index.json` and `blends/<id>/`), a team's own or a workshop's; `--registry ./folder` reads one on disk.
+
+To publish a starter of your own, see [the registry README](https://github.com/acrylblends/acrylblends.github.io/tree/main/registry): the folder of your app under `blends/<id>/` with an `acryl.template.json`, in a pull request.
 
 ## Templates from a repository or a package
 

@@ -255,3 +255,26 @@ test('a plugin that injects drivers is pending while no panel is mounted, and st
   assert.equal(registered, true)
   await fiber.dispose()
 })
+
+test('pi is offered when it has a DeepSeek key, from the environment or from its own stored login', async () => {
+  const { piHasDeepseekKey } = await import('../headless.ts')
+  const { mkdirSync, writeFileSync } = await import('node:fs')
+  const home = mkdtempSync(join(tmpdir(), 'pi-home-'))
+  cleanup.push(() => rmSync(home, { recursive: true, force: true }))
+  assert.equal(piHasDeepseekKey({}, home), false, 'no key and no login')
+  assert.equal(
+    piHasDeepseekKey({ DEEPSEEK_API_KEY: 'k' }, home),
+    true,
+    'the key in the environment',
+  )
+  mkdirSync(join(home, '.pi', 'agent'), { recursive: true })
+  writeFileSync(join(home, '.pi', 'agent', 'auth.json'), JSON.stringify({ openai: { key: 'x' } }))
+  assert.equal(piHasDeepseekKey({}, home), false, 'a login for another provider does not count')
+  writeFileSync(
+    join(home, '.pi', 'agent', 'auth.json'),
+    JSON.stringify({ deepseek: { type: 'api_key', key: 'k' } }),
+  )
+  assert.equal(piHasDeepseekKey({}, home), true, 'the DeepSeek key pi stored')
+  writeFileSync(join(home, '.pi', 'agent', 'auth.json'), 'not json')
+  assert.equal(piHasDeepseekKey({}, home), false, 'an unreadable file is no login')
+})

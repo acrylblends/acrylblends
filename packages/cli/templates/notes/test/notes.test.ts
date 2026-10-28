@@ -62,7 +62,7 @@ test('the home page sends a visitor to the notes, which send them to log in', as
 test('sign up validates, refuses a duplicate, and starts a session', async () => {
   const app = createApp(await memoryDb())
   assert.match(await (await app.request('/signup')).text(), /Create account/)
-  const bad = await app.request('/signup', form({ email: 'nope', password: 'short' }))
+  const bad = await app.request('/signup', form({ email: 'nope', password: 'no way' }))
   assert.equal(bad.status, 400)
   const text = await bad.text()
   assert.match(text, /valid email/)

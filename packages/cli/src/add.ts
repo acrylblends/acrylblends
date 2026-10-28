@@ -14,6 +14,7 @@ import {
   pluginsFolder,
   readLibrary,
 } from './library'
+import { MOUNTED, type Mounted, missingRows, mount, rowNames } from './mount'
 import {
   appendGitignore,
   mergeDependencies,
@@ -111,6 +112,19 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     )
     return 1
   }
+  // The agent panel and the PTY driver cannot run without the rows of the agent template: refuse before anything is copied, and say exactly what is missing.
+  const mounting = MOUNTED.filter((plugin) => names.includes(plugin.name))
+  for (const plugin of mounting) {
+    const missing = missingRows(appDir, plugin, names)
+    if (missing.length > 0) {
+      io.stderr.write(
+        `error: ${plugin.name} needs the ${missing.map((row) => `\`${row}\``).join(' and ')} ${missing.length === 1 ? 'row' : 'rows'} in blend.yaml, and this app has ${describeRows(appDir)}. ` +
+          `${plugin.name === 'driver-pty' ? 'Add agent-panel first (acrylblends add agent-panel driver-pty), which needs the agent template. ' : ''}` +
+          `The rows come with the agent template: start from it (npm create acrylblends@latest my-app agent) and add ${plugin.name} there. Nothing was changed.\n`,
+      )
+      return 1
+    }
+  }
   const toCopy: LibraryPlugin[] = closure(names, readLibrary()).filter(
     (plugin) => !present(appDir, plugin.name),
   )
@@ -142,11 +156,26 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
   if (addedDependencies.length > 0)
     io.stdout.write(`new dependencies: ${addedDependencies.join(', ')} (run npm install)\n`)
   for (const plugin of toCopy.filter((plugin) => names.includes(plugin.name))) {
+    const mounted = MOUNTED.find((candidate) => candidate.name === plugin.name)
+    const result = mounted ? mount(appDir, mounted) : undefined
     io.stdout.write(
-      `\n${plugin.name}: ${plugin.mount ?? `import it from '../plugins/${plugin.name}/index.ts' and mount it in src/app.ts`}\n`,
+      `\n${plugin.name}: ${result?.done ? `${result.note}${extraNote(mounted)}` : `${result ? `${result.note}\n` : ''}${plugin.mount ?? `import it from '../plugins/${plugin.name}/index.ts' and mount it in src/app.ts`}`}\n`,
     )
   }
   return 0
+}
+
+/** What an app has to say about its rows, for an error: the `name:` of each, or that it has no blend.yaml. */
+function describeRows(appDir: string): string {
+  const rows = rowNames(appDir)
+  return rows === undefined ? 'no blend.yaml' : `the rows ${rows.join(', ') || '(none)'}`
+}
+
+/** What to do after `npm install` for a plugin that needs more than the install: node-pty compiles a native module in an install script, which npm 11 and pnpm skip until approved. */
+function extraNote(plugin: Mounted | undefined): string {
+  return plugin?.name === 'driver-pty'
+    ? "\nnpm 11 and pnpm warn that node-pty's install script was not run, because they ask you to approve dependency install scripts. node-pty ships prebuilt binaries for macOS, Windows and Linux (x64, arm64), so you can usually ignore the warning. If the panel lists no `pty:` terminal (the app prints why at start), approve it and rebuild: `npm approve-scripts node-pty`, then `npm rebuild node-pty` (pnpm: `pnpm approve-builds`)."
+    : ''
 }
 
 /**

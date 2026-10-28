@@ -66,30 +66,17 @@ let browser
 try {
   const app = join(scratch, 'app')
   run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
-  run(process.execPath, [cli, 'add', 'agent-panel'], app)
-  run(process.execPath, [cli, 'add', 'driver-pty'], app)
+  // `add` mounts both itself (the rows and the registry); the gate only gives the driver its scripted program.
+  run(process.execPath, [cli, 'add', 'agent-panel', 'driver-pty'], app)
   writeFileSync(join(app, 'agent-script.mjs'), AGENT)
   const yaml = join(app, 'blend.yaml')
-  writeFileSync(
-    yaml,
-    readFileSync(yaml, 'utf8').replace(
-      '    - id: routes\n',
-      "    - id: agent-panel\n      name: agent-panel\n    - id: driver-pty\n      name: driver-pty\n      config:\n        programs:\n          node: ['agent-script.mjs']\n    - id: routes\n",
-    ),
+  const before = readFileSync(yaml, 'utf8')
+  const withProgram = before.replace(
+    '    - id: driver-pty\n      name: driver-pty\n',
+    "    - id: driver-pty\n      name: driver-pty\n      config:\n        programs:\n          node: ['agent-script.mjs']\n",
   )
-  const appTs = join(app, 'src', 'app.ts')
-  writeFileSync(
-    appTs,
-    readFileSync(appTs, 'utf8')
-      .replace(
-        'import * as door from',
-        "import * as panel from '../plugins/agent-panel/index.ts'\nimport * as driverPty from '../plugins/driver-pty/index.ts'\nimport * as door from",
-      )
-      .replace(
-        "  'acryl-door': door,",
-        "  'acryl-door': door,\n  'agent-panel': panel,\n  'driver-pty': driverPty,",
-      ),
-  )
+  if (withProgram === before) fail('add did not mount the driver-pty row in blend.yaml')
+  writeFileSync(yaml, withProgram)
   run('npm', ['install', '--no-audit', '--no-fund'], app)
   run('npm', ['run', 'check'], app)
   log('the panel and the PTY driver are added to a fresh agent app, which type-checks')

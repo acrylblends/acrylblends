@@ -18,6 +18,14 @@ import { parseArgs } from 'node:util'
 import { findSecrets } from '@webboxes/app-persistence'
 import { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST } from './names'
 import {
+  DEFAULT_REGISTRY,
+  ownManifest,
+  pickEntry,
+  REGISTRY_ID,
+  type RegistryEntry,
+  readRegistry,
+} from './registry'
+import {
   type Fetchers,
   fetchSource,
   LIFECYCLE,
@@ -69,7 +77,14 @@ A source makes the app from someone else's template (it is downloaded and unpack
   github:owner/repo[#ref]    a GitHub repository, as a tarball (no clone)
   @scope/name[@version]      an npm package (npm pack --ignore-scripts)
   ./template.tgz             a packed template on disk
+  ./folder                   a template folder on disk
 A template is a folder with an ${TEMPLATE_MANIFEST} (name, description, plugins).
+
+A starter from the registry is pulled by its id (npm needs the -- before the options):
+  npm create ${PACKAGE}@latest my-app -- --from acrylblends.notes-desktop
+  --from <id | source>   a registry id such as acrylblends.notes-desktop, or any of the sources above
+  --registry <source>    read the starters from this registry instead of the public one (github:owner/repo, or a folder)
+Only starters made for ${CLASS} (runtime: ${PACKAGE}) are apps this command can make; an ACRYL app starter is refused with a line saying so.
 
 Options:
   --template <name>   one of the templates below (asked when not given); a bare name after the directory means the same
@@ -135,8 +150,10 @@ export interface CreateOptions {
   install: boolean
   pm: PackageManager | undefined
   yes: boolean
-  /** `github:owner/repo[#ref]`, `@scope/name` or a packed `.tgz`: a template from outside this package. */
+  /** `github:owner/repo[#ref]`, `@scope/name`, a packed `.tgz`, a folder, or a registry id: a template from outside this package. */
   source: string | undefined
+  /** Where registry ids are read from; the public registry by default. */
+  registry: string | undefined
 }
 
 export function isTemplate(value: string): value is Template {
@@ -167,13 +184,24 @@ export function parseCreateOptions(argv: readonly string[]): CreateOptions {
     throw new UsageError(`unknown template "${values.template}" (${TEMPLATES.join(', ')})`)
   if (values.pm !== undefined && !(PACKAGE_MANAGERS as readonly string[]).includes(values.pm))
     throw new UsageError(`unknown package manager "${values.pm}" (${PACKAGE_MANAGERS.join(', ')})`)
+  const positionalSource = bare === undefined ? positionals[1] : undefined
+  if (values.from !== undefined && positionals[1] !== undefined)
+    throw new UsageError(
+      'give --from or a template (or a template source) after the directory, not both',
+    )
+  if (values.from !== undefined && values.template !== undefined)
+    throw new UsageError('give --from or --template, not both')
+  const source = values.from ?? positionalSource
+  if (values.registry !== undefined && !(source !== undefined && REGISTRY_ID.test(source)))
+    throw new UsageError('--registry goes with a registry id: --from <id> --registry <source>')
   return {
     directory: positionals[0],
     template: bare ?? named,
     install: values.install === true,
     pm: values.pm as PackageManager | undefined,
     yes: values.yes === true,
-    source: bare === undefined ? positionals[1] : undefined,
+    source,
+    registry: values.registry,
   }
 }
 
@@ -184,6 +212,8 @@ const parse = (argv: readonly string[]) =>
     strict: true,
     options: {
       template: { type: 'string' },
+      from: { type: 'string' },
+      registry: { type: 'string' },
       install: { type: 'boolean' },
       pm: { type: 'string' },
       yes: { type: 'boolean', short: 'y' },
@@ -298,16 +328,34 @@ async function createFromSource(
   }
   const scratch = mkdtempSync(join(tmpdir(), 'create-acrylblends-'))
   try {
-    const source = parseSource(options.source!, io.cwd)
-    if (!source)
-      throw new UsageError(`unknown template source "${options.source}" (${SOURCE_FORMS})`)
     const name = nameFrom(target)
-    await fetchSource(
-      source,
-      join(scratch, 'source'),
-      join(scratch, 'download'),
-      io.fetchers ?? realFetchers,
-    )
+    const fetchers = io.fetchers ?? realFetchers
+    let entry: RegistryEntry | undefined
+    if (REGISTRY_ID.test(options.source!)) {
+      // A registry id: read the registry's index, pick the entry (only an app for this runtime), and take its folder as the template.
+      const registrySource = parseSource(options.registry ?? DEFAULT_REGISTRY, io.cwd)
+      if (!registrySource)
+        throw new UsageError(`unknown registry "${options.registry}" (${SOURCE_FORMS})`)
+      await fetchSource(
+        registrySource,
+        join(scratch, 'registry'),
+        join(scratch, 'download'),
+        fetchers,
+      )
+      const registry = readRegistry(join(scratch, 'registry'))
+      entry = pickEntry(registry.entries, options.source!)
+      await fetchSource(
+        { kind: 'folder', path: join(registry.root, entry.path) },
+        join(scratch, 'source'),
+        join(scratch, 'download'),
+        fetchers,
+      )
+    } else {
+      const source = parseSource(options.source!, io.cwd)
+      if (!source)
+        throw new UsageError(`unknown template source "${options.source}" (${SOURCE_FORMS})`)
+      await fetchSource(source, join(scratch, 'source'), join(scratch, 'download'), fetchers)
+    }
     const manifest = readManifest(join(scratch, 'source'))
     const staged = join(scratch, 'app')
     const { files, lifecycle } = writeTemplate(
@@ -317,6 +365,11 @@ async function createFromSource(
       frameworkRange(),
       name,
     )
+    if (entry !== undefined && existsSync(join(staged, 'blend.yaml')))
+      writeFileSync(
+        join(staged, 'blend.yaml'),
+        ownManifest(readFileSync(join(staged, 'blend.yaml'), 'utf8'), name),
+      )
     if (!existsSync(join(staged, 'AGENTS.md')))
       writeFileSync(
         join(staged, 'AGENTS.md'),
@@ -334,7 +387,7 @@ async function createFromSource(
     copyDocs(staged)
     cpSync(staged, target, { recursive: true })
     io.stdout.write(
-      `created ${name} from ${manifest.name} (${manifest.description}) in ${target}: ${files.length} files, ${CLASS} docs in docs/framework\n`,
+      `created ${name} from ${entry ? `${entry.id} ${entry.version}` : manifest.name} (${manifest.description}) in ${target}: ${files.length} files, ${CLASS} docs in docs/framework\n`,
     )
     if (manifest.plugins.length > 0)
       io.stdout.write(
@@ -425,7 +478,17 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
     // Every template is a Cordis app, made by the framework package's own `init` (blend.yaml, plugins/, AGENTS.md, CLAUDE.md, the skill, the docs).
     const code = await io.run(
       process.execPath,
-      [acrylblendsBin(), 'init', target, '--template', template, '--name', name, '--yes'],
+      [
+        acrylblendsBin(),
+        'init',
+        target,
+        '--template',
+        template,
+        '--name',
+        name,
+        '--yes',
+        '--no-next',
+      ],
       io.cwd,
     )
     if (code !== 0) return 1

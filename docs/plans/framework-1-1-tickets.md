@@ -16,6 +16,10 @@ Same-shape check (a template or built-in row that stays mounted in production an
 | `acryl-state` | exposes cells only for what is mounted |
 | `chat` template's chat endpoint | open by design (a chat app answers its visitors with the model key); not changed, said in the 1.0.1 notes: put a login in front |
 
+## 1.0.2 (workshop fixes, in release)
+
+From DS_Fork3's macOS walk and Fork3's Linux walk (`docs/plans/workshop-readiness.md`), ahead of the 1.1 list because they stand between a newcomer and the 2026-11-20 workshop. Built and in `docs/release-notes/1.0.2.md`: B1 `create-acrylblends --from <id | source>` with `--registry`, registry `runtime` field and badge, three acrylblends starters; B2/L3 `npx acrylblends@latest upgrade`; C1 `add agent-panel` mounts or refuses; C2 login documented; C3 pi detection; C4 todo URL; C5 node-pty approval text; cosmetics (one `Next:`, `--desktop` wording); L1 Linux sandbox launcher; L2 Node 22.19 preflight; the chat template closed in production. Not in 1.0.2: Windows findings (DS2's walk is not in yet), the workshop registry repo (designed, not created).
+
 ## 1.1, in order
 
 | Order | Item | Priority | Status |
