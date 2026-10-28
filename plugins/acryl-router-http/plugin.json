@@ -1,7 +1,7 @@
 {
   "name": "acryl-router-http",
-  "description": "The serve() and request bridge that acryl-node-server uses to put the router on node:http. Mounting it as a plugin needs the DSH web server, which a generated app does not have. Vendored from ACRYL.",
-  "requires": ["acryl-router"],
+  "description": "Mounts router prefixes on the ACRYL Host's web server, with exact-path WebSocket upgrades owned by the mounting plugin, and the serve() and request bridge. Mounting it as a plugin needs the Host web server, which a generated app does not have. Vendored from ACRYL.",
+  "requires": ["acryl-router", "acryl-node-server"],
   "inject": ["router"],
   "provides": [],
   "dependencies": {

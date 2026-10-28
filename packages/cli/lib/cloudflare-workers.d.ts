@@ -1,6 +1,6 @@
 import { L as MiddlewareHandler, v as Env } from "./context-DS3fYyG-.js";
 import { r as GetConnInfo } from "./types-Dv_nV2cv.js";
-import { a as WSEvents, n as UpgradeWebSocket } from "./index-BvFh1Gfx.js";
+import { a as WSEvents, n as UpgradeWebSocket } from "./index-C-SklY6u.js";
 import { t as ServeStaticOptions$1 } from "./index-CseujaYI.js";
 
 //#region ../../plugins/acryl-router/src/core/adapter/cloudflare-workers/serve-static.d.ts

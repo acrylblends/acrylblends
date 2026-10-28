@@ -86,6 +86,10 @@ describe('the door in a framework app', () => {
     expect(brief.out).toContain(`App demo in ${running.root}.`)
     expect(brief.out).toContain('Read first: AGENTS.md.')
     expect(brief.out).toContain('Page: not open')
+    // The running app's address, in the text and in --json, so an agent does not have to read .acryl/door.json to curl a route.
+    expect(brief.out).toMatch(/Address: http:\/\/127\.0\.0\.1:\d+ /u)
+    const asJson = await operator(running.root, ['brief', '--json'])
+    expect((JSON.parse(asJson.out) as { url?: string }).url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u)
   })
 
   it('looks at the page and acts on it through the event stream, and audits each call without what was typed', async () => {

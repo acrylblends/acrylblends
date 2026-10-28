@@ -535,6 +535,9 @@ importers:
 
   plugins/acryl-router-http:
     dependencies:
+      acryl-node-server:
+        specifier: workspace:*
+        version: link:../acryl-node-server
       acryl-router:
         specifier: workspace:*
         version: link:../acryl-router
@@ -548,6 +551,9 @@ importers:
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.5
+      '@types/ws':
+        specifier: 8.18.2
+        version: 8.18.2
       acryl-state:
         specifier: workspace:*
         version: link:../acryl-state
@@ -560,6 +566,9 @@ importers:
       vitest:
         specifier: 4.1.11
         version: 4.1.11(@types/node@22.20.5)(jsdom@29.1.1)(msw@2.15.0(@types/node@22.20.5)(typescript@6.0.3))(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.0))
+      ws:
+        specifier: 8.21.3
+        version: 8.21.3
 
   plugins/acryl-state:
     dependencies:

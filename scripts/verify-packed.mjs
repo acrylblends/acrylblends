@@ -56,6 +56,59 @@ try {
   run('npm', ['install', '--no-audit', '--no-fund'], blank)
   run('npm', ['test'], blank, { ACRYL_DOOR: 'off' })
   log('todo: made by the installed command, its tests pass')
+  // A WebSocket upgrade route in an app made by the installed command (spec 047 T009): a plugin mounts `/ws` behind a check, a real `ws` client echoes through it, and unloading the
+  // plugin closes the socket with 1001. The app's own copies of the router and the server run it, so the installed package's source is what is tested.
+  const wsApp = join(scratch, 'app-nodejs')
+  run('npm', ['install', 'ws', '--no-audit', '--no-fund'], wsApp)
+  writeFileSync(
+    join(wsApp, 'ws-check.ts'),
+    `import { Context } from '@deepseek-ai/cordis'
+import WebSocket from 'ws'
+import * as nodeServer from './plugins/acryl-node-server/src/index.ts'
+import * as router from './plugins/acryl-router/src/index.ts'
+
+const ctx = new Context()
+await ctx.plugin(router).await()
+await ctx.plugin(nodeServer, { hostname: '127.0.0.1' }).await()
+const echo = ctx.plugin({
+  name: 'ws-echo',
+  inject: ['router', 'nodeServer'],
+  apply(inner: Context) {
+    const upgrade = inner.nodeServer.upgrades()
+    inner.router.route('/', new router.Acryl()
+      .use('/ws', async (c, next) => (c.req.header('x-allow') === 'yes' ? next() : c.text('forbidden', 403)))
+      .get('/ws', upgrade(() => ({ onMessage(event, socket) { socket.send('echo ' + String(event.data)) } }))))
+  },
+})
+await echo.await()
+const url = ctx.nodeServer.url.replace('http', 'ws') + '/ws'
+const refused = await new Promise<string>((resolve) => {
+  const client = new WebSocket(url)
+  client.once('unexpected-response', (_request, response) => resolve(String(response.statusCode)))
+  client.once('open', () => resolve('opened'))
+  client.once('error', () => resolve('error'))
+})
+if (refused !== '403') throw new Error('expected a plain 403, got ' + refused)
+const client = new WebSocket(url, { headers: { 'x-allow': 'yes' } })
+const reply = await new Promise<string>((resolve, reject) => {
+  client.once('message', (data) => resolve(String(data)))
+  client.once('open', () => client.send('hi'))
+  client.once('error', reject)
+})
+if (reply !== 'echo hi') throw new Error('expected echo hi, got ' + reply)
+const closed = new Promise<number>((resolve) => client.once('close', (code) => resolve(code)))
+await echo.dispose()
+const code = await closed
+if (code !== 1001) throw new Error('expected close 1001, got ' + String(code))
+if (ctx.nodeServer.sockets !== 0) throw new Error('a socket is still open')
+await ctx.fiber.dispose()
+console.log('ws-check: ok')
+`,
+  )
+  run('node', ['ws-check.ts'], wsApp)
+  log(
+    'nodejs: a WebSocket upgrade route refuses, echoes, and closes with 1001 when its plugin unloads',
+  )
   // The agent panel and the PTY driver, added by the installed command: copied, installed (node-pty from the registry) and type-checked.
   const agentApp = join(scratch, 'app-agent')
   run(bin('acrylblends'), ['init', agentApp, '--template', 'agent', '-y'], scratch)

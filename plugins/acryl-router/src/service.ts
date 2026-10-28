@@ -10,6 +10,7 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { ConnectionInfo, RouterBindings } from './connection.ts'
+import type { UpgradeWebSocket } from './core/helper/websocket/index.ts'
 import { Acryl } from './core/app.ts'
 import type { ExecutionContext } from './core/context.ts'
 import { HTTPException } from './core/http-exception.ts'
@@ -40,8 +41,19 @@ export const Config: z<Partial<Config>, Config> = z.object({
  * served over HTTP without depending on the adapter package.
  */
 export interface RouterHttpService {
-  /** Serve `prefix` and everything below it through the router; returns a remover. The mount also goes away when the calling plugin unloads. */
-  mount(prefix: string): () => void
+  /**
+   * Serve `prefix` and everything below it through the router; returns a remover. The mount also goes away when the calling plugin unloads.
+   * `options.upgrade` lists the exact paths below the prefix that may be upgraded to a WebSocket (each must be inside the prefix); no other path of the mount accepts an upgrade.
+   */
+  mount(prefix: string, options?: { readonly upgrade?: readonly string[] }): () => void
+  /**
+   * `upgradeWebSocket` for the calling plugin: `app.get('/terminal', upgrade((c) => ({ onMessage(event, ws) { ... } })))` on a route the plugin mounted with `upgrade: ['/terminal']`.
+   * Checks go in ordinary middleware on the route; a handler that returns a `Response` refuses with that status before any handshake. The sockets it accepts belong to the calling
+   * plugin: when it unloads they are closed with 1001 and the handler sees `close` once. Needs the `ws` package.
+   */
+  upgrades(): UpgradeWebSocket
+  /** How many WebSocket connections are open now. */
+  readonly sockets: number
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -260,8 +272,9 @@ export class Router extends Service {
    * Run a request in process. Never throws: failures become a 500, a disposed router answers 503. `connection` describes the transport
    * (an HTTP adapter passes the socket's peer address and local port); an in-process caller omits it. Handlers read it with
    * `connectionOf(c)`, abort with `c.req.raw.signal` and keep the request in flight with `c.executionCtx.waitUntil(task)`.
+   * `bindings` is an object an adapter hands to the handler as `c.env` (an upgrade request's socket hooks, for `upgradeWebSocket`); `connection` is added to it.
    */
-  fetch(request: Request, connection: ConnectionInfo = {}): Promise<Response> {
+  fetch(request: Request, connection: ConnectionInfo = {}, bindings?: object): Promise<Response> {
     if (this.state.closing) return Promise.resolve(new Response('Service Unavailable', { status: 503 }))
     const controller = new AbortController()
     const forward = (): void => controller.abort()
@@ -273,7 +286,8 @@ export class Router extends Service {
       passThroughOnException: () => {},
       props: {},
     }
-    const env: RouterBindings = { connection }
+    // `bindings` is used as `c.env` itself (not copied): the upgrade helper records its handshake state on it, and the adapter reads that state back after the handler answered.
+    const env: RouterBindings = bindings === undefined ? { connection } : Object.assign(bindings, { connection })
     let bodyDone: Promise<void> = Promise.resolve()
     let endBody = (): void => {}
     let resolveSettled!: (value: Promise<unknown>) => void

@@ -92,12 +92,13 @@
     },
     "src/adapter/websocket-types.ts": {
       "upstreamSha256": "b6d2938c85d4f9d5e12fa98e40c685a5009b050239c7174641573d6c3f5264e0",
-      "sha256": "c209a4493ddeb13cb182860b5fceebd0d18f97040b17c09f95f207e6153a4297"
+      "sha256": "9dbe10d817290c0ce9e6f456915c36aea12e87812f1905c840f551859a468abc",
+      "deviation": "The sockets expose bufferedAmount, ping, terminate and the pong event, and the server's close takes a callback: what the hub (src/upgrade-hub.ts, ACRYL's addition) needs of ws."
     },
     "src/adapter/websocket.ts": {
       "upstreamSha256": "b123fe881c0556aecb67c9146da54967355c82c33a68d94bcfa058b68eb42952",
-      "sha256": "117075484c4f708f7be62617ab6415b5fa75c129f7b8e8d0b4e62aa5b3fd18ef",
-      "deviation": "The WebSocket context literal is typed as the class's public shape and asserted once: the core class has a private field a literal cannot carry (type-only)."
+      "sha256": "bf2f300d59b35c8a9d0c16bd87c3d041b5add82d10ed7131a19d98bb2de7b1dc",
+      "deviation": "The WebSocket context literal is typed as the class's public shape and asserted once: the core class has a private field a literal cannot carry (type-only). ACRYL's additions for plugin-owned upgrades (spec 047 T009): the context reports bufferedAmount; close() maps a code the protocol forbids on the wire to 1011 (application codes 1013, 4404 pass); the handler sees close exactly once; the option textOnly drops binary frames before onMessage; the option track hands each accepted socket to the mounting plugin's scope; a non-websocket Upgrade request is answered 400 when nothing else listens; setupWebSocket takes any emitter of upgrade events (UpgradeSource) instead of a Server, so the Host web server's exact-path upgrade routes can feed it. The two symbols that tie a handshake to its waiter are exported, for testWebSocket (src/test-websocket.ts, ACRYL's addition: an in-process client/server pair)."
     },
     "tests/adapter/app.ts": {
       "upstreamSha256": "1da4317b168efa628c53ab77eafcbbc59fb55b58f6cf12dfb5bd536327469ceb",

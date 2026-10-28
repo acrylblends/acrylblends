@@ -5,8 +5,11 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Duplex } from 'node:stream'
 import type { RouterHttpService } from 'acryl-router'
+import type { UpgradeWebSocket } from 'acryl-router/helpers'
 import { Context, Service } from '@deepseek-ai/cordis'
+import { UpgradeEmitter, UpgradeHub } from 'acryl-node-server'
 import { serve } from './serve.ts'
 
 /** Stable Cordis plugin name, equal to the package name and the Loader row id. */
@@ -25,6 +28,11 @@ export interface WebServerPort {
     readonly path: string
     readonly handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
   }): () => void
+  /** One exact-path upgrade claim (`WebUpgradeRoute` of the web server); optional because an older web server has none. */
+  registerUpgrade?(route: {
+    readonly path: string
+    readonly handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>
+  }): () => void
 }
 
 const PREFIX_PATTERN = /^\/[A-Za-z0-9._~\-/]*[A-Za-z0-9._~-]$/
@@ -32,9 +40,14 @@ const PREFIX_PATTERN = /^\/[A-Za-z0-9._~\-/]*[A-Za-z0-9._~-]$/
 export class RouterHttp extends Service implements RouterHttpService {
   private readonly router: Context['router']
   private readonly web: WebServerPort
+  private hub: UpgradeHub | undefined
+  /** The adapter's own context: the hub lives as long as the adapter, whichever plugin asked for it first (`this.ctx` is the caller's). */
+  private readonly home: Context
+  private readonly upgradesIn = new UpgradeEmitter()
 
   constructor(ctx: Context) {
     super(ctx, 'routerHttp')
+    this.home = ctx
     this.router = ctx.router
     this.web = ctx.get('webServer') as WebServerPort
   }
@@ -42,16 +55,67 @@ export class RouterHttp extends Service implements RouterHttpService {
   /**
    * Serve `prefix` and everything below it through the router. Returns a remover; the mount also goes away when the
    * calling plugin unloads. A prefix another route already claims throws, as the webServer treats it as misconfiguration.
+   * `options.upgrade` names the exact paths that may be upgraded to a WebSocket: each must be inside the prefix, and each is one
+   * exact-path upgrade route of the web server, removed with the mount. No other path of the mount accepts an upgrade.
    */
-  mount(prefix: string): () => void {
+  mount(prefix: string, options: { readonly upgrade?: readonly string[] } = {}): () => void {
     if (!PREFIX_PATTERN.test(prefix)) throw new TypeError(`acryl-router-http: "${prefix}" is not a mountable path prefix`)
-    const remove = this.web.register({
-      kind: 'prefix',
-      path: prefix,
-      handler: (req, res) => serve(this.router, req, res),
-    })
+    const upgrade = options.upgrade ?? []
+    for (const path of upgrade) {
+      if (!PREFIX_PATTERN.test(path) || !(path === prefix || path.startsWith(`${prefix}/`)))
+        throw new TypeError(`acryl-router-http: the upgrade path "${path}" is not inside the prefix "${prefix}"`)
+    }
+    if (upgrade.length > 0 && this.web.registerUpgrade === undefined)
+      throw new TypeError('acryl-router-http: this web server cannot take WebSocket upgrades (it has no registerUpgrade)')
+    const removers: Array<() => void> = []
+    // Claim the upgrade paths first: a duplicate throws before anything is mounted, so a refused mount leaves nothing behind.
+    try {
+      if (upgrade.length > 0) this.ensureHub()
+      for (const path of upgrade) {
+        removers.push(
+          (this.web.registerUpgrade as NonNullable<WebServerPort['registerUpgrade']>)({
+            path,
+            handler: (req, socket, head) => { this.upgradesIn.emit('upgrade', req, socket, head) },
+          }),
+        )
+      }
+      removers.push(
+        this.web.register({
+          kind: 'prefix',
+          path: prefix,
+          handler: (req, res) => serve(this.router, req, res),
+        }),
+      )
+    } catch (error) {
+      for (const remove of removers) remove()
+      throw error
+    }
+    const remove = (): void => { for (const undo of removers.splice(0)) undo() }
     this.ctx.effect(() => () => { remove() }, `acryl-router-http: mount ${prefix}`)
     return remove
+  }
+
+  /**
+   * `upgradeWebSocket` for the calling plugin: the sockets its routes accept are closed with 1001 when it unloads. Needs the `ws` package.
+   * The route must be on a path the plugin mounted with `upgrade: [path]`.
+   */
+  upgrades(): UpgradeWebSocket {
+    return this.ensureHub().upgradeWebSocketFor(this.ctx) as unknown as UpgradeWebSocket
+  }
+
+  /** How many WebSocket connections are open now. */
+  get sockets(): number {
+    return this.hub?.size ?? 0
+  }
+
+  private ensureHub(): UpgradeHub {
+    if (!this.hub) {
+      const hub = new UpgradeHub()
+      hub.attach(this.upgradesIn, this.router)
+      this.hub = hub
+      this.home.effect(() => () => hub.close(), 'acryl-router-http: WebSocket hub')
+    }
+    return this.hub
   }
 }
 

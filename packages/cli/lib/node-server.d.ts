@@ -1,42 +1,12 @@
 import { t as Acryl } from "./app-D8riatvv.js";
-import { n as UpgradeWebSocket } from "./index-BvFh1Gfx.js";
-import { t as RequestError } from "./error-t4N2js2I.js";
+import { a as UpgradeRouter, c as WebSocketData, i as UpgradeHubOptions, l as WebSocketLike, n as UpgradeEmitter, o as RequestError, r as UpgradeHub, s as upgradeWebSocket, t as Owner, u as WebSocketServerLike } from "./upgrade-hub-C25yjWG9.js";
 import { ServeStaticOptions, serveStatic } from "./node-server/serve-static.js";
 import { getConnInfo } from "./node-server/conninfo.js";
 import { AddressInfo } from "node:net";
 import { IncomingMessage, Server, ServerOptions, ServerResponse, createServer } from "node:http";
 import { Http2SecureServer, Http2Server, Http2ServerRequest, Http2ServerResponse, SecureServerOptions, ServerOptions as ServerOptions$1, createSecureServer, createServer as createServer$1 } from "node:http2";
-import { Duplex } from "node:stream";
 import { Server as Server$1, ServerOptions as ServerOptions$2, createServer as createServer$2 } from "node:https";
 
-//#region ../../plugins/acryl-node-server/src/adapter/websocket-types.d.ts
-type WSReadyState = 0 | 1 | 2 | 3;
-type WebSocketData = string | ArrayBuffer | Uint8Array | readonly Uint8Array[];
-type WebSocketSendOptions = {
-  compress?: boolean;
-};
-interface WebSocketLike {
-  protocol: string;
-  readyState: WSReadyState;
-  close(code?: number, reason?: string): void;
-  send(data: string | ArrayBuffer | ArrayBufferView, options?: WebSocketSendOptions): void;
-  on(event: 'message', listener: (data: WebSocketData, isBinary: boolean) => void): this;
-  on(event: 'close', listener: (code: number, reason: Uint8Array) => void): this;
-  on(event: 'error', listener: (error: unknown) => void): this;
-  off(event: 'message', listener: (data: WebSocketData, isBinary: boolean) => void): this;
-}
-interface WebSocketServerLike {
-  options: {
-    noServer?: boolean;
-  };
-  on(event: 'connection', listener: (ws: WebSocketLike, request: IncomingMessage) => void): this;
-  on(event: 'headers', listener: (headers: string[]) => void): this;
-  off(event: 'headers', listener: (headers: string[]) => void): this;
-  emit(event: 'connection', ws: WebSocketLike, request: IncomingMessage): boolean;
-  handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, callback: (ws: WebSocketLike) => void): void;
-  close(): void;
-}
-//#endregion
 //#region ../../plugins/acryl-node-server/src/adapter/types.d.ts
 type HttpBindings = {
   incoming: IncomingMessage;
@@ -107,12 +77,6 @@ declare function serve(options: HttpsOptions, listeningListener?: (info: Address
 declare function serve(options: HttpOptions, listeningListener?: (info: AddressInfo) => void): Server;
 declare function serve(options: Options, listeningListener?: (info: AddressInfo) => void): ServerType;
 //#endregion
-//#region ../../plugins/acryl-node-server/src/adapter/websocket.d.ts
-type UpgradeWebSocketOptions = {
-  onError: (err: unknown) => void;
-};
-declare const upgradeWebSocket: UpgradeWebSocket<WebSocketLike, UpgradeWebSocketOptions>;
-//#endregion
 //#region ../../plugins/acryl-node-server/src/adapter/listener.d.ts
 declare const getRequestListener: (fetchCallback: FetchCallback, options?: {
   hostname?: string;
@@ -161,4 +125,4 @@ declare function clientModules(options: ClientModulesOptions): Acryl;
  */
 declare function buildClientModules(options: BuildClientModulesOptions): string[];
 //#endregion
-export { type BuildClientModulesOptions, type ClientModulesOptions, type Http2Bindings, type HttpBindings, RequestError, type ServeStaticOptions, type ServerType, type WebSocketData, type WebSocketLike, type WebSocketServerLike, buildClientModules, clientModules, createAdaptorServer, getConnInfo, getRequestListener, serve, serveStatic, upgradeWebSocket };
+export { type BuildClientModulesOptions, type ClientModulesOptions, type Http2Bindings, type HttpBindings, type Owner, RequestError, type ServeStaticOptions, type ServerType, UpgradeEmitter, UpgradeHub, type UpgradeHubOptions, type UpgradeRouter, type WebSocketData, type WebSocketLike, type WebSocketServerLike, buildClientModules, clientModules, createAdaptorServer, getConnInfo, getRequestListener, serve, serveStatic, upgradeWebSocket };

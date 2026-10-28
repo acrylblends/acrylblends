@@ -478,8 +478,8 @@
     },
     "src/core/helper/websocket/index.ts": {
       "upstreamSha256": "fbcd0f1bf3eeeca57f5952b86d91fa35055ab12b5569a2126bb358b00a007c62",
-      "sha256": "b7277396a2b46389b26452d0a808fba6ce9bf38ad41150472631b666df03fb32",
-      "deviation": "MessageEvent, CloseEvent and BinaryType come from utils/types.ts so the public types do not need the DOM library"
+      "sha256": "8e79c50de47391f4ce9959fecaa067465c0d5dd346982ea89d31a97a0658d94f",
+      "deviation": "MessageEvent, CloseEvent and BinaryType come from utils/types.ts so the public types do not need the DOM library. WSContext.bufferedAmount (optional in WSContextInit, 0 when the adapter does not report it) for senders that back-pressure"
     },
     "src/core/http-exception.test.ts": {
       "upstreamSha256": "b0eeb813fa540cb9eaf105ceb4b80b1aebf2160a2f6987dfb586bf1255fdf615",

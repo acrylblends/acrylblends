@@ -18,6 +18,9 @@ var WSContext = class {
 	get readyState() {
 		return this.#init.readyState;
 	}
+	get bufferedAmount() {
+		return this.#init.bufferedAmount ?? 0;
+	}
 	url;
 	protocol;
 	close(code, reason) {

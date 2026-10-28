@@ -3,7 +3,7 @@ import { defineWebSocketHelper } from 'acryl-router/helpers'
 import type { IncomingMessage } from 'node:http'
 import { STATUS_CODES } from 'node:http'
 import type { Duplex } from 'node:stream'
-import type { FetchCallback, ServerType } from './types.ts'
+import type { FetchCallback } from './types.ts'
 import type { WebSocketData, WebSocketLike, WebSocketServerLike } from './websocket-types.ts'
 
 interface CloseEventInit extends EventInit {
@@ -83,13 +83,17 @@ export const ErrorEvent: typeof globalThis.ErrorEvent =
 
 const generateConnectionSymbol = () => Symbol('connection')
 
+/** The codes an endpoint may send in a close frame (RFC 6455 section 7.4): 1000-1003, 1007-1014 and the private ranges 3000-4999. */
+export const validCloseCode = (code: number): boolean =>
+  (code >= 1000 && code <= 1014 && code !== 1004 && code !== 1005 && code !== 1006) || (code >= 3000 && code <= 4999)
+
 type WaitForWebSocket = (
   request: IncomingMessage,
   connectionSymbol: symbol
 ) => Promise<WebSocketLike>
 
-const CONNECTION_SYMBOL_KEY: unique symbol = Symbol('CONNECTION_SYMBOL_KEY')
-const WAIT_FOR_WEBSOCKET_SYMBOL: unique symbol = Symbol('WAIT_FOR_WEBSOCKET_SYMBOL')
+export const CONNECTION_SYMBOL_KEY: unique symbol = Symbol('CONNECTION_SYMBOL_KEY')
+export const WAIT_FOR_WEBSOCKET_SYMBOL: unique symbol = Symbol('WAIT_FOR_WEBSOCKET_SYMBOL')
 
 export type UpgradeBindings = {
   incoming: IncomingMessage
@@ -101,6 +105,10 @@ export type UpgradeBindings = {
 
 type UpgradeWebSocketOptions = {
   onError: (err: unknown) => void
+  /** Hand the handler text frames only; binary frames are dropped before `onMessage`. */
+  textOnly?: boolean
+  /** Called with each accepted socket: the mounting plugin's scope keeps it to close it when the plugin unloads. */
+  track?: (ws: WebSocketLike) => void
 }
 
 // Hop-by-hop headers per RFC 9110 Section 7.6.1
@@ -162,8 +170,15 @@ const createUpgradeRequest = (request: IncomingMessage): Request => {
   })
 }
 
+/** The part of a server `setupWebSocket` listens to: the Host's web server hands upgrades to a plain emitter with the same two methods. */
+export interface UpgradeSource {
+  on(event: 'upgrade', listener: (request: IncomingMessage, socket: Duplex, head: Buffer) => void): unknown
+  on(event: 'close', listener: () => void): unknown
+  listenerCount(event: 'upgrade'): number
+}
+
 export const setupWebSocket = (options: {
-  server: ServerType
+  server: UpgradeSource
   fetchCallback: FetchCallback
   wss: WebSocketServerLike
 }): void => {
@@ -202,6 +217,8 @@ export const setupWebSocket = (options: {
 
   server.on('upgrade', async (request, socket: Duplex, head) => {
     if (request.headers.upgrade?.toLowerCase() !== 'websocket') {
+      // Nobody else listens: an upgrade to another protocol is answered, not left hanging.
+      if (server.listenerCount('upgrade') === 1) rejectUpgradeRequest(socket, 400)
       return
     }
 
@@ -282,6 +299,7 @@ export const upgradeWebSocket: UpgradeWebSocket<WebSocketLike, UpgradeWebSocketO
       let ws: WebSocketLike
       try {
         ws = await waitForWebSocket(env.incoming, connectionSymbol)
+        options?.track?.(ws)
       } catch {
         return
       }
@@ -296,12 +314,16 @@ export const upgradeWebSocket: UpgradeWebSocket<WebSocketLike, UpgradeWebSocketO
       const shape: Pick<WSContext<WebSocketLike>, keyof WSContext<WebSocketLike>> = {
         binaryType: 'arraybuffer',
         close(code, reason) {
-          ws.close(code, reason)
+          // An application code (1013, 4404, ...) passes; one the protocol forbids on the wire would make `ws` throw, so it becomes 1011.
+          ws.close(code === undefined || validCloseCode(code) ? code : 1011, reason)
         },
         protocol: ws.protocol,
         raw: ws,
         get readyState() {
           return ws.readyState
+        },
+        get bufferedAmount() {
+          return ws.bufferedAmount
         },
         send(source, opts) {
           ws.send(source, {
@@ -319,6 +341,8 @@ export const upgradeWebSocket: UpgradeWebSocket<WebSocketLike, UpgradeWebSocketO
       }
 
       const handleMessage = (data: WebSocketData, isBinary: boolean) => {
+        // With `textOnly` a binary frame never reaches the handler.
+        if (isBinary && options?.textOnly) return
         const datas = Array.isArray(data) ? data : [data]
         for (const data of datas) {
           try {
@@ -349,7 +373,11 @@ export const upgradeWebSocket: UpgradeWebSocket<WebSocketLike, UpgradeWebSocketO
         handleMessage(data, isBinary)
       })
 
+      let closed = false
       ws.on('close', (code, reason) => {
+        // The handler sees close exactly once, whoever closed the socket.
+        if (closed) return
+        closed = true
         try {
           events?.onClose?.(new CloseEvent('close', { code, reason: reason.toString() }), ctx)
         } catch (e) {

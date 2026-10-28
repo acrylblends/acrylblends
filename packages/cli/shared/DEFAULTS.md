@@ -26,7 +26,7 @@ install a second time). Do not create `src/plugins/` or `extensions/`.
 The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at and change the running app. The running app writes it, and it reaches only the app running from this folder. Its state (a secret and an audit log) lives under `.acryl/`, which git ignores: never commit it. It is on in development and off with `NODE_ENV=production` or `ACRYL_DOOR=off`; one process at a time serves a folder's door, so a second `npm start` in the same folder stops with a message that says so (the tests set `ACRYL_DOOR=off`). If `.acryl/bin/acryl` is not here, the app is not running: start it with `npm run dev` (in the background) and open its address in a browser.
 
 ```
-.acryl/bin/acryl brief                      what this app is: its plugins, where the docs are, the verbs, and whether a page is open
+.acryl/bin/acryl brief                      what this app is: its address (curl a new route there), where the docs are, the verbs, and whether a page is open
 .acryl/bin/acryl look                       the page as text, with refs (1.1, 1.2, ...): roles, names, values, visible text
 .acryl/bin/acryl act click --ref <r>
 .acryl/bin/acryl act type --ref <r> --text <t> [--submit] [--no-clear]
