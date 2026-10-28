@@ -182,7 +182,8 @@ npm run dev
 ```
 
 The same command takes a git repository or a folder: `--from github:you/starter` or `--from ../a-template`. You get a complete app someone else
-published, with its plugins and its `blend.yaml`, in your folder and yours to change.
+published, with its plugins, its dependencies and its `blend.yaml`, in your folder and yours to change. Nothing is installed for you: the starter's
+`Next:` block asks for the same `npm install` as step 1.
 
 **Stuck?** The `--` before `--from` is npm's, not ours: without it npm swallows the flag. An id that is not in the registry prints the ids it knows.
 TODO(B1): the ids of the starters this workshop uses are published with 1.0.2; the facilitator writes them on the board.
@@ -277,7 +278,7 @@ private app to a public remote). Create an empty repository on your git host, se
    cd ~/acryl-workshop
    git clone --depth 1 https://github.com/acrylblends/acrylblends.github.io.git registry
    mkdir -p registry/registry/blends/you.agent-app
-   cp agent-app/blend.yaml registry/registry/blends/you.agent-app/
+   cp agent-app/blend.yaml agent-app/package.json registry/registry/blends/you.agent-app/
    cp -R agent-app/plugins registry/registry/blends/you.agent-app/plugins
    ```
 
@@ -290,6 +291,9 @@ private app to a public remote). Create an empty repository on your git host, se
    bun <blends-core>/src/bin/registry-index.ts registry            # writes registry/index.json
    bun <blends-core>/src/bin/registry-index.ts registry --check    # passes
    ```
+
+   The entry is the whole app: `blend.yaml`, `plugins/`, and the app's `package.json`, whose dependencies come with it (a starter that mounts
+   `desktop` brings `electron`, so whoever pulls it does not add the shell again). No `node_modules`.
 
 5. Commit, push to your fork, open a pull request. CI validates the entry and the index, a person reviews it, and once it is merged your starter is
    listed at <https://acrylblends.github.io/blends>; anyone can then start an app from it with `npm create acrylblends@latest my-app -- --from you.agent-app`.
