@@ -12,7 +12,7 @@ npx acrylblends@latest upgrade             # do it
 npm install && npm run check && npm test
 ```
 
-**Write `@latest`.** A bare `npx acrylblends upgrade` runs the `acrylblends` the app has installed, and an app made before 1.0 has a 0.x copy with no `upgrade` verb: it prints its old help and exits 0, so nothing happens and nothing says so. `npx acrylblends@latest` fetches the current package and runs that. (After the first upgrade the app depends on 1.x, and the bare form works too.)
+**Write `@latest`.** A bare `npx acrylblends upgrade` runs the `acrylblends` the app has installed, and an app made before 1.0 has a 0.x copy with no `upgrade` verb. It does not upgrade anything: depending on the platform and the version it prints its old help and exits 0 (so nothing happens and nothing says so), or answers "unknown command" and exits 2. `npx acrylblends@latest` fetches the current package and runs that. (After the first upgrade the app depends on 1.x, and the bare form works too.)
 
 - A file nobody edited is replaced. A file the app edited stops the upgrade: nothing is changed, the diff of what would be lost is shown, and the command exits 1. Move your change out of the plugin (a plugin of your own in `plugins/<name>/` is never touched), or run `npx acrylblends upgrade --force`, which saves the edited versions in `.acrylblends/upgrade-backup/<time>/` before replacing them.
 - `--diff` prints the diff of every changed file, not only the edited ones. `acrylblends upgrade acryl-router extensions` upgrades only those plugins.

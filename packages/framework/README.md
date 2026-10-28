@@ -103,17 +103,19 @@ Every Electron call lives in `plugins/desktop`, so the app's own code never impo
 ## Start from the registry
 
 The registry is a set of starting points people published, browsable at [acrylblends.github.io/blends](https://acrylblends.github.io/blends)
-and readable by any tool as plain JSON at <https://acrylblends.github.io/registry/index.json>. ACRYL's CLI pulls one by id, or from any git
-repository:
+and readable by any tool as plain JSON at <https://acrylblends.github.io/registry/index.json>. Each entry says which runtime it is for. An
+`acrylblends` starter is a whole app, and one command makes it from npm alone:
 
 ```sh
-npm install -g acryl
-acryl new my-app --from acryl.gtd               # a starter from the registry
-acryl new my-app --from github:you/starter      # a repository with an acryl.template.json
+npm create acrylblends@latest my-notes -- --from acrylblends.notes-desktop     # npm needs the -- before the options
+cd my-notes
+npm install
+npm run dev
 ```
 
-Without `--from`, `acryl new` writes the blank app; `--blueprint` picks another built-in Blueprint. A team's own registry is the same layout in
-its own repository: `--registry <git URL or folder>` reads starters from there instead of the public one.
+The other starters in the registry (`acryl.gtd`, `acryl.blank`, ...) are for the ACRYL app: `create-acrylblends` refuses them with a line that
+says so. A repository with an `acryl.template.json` works the same way (`-- --from github:you/starter`), and a team's own registry is the same
+layout in its own repository (`-- --from you.thing --registry github:you/registry`).
 
 ## Publish your app, or your own starter
 
@@ -124,10 +126,10 @@ Before an app goes on a server: with `NODE_ENV=production` the door, the agent p
 (`ACRYL_PRODUCTION_KEEP` names the ones to keep, with a warning), and the `chat` template is closed until it has a `CHAT_ACCESS_TOKEN`
 - see [What runs in production](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/production.md).
 
-**A starter** other people can pull is a pull request to the registry repository: add `registry/blends/<id>/` with a `blend.yaml` (`kind: Blueprint`,
-an id you own, the license, `visibility`, a category and a one-line description), the plugins it adds under `plugins/`, and a `README.md`. CI
-validates every entry and fails when `index.json` is stale, so what the site lists is what passed. The layout, and how to keep a starter private
-without a registry at all, is in
+**A starter** other people can pull is a pull request to the registry repository: add `registry/blends/<id>/` with your app as it stands (without `node_modules/`
+and `dist/`), its `blend.yaml` made public (`id`, a licence, a category and a one-line description) and an `acryl.template.json`, which is what marks it as an
+app for acrylblends. CI validates every entry, makes the app with `create-acrylblends`, and fails when `index.json` is stale, so what the site lists is what
+passed. The layout, and how to keep a starter private without a registry at all, is in
 [the registry README](https://github.com/acrylblends/acrylblends.github.io/tree/main/registry).
 
 ## Keep the framework current
@@ -139,7 +141,7 @@ npx acrylblends@latest upgrade --dry-run   # the plan: what would be replaced
 npx acrylblends@latest upgrade             # an edited file stops it with the diff, unless --force
 ```
 
-Write `@latest`: a bare `npx acrylblends upgrade` runs the copy the app has installed, and an app made before 1.0 has an old one with no `upgrade` verb (it prints its help and exits 0, so it looks as if it worked).
+Write `@latest`: a bare `npx acrylblends upgrade` runs the copy the app has installed, and an app made before 1.0 has an old one with no `upgrade` verb (it prints its help and exits 0, so it looks as if it worked, or answers "unknown command" and exits 2).
 
 ## Use it as a library
 
