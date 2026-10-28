@@ -289,7 +289,7 @@ applies the `migrations` folder, and provides `db`; a plugin declares `inject: [
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from 'acryl-db'
+import type {} from 'acrylblends/cordis/db'
 
 export const name = 'notes'
 export const inject = ['db']

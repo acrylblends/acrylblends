@@ -126,7 +126,7 @@ smallest one to copy is `examples/acryl-framework-starter`.
 
 ```ts
 import { Context } from '@deepseek-ai/cordis'
-import * as router from 'acryl-router'
+import * as router from 'acrylblends/cordis/router'
 import * as todo from '../src/index.ts'
 
 const ctx = new Context()
@@ -139,13 +139,18 @@ expect(await response.json()).toEqual({ id: '42' })
 
 ## Package map
 
-| Package | Responsibility |
-| --- | --- |
-| `acryl-router` | the application API and the Cordis `router` service |
-| `acryl-router-http` | serving router prefixes on the ACRYL Host's web server |
-| `acryl-node-server` | serving the whole router from a standalone Node.js process |
-| `acryl-state` | shared application state across surfaces |
-| `acryl-inspect` | runtime inspection of mounts, routes and plugins |
+The framework plugins are published as subpaths of the `acrylblends` package (the Cordis forms); an app made by `acrylblends init` carries their source under `plugins/` instead, with the same names.
+
+| Plugin | Published as | Responsibility |
+| --- | --- | --- |
+| `acryl-router` | `acrylblends/cordis/router` | the application API and the Cordis `router` service |
+| `acryl-router-http` | `acrylblends/cordis/router-http` | serving router prefixes on the ACRYL Host's web server, with WebSocket upgrades owned by the mounting plugin |
+| `acryl-node-server` | `acrylblends/cordis/node-server` | serving the whole router from a standalone Node.js process |
+| `acryl-state` | `acrylblends/cordis/state` | shared application state across surfaces |
+| `acryl-inspect` | `acrylblends/cordis/inspect` | runtime inspection of mounts, routes and plugins |
+| `acryl-db`, `acryl-db-sqlite` | `acrylblends/cordis/db`, `acrylblends/cordis/db-sqlite` | the `db` port and its SQLite provider |
+| `acryl-kv`, `acryl-kv-json`, `acryl-kv-db` | `acrylblends/cordis/kv`, `.../kv-json`, `.../kv-db` | the `kv` port and its providers |
+| `acryl-door` | `acrylblends/cordis/door` (experimental) | the door: an agent looks at the running app and acts on it, in development only |
 
 ## Next
 

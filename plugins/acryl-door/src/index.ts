@@ -49,9 +49,15 @@ export const inject = ['router', 'appInstance', 'nodeServer']
 
 export interface Config {
   tools?: { expose?: string[] }
+  /**
+   * The door is a development tool: with `NODE_ENV=production` the plugin starts nothing (no route, no `.acryl/` file, no service), and with `ACRYL_DOOR=off` it never does. A host that means to
+   * run it in production (a packaged desktop app whose user drives it with an agent) says so here; `ACRYL_DOOR=off` still wins.
+   */
+  allowInProduction?: boolean
 }
 
 export const Config: z<Config> = z.object({
+  allowInProduction: z.boolean().default(false).description('Run in production too (NODE_ENV=production); ACRYL_DOOR=off still turns it off.'),
   tools: z.object({
     // Not a `door_` name: those are the door's own verbs in the registry, never offered back as app tools.
     expose: z.array(z.string().pattern(/^(?!door_)[A-Za-z][A-Za-z0-9_-]{0,63}$/u)).description('App tools (from the tools registry) the door offers; none by default.'),
@@ -84,6 +90,8 @@ function loopbackUrl(url: string): string {
 
 export function apply(ctx: Context, rawConfig: Config = {}): void {
   const config = Config(rawConfig)
+  // Development only: nothing is started, mounted or written in production, or when switched off.
+  if (process.env.ACRYL_DOOR === 'off' || (process.env.NODE_ENV === 'production' && config.allowInProduction !== true)) return
   const app = ctx.get('appInstance') as unknown as AppFolder
   const server = ctx.get('nodeServer') as unknown as Listening
   if (typeof app?.root !== 'string') throw new Error('acryl-door: the appInstance service has no app folder (root)')

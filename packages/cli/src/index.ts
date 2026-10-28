@@ -19,4 +19,14 @@ export {
   readTemplatePlugins,
   TargetNotEmptyError,
 } from './project'
-export { isTemplate, TEMPLATES, type Template, templateDir, templatesRoot } from './templates'
+export {
+  isTemplate,
+  resolveTemplate,
+  TEMPLATE_ALIASES,
+  TEMPLATE_SUMMARY,
+  TEMPLATES,
+  type Template,
+  templateDir,
+  templatesRoot,
+} from './templates'
+export { parseUpgradeOptions, type UpgradeOptions, upgrade } from './upgrade'

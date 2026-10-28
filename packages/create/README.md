@@ -14,10 +14,12 @@ Every template is a Cordis app: `blend.yaml` lists the plugins that are mounted 
 
 | Template | What you get |
 | --- | --- |
+| `blank` | the smallest app: the router, a server and one route, with a test |
 | `nodejs` | a web app: routes, a server-rendered JSX page and a client component, with tests; run with Node.js 22.19 or newer |
 | `notes` | a full-stack starter: accounts (scrypt, cookie session), notes in SQLite through the `db` port, validated forms, search, a JSON API with a typed test client, csrf on, a test for every route |
 | `chat` | an AI chat starter: the answer streams token by token (Server-Sent Events) from an OpenAI-compatible API (DeepSeek by default, key only from `DEEPSEEK_API_KEY`), a client component with a Stop button that also stops the request to the model, history in SQLite, tests with a mock model |
-| `acryl-app` | a Cordis app built from plugins, with an agent that can extend it while it runs (the same app `npx acrylblends init --template agent` creates) |
+| `todo` | a to-do list on the router and state: CRUD routes, a page, tests |
+| `agent` | the blank app with an offline agent that builds plugins into the running app, through the door (`acryl-app` is the old name for it and still works) |
 
 Every template includes `AGENTS.md`, `CLAUDE.md` and a copy of the framework documentation in `docs/framework/`, so a coding agent working in the folder reads the API from the folder.
 
@@ -31,7 +33,7 @@ npm create acrylblends@latest my-app -- --template nodejs --install --pm npm
 
 | Option | |
 | --- | --- |
-| `--template <name>` | `nodejs`, `notes`, `chat` or `acryl-app` (a bare name after the directory means the same: `npm create acrylblends@latest my-app notes`) |
+| `--template <name>` | `blank`, `nodejs`, `notes`, `chat`, `todo` or `agent` (the same list as `acrylblends init`; `acryl-app` still means `agent`; a bare name after the directory means the same: `npm create acrylblends@latest my-app notes`) |
 | `--install` | install the dependencies after creating the app |
 | `--pm <manager>` | `npm`, `pnpm`, `yarn` or `bun` (default: the one that ran the command) |
 | `-y`, `--yes` | ask nothing: template `nodejs`, directory `acrylblends-app` unless given |

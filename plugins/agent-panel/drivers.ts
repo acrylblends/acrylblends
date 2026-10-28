@@ -4,11 +4,9 @@
  * - `chat`: a message in, the panel's own events out (`text`, `tool`, `error`). The app's agent, the headless coding agents and a harness chat are chat drivers.
  * - `terminal`: bytes in, bytes out, a real pseudo-terminal (the `driver-pty` plugin). Nothing is forced to speak bytes.
  *
- * The panel lists every registered driver and picks the view by `kind`. A plugin that provides drivers injects `drivers`: with no panel mounted it is pending,
+ * This module is `acrylblends/drivers`: the contract a driver plugin writes against, with no dependency on Cordis. The panel lists every registered driver and picks the view by `kind`. A plugin that provides drivers injects `drivers`: with no panel mounted it is pending,
  * and a panel without such a plugin simply lists none of its drivers.
  */
-import type { Context } from '@deepseek-ai/cordis'
-
 /** One event of a chat run. The panel adds `change` (a plugin was installed or removed) and `done` itself. */
 export type ChatEvent =
   | { readonly event: 'text'; readonly data: { readonly text: string } }
@@ -55,12 +53,6 @@ export interface Drivers {
   authorized(headers: Headers): boolean
 }
 
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    drivers: Drivers
-  }
-}
-
 export function createDrivers(authorized: (headers: Headers) => boolean = () => true): Drivers {
   const table = new Map<string, Driver>()
   return {
@@ -73,11 +65,4 @@ export function createDrivers(authorized: (headers: Headers) => boolean = () => 
     get: (name) => table.get(name),
     authorized,
   }
-}
-
-/** Provide the registry on `ctx` (the panel does). */
-export function provideDrivers(ctx: Context, authorized: (headers: Headers) => boolean): Drivers {
-  const registry = createDrivers(authorized)
-  ;(ctx as Context).provide('drivers', registry)
-  return registry
 }

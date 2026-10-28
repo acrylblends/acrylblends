@@ -1,6 +1,7 @@
 import { cpSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { hashFolder, recordLock } from './lock'
 import { type EntryTable, entryTable, rewriteSpecifiers } from './rewrite'
 
 /** One entry of the plugin library: `plugins/<name>/plugin.json` in this repository. */
@@ -144,7 +145,8 @@ export function pluginsFolder(appDir: string): { dir: string; legacy: boolean } 
 export const LEGACY_WARNING =
   'warning: this app keeps its plugins in src/plugins/ (and extensions/); plugins now live in one folder, plugins/. Move them with "git mv src/plugins plugins", fix the paths in tsconfig.json, package.json and src/, and see docs/framework/agents/index.md. The old layout is read for this release only.'
 
-function recordLibraryCopy(folder: string, name: string): void {
+/** List `name` among the library copies of a plugins folder (`library.json`). */
+export function recordLibraryCopy(folder: string, name: string): void {
   const file = join(folder, LIBRARY_LIST)
   const names: string[] = existsSync(file)
     ? (JSON.parse(readFileSync(file, 'utf8')) as { plugins: string[] }).plugins
@@ -193,7 +195,11 @@ export function copyPlugin(
     },
   })
   if (entries) rewriteTree(join(target, 'src'), plugin.name, 'src', entries)
-  if (!folder.legacy) recordLibraryCopy(folder.dir, plugin.name)
+  if (!folder.legacy) {
+    recordLibraryCopy(folder.dir, plugin.name)
+    // The hashes of the files as copied: `acrylblends upgrade` tells an untouched file from an edited one by them.
+    recordLock(folder.dir, plugin.name, hashFolder(target))
+  }
   return target
 }
 

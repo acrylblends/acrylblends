@@ -1,9 +1,15 @@
 # Releasing
 
-1. Bump `packages/cli/package.json` (`acrylblends`) and `packages/create/package.json` (`create-acrylblends`), and add `docs/release-notes/<version>.md` with its line in `docs/README.md`.
-2. `pnpm run check` must pass: lint, build, `verify:framework`, `verify:secrets`, typecheck, the tests, `verify:scaffolder`, `verify:byo`, `verify:panel`, `verify:packed`, `verify:tarball`.
-3. `pnpm pack` in both packages; publish the two tarballs.
-4. Install the published versions from the registry in an empty folder with an empty home and make an app of every template.
-5. Redeploy the sites.
+Run from `main`, in this order. Every step has a command; nothing is done by hand twice.
 
-**Release gates run the installed package, never the repository's CLI.** What a user gets is the packed tarball installed from scratch; the repository has files the package leaves out (0.9.0 worked from the repository and failed once installed). `verify:packed` installs only the two tarballs and runs their commands.
+1. **Bump and write.** `packages/cli/package.json` (`acrylblends`) and `packages/create/package.json` (`create-acrylblends`); add `docs/release-notes/<version>.md` and its line in `docs/README.md`. If the release changes what a plugin copies into an app, refresh the hash history that `acrylblends upgrade` reads for apps made before the lock: `node scripts/build-library-history.mjs <the versions already published and not yet in shared/library-history.json>`.
+2. **Check.** `pnpm run check` must pass: lint, build, `verify:framework` (the Bun smoke included), `verify:secrets`, typecheck, the tests, `verify:scaffolder`, `verify:byo`, `verify:panel`, `verify:driver-pty`, `verify:packed`, `verify:tarball`. CI runs the framework packages on Linux, macOS and Windows with Node 22 and 24: the branch and then `main` must be green before and after the merge.
+3. **Pack and publish.** `pnpm pack` in `packages/cli` and `packages/create`; publish the two tarballs (a release candidate with `--tag next`, a release as `latest` and `next`).
+4. **Check the registry.** In an empty `HOME`: `npm create acrylblends@<version>` makes an app, installs, type-checks; `acrylblends upgrade --dry-run` runs on an app made by the previous version. For a release that adds a feature, run the feature from the published package.
+5. **Tag and release on GitHub.** `git tag -a v<version> -m "acrylblends <version>" <commit>` and `git tag -a create-acrylblends-v<version> ...` on the commit the tarballs were packed from (the merge, when the branch equals it), push them, then `gh release create v<version> --verify-tag --title "acrylblends <version>" --notes-file docs/release-notes/<version>.md` (`--prerelease` for a candidate).
+6. **Sites.** `node scripts/sync-sites.mjs` (a dry run: clones both sites, copies `docs/framework`, adds the new release notes to the framework site, builds both), then `node scripts/sync-sites.mjs --push`. It waits for the Pages workflows and checks the live pages. Release notes older than the newest the site has are reported, not filled.
+7. **Report.** The merge hash, every workflow result, the published versions and what was checked from the registry.
+
+**Release gates run the installed package, never the repository's CLI.** What a user gets is the packed tarball installed from scratch; the repository has files the package leaves out (0.9.0 worked from the repository and failed once installed). `verify:packed` installs only the two tarballs and runs their commands: it creates an app of every template, adds the panel and the PTY driver, mounts a WebSocket upgrade route, and upgrades apps made by 0.9.1 and 0.10.0, each of which then installs, type-checks and passes its tests.
+
+The real-agent runs are manual, because they use models: `node scripts/verify-coding-agent.mjs <version> --preset notes|chat` and `node scripts/verify-pty-agents.mjs --version <version>`. Their results go into the release's evidence page.

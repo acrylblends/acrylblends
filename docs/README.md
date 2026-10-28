@@ -15,6 +15,7 @@ ACRYLBLENDS is the public ACRYL framework, in two parts.
 | Use the framework: handlers, routing, middleware | [Framework documentation](framework/README.md), [Getting started](framework/getting-started/basic.md) |
 | Look up a call | [API summary](framework/api/summary.md), [Routing](framework/api/routing.md), [Context](framework/api/context.md), [Request](framework/api/request.md) |
 | Use the framework inside a Cordis app | [Acryl in a Cordis app](framework/cordis/acryl-in-a-cordis-app.md), [Mounting](framework/cordis/mounting.md), [Plugin lifecycle](framework/cordis/plugin-lifecycle.md) |
+| Move to 1.0 | [Migration to 1.0](framework/cordis/migration-to-1-0.md) |
 | Move from 0.4 or 0.3 | [Migration from 0.4](framework/cordis/migration-from-0-4.md), [Migration from 0.3](framework/cordis/migration-from-0-3.md) |
 | Create a Blend app and run it | [Getting started](getting-started.md) |
 | Let an agent extend my running app | [Extending a running app](agent/extending-apps.md) |
@@ -44,6 +45,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 0.9.1](release-notes/0.9.1.md) - a fix: apps made by the installed command line start again
 - [Release notes 0.9.2](release-notes/0.9.2.md) - Stop cancels the app's own agent, a secrets scan in check
 - [Release notes 0.10.0](release-notes/0.10.0.md) - driver-pty: a coding agent in a real terminal in the app, the panel's drivers as a registry
+- [Release notes 1.0.0](release-notes/1.0.0.md) - the 1.0 surface, acrylblends upgrade, what runs in production
 - [Release notes 0.11.0](release-notes/0.11.0.md) - WebSocket upgrades on the router, brief prints the address
 - [Release notes 0.9.0](release-notes/0.9.0.md) - the framework's home: the Cordis forms as subpaths, one `Acryl`, the source and its history here
 - [Release notes 0.8.1](release-notes/0.8.1.md) - the door's plugin verbs work in every web template

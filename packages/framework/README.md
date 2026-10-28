@@ -103,8 +103,7 @@ npm install
 npm run dev
 ```
 
-The `nodejs` template is a minimal Acryl app. `bun` is the same for Bun (experimental). `acryl-app` is a Cordis app built from plugins,
-with an agent that can extend it while it runs. See the
+The templates are the same through `npm create acrylblends` and `acrylblends init`: `blank`, `nodejs`, `notes`, `chat`, `todo` and `agent` (a Cordis app with an agent that can extend it while it runs; `acryl-app` is its old name). See the
 [create-acrylblends guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/create-acrylblends.md).
 
 ## A first API
@@ -270,18 +269,17 @@ See [Node.js](https://github.com/acryldev/acryl/blob/main/docs/framework/getting
 | `acrylblends/accepts`, `adapter`, `cookie`, `factory`, `html`, `route`, `streaming`, `ws`, `conninfo` | helpers ([helpers docs](https://github.com/acryldev/acryl/tree/main/docs/framework/helpers)) |
 | `acrylblends/http-exception` | `HTTPException` |
 | `acrylblends/router/*` | the routers: `reg-exp-router`, `smart-router`, `trie-router`, `pattern-router`, `linear-router` ([routers](https://github.com/acryldev/acryl/blob/main/docs/framework/concepts/routers.md)) |
-| `acrylblends/utils/*` | the utilities the framework is built from |
 | `acrylblends/tiny`, `acrylblends/quick` | the presets: `Acryl` with another router (`PatternRouter`; `LinearRouter` and `TrieRouter`) ([presets](https://github.com/acryldev/acryl/blob/main/docs/framework/api/presets.md)) |
 | `acrylblends/cache`, `acrylblends/mount` | the cache middleware and mounting another framework's fetch handler |
 | `acrylblends/ssg` | static site generation: `toSSG` writes every route as a file ([SSG helper](https://github.com/acryldev/acryl/blob/main/docs/framework/helpers/ssg.md)) |
 | `acrylblends/proxy`, `acrylblends/dev` | the proxy helper and the dev helpers (`showRoutes`, `inspectRoutes`, `getRouterName`) |
 | `acrylblends/jsx` | JSX on the server: `jsxImportSource: 'acrylblends/jsx'`, `.tsx` files run on Node with `node --import acrylblends/node-server/register`, with `jsx/streaming`, and `acrylblends/jsx-renderer` for a layout behind `c.render` ([JSX guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/jsx.md)) |
 | `acrylblends/jsx/dom` | JSX in the browser: hooks and `render` (needs the DOM library) ([client components](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/jsx-dom.md)); on Node, `clientModules` serves them to the browser without a bundler ([guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/client-modules.md)) |
+| `acrylblends/drivers` | the driver contract of the agent panel (`ChatDriver`, `TerminalDriver`, `Drivers`), for plugins that add an agent to the panel |
 | `acrylblends/css` | CSS in JSX: `css`, `cx`, `keyframes`, `Style` ([CSS helper](https://github.com/acryldev/acryl/blob/main/docs/framework/helpers/css.md)) |
 | `acrylblends/node-server` | `serve`, `createAdaptorServer`, `getRequestListener`; with `node-server/serve-static`, `node-server/conninfo`, and `node-server/register` (compiles `.tsx` with the app's `typescript`); `clientModules` and `buildClientModules` (client components without a bundler) |
 
-Every subpath is listed in the package's `exports`. The adapters of other runtimes are being ported. The docs mark them "not yet available" until they ship
-([FAQ](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/faq.md)).
+Every subpath in the table is listed in the package's `exports` and is covered by semver from 1.0, except the ones marked experimental: `acrylblends/bun` and the door (`door/*`, `cordis/door`), which are development tools. The ported core's utilities (`utils/*`) and the base-class chunk are internal and not exported. Node.js is the runtime the package is verified on; the upstream's adapters for AWS Lambda, Lambda@Edge, Cloudflare, Vercel, Netlify and Service Workers are not part of the package ([Other runtimes](https://github.com/acryldev/acryl/blob/main/docs/framework/getting-started/other-runtimes.md)).
 
 To extend the context's typed variables, augment the root module:
 
@@ -295,8 +293,8 @@ declare module 'acrylblends' {
 
 ## Upgrading from 0.4
 
-From 0.5 the package's root is the framework. `App` and `AppRequest`, the 0.4 names, still work as deprecated aliases of `Acryl` and
-`AcrylRequest` for one release. The scaffolding API that was the root in 0.4 is now `acrylblends/cli`. See
+From 0.5 the package's root is the framework. `App` and `AppRequest`, the 0.4 names, were kept as deprecated aliases of `Acryl` and
+`AcrylRequest` and are removed in 1.0. The scaffolding API that was the root in 0.4 is now `acrylblends/cli`. See
 [Migration from 0.4](https://github.com/acryldev/acryl/blob/main/docs/framework/cordis/migration-from-0-4.md).
 
 ## The acrylblends command

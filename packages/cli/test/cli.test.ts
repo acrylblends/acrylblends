@@ -13,6 +13,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import {
   closure,
   copyPlugin,
+  HELP,
   type Io,
   isOmitted,
   nameFrom,
@@ -20,6 +21,7 @@ import {
   readLibrary,
   readTemplatePlugins,
   runCli,
+  TEMPLATE_SUMMARY,
   TEMPLATES,
   templatesRoot,
   UsageError,
@@ -51,8 +53,18 @@ function fakeIo(options: { answers?: string[]; installCode?: number } = {}) {
 const manifest = (dir: string) => JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
 
 describe('templates', () => {
-  it('are exactly blank, todo and agent', () => {
+  it('are exactly the folders of templates/, each with a one-line summary, and the help lists them all', () => {
     expect(readdirSync(templatesRoot()).sort()).toEqual([...TEMPLATES].sort())
+    expect(Object.keys(TEMPLATE_SUMMARY).sort()).toEqual([...TEMPLATES].sort())
+    for (const name of TEMPLATES)
+      expect(HELP).toContain(`${name.padEnd(7)} ${TEMPLATE_SUMMARY[name]}`)
+  })
+
+  it('init accepts every template by name, and the old create name acryl-app means agent', () => {
+    for (const name of TEMPLATES)
+      expect(parseInitOptions(['app', '--template', name]).template).toBe(name)
+    expect(parseInitOptions(['app', '--template', 'acryl-app']).template).toBe('agent')
+    expect(() => parseInitOptions(['app', '--template', 'nope'])).toThrow(/unknown template/)
   })
 
   it.each(TEMPLATES)(

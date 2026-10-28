@@ -16,6 +16,7 @@ import { streamSSE } from '../acryl-router/src/helpers/index.ts'
 import { Acryl } from '../acryl-router/src/index.ts'
 import type { TerminalDriver, TerminalSession } from '../agent-panel/drivers.ts'
 import { onPath } from '../agent-panel/headless.ts'
+import type {} from '../agent-panel/registry.ts'
 import { loadNodePty, type PtySpawn } from './spawn.ts'
 import { terminalDriver } from './terminal.ts'
 

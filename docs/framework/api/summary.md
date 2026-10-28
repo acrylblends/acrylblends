@@ -10,7 +10,7 @@ import { Acryl } from 'acrylblends'
 import { trimTrailingSlash } from 'acrylblends/trailing-slash'
 import { schemaValidator, type StandardSchema } from 'acrylblends/schema-validator'
 import { streamSSE } from 'acrylblends/streaming'
-import type {} from 'acryl-state'
+import type {} from 'acrylblends/cordis/state'
 
 export const name = 'orders'                 // the package name and the Loader row id
 export const inject = ['router', 'state']    // the plugin waits (PENDING) until both exist

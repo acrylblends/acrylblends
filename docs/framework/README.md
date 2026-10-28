@@ -36,7 +36,7 @@ Every template is a Cordis app (`blend.yaml`, plugins in `plugins/`). The starte
 
 ## Runtimes
 
-Verified: Node.js. Bun is experimental (its adapter is checked on Bun). Adapters for AWS Lambda, Lambda@Edge, Cloudflare Workers and Pages, Vercel, Netlify and Service Workers are part of the package, with a guide each on [Other runtimes](getting-started/other-runtimes.md); they are tested with the platforms' own events and have not been deployed by the ACRYL team.
+Verified: Node.js. Bun is experimental (its adapter, `acrylblends/bun`, has one smoke gate). The other hosting adapters of the upstream (AWS Lambda, Lambda@Edge, Cloudflare, Vercel, Netlify, Service Workers) are not part of the package: no gate of ours deploys to them. See [Other runtimes](getting-started/other-runtimes.md).
 
 ## Not yet available
 
@@ -50,12 +50,14 @@ They are enabled as they are built.
 | Run something in five minutes | [Getting started](getting-started/basic.md) |
 | Run the app as a desktop app | [Desktop](getting-started/desktop.md) |
 | Run it on a server | [Deploy](getting-started/deploy.md) |
-| Run it on a hosting platform | [Other runtimes](getting-started/other-runtimes.md): [AWS Lambda](getting-started/aws-lambda.md), [Cloudflare Workers](getting-started/cloudflare-workers.md), [Vercel](getting-started/vercel.md), [Netlify](getting-started/netlify.md) |
+| Run it on another runtime | [Other runtimes](getting-started/other-runtimes.md): Node.js is the verified one, [Bun](getting-started/bun.md) is experimental |
 | Look up a call | [API](api/index.md), [Routing](api/routing.md), [Context](api/context.md), [Request](api/request.md), [API summary](api/summary.md) |
 | Understand the design | [Concepts](concepts/motivation.md) |
 | Copy a pattern | [Guides](guides/best-practices.md), [Validation](guides/validation.md), [Testing](guides/testing.md), [Data, migrations and choosing a store](guides/data.md), [Forms, sessions and a database](guides/forms-and-sessions.md), [Client components without a bundler](guides/client-modules.md), [Bring your own tool](guides/bring-your-own-tool.md) |
 | Use Acryl inside a Cordis app | [Acryl in a Cordis app](cordis/acryl-in-a-cordis-app.md), [Plugin lifecycle](cordis/plugin-lifecycle.md), [Mounting](cordis/mounting.md) |
 | Move from the 0.3 router calls | [Migration from 0.3](cordis/migration-from-0-3.md) |
+| Know what runs in production, and what the sandbox stops | [What runs in production](guides/production.md) |
+| Move to 1.0 (`acrylblends upgrade`) | [Migration to 1.0](cordis/migration-to-1-0.md) |
 | Move from the 0.4 names (`App`) | [Migration from 0.4](cordis/migration-from-0-4.md) |
 
 The license of these pages and of the framework source they describe is in [LICENSE](LICENSE).

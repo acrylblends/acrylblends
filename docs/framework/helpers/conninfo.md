@@ -4,48 +4,13 @@ The ConnInfo Helper helps you to get the connection information. For example, yo
 
 ## Import
 
-Each adapter has its own `getConnInfo`: `acrylblends/node-server`, `acrylblends/cloudflare-workers`, `acrylblends/vercel`, `acrylblends/aws-lambda`, `acrylblends/netlify`, `acrylblends/lambda-edge` and `acrylblends/bun`. The Bun example is not type-checked by the docs tests, which run without Bun's types.
-
-**Cloudflare Workers**
-
-```ts
-import { Acryl } from 'acrylblends'
-import { getConnInfo } from 'acrylblends/cloudflare-workers'
-```
+Each adapter has its own `getConnInfo`: `acrylblends/node-server` and `acrylblends/bun` (experimental).
 
 **Bun**
 
 ```ts
 import { Acryl } from 'acrylblends'
 import { getConnInfo } from 'acrylblends/bun'
-```
-
-**Vercel**
-
-```ts
-import { Acryl } from 'acrylblends'
-import { getConnInfo } from 'acrylblends/vercel'
-```
-
-**AWS Lambda**
-
-```ts
-import { Acryl } from 'acrylblends'
-import { getConnInfo } from 'acrylblends/aws-lambda'
-```
-
-**Netlify**
-
-```ts
-import { Acryl } from 'acrylblends'
-import { getConnInfo } from 'acrylblends/netlify'
-```
-
-**Lambda@Edge**
-
-```ts
-import { Acryl } from 'acrylblends'
-import { getConnInfo } from 'acrylblends/lambda-edge'
 ```
 
 **Node.js**

@@ -3,11 +3,29 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** The templates, all Cordis apps: a web app with a page and a client component (nodejs), a notes app and a chat app on the db port (notes, chat), a blank app on the router, a todo list on the router and state, and the blank app with the offline agent. */
-export const TEMPLATES = ['nodejs', 'notes', 'chat', 'blank', 'todo', 'agent'] as const
+export const TEMPLATES = ['blank', 'nodejs', 'notes', 'chat', 'todo', 'agent'] as const
 export type Template = (typeof TEMPLATES)[number]
+
+/** One line per template: the single list `acrylblends init` and `create-acrylblends` both show (`create-acrylblends` tests that its own copy equals this one). */
+export const TEMPLATE_SUMMARY: Record<(typeof TEMPLATES)[number], string> = {
+  blank: 'the router, a server and one route: the smallest app',
+  nodejs: 'a web app with a page and a client component',
+  notes: 'a multi-user notes app on the db port (sign-up, log-in, sessions)',
+  chat: 'a chat app that streams an answer over server-sent events',
+  todo: 'a to-do list on the router and state',
+  agent: 'the blank app with an offline agent that builds plugins into the running app',
+}
+
+/** Names that were templates once and still work: `create-acrylblends --template acryl-app` made the agent app. */
+export const TEMPLATE_ALIASES: Record<string, Template> = { 'acryl-app': 'agent' }
 
 export function isTemplate(value: string): value is Template {
   return (TEMPLATES as readonly string[]).includes(value)
+}
+
+/** The template a name means: itself, or what an old name stands for; undefined for anything else. */
+export function resolveTemplate(value: string): Template | undefined {
+  return isTemplate(value) ? value : TEMPLATE_ALIASES[value]
 }
 
 /**

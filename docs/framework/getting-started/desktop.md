@@ -1,7 +1,7 @@
 # Desktop
 
 An Acryl app also runs as a desktop app: an Electron window opens on the app's own server. It is the same app and the same code as `npm run dev`; nothing in the app changes. This page covers a plain Acryl app (the `nodejs`
-template) and a Blend app (the `acryl-app` template or `acrylblends init`). It runs from source today: packaging a distributable app (dmg, exe, deb) is not part of it yet.
+template) and a Blend app (the `agent` template or any other `acrylblends init` template). It runs from source today: packaging a distributable app (dmg, exe, deb) is not part of it yet.
 
 ## Add it
 

@@ -31,7 +31,7 @@ app.use(
 app.get('/', (c) => c.text('Acryl!'))
 ```
 
-Pass the `getConninfo` from the [ConnInfo helper](../../helpers/conninfo.md) appropriate for your environment as the first argument of `ipRestriction`. Every adapter has one (`acrylblends/bun`, `acrylblends/aws-lambda`, `acrylblends/node-server` and the others).
+Pass the `getConninfo` from the [ConnInfo helper](../../helpers/conninfo.md) appropriate for your environment as the first argument of `ipRestriction`. Every adapter has one (`acrylblends/node-server` and `acrylblends/bun`).
 
 ## Rules
 
