@@ -240,3 +240,39 @@ describe('the door in a framework app', () => {
     expect(refused.err).toMatch(/^not-exposed:/u)
   })
 })
+
+describe('the door is a development tool', () => {
+  const saved = { NODE_ENV: process.env.NODE_ENV, ACRYL_DOOR: process.env.ACRYL_DOOR }
+  afterEach(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  })
+
+  it('with NODE_ENV=production it starts nothing: no connection file, no shim, no service, no route', async () => {
+    process.env.NODE_ENV = 'production'
+    delete process.env.ACRYL_DOOR
+    const running = await startApp({ withServer: false })
+    apps.push(running)
+    expect(existsSync(doorFilePath(running.root))).toBe(false)
+    expect(existsSync(join(running.root, '.acryl'))).toBe(false)
+    expect((running.ctx as unknown as { door?: unknown }).door).toBeUndefined()
+  })
+
+  it('with ACRYL_DOOR=off it starts nothing, even where production is allowed', async () => {
+    process.env.NODE_ENV = 'development'
+    process.env.ACRYL_DOOR = 'off'
+    const running = await startApp({ withServer: false, config: { allowInProduction: true } })
+    apps.push(running)
+    expect((running.ctx as unknown as { door?: unknown }).door).toBeUndefined()
+    expect(existsSync(join(running.root, '.acryl'))).toBe(false)
+  })
+
+  it('a host that allows it runs the door in production', async () => {
+    process.env.NODE_ENV = 'production'
+    delete process.env.ACRYL_DOOR
+    const running = await app({ config: { allowInProduction: true } })
+    expect(readDoorFile(running.root)?.url).toBe(running.origin)
+  })
+})

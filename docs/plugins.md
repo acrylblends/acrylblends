@@ -47,13 +47,15 @@ them in order; an unchanged value notifies nobody; pending writes settle on disp
 
 ## extensions
 
+**Experimental, development only** (see [what runs in production](framework/guides/production.md)): the web templates leave it out with `NODE_ENV=production`. Installing is a correctness check, not a security boundary: the plugin's code runs in the app's process with the app's permissions.
+
 Install, update, remove and reload Cordis plugins while the app runs: `ctx.extensions.install(folder)`, `remove(name)`,
 `reload()`, `list()`, `pending()`, `ledger()`. A failed update brings the previous version back. Config: `{ sources: [{
 dir, trust: 'install' | 'list' }] }`. Details in [Extending a running app](agent/extending-apps.md).
 
 ## sandbox
 
-`ctx.sandbox.run(entry, input, { timeoutMs, memoryMb, read })` runs a file that exports `run(input)` in a separate Node process
+For tools an agent writes, not for plugins installed live (those run in the app's process). `ctx.sandbox.run(entry, input, { timeoutMs, memoryMb, read })` runs a file that exports `run(input)` in a separate Node process
 under the permission model (`node --permission`): it can read only its own folder; it cannot write files, start processes or
 workers, or load native addons; it gets an empty environment; it is killed after a time limit and capped in memory and output.
 It never throws: failures are results (`denied`, `timeout`, `output`, `crash`, `error`). **It does not block the network**: Node 24
@@ -61,7 +63,7 @@ has no network permission, so restrict egress outside the process where that mat
 
 ## builder
 
-Gives the agent tools over Extensions: `list_plugins`, `read_plugin`, `write_plugin`, `install_plugin`, `remove_plugin`.
+**Experimental, development only.** Gives the agent tools over Extensions: `list_plugins`, `read_plugin`, `write_plugin`, `install_plugin`, `remove_plugin`.
 Writes are confined to one extensions folder (`{ dir }`, which must be an extensions source) and to source files. It
 teaches the scripted model commands (`create route <name> <path> <text>`, `update route ...`, `break plugin <name>`,
 `remove plugin <name>`, `list plugins`) so the whole loop runs offline.
@@ -108,7 +110,7 @@ has a tool registry. It never reads, stores or asks for a token: git and gh use 
 
 ## agent-panel
 
-A chat panel inside the running app (spec 049 slice 14). `npx acrylblends add agent-panel` copies it (with the agent family it needs) into an app made from the `agent` template; add a row
+**Experimental, development only** (it does nothing with `NODE_ENV=production`; see [what runs in production](framework/guides/production.md)). A chat panel inside the running app (spec 049 slice 14). `npx acrylblends add agent-panel` copies it (with the agent family it needs) into an app made from the `agent` template; add a row
 `- id: agent-panel` / `name: agent-panel` to `blend.yaml` **before** the `routes` row and `'agent-panel': panel` to the registry in `src/app.ts` (the line `acrylblends add` prints). Open the app in a browser:
 a button at the corner opens a side panel. Write what you want; the panel's agent builds it **through the same door** (`.acryl/bin/acryl`, see the app's `AGENTS.md`), and when a plugin was installed or
 removed the page reloads, so the feature shows with no restart.
@@ -124,7 +126,7 @@ removed the page reloads, so the feature shows with no restart.
 
 ## driver-pty
 
-A coding agent in a real terminal inside the running app (M8). `npx acrylblends add driver-pty` copies the plugin (and installs `node-pty`) into an app that has [agent-panel](#agent-panel); add a row
+**Experimental, development only** (it does nothing with `NODE_ENV=production`; see [what runs in production](framework/guides/production.md)). A coding agent in a real terminal inside the running app (M8). `npx acrylblends add driver-pty` copies the plugin (and installs `node-pty`) into an app that has [agent-panel](#agent-panel); add a row
 `- id: driver-pty` / `name: driver-pty` to `blend.yaml` **after** the `agent-panel` row and `'driver-pty': driverPty` to the registry in `src/app.ts`. The panel then offers `pty:claude`, `pty:codex` and
 `pty:pi` (the ones installed on the machine) next to its chat drivers; choosing one swaps the chat for the program's own terminal (xterm.js), in the app folder with `.acryl/bin` on its `PATH`, so the agent
 works in its interactive mode and acts through the door as the headless drivers do. `config.programs` (`{ node: ['agent.mjs'] }`) offers other programs as `pty:<name>`.
