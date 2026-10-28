@@ -19,6 +19,7 @@ against a real Cordis context, including disposal.
 | [save](#save) | a tool for the agent | `runtime/app-persistence` |
 | [agent-panel](#agent-panel) | `drivers` (a chat panel in the page) | - |
 | [driver-pty](#driver-pty) | none (terminal drivers for the panel) | node-pty, xterm.js |
+| [driver-acp](#driver-acp) | none (chat drivers for the panel) | - |
 
 ## instance
 
@@ -139,6 +140,24 @@ works in its interactive mode and acts through the door as the headless drivers 
 - **No PTY here.** `node-pty` ships prebuilds for macOS, Linux and Windows; if it cannot load (a sandbox that forbids PTYs) the plugin logs why and offers no `pty:*` driver.
 - The gate: `node scripts/verify-driver-pty.mjs` adds both plugins to a fresh `agent` app, opens the terminal in headless Chrome, and a scripted program in the PTY installs a plugin through the door; the page
   reloads and re-attaches. `pnpm run test:driver-pty` runs the plugin's tests with a real PTY on Linux, macOS and Windows. Design: [the PTY driver plan](plans/pty-driver.md).
+
+## driver-acp
+
+**Experimental, development only** (it does nothing with `NODE_ENV=production`; see [what runs in production](framework/guides/production.md)). Any agent that speaks the
+[Agent Client Protocol](https://agentclientprotocol.com) (ACP v1 over stdio) as a chat in the [agent panel](#agent-panel) (M8). `npx acrylblends add driver-acp` copies the plugin into an app that has the
+panel; add a row `- id: driver-acp` / `name: driver-acp` to `blend.yaml` **after** the `agent-panel` row and `'driver-acp': driverAcp` to the registry in `src/app.ts`. The panel then offers `acp:<name>`
+for each agent whose command is on the machine.
+
+- **Presets, no agent code.** An agent is a command line that starts its ACP server. `dsh` (DeepSeek Harness, `dsh --profile acp`) is the first preset; `config.agents` replaces the presets
+  (`{ 'my-agent': { command: 'my-agent', args: ['--acp'] } }`, with an optional `env` added to the app's environment). A key the agent needs is read from the environment the app was started in.
+- **Session.** The agent starts in the app folder at the first message and keeps one ACP session, so later messages continue the conversation; an agent that ended starts again at the next message. One
+  message runs at a time.
+- **Events.** The agent's message chunks are `text`, each finished tool call is one `tool` (its title, input, and result or error), and a turn that stops short (a refusal, a token or request limit,
+  an agent that ended) is an `error` with the reason. Thoughts and plans stay out of the chat.
+- **Stop and permissions.** Stop sends `session/cancel`. A permission request gets the agent's own "reject once" option, or "allow once" with `config.permissions: 'allow'`.
+- **Disposal.** Every agent process is started inside one `ctx.effect`; its disposer closes the process's stdin, then sends SIGTERM, then kills it (the whole tree on Windows). Unloading the plugin
+  leaves no process behind.
+- **Not on the machine.** An agent whose command is not on the `PATH` gets no driver, and the plugin logs one line saying so.
 
 ## desktop
 

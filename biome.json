@@ -15,6 +15,7 @@
       "!**/*.md",
       "!plugins/acryl-*",
       "!plugins/driver-pty/client/vendor",
+      "!plugins/driver-acp/test/acp-v1",
       "!packages/framework",
       "!packages/cli/lib",
       "!packages/cli/templates/todo/src/todo.ts",
