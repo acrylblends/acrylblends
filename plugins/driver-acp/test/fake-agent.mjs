@@ -99,7 +99,9 @@ async function prompt(id, { sessionId, prompt: blocks }) {
       process.stderr.write('boom: the fake agent crashed\n')
       return process.exit(3)
     case 'spawn': {
-      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        stdio: 'ignore',
+      })
       if (process.env.FAKE_ACP_PIDS) appendFileSync(process.env.FAKE_ACP_PIDS, `${child.pid}\n`)
       text(sessionId, 'started')
       return send({ id, result: { stopReason: 'end_turn' } })
