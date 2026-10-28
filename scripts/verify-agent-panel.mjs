@@ -3,7 +3,7 @@
 // The gate of spec 049 slice 14: in a fresh agent app with the panel added, a real (headless) Chrome opens the page, the message "create route hello /hello Hello" is sent from the
 // panel, the agent builds the feature, the page reloads, and /hello answers Hello, in the same process (no restart). Uses the app's offline scripted agent: no key, no network.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
