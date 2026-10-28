@@ -4,6 +4,7 @@ import { checkDeps, parseCheckDepsOptions } from './check-deps'
 import { init, parseInitOptions, UsageError } from './init'
 import { type Io, processIo } from './io'
 import { kvImport, parseKvOptions } from './kv-import'
+import { TEMPLATE_SUMMARY, TEMPLATES } from './templates'
 import { VERSION } from './version'
 
 export { VERSION }
@@ -22,7 +23,7 @@ Usage:
                                       package.json "acryl": { "opener": "src/db.ts" } (a port is imported, a provider is not)
 
 Options for init:
-  --template <name>      blank or agent (asked when not given); --agent means --template agent,
+  --template <name>      one of the templates below (asked when not given); --agent means --template agent,
                          --no-agent means --template blank
   --name <name>          the project name (default: the directory name)
   --desktop              also add the desktop shell: npm run desktop opens a window on the app
@@ -31,6 +32,9 @@ Options for init:
 
   -h, --help             show this help
   -v, --version          show the version
+
+Templates (the same list as npm create acrylblends):
+${TEMPLATES.map((name) => `  ${name.padEnd(7)} ${TEMPLATE_SUMMARY[name]}`).join('\n')}
 `
 
 /**

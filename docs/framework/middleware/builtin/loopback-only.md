@@ -3,7 +3,7 @@
 The guard for a local app's own routes, such as a control API a desktop window calls:
 
 ```ts
-import { loopbackOnly } from 'acryl-router/middleware'
+import { loopbackOnly } from 'acrylblends/loopback-only'
 
 app.use('/control/*', loopbackOnly())
 ```

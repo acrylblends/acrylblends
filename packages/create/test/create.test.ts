@@ -12,7 +12,9 @@ import {
   PACKAGE,
   parseCreateOptions,
   runCreate,
+  TEMPLATE_ALIASES,
   TEMPLATE_MANIFEST,
+  TEMPLATE_SUMMARY,
   TEMPLATES,
   UsageError,
 } from '../src/index'
@@ -98,6 +100,26 @@ describe('options', () => {
   })
 })
 
+describe('the template list', () => {
+  it('is the list acrylblends init has: same names, same order, same summaries, so the two commands cannot drift', async () => {
+    const cli = (await import(resolve(repo, 'packages/cli/src/templates.ts'))) as {
+      TEMPLATES: readonly string[]
+      TEMPLATE_SUMMARY: Record<string, string>
+      TEMPLATE_ALIASES: Record<string, string>
+    }
+    expect([...TEMPLATES]).toEqual([...cli.TEMPLATES])
+    expect(TEMPLATE_SUMMARY).toEqual(cli.TEMPLATE_SUMMARY)
+    expect(TEMPLATE_ALIASES).toEqual(cli.TEMPLATE_ALIASES)
+  })
+
+  it('every template is available through create, and the old name acryl-app still means agent', () => {
+    for (const template of TEMPLATES)
+      expect(parseCreateOptions(['app', template]).template).toBe(template)
+    expect(parseCreateOptions(['app', '--template', 'acryl-app']).template).toBe('agent')
+    expect(parseCreateOptions(['app', 'acryl-app']).template).toBe('agent')
+  })
+})
+
 describe('create', () => {
   it.each(TEMPLATES)(
     "%s: is made by the framework package's own init, as a Cordis app (blend.yaml, plugins/)",
@@ -109,7 +131,7 @@ describe('create', () => {
         'init',
         join(scratch, `app-${template}`),
         '--template',
-        template === 'acryl-app' ? 'agent' : template,
+        template,
         '--name',
         `app-${template}`,
         '--yes',
@@ -160,6 +182,6 @@ describe('create', () => {
     const h = fakeIo()
     expect(await runCreate(['--help'], h.io)).toBe(0)
     expect(h.out()).toContain(`npm create ${PACKAGE}@latest`)
-    expect(TEMPLATES).toEqual(['nodejs', 'notes', 'chat', 'acryl-app'])
+    expect(TEMPLATES).toEqual(['blank', 'nodejs', 'notes', 'chat', 'todo', 'agent'])
   })
 })

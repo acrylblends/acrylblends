@@ -18,8 +18,9 @@ import {
 } from './project'
 import {
   frameworkDocsRoot,
-  isTemplate,
+  resolveTemplate,
   sharedDir,
+  TEMPLATE_SUMMARY,
   TEMPLATES,
   type Template,
   templateDir,
@@ -53,21 +54,22 @@ export function parseInitOptions(argv: readonly string[]): InitOptions {
   if (positionals.length > 1) throw new UsageError('init takes at most one directory')
   if (values.agent && values['no-agent'])
     throw new UsageError('use --agent or --no-agent, not both')
-  if (values.template !== undefined && !isTemplate(values.template))
+  const named = values.template === undefined ? undefined : resolveTemplate(values.template)
+  if (values.template !== undefined && named === undefined)
     throw new UsageError(`unknown template "${values.template}" (${TEMPLATES.join(', ')})`)
   const alias: Template | undefined = values.agent
     ? 'agent'
     : values['no-agent']
       ? 'blank'
       : undefined
-  if (values.template !== undefined && alias !== undefined && values.template !== alias)
+  if (named !== undefined && alias !== undefined && named !== alias)
     throw new UsageError(
       `--template ${values.template} contradicts --${alias === 'agent' ? 'agent' : 'no-agent'}`,
     )
   return {
     directory: positionals[0],
     name: values.name,
-    template: (values.template as Template | undefined) ?? alias,
+    template: named ?? alias,
     install: values.install,
     desktop: values.desktop === true,
     yes: values.yes === true,
@@ -93,9 +95,16 @@ const parse = (argv: readonly string[]) =>
 const yes = (answer: string) => ['y', 'yes'].includes(answer.trim().toLowerCase())
 
 async function askTemplate(ask: (question: string) => Promise<string>): Promise<Template> {
-  const answer = (await ask(`Template (${TEMPLATES.join(', ')}) [blank]: `)).trim().toLowerCase()
+  const answer = (
+    await ask(
+      `Templates:\n${TEMPLATES.map((name) => `  ${name.padEnd(7)} ${TEMPLATE_SUMMARY[name]}`).join('\n')}\nTemplate [blank]: `,
+    )
+  )
+    .trim()
+    .toLowerCase()
   if (answer === '') return 'blank'
-  if (isTemplate(answer)) return answer
+  const chosen = resolveTemplate(answer)
+  if (chosen !== undefined) return chosen
   throw new UsageError(`unknown template "${answer}" (${TEMPLATES.join(', ')})`)
 }
 

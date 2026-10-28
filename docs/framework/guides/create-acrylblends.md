@@ -7,10 +7,12 @@
 
 | Template | What you get |
 | --- | --- |
+| `blank` | the smallest app: the router, a server and one route, with a test |
 | `nodejs` | a web app: routes, a server-rendered JSX page and a client component, mounted by the app's own plugin; run with Node.js 22.19 or newer |
 | `notes` | a full-stack starter: accounts (scrypt, cookie session), notes in SQLite through the [`db` port](data.md) with numbered migrations, validated forms, search, a JSON API with a typed test client, csrf, a test for every route, a client-component counter |
 | `chat` | an AI chat starter: the answer streams token by token from an OpenAI-compatible API (DeepSeek by default, key only from `DEEPSEEK_API_KEY`), a client component with a Stop button that also stops the request to the model, history in SQLite through the [`db` port](data.md), tests with a mock model |
-| `acryl-app` | a Cordis app built from plugins, with an agent that can extend it while it runs (the same app `npx acrylblends init --template agent` creates) |
+| `todo` | a to-do list on the router and state: CRUD routes, a page, tests |
+| `agent` | the blank app with an offline agent that builds plugins into the running app, through the door (`acryl-app` is the old name for it and still works) |
 
 Every template is a Cordis app: `blend.yaml` lists the plugins that are mounted, every plugin is a folder in `plugins/`, and the app is started by `src/main.ts`. A bare template name after the directory is the same as `--template`: `npm create acrylblends@latest my-app notes`. `bun` is no longer a template; the framework still runs on Bun (see [Bun](../getting-started/bun.md)), but a new app is a Cordis app on Node.
 
@@ -51,7 +53,7 @@ bun create acrylblends@latest my-app --template nodejs
 | :-- | :-- | :-- |
 | `[directory]` | The folder to create. It must not exist or must be empty. Asked for when it is missing. | `my-app` |
 | `[source]` | A template from outside the package: `github:owner/repo[#ref]`, `@scope/name[@version]` or a packed `.tgz` file. See [Templates from a repository or a package](#templates-from-a-repository-or-a-package). | `github:acme/starter` |
-| `--template <template>` | One of `nodejs`, `notes`, `chat`, `acryl-app`. Skips the template question; a bare name after the directory means the same. | `--template notes` |
+| `--template <template>` | One of `blank`, `nodejs`, `notes`, `chat`, `todo`, `agent` (the same list as `acrylblends init --template`; `acryl-app` is accepted as `agent`). Skips the template question; a bare name after the directory means the same. | `--template notes` |
 | `--install` | Install the dependencies with the package manager after creating the project. For a template from a source, the install scripts it will run are listed first. | `--install` |
 | `--pm <packageManager>` | The package manager for `--install`: `npm`, `pnpm`, `yarn` or `bun`. Defaults to the one that started the initializer. | `--pm pnpm` |
 | `--yes`, `-y` | Ask nothing: use `nodejs` unless `--template` is given, and the directory `acryl-app`. | `-y` |

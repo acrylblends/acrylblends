@@ -103,8 +103,7 @@ npm install
 npm run dev
 ```
 
-The `nodejs` template is a minimal Acryl app. `bun` is the same for Bun (experimental). `acryl-app` is a Cordis app built from plugins,
-with an agent that can extend it while it runs. See the
+The templates are the same through `npm create acrylblends` and `acrylblends init`: `blank`, `nodejs`, `notes`, `chat`, `todo` and `agent` (a Cordis app with an agent that can extend it while it runs; `acryl-app` is its old name). See the
 [create-acrylblends guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/create-acrylblends.md).
 
 ## A first API

@@ -33,8 +33,25 @@ import { packageManagerInvocation } from './spawn'
 
 export { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST }
 
-export const TEMPLATES = ['nodejs', 'notes', 'chat', 'acryl-app'] as const
+/**
+ * The templates: the same list as acrylblends init (the framework package makes every one of them; create-acrylblends delegates). A test compares this list and its summaries with the
+ * framework package's, so they cannot drift.
+ */
+export const TEMPLATES = ['blank', 'nodejs', 'notes', 'chat', 'todo', 'agent'] as const
 export type Template = (typeof TEMPLATES)[number]
+export const TEMPLATE_SUMMARY: Record<Template, string> = {
+  blank: 'the router, a server and one route: the smallest app',
+  nodejs: 'a web app with a page and a client component',
+  notes: 'a multi-user notes app on the db port (sign-up, log-in, sessions)',
+  chat: 'a chat app that streams an answer over server-sent events',
+  todo: 'a to-do list on the router and state',
+  agent: 'the blank app with an offline agent that builds plugins into the running app',
+}
+/** Names that were templates once and still work. */
+export const TEMPLATE_ALIASES: Record<string, Template> = { 'acryl-app': 'agent' }
+const TEMPLATE_LIST = TEMPLATES.map((name) => `  ${name.padEnd(7)} ${TEMPLATE_SUMMARY[name]}`).join(
+  '\n',
+)
 export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number]
 
@@ -55,12 +72,15 @@ A source makes the app from someone else's template (it is downloaded and unpack
 A template is a folder with an ${TEMPLATE_MANIFEST} (name, description, plugins).
 
 Options:
-  --template <name>   nodejs, notes, chat, acryl-app (asked when not given); a bare name after the directory means the same
+  --template <name>   one of the templates below (asked when not given); a bare name after the directory means the same
                       (npm create ${PACKAGE}@latest my-app notes). Every template is a Cordis app: blend.yaml, plugins/
   --install           install the dependencies after creating the app (the lifecycle scripts it will run are listed first)
   --pm <manager>      ${PACKAGE_MANAGERS.join(', ')} (default: the one that ran this command, else npm)
   -y, --yes           ask nothing: template nodejs unless --template is given, directory ${PACKAGE}-app
   -h, --help          show this help
+
+Templates (the same list as acrylblends init):
+${TEMPLATE_LIST}
   -v, --version       show the version
 `
 
@@ -123,6 +143,11 @@ export function isTemplate(value: string): value is Template {
   return (TEMPLATES as readonly string[]).includes(value)
 }
 
+/** The template a name means: itself, or what an old name stands for. */
+export function resolveTemplate(value: string): Template | undefined {
+  return isTemplate(value) ? value : TEMPLATE_ALIASES[value]
+}
+
 export function parseCreateOptions(argv: readonly string[]): CreateOptions {
   let parsed: ReturnType<typeof parse>
   try {
@@ -134,17 +159,17 @@ export function parseCreateOptions(argv: readonly string[]): CreateOptions {
   if (positionals.length > 2)
     throw new UsageError('takes a directory and at most one template source')
   // A bare name that is a built-in template means --template: `create my-app notes`. Only github:, @scope/ and .tgz are sources.
-  const bare =
-    positionals[1] !== undefined && isTemplate(positionals[1]) ? positionals[1] : undefined
+  const bare = positionals[1] !== undefined ? resolveTemplate(positionals[1]) : undefined
   if (positionals[1] !== undefined && values.template !== undefined)
     throw new UsageError('give a template (or a template source) or --template, not both')
-  if (values.template !== undefined && !isTemplate(values.template))
+  const named = values.template === undefined ? undefined : resolveTemplate(values.template)
+  if (values.template !== undefined && named === undefined)
     throw new UsageError(`unknown template "${values.template}" (${TEMPLATES.join(', ')})`)
   if (values.pm !== undefined && !(PACKAGE_MANAGERS as readonly string[]).includes(values.pm))
     throw new UsageError(`unknown package manager "${values.pm}" (${PACKAGE_MANAGERS.join(', ')})`)
   return {
     directory: positionals[0],
-    template: (bare ?? values.template) as Template | undefined,
+    template: bare ?? named,
     install: values.install === true,
     pm: values.pm as PackageManager | undefined,
     yes: values.yes === true,
@@ -383,12 +408,13 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
             const answer =
               (
                 await ask(
-                  `Which template do you want to use? (nodejs, notes, chat, acryl-app) [nodejs]: `,
+                  `Templates:\n${TEMPLATE_LIST}\nWhich template do you want to use? [nodejs]: `,
                 )
               ).trim() || 'nodejs'
-            if (!isTemplate(answer))
+            const chosen = resolveTemplate(answer)
+            if (chosen === undefined)
               throw new UsageError(`unknown template "${answer}" (${TEMPLATES.join(', ')})`)
-            return answer
+            return chosen
           })()
         : 'nodejs')
     if (!isEmpty(target)) {
@@ -399,16 +425,7 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
     // Every template is a Cordis app, made by the framework package's own `init` (blend.yaml, plugins/, AGENTS.md, CLAUDE.md, the skill, the docs).
     const code = await io.run(
       process.execPath,
-      [
-        acrylblendsBin(),
-        'init',
-        target,
-        '--template',
-        template === 'acryl-app' ? 'agent' : template,
-        '--name',
-        name,
-        '--yes',
-      ],
+      [acrylblendsBin(), 'init', target, '--template', template, '--name', name, '--yes'],
       io.cwd,
     )
     if (code !== 0) return 1
@@ -424,12 +441,7 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
         return 1
       }
     }
-    const start = {
-      nodejs: `${pm} run dev`,
-      notes: `${pm} run dev`,
-      chat: `${pm} run dev`,
-      'acryl-app': `${pm} run dev`,
-    }[template]
+    const start = `${pm} run dev`
     io.stdout.write(
       `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}  ${start}\n`,
     )

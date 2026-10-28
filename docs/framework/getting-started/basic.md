@@ -34,12 +34,17 @@ bun create acrylblends@latest my-app
 You are asked which template you want:
 
 ```
-? Which template do you want to use?
-❯   nodejs
-    acryl-app
+Templates:
+  blank   the router, a server and one route: the smallest app
+  nodejs  a web app with a page and a client component
+  notes   a multi-user notes app on the db port (sign-up, log-in, sessions)
+  chat    a chat app that streams an answer over server-sent events
+  todo    a to-do list on the router and state
+  agent   the blank app with an offline agent that builds plugins into the running app
+Which template do you want to use? [nodejs]:
 ```
 
-Every template is a Cordis app: `blend.yaml` lists its plugins and every plugin is a folder in `plugins/`. `nodejs` is a web app with a page and a client component, `notes` and `chat` add a database, and `acryl-app` adds an agent that can extend it while it
+Every template is a Cordis app: `blend.yaml` lists its plugins and every plugin is a folder in `plugins/`. `blank` is the smallest app, `nodejs` is a web app with a page and a client component, `notes` and `chat` add a database, `todo` is a to-do list, and `agent` adds an agent that can extend the app while it
 runs (see [Acryl in a Cordis app](../cordis/acryl-in-a-cordis-app.md)). Pass `--template` to skip the question, see [create-acrylblends](../guides/create-acrylblends.md).
 
 The template is created in `my-app`: go to it, install the dependencies and start the local server.
