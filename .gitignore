@@ -168,3 +168,6 @@ demos/
 plugins/acryl-*/lib/
 packages/framework/lib/
 plugins/acryl-*/src/**/*.d.ts
+
+# The upgrade tests unpack apps made by published versions (scripts/make-upgrade-fixtures.mjs).
+!packages/cli/test/fixtures/upgrade/*.tgz

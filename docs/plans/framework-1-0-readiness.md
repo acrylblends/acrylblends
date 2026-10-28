@@ -91,11 +91,11 @@ Node is the primary runtime and is public and gated; Bun is optional; Deno is de
 
 | Step | Work | Status |
 | --- | --- | --- |
-| a | Git tags and GitHub releases for 0.3 to 0.11, backfilled from the commits of the published tarballs | |
-| b | The exports cut and the `PUBLIC` / `INTERNAL` test | |
-| c | Docs: the published import names (`acrylblends/cordis/...`) everywhere; the unified templates | |
-| d | `acrylblends upgrade` (replace the vendored framework plugins in an app with the current version, show the diff, refuse when local edits would be lost unless `--force`), one migration guide to 1.0, an upgrade test on 0.9.1 and 0.10.0 fixtures | |
-| e | The experimental labels and the production page with its test | |
-| f | One site-sync script in the release checklist | |
+| a | Git tags and GitHub releases for 0.3 to 0.11, backfilled from the commits of the published tarballs | done: 27 tags and 27 GitHub releases (acrylblends 0.3.0 to 0.11.0), 20 create-acrylblends tags |
+| b | The exports cut and the `PUBLIC` / `INTERNAL` test | done: exports cut to 95 public subpaths, PUBLIC / EXPERIMENTAL / INTERNAL lists and test, Bun smoke gate in CI |
+| c | Docs: the published import names (`acrylblends/cordis/...`) everywhere; the unified templates | done: published import names in the docs, one template list in both commands |
+| d | `acrylblends upgrade` (replace the vendored framework plugins in an app with the current version, show the diff, refuse when local edits would be lost unless `--force`), one migration guide to 1.0, an upgrade test on 0.9.1 and 0.10.0 fixtures | done: `acrylblends upgrade`, the lock, the hash history, the migration guide, tests and `verify:packed` on apps made by 0.9.1 and 0.10.0 |
+| e | The experimental labels and the production page with its test | done: the door plugin gates itself on production, the production page, the labels, the production test |
+| f | One site-sync script in the release checklist | done: `scripts/sync-sites.mjs` and the complete checklist in `docs/releasing.md` |
 | g | Recorded real-agent runs on `notes`, `chat` and `agent` | |
 | h | `1.0.0-rc.1` on the `next` tag, checked from the registry by the coordinator, then `1.0.0` only after Fork3's T007/T008 have run on 0.11.x | |
