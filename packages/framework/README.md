@@ -4,13 +4,14 @@
 
 <h1 align="center">acrylblends</h1>
 
-<p align="center"><strong>Acryl, a small web framework on Web Standards, for Node.js.</strong><br>
-One <code>Request</code> in, one <code>Response</code> out: routing, middleware, validation, a typed client and a Node.js server, with no dependencies.</p>
+<p align="center"><strong>Acryl: a small web framework on Web Standards, and whole apps built from Cordis plugins.</strong><br>
+One <code>Request</code> in, one <code>Response</code> out - routing, middleware, validation, a typed client and a Node.js server, with no
+dependencies - and a composition of plugins that runs in a browser or a desktop window.</p>
 
 <p align="center">
-  <a href="https://github.com/acryldev/acryl/blob/main/docs/framework/README.md">Documentation</a> ·
-  <a href="https://github.com/acryldev/acryl/blob/main/docs/framework/getting-started/basic.md">Getting started</a> ·
-  <a href="https://github.com/acryldev/acryl/blob/main/docs/framework/api/index.md">API</a> ·
+  <a href="https://github.com/acrylblends/acrylblends/blob/main/docs/framework/README.md">Documentation</a> ·
+  <a href="https://github.com/acrylblends/acrylblends/blob/main/docs/framework/getting-started/basic.md">Getting started</a> ·
+  <a href="https://github.com/acrylblends/acrylblends/blob/main/docs/framework/api/index.md">API</a> ·
   <a href="https://acrylblends.github.io">acrylblends.github.io</a> ·
   <a href="https://acryl.dev">acryl.dev</a> ·
   <a href="https://github.com/acrylblends/acrylblends">GitHub</a>
@@ -30,8 +31,12 @@ export default app
 ## Contents
 
 - [Requirements](#requirements)
-- [Quick start](#quick-start)
-- [Start from a template](#start-from-a-template)
+- [Start an app in five minutes](#start-an-app-in-five-minutes)
+- [Run it in a browser or in a desktop window](#run-it-in-a-browser-or-in-a-desktop-window)
+- [Start from the registry](#start-from-the-registry)
+- [Publish your app, or your own starter](#publish-your-app-or-your-own-starter)
+- [Keep the framework current](#keep-the-framework-current)
+- [Use it as a library](#use-it-as-a-library)
 - [A first API](#a-first-api)
 - [Middleware](#middleware)
 - [Validation](#validation)
@@ -39,7 +44,7 @@ export default app
 - [Testing](#testing)
 - [Serving on Node.js](#serving-on-nodejs)
 - [What is in the package](#what-is-in-the-package)
-- [Upgrading from 0.4](#upgrading-from-04)
+- [Upgrading from an older version](#upgrading-from-an-older-version)
 - [The acrylblends command](#the-acrylblends-command)
 - [Links](#links)
 - [License](#license)
@@ -50,9 +55,93 @@ export default app
 - **Bun** runs the same app (`export default app`) and is experimental.
 - `acrylblends` has no dependencies. Its types need only Node's types (`@types/node`), not the DOM library.
 
-## Quick start
+## Start an app in five minutes
 
-Create a folder and install the package:
+```sh
+npm create acrylblends@latest my-app
+cd my-app
+npm install
+npm run dev
+```
+
+The starter asks which template you want; naming one skips the question (`npm create acrylblends@latest my-app notes`).
+
+| Template | What you get |
+| --- | --- |
+| `blank` | the router, the Node server and one route: the smallest app |
+| `nodejs` | a page rendered with JSX and a client component, without a bundler |
+| `notes` | a multi-user notes app on the `db` port: sign-up, sessions, migrations, search, a typed client |
+| `chat` | an answer streamed over server-sent events from an OpenAI-compatible API, history in SQLite |
+| `todo` | a to-do list on the router and live state |
+| `agent` | the blank app with an agent that writes and installs plugins into the running app |
+
+Every template is a Cordis app: `blend.yaml` lists its plugins, `plugins/` holds them as code you own, and the starter also writes
+`docs/framework` (the pages this README links to), `AGENTS.md`, `CLAUDE.md`, one skill for a coding agent, and its own tests. `npm run dev`
+serves it and prints the URL, `npm test` runs the tests, `npm run check` type-checks.
+
+Adding a capability is one command: `npx acrylblends add <plugin>` copies a library plugin and what it needs into `plugins/`, prints the row to
+add to `blend.yaml`, and records what it copied so `acrylblends upgrade` can move it forward later. `npx acrylblends plugins` lists the library.
+
+## Run it in a browser or in a desktop window
+
+The same app runs both ways; the routes, the plugins and the data are the ones you already wrote.
+
+- **Browser**: what you get. `npm run dev` (or `npm start`) serves it on a loopback port and prints the URL.
+- **Desktop**: add the shell and run it as a window on the app's own server.
+
+```sh
+npx acrylblends init my-app --desktop            # create an app with the shell (--template picks the template)
+# or, in an app you already have:
+npx acrylblends add desktop
+npm install                                      # the shell needs electron
+npm run desktop                                  # an Electron window on the app's own server
+```
+
+Every Electron call lives in `plugins/desktop`, so the app's own code never imports it. See
+[Desktop](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/getting-started/desktop.md).
+
+## Start from the registry
+
+The registry is a set of starting points people published, browsable at [acrylblends.github.io/blends](https://acrylblends.github.io/blends)
+and readable by any tool as plain JSON at <https://acrylblends.github.io/registry/index.json>. ACRYL's CLI pulls one by id, or from any git
+repository:
+
+```sh
+npm install -g acryl
+acryl new my-app --from acryl.gtd               # a starter from the registry
+acryl new my-app --from github:you/starter      # a repository with an acryl.template.json
+```
+
+Without `--from`, `acryl new` writes the blank app; `--blueprint` picks another built-in Blueprint. A team's own registry is the same layout in
+its own repository: `--registry <git URL or folder>` reads starters from there instead of the public one.
+
+## Publish your app, or your own starter
+
+**Your app** belongs to you and lives in your repository: `npm run save` commits it and pushes to its remote. It refuses a file that looks like
+a secret, and refuses to push a private app to a public remote.
+
+Before an app goes on a server: with `NODE_ENV=production` the door, the agent panel and the PTY driver start nothing, but the `agent` template
+still mounts its own agent, builder and extensions rows. Start from one of the other five templates, or remove those rows from its `blend.yaml`
+- see [What runs in production](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/production.md).
+
+**A starter** other people can pull is a pull request to the registry repository: add `registry/blends/<id>/` with a `blend.yaml` (`kind: Blueprint`,
+an id you own, the license, `visibility`, a category and a one-line description), the plugins it adds under `plugins/`, and a `README.md`. CI
+validates every entry and fails when `index.json` is stale, so what the site lists is what passed. The layout, and how to keep a starter private
+without a registry at all, is in
+[the registry README](https://github.com/acrylblends/acrylblends.github.io/tree/main/registry).
+
+## Keep the framework current
+
+An app carries its framework plugins as source, so a new release moves them in place and leaves your own code alone:
+
+```sh
+npx acrylblends upgrade --dry-run   # the plan: what would be replaced
+npx acrylblends upgrade             # an edited file stops it with the diff, unless --force
+```
+
+## Use it as a library
+
+An Acryl app is also a plain function from `Request` to `Response`, which needs no scaffold. Create a folder and install the package:
 
 ```sh
 mkdir my-app && cd my-app
@@ -90,21 +179,9 @@ Run it and open http://localhost:3000:
 node server.ts
 ```
 
-For Bun, `bun run index.ts` serves the same `export default app`.
-
-## Start from a template
-
-`create-acrylblends` creates a ready project with `dev`, `test` and `start` scripts:
-
-```sh
-npm create acrylblends@latest my-app
-cd my-app
-npm install
-npm run dev
-```
-
-The templates are the same through `npm create acrylblends` and `acrylblends init`: `blank`, `nodejs`, `notes`, `chat`, `todo` and `agent` (a Cordis app with an agent that can extend it while it runs; `acryl-app` is its old name). See the
-[create-acrylblends guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/create-acrylblends.md).
+For Bun, `bun run index.ts` serves the same `export default app`. The same app mounts inside a Cordis plugin with
+`ctx.router.route(prefix, app)`, which is how a generated app is put together: see
+[Acryl in a Cordis app](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/cordis/acryl-in-a-cordis-app.md).
 
 ## A first API
 
@@ -138,10 +215,10 @@ app.onError((error, c) => error instanceof HTTPException ? error.getResponse() :
 export default app
 ```
 
-Read more: [Routing](https://github.com/acryldev/acryl/blob/main/docs/framework/api/routing.md),
-[Context](https://github.com/acryldev/acryl/blob/main/docs/framework/api/context.md),
-[Request](https://github.com/acryldev/acryl/blob/main/docs/framework/api/request.md),
-[Exceptions](https://github.com/acryldev/acryl/blob/main/docs/framework/api/exception.md).
+Read more: [Routing](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/api/routing.md),
+[Context](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/api/context.md),
+[Request](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/api/request.md),
+[Exceptions](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/api/exception.md).
 
 ## Middleware
 
@@ -165,8 +242,8 @@ app.use('/admin/*', bearerAuth({ token: process.env.ADMIN_TOKEN ?? '' }))
 Built in: `basic-auth`, `bearer-auth`, `body-limit`, `combine`, `compress`, `context-storage`, `cors`, `csrf`, `etag`, `ip-restriction`,
 `jwk`, `jwt`, `language`, `logger`, `method-not-allowed`, `method-override`, `powered-by`, `pretty-json`, `request-id`, `secure-headers`,
 `serve-static`, `timeout`, `timing`, `trailing-slash`, plus ACRYL's `loopback-only`. Each one is documented under
-[Middleware](https://github.com/acryldev/acryl/tree/main/docs/framework/middleware/builtin). To write your own, see the
-[middleware guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/middleware.md).
+[Middleware](https://github.com/acrylblends/acrylblends/tree/main/docs/framework/middleware/builtin). To write your own, see the
+[middleware guide](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/middleware.md).
 
 ## Validation
 
@@ -191,7 +268,7 @@ app.post(
 ```
 
 `acrylblends/schema-validator` drives the same validator with any [Standard Schema](https://standardschema.dev) library (Zod, Valibot,
-ArkType and others). See the [validation guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/validation.md).
+ArkType and others). See the [validation guide](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/validation.md).
 
 ## Typed client
 
@@ -216,7 +293,7 @@ const answer = await client.api.hello.$get()
 console.log((await answer.json()).message)
 ```
 
-See [RPC](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/rpc.md).
+See [RPC](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/rpc.md).
 
 ## Testing
 
@@ -235,7 +312,7 @@ test('GET / says hello', async () => {
 ```
 
 Run it with `node --test`. `acrylblends/testing` adds `testClient`, the typed client over `app.request()`. See the
-[testing guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/testing.md).
+[testing guide](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/testing.md).
 
 ## Serving on Node.js
 
@@ -256,7 +333,7 @@ const server = serve({ fetch: app.fetch, port: 3000, hostname: '127.0.0.1' })
 process.on('SIGTERM', () => { server.close() })
 ```
 
-See [Node.js](https://github.com/acryldev/acryl/blob/main/docs/framework/getting-started/nodejs.md).
+See [Node.js](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/getting-started/nodejs.md).
 
 ## What is in the package
 
@@ -266,20 +343,20 @@ See [Node.js](https://github.com/acryldev/acryl/blob/main/docs/framework/getting
 | `acrylblends/<middleware>` | each built-in middleware, for example `acrylblends/cors` |
 | `acrylblends/validator`, `acrylblends/schema-validator` | request validation |
 | `acrylblends/client`, `acrylblends/testing` | the typed client and its in-process test version |
-| `acrylblends/accepts`, `adapter`, `cookie`, `factory`, `html`, `route`, `streaming`, `ws`, `conninfo` | helpers ([helpers docs](https://github.com/acryldev/acryl/tree/main/docs/framework/helpers)) |
+| `acrylblends/accepts`, `adapter`, `cookie`, `factory`, `html`, `route`, `streaming`, `ws`, `conninfo` | helpers ([helpers docs](https://github.com/acrylblends/acrylblends/tree/main/docs/framework/helpers)) |
 | `acrylblends/http-exception` | `HTTPException` |
-| `acrylblends/router/*` | the routers: `reg-exp-router`, `smart-router`, `trie-router`, `pattern-router`, `linear-router` ([routers](https://github.com/acryldev/acryl/blob/main/docs/framework/concepts/routers.md)) |
-| `acrylblends/tiny`, `acrylblends/quick` | the presets: `Acryl` with another router (`PatternRouter`; `LinearRouter` and `TrieRouter`) ([presets](https://github.com/acryldev/acryl/blob/main/docs/framework/api/presets.md)) |
+| `acrylblends/router/*` | the routers: `reg-exp-router`, `smart-router`, `trie-router`, `pattern-router`, `linear-router` ([routers](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/concepts/routers.md)) |
+| `acrylblends/tiny`, `acrylblends/quick` | the presets: `Acryl` with another router (`PatternRouter`; `LinearRouter` and `TrieRouter`) ([presets](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/api/presets.md)) |
 | `acrylblends/cache`, `acrylblends/mount` | the cache middleware and mounting another framework's fetch handler |
-| `acrylblends/ssg` | static site generation: `toSSG` writes every route as a file ([SSG helper](https://github.com/acryldev/acryl/blob/main/docs/framework/helpers/ssg.md)) |
+| `acrylblends/ssg` | static site generation: `toSSG` writes every route as a file ([SSG helper](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/helpers/ssg.md)) |
 | `acrylblends/proxy`, `acrylblends/dev` | the proxy helper and the dev helpers (`showRoutes`, `inspectRoutes`, `getRouterName`) |
-| `acrylblends/jsx` | JSX on the server: `jsxImportSource: 'acrylblends/jsx'`, `.tsx` files run on Node with `node --import acrylblends/node-server/register`, with `jsx/streaming`, and `acrylblends/jsx-renderer` for a layout behind `c.render` ([JSX guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/jsx.md)) |
-| `acrylblends/jsx/dom` | JSX in the browser: hooks and `render` (needs the DOM library) ([client components](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/jsx-dom.md)); on Node, `clientModules` serves them to the browser without a bundler ([guide](https://github.com/acryldev/acryl/blob/main/docs/framework/guides/client-modules.md)) |
+| `acrylblends/jsx` | JSX on the server: `jsxImportSource: 'acrylblends/jsx'`, `.tsx` files run on Node with `node --import acrylblends/node-server/register`, with `jsx/streaming`, and `acrylblends/jsx-renderer` for a layout behind `c.render` ([JSX guide](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/jsx.md)) |
+| `acrylblends/jsx/dom` | JSX in the browser: hooks and `render` (needs the DOM library) ([client components](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/jsx-dom.md)); on Node, `clientModules` serves them to the browser without a bundler ([guide](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/guides/client-modules.md)) |
 | `acrylblends/drivers` | the driver contract of the agent panel (`ChatDriver`, `TerminalDriver`, `Drivers`), for plugins that add an agent to the panel |
-| `acrylblends/css` | CSS in JSX: `css`, `cx`, `keyframes`, `Style` ([CSS helper](https://github.com/acryldev/acryl/blob/main/docs/framework/helpers/css.md)) |
+| `acrylblends/css` | CSS in JSX: `css`, `cx`, `keyframes`, `Style` ([CSS helper](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/helpers/css.md)) |
 | `acrylblends/node-server` | `serve`, `createAdaptorServer`, `getRequestListener`; with `node-server/serve-static`, `node-server/conninfo`, and `node-server/register` (compiles `.tsx` with the app's `typescript`); `clientModules` and `buildClientModules` (client components without a bundler) |
 
-Every subpath in the table is listed in the package's `exports` and is covered by semver from 1.0, except the ones marked experimental: `acrylblends/bun` and the door (`door/*`, `cordis/door`), which are development tools. The ported core's utilities (`utils/*`) and the base-class chunk are internal and not exported. Node.js is the runtime the package is verified on; the upstream's adapters for AWS Lambda, Lambda@Edge, Cloudflare, Vercel, Netlify and Service Workers are not part of the package ([Other runtimes](https://github.com/acryldev/acryl/blob/main/docs/framework/getting-started/other-runtimes.md)).
+Every subpath in the table is listed in the package's `exports` and is covered by semver from 1.0, except the ones marked experimental: `acrylblends/bun` and the door (`door/*`, `cordis/door`), which are development tools. The ported core's utilities (`utils/*`) and the base-class chunk are internal and not exported. Node.js is the runtime the package is verified on; the upstream's adapters for AWS Lambda, Lambda@Edge, Cloudflare, Vercel, Netlify and Service Workers are not part of the package ([Other runtimes](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/getting-started/other-runtimes.md)).
 
 To extend the context's typed variables, augment the root module:
 
@@ -291,11 +368,14 @@ declare module 'acrylblends' {
 }
 ```
 
-## Upgrading from 0.4
+## Upgrading from an older version
 
-From 0.5 the package's root is the framework. `App` and `AppRequest`, the 0.4 names, were kept as deprecated aliases of `Acryl` and
-`AcrylRequest` and are removed in 1.0. The scaffolding API that was the root in 0.4 is now `acrylblends/cli`. See
-[Migration from 0.4](https://github.com/acryldev/acryl/blob/main/docs/framework/cordis/migration-from-0-4.md).
+An app made with any 0.9.1 or later release moves with `acrylblends upgrade` (above); its edited files are never replaced silently.
+
+Code that imports the old names moves by hand: `App` and `AppRequest`, the 0.4 aliases of `Acryl` and `AcrylRequest`, are removed in 1.0, and
+the scaffolding API that was the package root in 0.4 is now `acrylblends/cli`. See
+[Migration to 1.0](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/cordis/migration-to-1-0.md) and
+[Migration from 0.4](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/cordis/migration-from-0-4.md).
 
 ## The acrylblends command
 
@@ -309,18 +389,18 @@ cd my-app && npm install && npm run dev
 ```
 
 See the [ACRYLBLENDS documentation](https://github.com/acrylblends/acrylblends/blob/main/docs/README.md) and
-[Acryl in a Cordis app](https://github.com/acryldev/acryl/blob/main/docs/framework/cordis/acryl-in-a-cordis-app.md).
+[Acryl in a Cordis app](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/cordis/acryl-in-a-cordis-app.md).
 
 ## Links
 
 | | |
 | --- | --- |
-| Framework documentation | https://github.com/acryldev/acryl/blob/main/docs/framework/README.md |
+| Framework documentation | https://github.com/acrylblends/acrylblends/blob/main/docs/framework/README.md |
 | ACRYLBLENDS website | https://acrylblends.github.io |
 | ACRYL website | https://acryl.dev |
 | This package's source and issues | https://github.com/acrylblends/acrylblends ([issues](https://github.com/acrylblends/acrylblends/issues)) |
 | The framework's source | https://github.com/acryldev/acryl (`plugins/acryl-router`, `plugins/acryl-node-server`) |
-| For coding agents | https://github.com/acryldev/acryl/blob/main/docs/framework/agents/index.md |
+| For coding agents | https://github.com/acrylblends/acrylblends/blob/main/docs/framework/agents/index.md |
 | npm | https://www.npmjs.com/package/acrylblends |
 
 ## License
