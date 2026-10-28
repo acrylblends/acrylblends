@@ -36,6 +36,26 @@ In a Blend app, the same two commands (`npx acrylblends add desktop`, `npm insta
 `npm install` does not download Electron's binary (Electron 44 has no install script). The first `npm run desktop` does: about 100 MB, once per machine, then it is cached. Behind a proxy or mirror set `ELECTRON_MIRROR`
 (and `ELECTRON_CACHE` to reuse a download); if the download is blocked, run `npx install-electron` where the mirror is reachable.
 
+## Linux: Ubuntu 23.10 and later
+
+Ubuntu 23.10 and later restrict unprivileged user namespaces (`kernel.apparmor_restrict_unprivileged_userns=1`). Chromium's sandbox needs them, and an Electron unpacked by npm into `node_modules` has no AppArmor profile, so Electron stops at the start with "The SUID sandbox helper binary was found, but is not configured correctly" before the app runs.
+
+`npm run desktop` starts through `plugins/desktop/launch.ts`, which reads that sysctl. **Only when it is `1` on Linux** it starts Electron with `--no-sandbox` and prints one line saying so; on macOS, on Windows and on any Linux without the restriction Electron starts with its sandbox, as it always does. The window's renderer is still locked down (context isolation, no Node in the page, web security); what is lost is Chromium's process sandbox around it.
+
+To keep the sandbox, give Electron an AppArmor profile that allows `userns`, as the VS Code and Chrome `.deb` packages do. Save this as `/etc/apparmor.d/my-app-electron` (the path is the one in your app's `node_modules`), then `sudo apparmor_parser -r /etc/apparmor.d/my-app-electron`:
+
+```text
+abi <abi/4.0>,
+include <tunables/global>
+
+profile my-app-electron /path/to/my-app/node_modules/electron/dist/electron flags=(unconfined) {
+  userns,
+  include if exists <local/my-app-electron>
+}
+```
+
+The launcher then still sees the sysctl as `1` and passes `--no-sandbox`; set `ACRYLBLENDS_DESKTOP_SANDBOX=1` to start with the sandbox anyway.
+
 ## A different start page
 
 The window opens on `/`. To open another path, set it in `package.json`: `"acrylblends": { "desktopPath": "/todo" }`.

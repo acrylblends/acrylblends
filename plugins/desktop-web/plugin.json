@@ -9,7 +9,7 @@
     "electron": "44.9.3"
   },
   "scripts": {
-    "desktop": "electron plugins/desktop-web/main.ts"
+    "desktop": "node plugins/desktop-web/launch.ts"
   },
   "gitignore": [".acrylblends/"],
   "omit": ["**/*.test.*"],
