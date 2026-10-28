@@ -42,6 +42,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [The site patches](plans/site-patches/README.md) - patches for the hand-written pages of acrylblends.github.io (`git am`)
 - [WebSocket upgrades on the router (plan)](plans/router-websocket.md) - spec 047 T009: upgrade routes owned by the mounting plugin
 - [Framework 1.0 readiness](plans/framework-1-0-readiness.md) - audit: the API surface to freeze, the missing upgrade path, what is experimental; each item must-fix or later
+- [Workshop readiness](plans/workshop-readiness.md) - the newcomer path walked on 1.0.0 (macOS): the step table, the frictions ranked, and a 90-minute outline
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
