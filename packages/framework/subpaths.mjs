@@ -8,6 +8,7 @@
 import { readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { INTERNAL } from './api-surface.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const ROUTER = '../../plugins/acryl-router/src'
@@ -26,8 +27,12 @@ const MIDDLEWARE = [
   'request-id', 'secure-headers', 'serve-static', 'timeout', 'timing', 'trailing-slash',
 ]
 const HELPERS = ['accepts', 'adapter', 'cookie', 'dev', 'factory', 'html', 'proxy', 'route', 'ssg', 'streaming', 'testing']
-/** The hosting adapters (a handler for a platform that calls `fetch`): each is `<upstream>/<name>`. */
-const ADAPTERS = ['aws-lambda', 'bun', 'cloudflare-pages', 'cloudflare-workers', 'lambda-edge', 'netlify', 'service-worker', 'vercel']
+/**
+ * The hosting adapters of the package: Node is the primary runtime (`node-server`), Bun is experimental and has one smoke gate. The upstream's other adapters (AWS Lambda, Lambda@Edge,
+ * Cloudflare, Netlify, Vercel, service worker) are not built or exported: no gate of ours deploys to them. Their ported sources stay in `plugins/acryl-router/src/core/adapter/`,
+ * where they may become separate plugins, each with its own gate.
+ */
+const ADAPTERS = ['bun']
 const ROUTERS = ['reg-exp-router', 'smart-router', 'trie-router', 'pattern-router', 'linear-router']
 /** `<upstream>/utils/*`: each utility module by its file name. */
 const UTILS = readdirSync(join(here, CORE, 'utils')).filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts') && !name.endsWith('.d.ts')).map(name => name.slice(0, -3)).sort()
@@ -106,13 +111,17 @@ export const SUBPATHS = {
   'cordis/door': `${P}/acryl-door/src/index.ts`,
 }
 
+/** The subpaths that are built (shared chunks keep their names) but are not part of the public API: see `api-surface.mjs`. */
+export const isInternal = subpath => INTERNAL.includes(subpath)
+
 /** The build entry name of a subpath: the file stem under `lib/`. */
 export const entryName = subpath => (subpath === '.' ? 'index' : subpath)
 
-/** The package's `exports`, made from {@link SUBPATHS}. */
+/** The package's `exports`: {@link SUBPATHS} without the internal ones. */
 export function exportsMap() {
   const map = {}
   for (const subpath of Object.keys(SUBPATHS)) {
+    if (isInternal(subpath)) continue
     const name = entryName(subpath)
     map[subpath === '.' ? '.' : `./${subpath}`] = { types: `./lib/${name}.d.ts`, default: `./lib/${name}.js` }
   }

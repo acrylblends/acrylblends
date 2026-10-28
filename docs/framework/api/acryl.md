@@ -64,7 +64,7 @@ app.onError((err, c) => {
 
 ## fire()
 
-> **Warning.** **`app.fire()` is deprecated**. Use `fire()` from `acrylblends/service-worker` instead. See the Service Worker documentation for details.
+> **Warning.** **`app.fire()` is deprecated**, and the Service Worker adapter (`acrylblends/service-worker`) is not part of the package in 1.0. Use `app.fetch` in a `fetch` event handler of your own.
 
 `app.fire()` automatically adds a global `fetch` event listener.
 

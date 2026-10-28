@@ -159,58 +159,6 @@ try {
   if (once !== 'true') throw new Error('acrylblends and acrylblends/cordis/router export two different Acryl classes')
   report('one Acryl, and the plain entries load without Cordis', 'acrylblends and acrylblends/cordis/router export the same Acryl; 8 plain entries import with no @deepseek-ai/cordis installed')
 
-  // The hosting adapters, from the packed build: each handler is called the way its platform calls it (a real API Gateway or ALB event, a Request,
-  // a CloudFront event, a fetch event), with no account and no network, and must answer what the app answers.
-  writeFileSync(join(app, 'adapters.mjs'), [
-    "import { Acryl } from 'acrylblends'",
-    "import { handle as lambda } from 'acrylblends/aws-lambda'",
-    "import { handle as pages } from 'acrylblends/cloudflare-pages'",
-    "import { getConnInfo as workersConnInfo } from 'acrylblends/cloudflare-workers'",
-    "import { handle as edge } from 'acrylblends/lambda-edge'",
-    "import { handle as netlify } from 'acrylblends/netlify'",
-    "import { handle as serviceWorker } from 'acrylblends/service-worker'",
-    "import { handle as vercel } from 'acrylblends/vercel'",
-    "import assert from 'node:assert/strict'",
-    "const app = new Acryl()",
-    "  .get('/', (c) => c.text('Acryl!'))",
-    "  .post('/echo', async (c) => c.json({ body: await c.req.text(), q: c.req.query('q'), ct: c.req.header('content-type') }))",
-    "// AWS Lambda behind an HTTP API (payload v2).",
-    "const v2 = { version: '2.0', routeKey: '$default', rawPath: '/echo', rawQueryString: 'q=1', headers: { 'content-type': 'text/plain', host: 'x.execute-api.eu-west-1.amazonaws.com' }, requestContext: { http: { method: 'POST', path: '/echo', sourceIp: '203.0.113.9' }, accountId: '1', apiId: 'x', domainName: 'x.execute-api.eu-west-1.amazonaws.com', requestId: 'r', routeKey: '$default', stage: '$default', time: 't', timeEpoch: 0 }, body: 'hello', isBase64Encoded: false }",
-    "const a = await lambda(app)(v2, {})",
-    "assert.equal(a.statusCode, 200); assert.deepEqual(JSON.parse(a.body), { body: 'hello', q: '1', ct: 'text/plain' })",
-    "// API Gateway REST API (payload v1) with a base64 body.",
-    "const v1 = { httpMethod: 'POST', path: '/echo', resource: '/echo', queryStringParameters: { q: '2' }, multiValueQueryStringParameters: { q: ['2'] }, headers: { 'content-type': 'text/plain', Host: 'x.execute-api.eu-west-1.amazonaws.com' }, multiValueHeaders: {}, requestContext: { identity: { sourceIp: '203.0.113.9' }, stage: 'prod' }, body: Buffer.from('v1 body').toString('base64'), isBase64Encoded: true, pathParameters: null, stageVariables: null }",
-    "const b = await lambda(app)(v1, {})",
-    "assert.equal(b.statusCode, 200); assert.deepEqual(JSON.parse(b.body), { body: 'v1 body', q: '2', ct: 'text/plain' })",
-    "// Application Load Balancer.",
-    "const alb = { httpMethod: 'GET', path: '/', queryStringParameters: {}, headers: { host: 'alb.example.com' }, requestContext: { elb: { targetGroupArn: 'arn' } }, body: '', isBase64Encoded: false }",
-    "const c = await lambda(app)(alb, {})",
-    "assert.equal(c.statusCode, 200); assert.equal(c.body, 'Acryl!')",
-    "// Vercel and Netlify: a Request in, a Response out.",
-    "const request = () => new Request('https://example.com/echo?q=3', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'req' })",
-    "assert.deepEqual(await (await vercel(app)(request())).json(), { body: 'req', q: '3', ct: 'text/plain' })",
-    "assert.deepEqual(await (await netlify(app)(request(), {})).json(), { body: 'req', q: '3', ct: 'text/plain' })",
-    "// Cloudflare Pages Functions: an event context.",
-    "const pagesResponse = await pages(app)({ request: request(), env: {}, params: {}, data: {}, next: async () => new Response('next'), waitUntil() {}, passThroughOnException() {}, functionPath: '/echo' })",
-    "assert.deepEqual(await pagesResponse.json(), { body: 'req', q: '3', ct: 'text/plain' })",
-    "// Cloudflare Workers: the app is the module's fetch handler; the adapter adds the connecting address.",
-    "assert.equal(workersConnInfo({ req: { header: (name) => (name === 'cf-connecting-ip' ? '198.51.100.7' : undefined) } }).remote.address, '198.51.100.7')",
-    "assert.equal(await (await app.fetch(new Request('https://example.com/'), {}, { waitUntil() {}, passThroughOnException() {} })).text(), 'Acryl!')",
-    "// Lambda@Edge: a CloudFront viewer-request event, answered with a CloudFront response.",
-    "const cloudfront = { Records: [{ cf: { config: { distributionDomainName: 'd.cloudfront.net', eventType: 'viewer-request', requestId: 'r' }, request: { clientIp: '203.0.113.9', headers: { host: [{ key: 'Host', value: 'd.cloudfront.net' }] }, method: 'GET', querystring: '', uri: '/' } } }] }",
-    "const edgeResponse = await edge(app)(cloudfront)",
-    "assert.equal(edgeResponse.status, '200'); assert.equal(edgeResponse.body, 'Acryl!')",
-    "// Service worker: a fetch event answered with respondWith.",
-    "let answered; const event = { request: new Request('https://example.com/'), respondWith: (promise) => { answered = promise } }",
-    "serviceWorker(app)(event)",
-    "assert.equal(await (await answered).text(), 'Acryl!')",
-    "console.log('ok')",
-    '',
-  ].join('\n'))
-  const adapters = run(process.execPath, ['adapters.mjs'], app).trim()
-  if (adapters !== 'ok') throw new Error(`the hosting adapters answered ${JSON.stringify(adapters)}`)
-  report('hosting adapters (AWS Lambda v1, v2 and ALB events, Vercel, Netlify, Cloudflare Pages and Workers, Lambda@Edge, service worker; platform events, no account)', 'each answers what the app answers')
-
   // The data entries, from the packed build: openDb opens a file in a folder it creates, applies the numbered migrations once, enforces
   // foreign keys, rolls back a failing transaction, refuses a misnumbered folder, and a second open does not run the migrations again.
   mkdirSync(join(app, 'migrations'), { recursive: true })
@@ -417,8 +365,10 @@ try {
     }
   } else report('bun (informational)', 'skipped: bun is not installed')
 
-  // The Bun adapter on Bun itself: serveStatic reads a file with Bun.file, getConnInfo reads the client's address from the server, and
-  // upgradeWebSocket echoes a message over a real WebSocket. It runs when bun is installed and is counted when it does.
+  // The Bun adapter on Bun itself (experimental, and the only runtime besides Node that has a gate): serveStatic reads a file with Bun.file, getConnInfo reads the client's address
+  // from the server, and upgradeWebSocket echoes a message over a real WebSocket. It runs when bun is installed and is counted when it does; on CI (where bun is installed by the
+  // workflow) a missing bun fails the check instead of skipping.
+  if (!installed('bun') && process.env.CI) throw new Error('bun is not installed on this CI runner: the Bun smoke gate cannot run (the workflow installs it)')
   if (installed('bun')) {
     mkdirSync(join(app, 'static'), { recursive: true })
     writeFileSync(join(app, 'static', 'hello.txt'), 'hello from bun\n')

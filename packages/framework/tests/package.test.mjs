@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
+import { EXPERIMENTAL, INTERNAL, PUBLIC } from '../api-surface.mjs'
 import { SUBPATHS, entryName, exportsMap } from '../subpaths.mjs'
 
 /** The optional peer dependencies: only the Cordis forms and the conformance suites may import them, and a built file imports nothing else outside itself. */
@@ -38,6 +39,25 @@ function closure(start) {
 
 test('package.json exports every subpath of the table, and nothing else', () => {
   assert.deepEqual(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).exports, exportsMap())
+})
+
+test('every built subpath is PUBLIC or INTERNAL, never both, and `exports` is exactly PUBLIC', () => {
+  const built = Object.keys(SUBPATHS)
+  assert.deepEqual(PUBLIC.filter(subpath => INTERNAL.includes(subpath)), [], 'a subpath is in both lists')
+  assert.deepEqual(built.filter(subpath => !PUBLIC.includes(subpath) && !INTERNAL.includes(subpath)), [], 'a built subpath is in neither list: decide whether it is public')
+  assert.deepEqual([...PUBLIC, ...INTERNAL].filter(subpath => !built.includes(subpath)), [], 'a listed subpath is not built')
+  assert.equal(new Set(PUBLIC).size, PUBLIC.length, 'PUBLIC lists a subpath twice')
+  const exported = Object.keys(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).exports).filter(key => key !== './package.json')
+  assert.deepEqual(exported.sort(), PUBLIC.map(subpath => (subpath === '.' ? '.' : `./${subpath}`)).sort())
+  assert.deepEqual(EXPERIMENTAL.filter(subpath => !PUBLIC.includes(subpath)), [], 'an experimental subpath must be public')
+})
+
+test('the internal modules and the hosting adapters that have no gate are not exported', () => {
+  const exported = Object.keys(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).exports)
+  assert.deepEqual(exported.filter(key => key === './acryl-base' || key.startsWith('./utils/')), [])
+  for (const adapter of ['aws-lambda', 'cloudflare-pages', 'cloudflare-workers', 'lambda-edge', 'netlify', 'service-worker', 'vercel'])
+    assert.equal(exported.includes(`./${adapter}`), false, `${adapter} is exported`)
+  assert.ok(exported.includes('./bun'), 'bun (experimental) stays')
 })
 
 test('a built file imports only its own chunks, Node built-ins and the optional peers', () => {
@@ -76,11 +96,11 @@ test('every plain entry loads in plain Node, without Cordis', async () => {
   }
 })
 
-test('the root is the framework: Acryl serves a request, and App is the same class under its 0.4 name', async () => {
+test('the root is the framework: Acryl serves a request, and the 0.4 names App and AppRequest are gone', async () => {
   const framework = await import(pathToFileURL(join(lib, 'index.js')).href)
   const app = new framework.Acryl()
   app.get('/', c => c.text('Acryl!'))
   const response = await app.fetch(new Request('http://localhost/'))
   assert.equal(await response.text(), 'Acryl!')
-  assert.equal(framework.App, framework.Acryl)
+  assert.equal(framework.App, undefined)
 })

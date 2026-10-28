@@ -1,18 +1,11 @@
 # WebSocket Helper
 
 WebSocket Helper is a helper for server-side WebSockets in Acryl applications.
-The Node.js, Cloudflare Workers and Bun adapters are available.
+The Node.js and Bun adapters are available.
 
 ## Import
 
-The Node.js adapter (`acrylblends/node-server`), the Cloudflare Workers adapter (`acrylblends/cloudflare-workers`) and the Bun adapter (`acrylblends/bun`) provide `upgradeWebSocket`. The other platforms have no WebSocket support in their adapters. The Bun adapter is checked on Bun in the framework's release check; its examples below are not type-checked by the docs tests, which run without Bun's types.
-
-**Cloudflare Workers**
-
-```ts
-import { Acryl } from 'acrylblends'
-import { upgradeWebSocket } from 'acrylblends/cloudflare-workers'
-```
+The Node.js adapter (`acrylblends/node-server`) and the Bun adapter (`acrylblends/bun`, experimental) provide `upgradeWebSocket`. The other platforms have no adapter in 1.0.
 
 **Bun**
 
@@ -63,7 +56,7 @@ app.get(
 
 Available events:
 
-- `onOpen` - Currently, Cloudflare Workers does not support it.
+- `onOpen`
 - `onMessage`
 - `onClose`
 - `onError`
@@ -103,7 +96,7 @@ See the examples using WebSocket Helper.
 ```ts
 // server.ts
 import { Acryl } from 'acrylblends'
-import { upgradeWebSocket } from 'acrylblends/cloudflare-workers'
+import { upgradeWebSocket } from 'acrylblends/node-server'
 
 const app = new Acryl().get(
   '/ws',
