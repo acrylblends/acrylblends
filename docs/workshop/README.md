@@ -251,6 +251,14 @@ this walk yet.
 
 ---
 
+## Browser only (WebBoxes.ai) TODO(M9)
+
+No local install? The same app, and the same agent, will run as a hosted workspace: open it in a browser, pick a starter, and work in the same
+three folders. Nothing to install, nothing to keep on your machine.
+
+The hosted workspace is milestone M9 and is due before the workshop, so this section is a stub until it is live: write the address, the sign-in it
+needs, and the two or three clicks that replace steps 1-2 here, then let the local steps stand for anyone who wants the app on their own disk.
+
 ## If something goes wrong
 
 | Symptom | Do |
