@@ -43,6 +43,9 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [WebSocket upgrades on the router (plan)](plans/router-websocket.md) - spec 047 T009: upgrade routes owned by the mounting plugin
 - [After 1.0: tickets](plans/framework-1-1-tickets.md) - 1.0.1 security fix, the 1.1 items with priority and order, what is parked
 - [Framework 1.0 readiness](plans/framework-1-0-readiness.md) - audit: the API surface to freeze, the missing upgrade path, what is experimental; each item must-fix or later
+- [Workshop readiness](plans/workshop-readiness.md) - the newcomer path walked on 1.0.0 (macOS): the step table, the frictions ranked, and a 90-minute outline
+- [The workshop handout](workshop/README.md) - 90 minutes, one app in a browser and a window, an agent that edits it, the registry both ways
+- [Facilitator notes](workshop/facilitator.md) - what to put on each machine, the timings, what breaks in the room, the no-network fallback
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
 - [Building with Cordis](cordis.md) - plugins, services, `inject`, effects, events, a scope per task
