@@ -28,20 +28,27 @@ cd ~/acryl-workshop && cp -R warmup prepared-notes && rm -rf warmup
 
 That leaves `prepared-notes` with everything installed, including Electron.
 
-## Timings, and where to cut
+## Timings, checkpoints, and what to make optional
 
-| Block | Minutes | Measured | Cut when late |
+The handout's own timings, as measured on the published 1.0.0:
+
+| Minutes | Step | Measured | If late |
 | --- | --- | --- | --- |
-| Check the machine, create the app | 10 | create 2-10 s (cold/warm), install 2-3 s | keep |
-| Run, three folders, change one route | 15 | boot 1-3 s, reload instant | keep; it is the heart |
-| Tests and the typecheck | 10 | test 0.5-2 s, check 2.5-4 s | cut the "add a test" exercise |
-| Desktop window | 10 | add 2 s, install 3 s, first Electron boot ~20 s | cut first if the clock runs |
-| Coding agent edits the app | 25 | codex wrote a route in about 4 minutes | never cut; demo it instead of hands-on |
-| Registry: read and publish into a clone | 15 | clone 2 s, each check under 1 s | shorten to reading one entry |
-| Wrap | 5 | - | keep |
+| 0-10 | installs and checks | seconds each | never cut |
+| 10-15 | create and run the blank app | create 2-10 s (cold/warm), install 2-3 s, boot 1-3 s | never cut |
+| 15-22 | change one route | reload is instant | never cut |
+| 22-30 | tests and the typecheck | test 0.5-2 s, check 2.5-4 s | keep; cut the "write a test" exercise |
+| 30-38 | data: JSON then SQLite (**optional**) | two adds plus edits, ~8 min | **cut first** |
+| 38-45 | the desktop window | add 2 s, install 3 s, first Electron boot ~20 s | pre-warm Electron on every machine or demo it |
+| 45-53 | pull a starter | TODO(B1) until 1.0.2 | demo it in 2 minutes |
+| 53-60 | create from a template | create 2-3 s, install 2 s, window as above | drop the second app |
+| 60-75 | the agent builds a feature | codex wrote a route in ~4 min; 15 leaves room for the queue | never cut; demo it if the room is behind |
+| 75-82 | upgrade | upgrade + install + test, ~1 min | keep |
+| 82-90 | publish and the hero moment | the registry steps are seconds; the PR is talk | always keep at least the hero talk |
 
-The desktop block takes longest on the first run because Electron downloads (about 200 MB). If machines are not pre-warmed, move the desktop block
-before the agent block and start it while people read step 3.
+Checkpoints in the handout, and what to look for as you walk the room: **15 minutes** every screen shows `{"app":"my-hero","ok":true}`; **45 minutes**
+every screen has the app in a desktop window; **75 minutes** every screen has `/board` open with the agent's page. A machine behind at a checkpoint is
+what the optional column is for, and the handout names the same choices so nobody has to guess.
 
 ## What breaks in the room, and what to say
 
@@ -57,6 +64,10 @@ These are the defects found by the walk. They are known; say so rather than lett
 - **The agent's login (C2).** The panel's `codex`/`claude` drivers use the attendee's own login. Anyone who is not logged in sees the driver and a
   failed run; `codex login` in a terminal fixes it. `pi` is offered only as a terminal driver (C3).
 - **The `todo` template (C4).** Its app is under `/todo`, so the printed URL is a 404. Not used in this workshop.
+- **Publishing target (TODO(registry-target)).** The handout publishes to the public registry today. When the workshop registry exists, swap the
+  repository in step 10's four commands and tell the room which one they are looking at.
+- **Browser-only attendees (TODO(M9)).** The handout's hosted-workspace stub is empty until M9 is live; until then a browser-only attendee can follow
+  along but not create an app.
 - **node-pty's install script (C5).** `npm install` warns that npm 11 blocked `node-pty`'s script. The terminal drivers still list; the workshop does
   not open one.
 

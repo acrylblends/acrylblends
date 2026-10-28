@@ -1,133 +1,161 @@
-# ACRYL Blends workshop: build an app, then let an agent change it
+# From nothing to your own app: the ACRYL Blends workshop
 
-Ninety minutes, one app that runs in a browser and in a desktop window, and a coding agent that edits it while it runs. You will publish a starter
-into a copy of the registry too. You need a terminal, Node.js, git, and a login for one coding agent (Codex, Claude Code, or `pi`).
+Ninety minutes, starting from an empty folder. **Acryl** is a small web framework built on Web Standards: a handler takes a `Request` and returns a
+`Response`, exactly as in the browser. **ACRYL Blends** puts that framework inside an app you own: a folder whose `blend.yaml` lists its plugins, whose
+`plugins/` folder holds their code, and which runs in a browser or in a desktop window. A coding agent can change the app while it runs. By the end you
+will have built an app from the blank template, added a feature to it with an agent, opened it as a desktop window, upgraded it, and published it as a
+starter other people can pull from the registry.
 
-Everything here was run on the published `acrylblends` 1.0.0. If a step fails on your machine, read its **Stuck?** line before asking for help; it
-covers what actually goes wrong.
+Every command below is copy-pasteable and was run on the published packages. Each step says how long it takes; the checkpoints tell you whether you
+are on time.
 
-## Before you start
+## What you need (10 minutes)
 
 | | macOS | Windows | Linux |
 | --- | --- | --- | --- |
 | Node.js 22.19 or newer | `node -v` | `node -v` | `node -v` |
-| npm (comes with Node) | `npm -v` | `npm -v` | `npm -v` |
+| npm, which comes with Node | `npm -v` | `npm -v` | `npm -v` |
 | git | `git --version` | `git --version` | `git --version` |
-| A coding agent, logged in | `codex login status` (or `claude --version`) | same | same |
+| a coding agent, logged in | `codex login status` or `claude --version` | same | same |
 
-If Node is missing, install the current LTS from <https://nodejs.org> (or `brew install node` on a Mac). If the agent is missing, install Codex
-(`npm i -g @openai/codex`) or Claude Code and log in once before the workshop. The agent is only used in the last third; everything before it
-works without one.
+Install what is missing: Node from <https://nodejs.org> (the LTS), git from <https://git-scm.com>, and one agent with `npm i -g @openai/codex`
+(then `codex login` once) or Claude Code. No prior knowledge of ACRYL, Cordis or Blends is needed; every new word is explained where it appears.
 
-Make a folder for your work and open a terminal in it:
+Make a folder and open a terminal in it:
 
 ```sh
 mkdir ~/acryl-workshop && cd ~/acryl-workshop
 ```
 
-## The plan
+## The path
 
-| Minutes | What |
-| --- | --- |
-| 0-10 | Check the machine, create the app |
-| 10-25 | Run it, read its three folders, change one route |
-| 25-35 | Tests and the typecheck |
-| 35-45 | The same app in a desktop window |
-| 45-70 | A coding agent edits the running app |
-| 70-85 | The registry: read one, publish one into a local copy |
-| 85-90 | Where to go next |
+| Minutes | Step | What you get |
+| --- | --- | --- |
+| 0-10 | Before you start | tools installed and checked |
+| 10-15 | 1. Create and run | a blank app answering in a browser |
+| 15-22 | 2. Change one thing | a route of your own, live, without a restart |
+| 22-30 | 3. Tests and the typecheck | the app proves itself |
+| 30-38 | 4. Data: JSON, then SQLite *(optional)* | a counter kept in a file, then in SQL |
+| 38-45 | 5. A desktop window | the same app as a window |
+| 45-53 | 6. Pull a starter from the registry | someone else's app in your folder |
+| 53-60 | 7. Create from a template | the six starters, one table, one run |
+| 60-75 | 8. An agent builds a feature | your app changed by the agent, still running |
+| 75-82 | 9. Upgrade | the app moved to the current framework |
+| 82-90 | 10. Publish it | your app as a registry starter |
 
-## 1. Create the app (2 minutes)
+> **Checkpoint 15 minutes:** your app answers in a browser. Without that, read the "Stuck?" line of step 1.
+> **Checkpoint 45 minutes:** your app is open in a desktop window. Behind? Step 4 is the optional one; skip it and carry on.
+> **Checkpoint 75 minutes:** the agent's page is live. Still waiting? Give it five more minutes, then skip step 9.
 
-```sh
-npm create acrylblends@latest notes-app notes
-```
-
-You should see something like:
-
-```
-created notes-app (notes) in /Users/you/acryl-workshop/notes-app: 150+ files, plugins instance, acryl-router, acryl-node-server, acryl-db, acryl-db-sqlite, manifest, save
-
-Next:
-  cd notes-app
-  npm install
-  npm run dev
-```
-
-The `Next:` block prints twice; run its three lines once. Six templates exist: `blank`, `nodejs`, `notes`, `chat`, `todo` and `agent`. We use
-`notes` because it has accounts, a database and tests.
-
-**Stuck?** `npm create` downloads `create-acrylblends` the first time (a few seconds). Behind a proxy or offline, use the folder the facilitator
-prepared.
-
-## 2. Install and run (5 minutes)
+## 1. Create and run (5 minutes)
 
 ```sh
-cd notes-app
+npm create acrylblends@latest my-hero blank
+cd my-hero
 npm install
 npm run dev
 ```
 
-`npm install` ends with `found 0 vulnerabilities`. `npm run dev` prints the address and keeps running:
+You should see:
 
 ```
-notes-app listening on http://127.0.0.1:3938 (data in /Users/you/acryl-workshop/notes-app/.acrylblends)
+created my-hero (blank) in /Users/you/acryl-workshop/my-hero: … files, plugins instance, acryl-router, acryl-node-server, manifest, save
+
+Next:
+  cd my-hero
+  npm install
+  npm run dev
 ```
 
-Open that address. You land on the sign-in page; create an account and add a note. Leave the terminal running.
+then, from `npm run dev`:
 
-**Stuck?** If the port is taken, the app simply prints the next free one: use the address it printed, not 3938. `Ctrl-C` stops it; start it again
-with `npm run dev`.
+```
+my-hero listening on http://127.0.0.1:3080 (data in /Users/you/acryl-workshop/my-hero/.acrylblends)
+```
 
-## 3. Three folders, and what they mean (5 minutes)
+Open that address: `{"app":"my-hero","ok":true}`. `/health` answers `{"ok":true}` too. Leave the terminal running.
 
-- `blend.yaml` is the app as data: an ordered list of plugin rows with their config. Switch a row off (`disabled: true`) and it is gone, no code
-  edit.
-- `plugins/` is the code you own: the framework plugins the starter copied in, and any plugin you or an agent write.
-- `src/` is your app: `src/main.ts` starts it, `src/app.ts` registers the plugins, `src/routes.ts` mounts the routes, `src/notes-app.ts` builds the
-  notes app itself.
-- `.acrylblends/` is where the app keeps its database and settings. It is in `.gitignore`.
+**Stuck?** A busy port gets the next free one: use the address the app printed. The first `npm create` downloads the initializer, so give it a few
+seconds.
 
-**Stuck?** Nothing to run here. If a file is missing, compare with `ls` above; the folder names are exact.
+## 2. Change one thing (7 minutes)
 
-## 4. Change one thing (10 minutes)
-
-Open `src/notes-app.ts`, find the line `const app = new Acryl<Env>()`, and add one line below it:
+Open `src/routes.ts`. It builds an `Acryl` app and mounts it on the router. Add one line to that chain, above `.get('/health', …)`:
 
 ```ts
-  app.get('/hello', (c) => c.json({ hello: 'workshop' }))
+  .get('/hello', (c) => c.json({ hello: 'workshop' }))
 ```
 
-Save the file. The terminal prints:
+Save. The terminal prints `Change detected … Restarting 'src/main.ts'`, and `http://127.0.0.1:3080/hello` answers `{"hello":"workshop"}`. No restart
+command, no build step: the app watches its own source.
 
-```
-Change detected in '/Users/you/acryl-workshop/notes-app/src/notes-app.ts'
-Restarting 'src/main.ts'
-notes-app listening on http://127.0.0.1:3938 (…)
-```
+**Stuck?** No message means the file is not where the app watches; the message names the path it saw. A red error names the file and line.
 
-Open `http://127.0.0.1:3938/hello` (your port): `{"hello":"workshop"}`.
+## 3. Tests and the typecheck (8 minutes)
 
-**Stuck?** No restart means the file was not saved where the app watches: check the path in the message. A red error means a typo; read the file
-and line it names.
-
-## 5. Tests and the typecheck (10 minutes)
-
-Stop the dev server with `Ctrl-C`, then:
+Stop the server with `Ctrl-C`, then:
 
 ```sh
 npm test
 npm run check
 ```
 
-`npm test` ends with `ℹ tests 15`, `ℹ pass 15`, `ℹ fail 0` (the count depends on the template). `npm run check` prints nothing when it is happy:
-that is the typecheck passing.
+`npm test` ends with `ℹ pass 5`, `ℹ fail 0`. `npm run check` prints nothing when the types are clean.
 
-Add a test for the route you just wrote, in `test/`, and run `npm test` again. A failing test prints the file and line.
+Now add a test for your route in `test/`: copy the style of the existing test file, request `/hello` and expect `{"hello":"workshop"}`. `npm test`
+again; a failure names the file and line.
 
-**Stuck?** `npm run check` failing on your new line is the typecheck doing its job; the message names the type.
+**Stuck?** `npm run check` complaining about your new line is the typechecker doing its job; the message says which type it expected.
 
-## 6. The same app in a window (10 minutes)
+## 4. Data: JSON, then SQLite (8 minutes, optional)
+
+An app keeps data through a **port**: a small interface that a plugin provides. The smallest is `kv`, a JSON file in the app's own folder.
+
+```sh
+npx acrylblends add acryl-kv-json
+npm install
+```
+
+`add` copies the plugin into `plugins/` and prints how to mount it. Two edits, in files you already know:
+
+1. `blend.yaml`, after `- id: instance`, add:
+
+   ```yaml
+       - id: acryl-kv
+         name: acryl-kv
+       - id: acryl-kv-json
+         name: acryl-kv-json
+   ```
+
+2. `src/routes.ts`: change `inject: ['router']` to `inject: ['router', 'kv']`, and count visits in your route:
+
+   ```ts
+     .get('/hello', async (c) => {
+       const visits = await ctx.kv.update('visits', (n) => (n ?? 0) + 1)
+       return c.json({ hello: 'workshop', visits })
+     })
+   ```
+
+   `apply(ctx)` already receives the context; register the plugin in `src/app.ts` the way the other rows are registered.
+
+`npm run dev` again and open `/hello` twice: `visits` goes 1, 2. The file is `my-hero/.acrylblends/kv.json`.
+
+The relational port is `db`, with numbered SQL migrations:
+
+```sh
+npx acrylblends add acryl-db-sqlite
+mkdir migrations
+printf 'CREATE TABLE visits (id INTEGER PRIMARY KEY, at TEXT NOT NULL);\n' > migrations/001-visits.sql
+npm install
+```
+
+Add its two rows to `blend.yaml` the same way (`acryl-db`, then `acryl-db-sqlite`), give the plugin `inject: ['router', 'db', 'kv']`, and in the route
+`await ctx.db.run('INSERT INTO visits (at) VALUES (?)', new Date().toISOString())` before the reply. The database is `my-hero/.acrylblends/data.sqlite`,
+and the migrations run at start, in order.
+
+**Stuck?** "no such table" means the migration file is not in `migrations/` at the app root, or the row is not mounted.
+
+## 5. A desktop window (7 minutes)
 
 ```sh
 npx acrylblends add desktop
@@ -135,136 +163,170 @@ npm install
 npm run desktop
 ```
 
-A desktop window opens, showing the same app from the same server. Your routes, your sign-in and your notes are the ones you already wrote; every
-Electron call lives inside `plugins/desktop`, so the app's own code never imports it. Its browser data lives inside the app folder, in
-`.acrylblends/electron`. Close the window when you are done.
+A window opens, showing the same routes and the same data. The app's own code never imports Electron; every Electron call lives in `plugins/desktop`,
+and the window's browser data stays inside `my-hero/.acrylblends/electron`. Close the window when you are done (`Cmd-Q`, `Alt-F4`).
 
-**Stuck?** The first `npm run desktop` downloads Electron (about 200 MB, once). On Linux without a display, skip this step and watch the
-facilitator's window.
+**Stuck?** The first `npm run desktop` downloads Electron (about 200 MB). No display (a bare server)? Skip this step; nothing later needs it.
 
-## 7. A coding agent edits the running app (25 minutes)
+## 6. Pull a starter from the registry (8 minutes)
 
-The `notes` app runs its own offline agent, but the interesting one is a coding agent you already trust. Use the `agent` template for this part:
-it ships the plugin rows an agent needs.
+The registry is where people publish starters: <https://acrylblends.github.io/blends>. Pull one by id and run it:
 
 ```sh
 cd ~/acryl-workshop
-npm create acrylblends@latest agent-app agent
-cd agent-app
+npx acryl new from-the-registry --from acryl.blank
+cd from-the-registry
 npm install
+npm run dev
+```
+
+You get a complete app someone else published, with its plugins and its `blend.yaml`, in your folder and yours to change.
+
+**Stuck?** `--from` needs an `acryl` CLI new enough to know starters: `npm i -g acryl@latest`. TODO(B1): the starter pull ships in acrylblends 1.0.2;
+until then the facilitator demos this step.
+
+## 7. Create from a template (7 minutes)
+
+Every app begins from one of six templates, the same list in `npm create acrylblends` and `acrylblends init`:
+
+| Template | What you get |
+| --- | --- |
+| `blank` | the router, the server and one route: what you just built |
+| `nodejs` | a page rendered with JSX and a client component, without a bundler |
+| `notes` | a multi-user notes app on the `db` port: sign-up, sessions, migrations, search, a typed client |
+| `chat` | an answer streamed over server-sent events from an OpenAI-compatible API, history in SQLite |
+| `todo` | a to-do list on the router and live state |
+| `agent` | the blank app with an offline agent that writes and installs plugins into the running app |
+
+Try the one with a database and accounts, in a window:
+
+```sh
+cd ~/acryl-workshop
+npm create acrylblends@latest notes-app notes
+cd notes-app && npm install
+npx acrylblends add desktop && npm install && npm run desktop
+```
+
+Sign up, add a note, close the window; run `npm run dev` and the note is still there, because it lives in `notes-app/.acrylblends/data.sqlite`.
+
+**Stuck?** The sign-in page is at `/login`; the root redirects there. Delete the folder when you are done with it.
+
+## 8. An agent builds a feature (15 minutes)
+
+Back in your own app, `~/acryl-workshop/my-hero`. The agent panel turns a coding agent you already use into a chat in the corner of the page.
+
+```sh
+cd ~/acryl-workshop/my-hero
 npx acrylblends add agent-panel driver-pty
 npm install
 ```
 
-`add` prints two edits it does not make for you. Do them:
-
-1. In `blend.yaml`, before the `- id: routes` row, add:
-
-   ```yaml
-       - id: agent-panel
-         name: agent-panel
-       - id: driver-pty
-         name: driver-pty
-   ```
-
-2. In `src/app.ts`, import them and register them:
-
-   ```ts
-   import * as agentPanel from '../plugins/agent-panel/index.ts'
-   import * as driverPty from '../plugins/driver-pty/index.ts'
-   ```
-
-   and add `'agent-panel': agentPanel, 'driver-pty': driverPty,` to the `registry` object.
-   (The agent template's `src/app.ts` already lists `agent`, `builder`, `extensions`, `sandbox` and `tasks`.)
-
-Run it and open the page:
+`add` prints the two edits it does not make: a row for `agent-panel` and one for `driver-pty` before `- id: routes` in `blend.yaml`, and two lines in
+`src/app.ts` (`'agent-panel': agentPanel, 'driver-pty': driverPty,` in the `registry`, with their imports). Start the app:
 
 ```sh
 npm run dev
 ```
 
-Click the panel button in the corner of the page. Pick `codex` (or `claude`) and ask:
+Open the page, click the panel button in the corner, pick `codex` (or `claude`), and ask:
 
-> Add a route GET /agent-built to src/routes.ts that returns {"built": true}, then run the tests and tell me what happened.
+> Add a page at /board that shows the last five visits from the database, and a test for it.
 
-Watch the terminal: the agent edits files, the app reloads by itself, and `http://127.0.0.1:<port>/agent-built` answers `{"built":true}`. The panel
-shows what the agent is doing and has a stop button.
+The agent reads `AGENTS.md`, reads `docs/framework` (which is in your app), edits your files, runs your tests, and the app reloads itself. Open `/board`
+when it is done.
 
-**Stuck?** A 404 on `/api/agent-panel/session` means the panel is waiting for a plugin row: check the two edits above (and that you started from the
-`agent` template). If the agent reports it is not logged in, run `codex login` (or `claude`) in a terminal and retry. `pi` shows up as a terminal
-driver, not a chat one.
+A terminal agent works too: choose `pty:codex` (or `pty:claude`, `pty:pi`) for its normal interactive session inside the app folder, where it can use
+the door (`.acryl/bin/acryl`) to look at the page it built.
 
-## 8. The registry (15 minutes)
+**Stuck?** A 404 under `/api/agent-panel` means the rows or the registry lines are missing; compare with what `add` printed. "Not logged in" means the
+agent needs `codex login` (or `claude`) in a terminal; the panel uses your own account. TODO(C1): 1.0.2 wires the panel's rows itself; until then make
+the two edits by hand.
 
-The registry is where starters live: <https://acrylblends.github.io/blends>. Publishing is a pull request; you can rehearse the whole path on your
-own machine, which is what we do here.
+## 9. Upgrade (7 minutes)
 
-```sh
-cd ~/acryl-workshop
-git clone --depth 1 https://github.com/acrylblends/acrylblends.github.io.git registry
-cd registry
-mkdir -p registry/blends/you.demo/plugins/you-demo
-```
-
-Write `registry/blends/you.demo/blend.yaml`:
-
-```yaml
-apiVersion: blends.acryl.dev/v1alpha1
-kind: Blueprint
-metadata:
-  id: you.demo
-  name: Your Demo
-  version: 0.1.0
-  category: starter
-  description: "Blank plus one plugin that answers GET /hello."
-  license: MIT
-  visibility: public
-spec:
-  runtime: cordis
-  extends: acryl.blank
-  rows:
-    - id: you-demo
-      name: you-demo
-```
-
-…a `plugins/you-demo/index.ts` that mounts a route, and a `README.md`. Then run the same check CI runs. It needs the format library from ACRYL's
-source, which the facilitator has already put at `~/acryl-workshop/blends-core`:
+Your app carries its framework plugins as source, so a new release moves them in place and leaves your code alone:
 
 ```sh
-bun ~/acryl-workshop/blends-core/src/bin/registry-index.ts registry --check
+npx acrylblends upgrade --dry-run
+npx acrylblends upgrade
+npm install && npm test
 ```
 
-It refuses your entry first (an unquoted `:` in the description is the classic mistake), then says `registry/index.json is stale: run
-blends-registry-index registry`. Run the same command without `--check`; it writes the index; `--check` now passes. That is the pull request: a new
-folder and a regenerated index. (Do not push.)
+The dry run lists what would be replaced; the real run replaces untouched files and stops with a diff if you edited one (move your change into a plugin
+of your own, or use `--force`, which backs the edited copies up first). Your tests still pass afterwards.
 
-Pulling a starter by id (`acryl new my-app --from you.demo`) is the other half: TODO(B1), it is being finished in the framework and is not part of
-this walk yet.
+**Stuck?** `acrylblends upgrade` printing the help means it ran an older copy of the tool; use `npx acrylblends@latest upgrade`. TODO(B2): 1.0.2 makes
+the plain command work.
 
-**Stuck?** `bun: command not found`: use `npx bun` or the facilitator's machine. A YAML error names the line; quote the description.
+## 10. Publish it, and the hero moment (8 minutes)
 
-## 9. Where to go next (5 minutes)
+Your app is already a **starter**: `blend.yaml` names it, lists its rows, and `plugins/` holds its code. Two steps make it public.
 
-- The docs you have on disk: every generated app carries `docs/framework`, the same pages as <https://acrylblends.github.io/docs>.
-- `AGENTS.md` in your app is what a coding agent reads first; it is part of every template.
-- Swap a provider by editing one row: SQLite to Postgres, the browser to a desktop window, an agent to another agent.
+**Your own copy first.** `npm run save` commits the app and pushes it to its remote (it refuses a file that looks like a secret, and refuses to push a
+private app to a public remote). Create an empty repository on your git host, set it as `origin`, run `npm run save`.
 
----
+**The registry.** Publishing is a reviewed pull request. In your app:
+
+1. In `blend.yaml`, set `visibility: public`, add a `license`, a `category` and a one-line `description`.
+2. Clone the registry and copy your app in as an entry:
+
+   ```sh
+   cd ~/acryl-workshop
+   git clone --depth 1 https://github.com/acrylblends/acrylblends.github.io.git registry
+   mkdir -p registry/registry/blends/you.my-hero
+   cp my-hero/blend.yaml registry/registry/blends/you.my-hero/
+   cp -R my-hero/plugins registry/registry/blends/you.my-hero/plugins
+   ```
+
+3. Write `registry/registry/blends/you.my-hero/README.md`: one paragraph on what it is and how to start from it.
+4. Regenerate the index with the tool the registry's CI uses (`bun`):
+
+   ```sh
+   cd registry
+   bun <blends-core>/src/bin/registry-index.ts registry --check    # refuses: the index is stale
+   bun <blends-core>/src/bin/registry-index.ts registry            # writes registry/index.json
+   bun <blends-core>/src/bin/registry-index.ts registry --check    # passes
+   ```
+
+5. Commit, push to your fork, open a pull request. CI validates the entry and the index, a person reviews it, and once it is merged your starter is
+   listed at <https://acrylblends.github.io/blends>; anyone can then start an app from it with `acryl new my-app --from you.my-hero`.
+
+TODO(registry-target): the workshop publishes to <the registry the facilitators run for the event> instead of the public one; the commands above are
+the same, with that repository in place of `acrylblends/acrylblends.github.io`.
+
+**Stuck?** A YAML error names the line; the classic one is an unquoted `:` in the description. `index.json is stale` is not an error: run the same
+command without `--check`. No `bun`? `npm i -g bun`.
+
+> **The hero moment.** Your app, built from blank by you, with a page an agent wrote, running as a desktop window, saved in your own repository, and
+> published as a starter in the registry. Note what you did not write: the router, the server, the JSON file, the SQLite migrations, the window.
+
+## Where next
+
+- **Read the docs you already have**: every app carries `docs/framework`, the same pages as <https://acrylblends.github.io/docs>. Start with
+  `cordis/acryl-in-a-cordis-app.md`, then `guides/data.md`, then `guides/production.md` (what runs in production, and what does not).
+- **Swap a provider by editing one row**: SQLite to Postgres (`npx acrylblends add acryl-db-postgres`), the browser to a window (`desktop`), one agent
+  to another (the panel's driver list).
+- **Teach your agent**: `AGENTS.md` in your app is what it reads first; add your team's conventions there and the next run follows them.
+- **Bring your own tool**: <https://acrylblends.github.io/docs/guides/bring-your-own-tool> wraps an outside library as a provider of a port.
 
 ## Browser only (WebBoxes.ai) TODO(M9)
 
-No local install? The same app, and the same agent, will run as a hosted workspace: open it in a browser, pick a starter, and work in the same
-three folders. Nothing to install, nothing to keep on your machine.
+No local install? The same app, and the same agent, will run as a hosted workspace: open it in a browser, pick a starter, and work in the same three
+folders. Nothing to install, nothing to keep on your machine.
 
 The hosted workspace is milestone M9 and is due before the workshop, so this section is a stub until it is live: write the address, the sign-in it
 needs, and the two or three clicks that replace steps 1-2 here, then let the local steps stand for anyone who wants the app on their own disk.
+
+---
 
 ## If something goes wrong
 
 | Symptom | Do |
 | --- | --- |
-| `npm create` fails or hangs | Check the network; the facilitator has the apps pre-created in `~/acryl-workshop/prepared/` |
-| Port taken | Use the address the app printed |
+| `npm create` fails or hangs | check the network; the facilitator has prepared apps |
+| A port is taken | use the address the app printed |
 | The agent cannot log in | `codex login` / `claude` in a terminal, then retry in the panel |
-| You want to start over | Delete the app folder and repeat step 1; nothing lives outside it |
-| Anything else | Read the **Stuck?** line of the step; then ask |
+| You want to start over | delete your app folder and repeat step 1; nothing lives outside it |
+| Anything else | the **Stuck?** line of the step, then your facilitator |
+
+Behind at a checkpoint? Skip step 4 (data) first, then the second app in step 7. Steps 1-3, 5, 8-10 are the spine.
