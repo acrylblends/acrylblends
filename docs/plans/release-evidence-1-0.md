@@ -7,8 +7,9 @@ The gate is `scripts/verify-coding-agent.mjs <version> --agent <agent> ...` (man
 | `agent` template | add a `/customers/count` route with a test | **PASS**: 1 turn, 7 commands and edits, 21 s | **PASS**: 19 turns, 103 s | **FAIL**: 5 turns, 20 s. It asked which data source to use (a state cell, `db` or `kv`) and changed nothing: the task names no data. Not a quota stall |
 | `notes` starter (with the desktop shell) | add tags to notes (a comma separated field, shown in the list, filter by tag, tests) | **PASS**: 1 turn, 11 commands and edits, 72 s | **PASS**: 40 turns, 327 s | not run |
 | `chat` starter | add a `/customers/count` route with a test | **PASS**: 1 turn, 7 commands and edits, 36 s | **PASS**: 12 turns, 51 s | not run |
+| `notes` starter | add `GET /customers/count` returning the number of rows in the `customers` table, with a test (the task names the data) | not run | not run | **PASS**: 15 turns, 62 s |
 
-Claude was run once, on the cheapest task, because its account was close to its weekly limit; after the answer above it was not retried (the task is the same for every agent). `isolation` for Claude is the real `HOME` for its login only, project settings only, and tools limited to npm, node, ls, cat and edits.
+Claude was run twice and no more, because its account was close to its weekly limit. The first run (the `agent` template row) asked which data source to use and changed nothing. The second, the same day, used a task that names the data: it wrote `migrations/002-customers.sql` (a `customers` table), the route (`SELECT COUNT(*) ... FROM customers`) and a test that inserts two rows and asserts the count, and passed (the app's 16 tests pass; I read the code and ran the tests by hand because the gate does not run its HTTP route probe for this setup: its result says `route not probed`). No quota stop happened in either run. `isolation` for Claude is the real `HOME` for its login only, project settings only, and tools limited to npm, node, ls, cat and edits.
 
 ## What else was run, and what it showed
 
@@ -21,4 +22,4 @@ Two runs that do not belong in the table because the setup was wrong for the tas
 
 - On the tasks a user gives an existing app (add a route, add a feature to a starter), Codex and pi pass on all three starters with the published 1.0.0-rc.1, in 21 to 327 s.
 - Each agent checked its own work through the app's own tests and type-check, which the gate then ran itself.
-- Claude's one run shows the ambiguity of that particular task (no data source named), not a framework failure; a later run with a task that names the data would be the useful comparison.
+- Claude's first run showed the ambiguity of that task (no data source named), not a framework failure: the second, with the data named, passed in 62 s.
