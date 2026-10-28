@@ -54,13 +54,12 @@ what the optional column is for, and the handout names the same choices so nobod
 
 These are the defects found by the walk. They are known; say so rather than letting people think they broke something.
 
-- **Pulling a starter (TODO(B1)).** `acryl new my-app --from <starter>` is not in the published CLI yet; it needs the ACRYL source checkout. The
-  handout therefore publishes into a local clone instead of pulling. If someone asks for a starter, show `acrylblends.github.io/blends` and say
-  pulling lands in the next 1.0.x.
-- **Upgrading (TODO(B2)).** In an app made before 1.0, `npx acrylblends upgrade` runs the app's own older CLI and prints help. Teach
-  `npx acrylblends@latest upgrade`. The handout shows the form that works.
-- **The agent panel (TODO(C1)).** `acrylblends add agent-panel` copies the plugin but not the rows it needs; on a `blank` app the panel silently
-  404s. The handout starts from the `agent` template and makes the two edits by hand. Expect the 404 if someone skips an edit.
+- **Pulling a starter (TODO(B1)).** The form is `npm create acrylblends@latest my-app -- --from <id>`, and only starters that declare `runtime:
+  acrylblends` can be pulled (the older `acryl.*` ACRYL Blueprints are refused with one line saying so). The ids this workshop uses ship with 1.0.2;
+  until Blends sends them, write the id on the board and demo the step.
+- **Upgrading.** An app's own copy shadows the bare command, so always `npx acrylblends@latest upgrade`; the handout says so with the reason (TODO(B2) until 1.0.2's migration guide says the same).
+- **The agent panel (TODO(C1)).** 1.0.2 makes `acrylblends add agent-panel` add the rows it needs, and refuse on a `blank` app with what is missing.
+  The handout uses the `agent` template for that step, so it works either way; on 1.0.x expect to make the two edits by hand.
 - **The agent's login (C2).** The panel's `codex`/`claude` drivers use the attendee's own login. Anyone who is not logged in sees the driver and a
   failed run; `codex login` in a terminal fixes it. `pi` is offered only as a terminal driver (C3).
 - **The `todo` template (C4).** Its app is under `/todo`, so the printed URL is a 404. Not used in this workshop.

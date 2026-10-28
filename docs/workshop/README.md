@@ -170,20 +170,22 @@ and the window's browser data stays inside `my-hero/.acrylblends/electron`. Clos
 
 ## 6. Pull a starter from the registry (8 minutes)
 
-The registry is where people publish starters: <https://acrylblends.github.io/blends>. Pull one by id and run it:
+The registry is where people publish starters: <https://acrylblends.github.io/blends> (the starters written for this framework say
+`runtime: acrylblends`; older ACRYL app starters are refused with a line saying so). Pull one by id, straight into a new folder:
 
 ```sh
 cd ~/acryl-workshop
-npx acryl new from-the-registry --from acryl.blank
+npm create acrylblends@latest from-the-registry -- --from <starter-id>
 cd from-the-registry
 npm install
 npm run dev
 ```
 
-You get a complete app someone else published, with its plugins and its `blend.yaml`, in your folder and yours to change.
+The same command takes a git repository or a folder: `--from github:you/starter` or `--from ../a-template`. You get a complete app someone else
+published, with its plugins and its `blend.yaml`, in your folder and yours to change.
 
-**Stuck?** `--from` needs an `acryl` CLI new enough to know starters: `npm i -g acryl@latest`. TODO(B1): the starter pull ships in acrylblends 1.0.2;
-until then the facilitator demos this step.
+**Stuck?** The `--` before `--from` is npm's, not ours: without it npm swallows the flag. An id that is not in the registry prints the ids it knows.
+TODO(B1): the ids of the starters this workshop uses are published with 1.0.2; the facilitator writes them on the board.
 
 ## 7. Create from a template (7 minutes)
 
@@ -213,24 +215,24 @@ Sign up, add a note, close the window; run `npm run dev` and the note is still t
 
 ## 8. An agent builds a feature (15 minutes)
 
-Back in your own app, `~/acryl-workshop/my-hero`. The agent panel turns a coding agent you already use into a chat in the corner of the page.
+The agent panel turns a coding agent you already use into a chat in the corner of the page. It needs the plugins the `agent` template ships (its model,
+tools and memory), so this step builds a second, small app from that template; it is the app you publish in step 10.
 
 ```sh
-cd ~/acryl-workshop/my-hero
-npx acrylblends add agent-panel driver-pty
+cd ~/acryl-workshop
+npm create acrylblends@latest agent-app agent
+cd agent-app
 npm install
-```
-
-`add` prints the two edits it does not make: a row for `agent-panel` and one for `driver-pty` before `- id: routes` in `blend.yaml`, and two lines in
-`src/app.ts` (`'agent-panel': agentPanel, 'driver-pty': driverPty,` in the `registry`, with their imports). Start the app:
-
-```sh
+npx acrylblends add agent-panel driver-pty
+npx acrylblends add desktop
+npm install
 npm run dev
 ```
 
-Open the page, click the panel button in the corner, pick `codex` (or `claude`), and ask:
+`add agent-panel` adds the plugin rows the panel needs and prints what it changed. (On a `blank` app it refuses and says what is missing: that is why
+this step uses the `agent` template.) Open the page, click the panel button in the corner, pick `codex` (or `claude`, or `pi`), and ask:
 
-> Add a page at /board that shows the last five visits from the database, and a test for it.
+> Add a page at /board that lists the app's tasks, newest first, and a test for it.
 
 The agent reads `AGENTS.md`, reads `docs/framework` (which is in your app), edits your files, runs your tests, and the app reloads itself. Open `/board`
 when it is done.
@@ -238,34 +240,35 @@ when it is done.
 A terminal agent works too: choose `pty:codex` (or `pty:claude`, `pty:pi`) for its normal interactive session inside the app folder, where it can use
 the door (`.acryl/bin/acryl`) to look at the page it built.
 
-**Stuck?** A 404 under `/api/agent-panel` means the rows or the registry lines are missing; compare with what `add` printed. "Not logged in" means the
-agent needs `codex login` (or `claude`) in a terminal; the panel uses your own account. TODO(C1): 1.0.2 wires the panel's rows itself; until then make
-the two edits by hand.
+**Stuck?** The panel uses your own agent account: `codex login` (or `claude`) in a terminal first. If `npm install` warns that npm blocked
+`node-pty`'s install script, `add driver-pty` prints the exact approve command; run it and `npm install` again. TODO(C1): the row-writing and the
+refusal land in 1.0.2, so on 1.0.x make the two edits `add` prints by hand.
 
 ## 9. Upgrade (7 minutes)
 
-Your app carries its framework plugins as source, so a new release moves them in place and leaves your code alone:
+Your app carries its framework plugins as source, so a new release moves them in place and leaves your code alone. Run the tool by its full name:
+**`npx acrylblends@latest`**, because an app's own copy of `acrylblends` shadows the bare command and an older copy has no `upgrade` at all.
 
 ```sh
-npx acrylblends upgrade --dry-run
-npx acrylblends upgrade
+cd ~/acryl-workshop/my-hero
+npx acrylblends@latest upgrade --dry-run
+npx acrylblends@latest upgrade
 npm install && npm test
 ```
 
 The dry run lists what would be replaced; the real run replaces untouched files and stops with a diff if you edited one (move your change into a plugin
-of your own, or use `--force`, which backs the edited copies up first). Your tests still pass afterwards.
-
-**Stuck?** `acrylblends upgrade` printing the help means it ran an older copy of the tool; use `npx acrylblends@latest upgrade`. TODO(B2): 1.0.2 makes
-the plain command work.
+of your own, or use `--force`, which backs the edited copies up first). Your tests still pass afterwards. TODO(B2): 1.0.2's docs say the same thing in
+the migration guide; the command itself does not change.
 
 ## 10. Publish it, and the hero moment (8 minutes)
 
-Your app is already a **starter**: `blend.yaml` names it, lists its rows, and `plugins/` holds its code. Two steps make it public.
+The app you publish is `agent-app`, the one the agent changed in step 8 (keep `my-hero` too: it is yours, saved the same way). It is already a
+**starter**: `blend.yaml` names it, lists its rows, and `plugins/` holds its code. Two steps make it public.
 
 **Your own copy first.** `npm run save` commits the app and pushes it to its remote (it refuses a file that looks like a secret, and refuses to push a
 private app to a public remote). Create an empty repository on your git host, set it as `origin`, run `npm run save`.
 
-**The registry.** Publishing is a reviewed pull request. In your app:
+**The registry.** Publishing is a reviewed pull request. In `agent-app`:
 
 1. In `blend.yaml`, set `visibility: public`, add a `license`, a `category` and a one-line `description`.
 2. Clone the registry and copy your app in as an entry:
@@ -273,12 +276,12 @@ private app to a public remote). Create an empty repository on your git host, se
    ```sh
    cd ~/acryl-workshop
    git clone --depth 1 https://github.com/acrylblends/acrylblends.github.io.git registry
-   mkdir -p registry/registry/blends/you.my-hero
-   cp my-hero/blend.yaml registry/registry/blends/you.my-hero/
-   cp -R my-hero/plugins registry/registry/blends/you.my-hero/plugins
+   mkdir -p registry/registry/blends/you.agent-app
+   cp agent-app/blend.yaml registry/registry/blends/you.agent-app/
+   cp -R agent-app/plugins registry/registry/blends/you.agent-app/plugins
    ```
 
-3. Write `registry/registry/blends/you.my-hero/README.md`: one paragraph on what it is and how to start from it.
+3. Write `registry/registry/blends/you.agent-app/README.md`: one paragraph on what it is and how to start from it.
 4. Regenerate the index with the tool the registry's CI uses (`bun`):
 
    ```sh
@@ -289,7 +292,7 @@ private app to a public remote). Create an empty repository on your git host, se
    ```
 
 5. Commit, push to your fork, open a pull request. CI validates the entry and the index, a person reviews it, and once it is merged your starter is
-   listed at <https://acrylblends.github.io/blends>; anyone can then start an app from it with `acryl new my-app --from you.my-hero`.
+   listed at <https://acrylblends.github.io/blends>; anyone can then start an app from it with `npm create acrylblends@latest my-app -- --from you.agent-app`.
 
 TODO(registry-target): the workshop publishes to <the registry the facilitators run for the event> instead of the public one; the commands above are
 the same, with that repository in place of `acrylblends/acrylblends.github.io`.
@@ -297,8 +300,9 @@ the same, with that repository in place of `acrylblends/acrylblends.github.io`.
 **Stuck?** A YAML error names the line; the classic one is an unquoted `:` in the description. `index.json is stale` is not an error: run the same
 command without `--check`. No `bun`? `npm i -g bun`.
 
-> **The hero moment.** Your app, built from blank by you, with a page an agent wrote, running as a desktop window, saved in your own repository, and
-> published as a starter in the registry. Note what you did not write: the router, the server, the JSON file, the SQLite migrations, the window.
+> **The hero moment.** An app you created, with a page an agent wrote for it, running as a desktop window, saved in your own repository, and published
+> as a starter in the registry so the next person can pull it with one command. Along the way you built a second app from blank, a route, a test, a JSON
+> store and a SQLite database. Note what you did not write: the router, the server, the JSON file, the SQLite migrations, the window, the page.
 
 ## Where next
 
