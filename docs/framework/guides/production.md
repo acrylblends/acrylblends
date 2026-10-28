@@ -10,14 +10,17 @@
 | **The door** (`acryl-door`: `.acryl/bin/acryl`, the page script, the operator routes) | **experimental**: starts when the server is up | starts nothing: no service, no route, no `.acryl/` folder, no script in the page. `ACRYL_DOOR=off` also turns it off. A host that means to run it in production sets `allowInProduction: true` in the plugin's config |
 | **The agent panel** (`agent-panel`) | **experimental**: a script tag on every HTML page and `/api/agent-panel/*` | does nothing (no tag, no routes). `ACRYL_DOOR=off` too |
 | **The PTY driver** (`driver-pty`) | **experimental**: terminal drivers in the panel, `/api/driver-pty/*` | does nothing. `ACRYL_DOOR=off` too |
-| **Live plugin install** (`extensions`, `builder`) | **experimental**: install, update, remove and reload plugins while the app runs | the `nodejs`, `notes` and `chat` templates leave the `extensions` row out; the `agent` template does not (see below) |
+| **Live plugin install and the agent** (`extensions`, `builder`, `agent`: `POST /ask`) | **experimental**: install, update, remove and reload plugins while the app runs; the agent builds them | left out: the `nodejs`, `notes` and `chat` templates drop the `extensions` row, and the `agent` template drops `agent`, `builder` and `extensions` (since 1.0.1) unless `ACRYL_PRODUCTION_KEEP` names them |
 | `acrylblends/bun` | **experimental**: one smoke gate runs it on Bun | the same |
 
 Experimental means: it works and is gated, its interface may still change in a minor version, and it is not for the public internet. The door and the panel are loopback and own-page only, with a per-run secret and an audit log; that is a convenience fence for a developer's machine, not an authentication system.
 
-## The `agent` template is a development app
+## The `agent` template in production
 
-The `agent` template mounts an agent behind `POST /ask` that can write plugins into the running app (`builder`) and install them (`extensions`). Only its door is left out in production. Do not deploy it as it is: remove the `agent`, `builder` and `extensions` rows from `blend.yaml` (or start from `blank`, `nodejs`, `notes`, `chat` or `todo`), and if live install is wanted anywhere shared, set `approval: true` so an install waits for `POST /extensions/approve`.
+The `agent` template mounts an agent behind `POST /ask` that spends the model key and can write plugins into the running app (`builder`) and install them (`extensions`, with `POST /extensions/approve` deciding installs). **None of that is behind a login.** Since 1.0.1, with `NODE_ENV=production` the template leaves the `agent`, `builder` and `extensions` rows out, along with the door: `/ask`, `/extensions*` and `/tasks*` are not mounted, and the page and `GET /health` stay. 1.0.0 left them mounted.
+
+- To keep a row anyway, name it: `ACRYL_PRODUCTION_KEEP=agent,builder,extensions` (a comma list). Each row kept prints a `WARNING` line at start saying what it gives a visitor. Put your own login in front before you do.
+- **An app made by 1.0.0 keeps its own `src/app.ts` and `src/routes.ts`**, which `acrylblends upgrade` never touches (they are your files). Until you change them: deploy with the `agent`, `builder` and `extensions` rows set to `disabled: true` in `blend.yaml`, or start from another template, or copy the new `src/app.ts` and `src/routes.ts` of a fresh `acrylblends init my-app --template agent` over yours.
 
 ## What live plugin install does and does not promise
 
@@ -38,6 +41,6 @@ Installing a plugin (`ctx.extensions.install`, the door's `plugin add`, the buil
 ## Checklist for a deployment
 
 1. `NODE_ENV=production` (the process manager or the Dockerfile sets it; the templates' Dockerfile does).
-2. Start from a template that is not `agent`, or remove the agent rows.
+2. With the `agent` template, leave `ACRYL_PRODUCTION_KEEP` unset (1.0.1 and later), or remove the agent rows.
 3. Do not set `allowInProduction` on the door unless the host is a single-user desktop app.
 4. Keep `ACRYL_DOOR=off` in any environment where an agent should not be able to see the page.

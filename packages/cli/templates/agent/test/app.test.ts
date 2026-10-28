@@ -65,3 +65,77 @@ test('stops listening when stopped', { skip }, async () => {
   await assert.rejects(fetch(`${app.url}/health`))
   await rm(home, { recursive: true, force: true })
 })
+
+/** Boot in a given environment, with the warnings collected. */
+async function inEnvironment(
+  env: Record<string, string | undefined>,
+  run: (app: App, warnings: string[]) => Promise<void>,
+) {
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]))
+  const warnings: string[] = []
+  const warn = console.warn
+  console.warn = (message: unknown) => void warnings.push(String(message))
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+  try {
+    await withApp((app) => run(app, warnings))
+  } finally {
+    console.warn = warn
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+}
+
+const asking = (app: App) =>
+  app.root.router.request('/ask', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ question: 'add 2 3' }),
+  })
+
+test('in production the agent, the builder and the extensions are left out: no /ask, no live install, no approve route; the page and /health stay', () =>
+  inEnvironment({ NODE_ENV: 'production', ACRYL_PRODUCTION_KEEP: undefined }, async (app) => {
+    assert.equal((await app.root.router.request('/health')).status, 200)
+    assert.equal((await app.root.router.request('/')).status, 200)
+    for (const [path, method] of [
+      ['/ask', 'POST'],
+      ['/extensions', 'GET'],
+      ['/extensions/approve', 'POST'],
+      ['/tasks', 'GET'],
+    ] as const) {
+      const response = await app.root.router.request(path, { method })
+      assert.equal(response.status, 404, `${method} ${path} answered ${response.status}`)
+      await response.body?.cancel()
+    }
+    assert.equal((app.root as unknown as { agent?: unknown }).agent, undefined)
+    assert.equal((app.root as unknown as { extensions?: unknown }).extensions, undefined)
+  }))
+
+test('ACRYL_PRODUCTION_KEEP keeps the named rows in production and says so at start; a name it does not know is reported', () =>
+  inEnvironment(
+    { NODE_ENV: 'production', ACRYL_PRODUCTION_KEEP: 'agent,extensions,nope' },
+    async (app, warnings) => {
+      const answer = await asking(app)
+      assert.equal(answer.status, 200)
+      assert.equal(((await answer.json()) as { status: string }).status, 'completed')
+      assert.equal((await app.root.router.request('/extensions')).status, 200)
+      assert.ok(
+        warnings.some((line) => line.includes('"agent" row runs in production')),
+        warnings.join('\n'),
+      )
+      assert.ok(warnings.some((line) => line.includes('"extensions" row runs in production')))
+      assert.ok(!warnings.some((line) => line.includes('"builder" row runs in production')))
+      assert.ok(warnings.some((line) => line.includes('names "nope"')))
+    },
+  ))
+
+test('outside production nothing changes: the agent answers and the extensions route is there', () =>
+  inEnvironment({ NODE_ENV: 'test', ACRYL_PRODUCTION_KEEP: undefined }, async (app, warnings) => {
+    assert.equal((await asking(app)).status, 200)
+    assert.equal((await app.root.router.request('/extensions')).status, 200)
+    assert.deepEqual(warnings, [])
+  }))

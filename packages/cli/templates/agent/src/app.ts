@@ -62,6 +62,14 @@ export interface App {
   stop(): Promise<void>
 }
 
+/** The development rows production leaves out, and what each one gives a visitor. */
+const DEVELOPMENT_ROWS: Record<string, string> = {
+  agent: 'POST /ask runs the agent, which spends the model key and calls its tools',
+  builder: 'the agent can write plugin source into plugins/',
+  extensions:
+    'a plugin installed live runs in this process, and POST /extensions/approve decides installs',
+}
+
 /**
  * The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. The app's `plugins/`
  * folder is trusted to install at start, and is where the builder writes.
@@ -84,6 +92,29 @@ export async function createApp(
   if (!listen) leaveOut.add('acryl-node-server').add('acryl-door')
   if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off')
     leaveOut.add('acryl-door')
+  // Production: the rows that give a visitor power over the running app or the owner's model key are left out too. The agent (`POST /ask` spends the model key and runs tools),
+  // the builder and the extensions (live plugin install runs code in this process, and `POST /extensions/approve` decides it) are development tools. `ACRYL_PRODUCTION_KEEP`
+  // names the ones to keep (`agent,builder,extensions`); each one kept is announced at start, because none of them is behind a login.
+  if (process.env.NODE_ENV === 'production') {
+    const keep = new Set(
+      (process.env.ACRYL_PRODUCTION_KEEP ?? '')
+        .split(',')
+        .map((name) => name.trim())
+        .filter((name) => name !== ''),
+    )
+    for (const name of keep)
+      if (!(name in DEVELOPMENT_ROWS))
+        console.warn(
+          `WARNING: ACRYL_PRODUCTION_KEEP names "${name}", which is not one of ${Object.keys(DEVELOPMENT_ROWS).join(', ')}`,
+        )
+    for (const [row, danger] of Object.entries(DEVELOPMENT_ROWS)) {
+      if (keep.has(row))
+        console.warn(
+          `WARNING: the "${row}" row runs in production because ACRYL_PRODUCTION_KEEP names it: ${danger}. Nothing here is behind a login; put the app behind your own.`,
+        )
+      else leaveOut.add(row)
+    }
+  }
   const manifest = {
     ...read,
     plugins: read.plugins.map((row) => (leaveOut.has(row.use) ? { ...row, disabled: true } : row)),
