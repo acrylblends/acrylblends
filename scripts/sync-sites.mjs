@@ -3,6 +3,7 @@
 //   - copy docs/framework over the site's src/docs/framework (the sites never edit it);
 //   - on the framework site, add every release of docs/release-notes/ the site does not have yet (the entry and the list item), newest first;
 //   - apply the site's patches from docs/plans/site-patches/<site>/ (`git am`), skipping any whose subject the site already has: they carry the hand-written pages the sync does not;
+//   - on the framework site, regenerate the registry's acrylblends starters from this repository's templates and rewrite registry/index.json (scripts/make-registry-starters.mjs, then the site's own scripts/registry-index.ts on blends-core at the pin its workflow names);
 //   - build the site (so a broken page fails here, not on the live site);
 //   - commit, and with --push push to main (the Pages workflows deploy) and wait for them.
 // Without --push it stops after the build and says what it would push.
@@ -41,6 +42,7 @@ const SITES = [
     patches: 'acrylblends.github.io',
     repo: 'acrylblends/acrylblends.github.io',
     releaseNotes: true,
+    starters: true,
     live: 'https://acrylblends.github.io/',
     workflow: 'Deploy to GitHub Pages',
   },
@@ -49,6 +51,7 @@ const SITES = [
     patches: 'acryl.dev',
     repo: 'acryldev/acryldev.github.io',
     releaseNotes: false,
+    starters: false,
     live: 'https://acryl.dev/',
     workflow: 'Deploy acryl.dev',
   },
@@ -66,6 +69,58 @@ const run = (command, args, cwd, options = {}) => {
     throw new Error(`${command} ${args.join(' ')} failed in ${cwd}:\n${r.stdout}${r.stderr}`)
   return r.stdout
 }
+/** blends-core at the commit the registry workflow pins, in a sparse clone of ACRYL's source (it is not on npm yet): the format library the registry index is written with. */
+function blendsCore(workflow) {
+  const pin = /repository: acryldev\/acryl\n\s+ref: ([0-9a-f]{40})/u.exec(workflow)?.[1]
+  if (pin === undefined)
+    throw new Error('registry.yml names no blends-core commit to read the index with')
+  const dir = join(work, 'acryl-blends-core')
+  if (!existsSync(join(dir, 'runtime', 'blends-core', 'node_modules'))) {
+    rmSync(dir, { recursive: true, force: true })
+    run(
+      'git',
+      [
+        ...credential,
+        'clone',
+        '-q',
+        '--depth',
+        '1',
+        '--filter=blob:none',
+        '--sparse',
+        'https://github.com/acryldev/acryl.git',
+        dir,
+      ],
+      work,
+    )
+    run('git', ['sparse-checkout', 'set', 'runtime/blends-core'], dir)
+    run('git', [...credential, 'fetch', '-q', '--depth', '1', 'origin', pin], dir)
+    run('git', ['checkout', '-q', pin], dir)
+    run('bun', ['install', '--production'], join(dir, 'runtime', 'blends-core'))
+  }
+  return join(dir, 'runtime', 'blends-core', 'src')
+}
+
+/** The registry's acrylblends starters are this repository's templates: made again, and the index written again, so the registry offers what `acrylblends init` makes today. */
+function refreshStarters(dir) {
+  if (spawnSync('bun', ['--version'], { encoding: 'utf8' }).status !== 0)
+    throw new Error(
+      'bun is needed to write the registry index (the format library is TypeScript for bun)',
+    )
+  const core = blendsCore(readFileSync(join(dir, '.github', 'workflows', 'registry.yml'), 'utf8'))
+  run(
+    process.execPath,
+    [join(root, 'scripts', 'make-registry-starters.mjs'), join(dir, 'registry')],
+    root,
+  )
+  run('bun', ['scripts/registry-index.ts', 'registry'], dir, {
+    env: { ...process.env, BLENDS_CORE: core },
+  })
+  run('bun', ['scripts/registry-index.ts', 'registry', '--check'], dir, {
+    env: { ...process.env, BLENDS_CORE: core },
+  })
+  log('framework: registry starters made again and index.json written')
+}
+
 const credential = ['-c', 'credential.helper=', '-c', 'credential.helper=!gh auth git-credential']
 const work =
   values.work === undefined ? mkdtempSync(join(tmpdir(), 'sync-sites-')) : resolve(values.work)
@@ -146,7 +201,7 @@ try {
               'commit',
               '-q',
               '-m',
-              `docs: framework docs and release notes re-synced (${version})`,
+              `docs: framework docs, release notes and registry starters re-synced (${version})`,
             ],
             dir,
           )
@@ -167,6 +222,7 @@ try {
         log(`${site.id}: applied ${file}`)
       }
     }
+    if (site.starters) refreshStarters(dir)
     if (values['no-build'] !== true) {
       const bun = spawnSync('bun', ['--version'], { encoding: 'utf8' }).status === 0
       const pnpm = existsSync(join(dir, 'pnpm-lock.yaml'))
@@ -190,7 +246,12 @@ try {
       run('git', ['add', '-A'], dir)
       run(
         'git',
-        ['commit', '-q', '-m', `docs: framework docs and release notes re-synced (${version})`],
+        [
+          'commit',
+          '-q',
+          '-m',
+          `docs: framework docs, release notes and registry starters re-synced (${version})`,
+        ],
         dir,
       )
     }
