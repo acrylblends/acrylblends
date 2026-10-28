@@ -8,7 +8,9 @@ const chosen = selectInstance({
   env: process.env,
 })
 const app = await createApp(chosen)
-console.log(`${APP_NAME} listening on ${app.url}/todo (data in ${chosen.home})`)
+console.log(`${APP_NAME} listening on ${app.url} (data in ${chosen.home})`)
+// The list is served under /todo, not at the address above: say where to open it.
+console.log(`open ${app.url}/todo`)
 
 const stop = async () => {
   await app.stop()
