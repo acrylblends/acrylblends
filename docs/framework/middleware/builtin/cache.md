@@ -2,11 +2,7 @@
 
 The Cache middleware uses the Web Standards' [Cache API](https://developer.mozilla.org/en-US/docs/Web/API/Cache).
 
-The Cache middleware currently supports Cloudflare Workers projects using custom domains and Deno projects using [Deno 1.26+](https://github.com/denoland/deno/releases/tag/v1.26.0). Also available with Deno Deploy.
-
-Cloudflare Workers respects the `Cache-Control` header and return cached responses. For details, refer to [Cache on Cloudflare Docs](https://developers.cloudflare.com/workers/runtime-apis/cache/). Deno does not respect headers, so if you need to update the cache, you will need to implement your own mechanism.
-
-See [Usage](#usage) below for instructions on each platform.
+It needs a Cache API on the host: the middleware reads `globalThis.caches`. Node.js, the verified runtime, does not provide one, so on Node the middleware is not enabled and says so in one line; a host that embeds an app in a runtime with a Cache API (or provides `globalThis.caches` itself) gets it. `Cache-Control` handling and the QUERY-request cache below are implemented by the middleware, not by the platform.
 
 ## Import
 
@@ -17,28 +13,12 @@ import { cache } from 'acrylblends/cache'
 
 ## Usage
 
-**Cloudflare Workers**
-
 ```ts
 app.get(
   '*',
   cache({
     cacheName: 'my-app',
     cacheControl: 'max-age=3600',
-  })
-)
-```
-
-**Deno**
-
-```ts
-// Must use `wait: true` for the Deno runtime
-app.get(
-  '*',
-  cache({
-    cacheName: 'my-app',
-    cacheControl: 'max-age=3600',
-    wait: true,
   })
 )
 ```
@@ -59,7 +39,7 @@ The name of the cache. Can be used to store multiple caches with different ident
 
 ### *(optional)* wait: `boolean`
 
-A boolean indicating if Acryl should wait for the Promise of the `cache.put` function to resolve before continuing with the request. _Required to be true for the Deno environment_. The default is `false`.
+A boolean indicating if Acryl should wait for the Promise of the `cache.put` function to resolve before continuing with the request. The default is `false`. A runtime whose Cache API only completes a write after the response has finished needs `true`, or the write is dropped.
 
 ### *(optional)* cacheControl: `string`
 

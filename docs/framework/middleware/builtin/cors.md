@@ -1,7 +1,6 @@
 # CORS Middleware
 
-There are many use cases of Cloudflare Workers as Web APIs and calling them from external front-end application.
-For them we have to implement CORS, let's do this with middleware as well.
+A web API is often called from a page served by another origin. For that we have to implement CORS, and this middleware does it.
 
 ## Import
 

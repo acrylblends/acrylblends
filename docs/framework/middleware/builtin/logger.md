@@ -32,7 +32,7 @@ By using the Logger Middleware, you can easily monitor the flow of requests and 
 You can also extend the middleware further by providing your own `PrintFunc` function for tailored logging behavior.
 
 > **Tip.**
-> To disable _status code coloring_, you can set a `NO_COLOR` environment variable. This is a common way to disable ANSI color escape codes in logging libraries, and is described at <https://no-color.org/>. Note that Cloudflare Workers do not have a `process.env` object, so will default to plaintext log output.
+> To disable _status code coloring_, you can set a `NO_COLOR` environment variable. This is a common way to disable ANSI color escape codes in logging libraries, and is described at <https://no-color.org/>.
 
 ## PrintFunc
 

@@ -277,7 +277,7 @@ export default function App() {
 On Node you can skip the bundler: [Client components without a bundler](client-modules.md) serves `.tsx` client modules to the browser with
 this runtime and one script tag, in development and in production.
 
-There is a small JSX Runtime for Client Components. Using this will result in smaller bundled results than using `acrylblends/jsx`. Specify `acrylblends/jsx/dom` in `tsconfig.json`. For Deno, modify the deno.json.
+There is a small JSX Runtime for Client Components. Using this will result in smaller bundled results than using `acrylblends/jsx`. Specify `acrylblends/jsx/dom` in `tsconfig.json`.
 
 ```json
 {

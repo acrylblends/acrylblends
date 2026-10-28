@@ -3,8 +3,7 @@
 The [Server-Timing](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing) Middleware provides
 performance metrics in the response headers.
 
-> **Note.** On Cloudflare Workers, the timer metrics may not be accurate,
-> since [timers only show the time of last I/O](https://developers.cloudflare.com/workers/learning/security-model/#step-1-disallow-timers-and-multi-threading).
+> **Note.** The metrics come from timers around the handler, so they measure wall-clock time on the host the app runs on.
 
 ## Import
 

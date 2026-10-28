@@ -584,21 +584,13 @@ const route = app.put(
 
 ## Custom `fetch` method
 
-You can set the custom `fetch` method.
-
-In the following example script for Cloudflare Worker, the Service Bindings' `fetch` method is used instead of the default `fetch`.
-
-```toml
-# wrangler.toml
-services = [
-  { binding = "AUTH", service = "auth-service" },
-]
-```
+You can set the custom `fetch` method: anything with the `fetch` signature works in place of the global one, such as a client that adds a header or a test double.
 
 ```ts
 // src/client.ts
 const client = hc<CreateProfileType>('http://localhost', {
-  fetch: c.env.AUTH.fetch.bind(c.env.AUTH),
+  fetch: (input, init) =>
+    fetch(input, { ...init, headers: { ...init?.headers, authorization: `Bearer ${token}` } }),
 })
 ```
 

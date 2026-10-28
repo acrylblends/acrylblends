@@ -2,9 +2,7 @@
 
 The Context Storage Middleware stores the Acryl `Context` in the `AsyncLocalStorage`, to make it globally accessible.
 
-> **Note.** This middleware uses `AsyncLocalStorage`. The runtime should support it.
->
-> **Cloudflare Workers**: To enable `AsyncLocalStorage`, add the [`nodejs_compat` or `nodejs_als` flag](https://developers.cloudflare.com/workers/configuration/compatibility-dates/#nodejs-compatibility-flag) to your `wrangler.toml` file.
+> **Note.** This middleware uses `AsyncLocalStorage`. Node.js, the verified runtime, provides it; a host that embeds an app in a runtime without it cannot use this middleware.
 
 ## Import
 
@@ -47,22 +45,20 @@ app.get('/', (c) => {
 })
 ```
 
-On Cloudflare Workers, you can access the bindings outside the handler.
+Anything a handler puts on the context can be read further down the call stack, without passing `c` through every function:
 
 ```ts
-type Env = {
-  Bindings: {
-    KV: KVNamespace
-  }
-}
-
-const app = new Acryl<Env>()
+const app = new Acryl()
 
 app.use(contextStorage())
+app.use(async (c, next) => {
+  c.set('user', 'ada')
+  await next()
+})
 
-const setKV = (value: string) => {
-  return getContext<Env>().env.KV.put('key', value)
-}
+app.get('/', (c) => c.text(`Hello ${getUser()}`))
+
+const getUser = () => getContext().get('user')
 ```
 
 ## tryGetContext

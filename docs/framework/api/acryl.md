@@ -64,25 +64,13 @@ app.onError((err, c) => {
 
 ## fire()
 
-> **Warning.** **`app.fire()` is deprecated**, and the Service Worker adapter (`acrylblends/service-worker`) is not part of the package in 1.0. Use `app.fetch` in a `fetch` event handler of your own.
-
-`app.fire()` automatically adds a global `fetch` event listener.
-
-This can be useful for environments that adhere to the [Service Worker API](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API), such as [non-ES module Cloudflare Workers](https://developers.cloudflare.com/workers/reference/migrate-to-module-workers/).
-
-`app.fire()` executes the following for you:
-
-```ts
-addEventListener('fetch', (event: FetchEventLike): void => {
-  event.respondWith(this.dispatch(...))
-})
-```
+> **Warning.** **`app.fire()` is deprecated**, and the Service Worker adapter is not part of the package in 1.0. It adds a global `fetch` event listener, which only a Service Worker-style host reads; use `app.fetch` in an entry point of your own instead.
 
 ## fetch()
 
 `app.fetch` will be the entry point of your application.
 
-For Cloudflare Workers, you can use the following:
+As the `fetch` method of an object a host calls:
 
 ```ts twoslash
 import { Acryl } from 'acrylblends'
@@ -230,7 +218,7 @@ const app = new Acryl({ router: new RegExpRouter() })
 
 ## Generics
 
-You can pass Generics to specify the types of Cloudflare Workers Bindings and variables used in `c.set`/`c.get`.
+You can pass Generics to specify the type of the environment the host passes and the variables used in `c.set`/`c.get`.
 
 ```ts twoslash
 import { Acryl } from 'acrylblends'

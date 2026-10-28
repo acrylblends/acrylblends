@@ -1,7 +1,7 @@
 # Basic Auth Middleware
 
 This middleware can apply Basic authentication to a specified path.
-Implementing Basic authentication with Cloudflare Workers or other platforms is more complicated than it seems, but with this middleware, it's a breeze.
+Implementing Basic authentication by hand is more complicated than it seems, but with this middleware, it's a breeze.
 
 For more information about how the Basic auth scheme works under the hood, see the [MDN docs](https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication#basic_authentication_scheme).
 

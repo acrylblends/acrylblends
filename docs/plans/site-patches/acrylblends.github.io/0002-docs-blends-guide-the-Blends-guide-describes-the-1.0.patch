@@ -1,7 +1,7 @@
 From 933fc0546e7771ff7f94e2de7cbdd64d081270a7 Mon Sep 17 00:00:00 2001
 From: Alex Musichen <alex.musichen@gmail.com>
 Date: Wed, 28 Oct 2026 14:21:10 +0100
-Subject: [PATCH 2/2] docs(blends-guide): the Blends guide describes the 1.0
+Subject: [PATCH 2/3] docs(blends-guide): the Blends guide describes the 1.0
  commands, templates and plugin folder
 
 The site's own /docs/blends guide is written by hand (sync-sites does not touch it) and had drifted from the package:

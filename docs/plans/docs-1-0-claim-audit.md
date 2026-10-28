@@ -37,7 +37,8 @@ Where a claim rests on a count or a flag, the source is named below.
 | B11 | api/acryl.md: title "App - Acryl" and an example comment "for Cloudflare Workers or Bun" | `App` removed in 1.0; the adapter is out | **fixed in acrylblends 122b8cf8** |
 | B12 | "Verified on Node 22 and 24, on Linux, macOS and Windows" | `.github/workflows/ci.yml` matrix | **confirmed** |
 | B13 | Experimental features are labelled (door, agent panel, driver-pty, live plugin install, Bun) | `guides/production.md` table, `getting-started/bun.md` header, release-notes "Experimental" | **confirmed** |
-| B14 | 1.0.0 release notes name `driver-acp` as a driver plugin | `plugins/` at origin/main has only `driver-pty`; `driver-acp` lives on branch 075-driver-acp (8967ee78, in Blends' review) | **open**: merge 075 before tagging 1.0, or soften that sentence |
+| B14 | 1.0.0 release notes name `driver-acp` as a driver plugin | `plugins/` at origin/main has only `driver-pty`; `driver-acp` lives on branch 075-driver-acp (8967ee78, in Blends' review) | **kept, by decision**: `driver-acp` merges before rc.1 (M8). If it does not make rc.1, Blends removes it from the 1.0.0 notes |
+| B15 | Middleware, helper and API pages carry notes about Cloudflare Workers, Deno, Fastly, AWS Lambda, Vercel and Netlify | 1.0 ships no adapter for any of them | **fixed**: the notes are removed or rewritten for the host the app runs on; where a runtime statement is needed the page says Node.js is verified and Bun experimental |
 
 ## C. acrylblends.github.io - the hand-written Blends guide (`/docs/blends`)
 
@@ -67,17 +68,22 @@ Where a claim rests on a count or a flag, the source is named below.
 | D3 | `/docs` is the framework docs | `FrameworkDocsPage` renders the synced copy; it is at 0.11.0 | **fixed by sync** (same run as B1) |
 | D4 | `/docs/platform` ("ACRYL is an agent-agnostic desktop and lifecycle environment built as a clean plugin layer over DeepSeek Harness", "Install a standard DSH package", the DSH compatibility contract) | still true of the desktop product today, but it is the pre-framework framing and not part of the framework docs | **open, owner's call**; untouched |
 
-## E. Open items
+## E. Decisions taken (coordinator, 2026-10-28)
 
-1. **`driver-acp` in the 1.0.0 release notes** (B14): merge 075-driver-acp before the tag, or soften the sentence to "a driver for the Agent Client Protocol is in review".
-2. **The home page's "Checkpoint & rollback - Differentiate safely with traceable states and reversibility"** card: no differentiation or rollback feature exists in acrylblends or in ACRYL's docs that I could confirm. Either name the feature it refers to or drop the card.
-3. **`/docs/platform`** (D4): decide whether the DSH-era framing stays until the desktop moves off DSH, or is rewritten now.
-4. **Inherited middleware pages** mention Cloudflare Workers, Deno, Fastly and AWS Lambda behaviour (compress, cache, timing, request-id, context-storage, logger, mount, cors, basic-auth). They are platform notes of the ported upstream, not promises that an adapter ships, and the pages that would promise one (`getting-started/*`) are gone in 1.0. Left as they are; a future pass could drop them.
-5. **Release notes the site never had** (0.5.1, 0.6.0, 0.6.2, 0.6.3, 0.6.4): `sync-sites` reports them as gaps and does not insert them inside an existing list.
+| # | Item | Decision | Where |
+| --- | --- | --- | --- |
+| E1 | `driver-acp` in the 1.0.0 notes (B14) | Keep. It merges before rc.1 as M8; if it does not make rc.1, Blends removes it from the notes. | recorded in B14; no page change |
+| E2 | The home page's "Checkpoint & rollback - Differentiate safely with traceable states and reversibility" card | Keep only what can be shown today: each claim names the page or command that proves it, and anything without one is gone. | rewritten, patch 0003 (site) |
+| E3 | `/docs/platform`'s DSH framing (D4) | DSH is one chat driver (the `dsh` preset of the ACP driver), not the platform; the platform is Acryl plus Cordis plugins. | rewritten, patch 0001 (acryl.dev) |
+| E4 | Middleware notes about removed platforms | Remove them; where a runtime statement is needed, say Node is verified and Bun is experimental. | fixed in the framework docs (B15) |
+| E5 | The five releases the site never had (0.5.1, 0.6.0, 0.6.2, 0.6.3, 0.6.4) | No pages for them; link to the GitHub releases list instead. | added to the oldest release-notes page, patch 0003 (site) |
+
+Nothing from the audit is left undecided.
 
 ## What changed where
 
-- **acrylblends** `docs-1-0` (branch, commit 122b8cf8): five framework pages fixed (B5-B11).
-- **acrylblends.github.io** (branch `site-patches` in a local clone, commits `f642d89` and `933fc05`; patches in `docs/plans/site-patches/`): the registry page (A1-A3) and the hand-written Blends guide (C1-C10).
+- **acrylblends** `docs-1-0`: commit 122b8cf8 fixes five framework pages (B5-B11); a later commit removes the platform notes about the runtime adapters 1.0 does not ship and splits `helpers/adapter.md` into the two runtimes that exist (B15). 16 pages changed: `middleware/builtin/{basic-auth,cache,compress,context-storage,cors,jsx-renderer,logger,mount,request-id,timing}.md`, `helpers/{adapter,streaming}.md`, `api/{acryl,context,presets,request}.md`, `guides/{jsx-dom,rpc}.md`, `concepts/web-standard.md`.
+- **acrylblends.github.io** (branch `site-patches` in a local clone, commits `f642d89`, `933fc05` and `40d8244`; patches in `docs/plans/site-patches/acrylblends.github.io/`): the registry page (A1-A3), the hand-written Blends guide (C1-C10) and the home page (E2, E5).
+- **acryl.dev** (branch `site-patches` in a local clone, commit `5f946f7`; patch in `docs/plans/site-patches/acryl.dev/`): `/docs/platform` and the footer note (E3).
 - **Docs sync and release notes** (B1-B4, D3): `scripts/sync-sites.mjs`, run by Blends after 1.0.0 is published.
-- Verified at each step with `bun run build` (726 real routes with the 0.11.0 docs, 722 after the 1.0 docs replace them) and headless screenshots of `/blends`, `/blends/application`, `/blends/software-factories` and the 1.0.0 release-notes page.
+- Verified at each step: `bun run build` on the framework site (726 real routes with the 0.11.0 docs, 722 after the 1.0 docs replace them) and on acryl.dev (`tsc -b && vite build`, clean against its own lockfile), `git am` of both patch series into fresh clones followed by a build, and headless screenshots of `/blends`, `/blends/application`, `/blends/software-factories`, the 1.0.0 release-notes page, the home page's primitives grid and code samples, and `/docs/platform`.

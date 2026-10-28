@@ -1,17 +1,24 @@
-# Site patches for acrylblends.github.io (1.0 docs pass)
+# Site patches for the 1.0 docs pass
 
-Two patches, made in a local clone of `acrylblends/acrylblends.github.io` on top of its `origin/main` (`e2bc43f`). They are site source, which `scripts/sync-sites.mjs` does not carry, so they have to be applied there by hand. Nothing was pushed to either site repository.
+Four patches, each made in a local clone on top of that repository's `origin/main` and produced with `git format-patch`, so each set applies with `git am` in order. They are site source, which `scripts/sync-sites.mjs` does not carry, so they have to be applied by hand. Nothing was pushed to either site repository.
 
 ```sh
+# acrylblends.github.io (origin/main e2bc43f)
 git clone https://github.com/acrylblends/acrylblends.github.io.git
 cd acrylblends.github.io
-git am /path/to/docs/plans/site-patches/0001-*.patch /path/to/docs/plans/site-patches/0002-*.patch
+git am /path/to/site-patches/acrylblends.github.io/000*.patch
 bun install && bun run build     # expect "real-routes: 726 pages emitted..." with the 0.11.0 docs still in place; after sync-sites replaces them it is 722
+
+# acryl.dev (origin/main da4be90)
+git clone https://github.com/acryldev/acryldev.github.io.git
+cd acryldev.github.io
+git am /path/to/site-patches/acryl.dev/000*.patch
+corepack pnpm install --frozen-lockfile && bun run build
 ```
 
-The two commits also exist as branch `site-patches` in the local clone and as `f642d89` and `933fc05`; a fetch from that clone is equivalent to `git am`.
+The commits also exist as branch `site-patches` in the two local clones, at `f642d89`, `933fc05` and `40d8244` (acrylblends.github.io) and `5f946f7` (acryl.dev); a fetch from those clones is equivalent to `git am`.
 
-## 0001 - the /blends page shows what exists
+## acrylblends.github.io/0001 - the /blends page shows what exists
 
 The page listed seven "Preview - not published" Blends above the six starters that are really in the registry: ACRYL, Blank Canvas, Agent Workbench, Local-first Studio, Secure Ops, Data Pipeline and Release Pilot.
 
@@ -24,12 +31,30 @@ What the patch does:
 - adds `src/lib/registry-placement.ts`: each published starter's place in the 100-category taxonomy, because the registry's own `category` field is the publisher's short word (starter, finance, productivity, ...), not the taxonomy. Category and subcategory pages now list the real starter instead of always "No Blends here yet";
 - the header count becomes "6 starters in the registry - 100 categories".
 
-## 0002 - the /docs/blends guide describes 1.0
+## acrylblends.github.io/0002 - the /docs/blends guide describes 1.0
 
 `/docs/blends` is hand-written (`src/lib/doc-content.ts`) and `sync-sites` does not touch it. It had drifted: three CLI verbs instead of six, three templates instead of six, two old plugin folders instead of the one `plugins/` folder, `npm run lock` writing a file it does not write, and `App` (removed in 1.0) in the framework page's example. The patch brings those pages to the 1.0 commands, templates, plugin folder and class names, and names the published entries (`acrylblends/cordis/router`, ...) beside the app's own copies.
 
+## acrylblends.github.io/0003 - the home page keeps only claims that can be shown
+
+Nine primitives, none checkable - "Checkpoint & rollback" (a differentiation engine that does not exist), "Harness compatible", "Private registries", "Category registry" - and two invented code samples: a plugin importing `cordis` (the package is `@deepseek-ai/cordis`) with `ctx.logger`, and a "blend.yml" naming `agent-runtime`, `tool-router`, `checkpoint-store` and `web-surface`.
+
+- Eight cards, each with its proof: a command (`npm create acrylblends@latest my-app notes`, `npx acrylblends upgrade --dry-run`, `npx acrylblends init my-app --desktop`) or a docs page (Add a plugin, The app manifest, Data and migrations, Acryl in a Cordis app, What runs in production). The claims without one are gone.
+- The samples are real: a plugin the docs verify, and the blank template's own `blend.yaml`.
+- "Plugins like the one above are published on cordisplugins.github.io, the sibling registry this site's own Blends pull from" is replaced by a link to the plugin-lifecycle page: no Blend in the registry composes that plugin, so the claim could not be shown.
+- The oldest release-notes page (0.3.0) now points at the GitHub releases list for the releases without a page (0.5.1, 0.6.0, 0.6.2, 0.6.3, 0.6.4) instead of leaving the gap silent; no pages are added for them.
+
+## acryl.dev/0001 - /docs/platform is the Cordis platform, not the DSH one
+
+The page described ACRYL as "a clean plugin layer over DeepSeek Harness", installed DSH packages as its main path, and listed a five-item DSH compatibility contract.
+
+- Lede, install section and contract now describe 1.0: a Cordis plugin platform whose web framework is Acryl (router, Node server, `db` and `kv` ports, live state, JSX), apps as folders of plugins mounted from `blend.yaml`, dependencies as service names, a versioned public surface with `acrylblends upgrade`, and ACRYL capabilities as additive and optional.
+- A 1.0 notice states that DeepSeek Harness is not the platform: it is one agent driver, the ACP driver runs any agent that speaks the Agent Client Protocol, and `dsh` is its first preset.
+- The runtime-layers stack gains the missing middle: ACRYL (the product), Acryl (the framework), Cordis (the runtime).
+- The footer note that appeared on every page ("Built on Cordis and DeepSeek Harness") now says an agent joins as a driver, so the app is not tied to one.
+
 ## What is not in these patches
 
-- `src/docs/framework` and the release-notes entries: `scripts/sync-sites.mjs` does that, and Blends runs it after 1.0.0 is published. The patch set here deliberately leaves those out.
-- `src/pages/DocsPage.tsx` (`/docs/platform`): it still describes ACRYL as "a clean plugin layer over DeepSeek Harness" and lists a DSH compatibility contract. That is the ACRYL product's story, not the framework's, and whether it changes is the owner's call, so it is untouched.
-- The home page's "Checkpoint & rollback - Differentiate safely with traceable states and reversibility" card: no differentiation or rollback feature exists in acrylblends or in ACRYL's docs that I could confirm, so it is reported here rather than guessed at.
+- `src/docs/framework` and the release-notes entries: `scripts/sync-sites.mjs` does that, and Blends runs it after 1.0.0 is published.
+- The home page's "One of a hundred starting points" section on the framework site: it links to the category browser, which patch 0001 keeps real.
+- acryl.dev's `/` and `/packages` pages, which still describe the DeepSeek Harness package ecosystem. They are the product and catalog story rather than the framework docs, and changing them is the owner's call.

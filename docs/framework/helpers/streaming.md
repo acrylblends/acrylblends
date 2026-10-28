@@ -47,7 +47,7 @@ app.get('/streamText', (c) => {
 
 **Warning.**
 
-If you are developing an application for Cloudflare Workers, streaming may not work well on Wrangler. If so, add `Identity` for `Content-Encoding` header.
+A proxy or a host that compresses the response body can hold a stream back until it ends. If a stream arrives only when it is complete, send `Content-Encoding: Identity` for that route.
 
 ```ts
 app.get('/streamText', (c) => {
