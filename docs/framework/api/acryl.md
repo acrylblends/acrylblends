@@ -1,4 +1,4 @@
-# App - Acryl
+# Acryl
 
 `Acryl` is the primary object.
 It will be imported first and used until the end.
@@ -9,7 +9,7 @@ import { Acryl } from 'acrylblends'
 const app = new Acryl()
 //...
 
-export default app // for Cloudflare Workers or Bun
+export default app // a Bun server, or a value a Cordis plugin mounts; see Node.js for the Node entry
 ```
 
 ## Methods
