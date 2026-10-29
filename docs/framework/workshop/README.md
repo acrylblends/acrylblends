@@ -13,7 +13,7 @@ are on time.
 
 | | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| Node.js 22.19 or newer | `node -v` | `node -v` | `node -v` |
+| Node.js 22.19 or newer (24 LTS or 26 tested) | `node -v` | `node -v` | `node -v` |
 | npm, which comes with Node | `npm -v` | `npm -v` | `npm -v` |
 | git | `git --version` | `git --version` | `git --version` |
 | a coding agent, logged in | `codex login status` or `claude --version` | same | same |
@@ -218,7 +218,7 @@ published, with its plugins, its dependencies and its `blend.yaml`, in your fold
 For the workshop's own registry, name it:
 
 ```sh
-npm create acrylblends@latest from-the-workshop -- --from <id> --registry https://github.com/acryldev/workshop-2026-11-20
+npm create acrylblends@latest from-the-workshop -- --from <id> --registry github:acryldev/workshop-2026-11-20
 ```
 
 Starters for this workshop: `acrylblends.notes-desktop` (notes with a desktop window), `acrylblends.chat`, `acrylblends.agent`.

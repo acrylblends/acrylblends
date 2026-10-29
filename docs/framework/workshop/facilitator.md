@@ -8,7 +8,7 @@ where to cut when the clock runs. Every timing and every failure below was measu
 
 | What | Why | How |
 | --- | --- | --- |
-| Node.js 22.19 or newer, npm 11 | the app runs TypeScript directly, no build step | `node -v`; if missing, the LTS from nodejs.org or `brew install node` |
+| Node.js 22.19 or newer (24 LTS or 26 tested), npm 11 | the app runs TypeScript directly, no build step | `node -v`; if missing, the LTS from nodejs.org or `brew install node` (Node 26 today, which is tested) |
 | git | the registry block clones the registry | `git --version` |
 | A warm npm cache | the first `npm create` downloads the initializer, `npm install` downloads Electron | create one app and add the desktop shell once per machine (below) |
 | A coding agent, logged in | step 7 drives Codex or Claude Code through the panel | `codex login status` or run `claude` once |
