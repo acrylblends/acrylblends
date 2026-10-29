@@ -171,7 +171,11 @@ try {
     500,
   )
   if (!ended) fail('Stop did not end the terminal')
-  const audit = readFileSync(join(app, '.acryl', 'audit', 'driver-pty.jsonl'), 'utf8')
+  // The page hears that the terminal ended first; the audit's `end` line is written once the process group is gone (the disposer kills it, then records it), so wait for the line.
+  const auditFile = join(app, '.acryl', 'audit', 'driver-pty.jsonl')
+  const read = () => readFileSync(auditFile, 'utf8')
+  await until(async () => /"session":"end"/u.test(read()), 15_000, 250)
+  const audit = read()
   if (!/"session":"start"/u.test(audit) || !/"session":"end"/u.test(audit))
     fail(`the audit log does not show the session: ${audit}`)
   log('Stop ended the terminal; the session is in .acryl/audit/driver-pty.jsonl')
