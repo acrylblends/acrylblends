@@ -1,6 +1,6 @@
 # Facilitator notes: the 90-minute ACRYL Blends workshop
 
-Read the attendee handout first (`docs/workshop/README.md`); this page is the room around it: what to put on each machine, what actually breaks, and
+Read the attendee handout first (`docs/framework/workshop/README.md`); this page is the room around it: what to put on each machine, what actually breaks, and
 where to cut when the clock runs. Every timing and every failure below was measured on the published `acrylblends` 1.0.0 during the readiness walk
 (`docs/plans/workshop-readiness.md`).
 
@@ -13,8 +13,8 @@ where to cut when the clock runs. Every timing and every failure below was measu
 | A warm npm cache | the first `npm create` downloads the initializer, `npm install` downloads Electron | create one app and add the desktop shell once per machine (below) |
 | A coding agent, logged in | step 7 drives Codex or Claude Code through the panel | `codex login status` or run `claude` once |
 | `~/acryl-workshop/prepared/` | the no-network fallback and the reset | copy the two prepared apps (below) |
-| `~/acryl-workshop/blends-core` | step 8 runs the registry's own check | a sparse checkout of `acryldev/acryl` at `runtime/blends-core`, at the commit the registry CI pins, with `bun install --production` |
-| Bun | the registry index tool | `curl -fsSL https://bun.sh/install \| bash` or `npm i -g bun` |
+| A GitHub account with `gh auth login` | step 10 forks the workshop registry and opens a pull request | `gh auth status` |
+| A device with `git` and a text editor | the edits in steps 2, 4 and 8 are small but real | `git --version` |
 
 Warm-up, once per machine (this is also the exact smoke test that the room works):
 
@@ -30,20 +30,20 @@ That leaves `prepared-notes` with everything installed, including Electron.
 
 ## Timings, checkpoints, and what to make optional
 
-The handout's own timings, as measured on the published 1.0.0:
+The handout's own timings, as measured on the published 1.0.2 (macOS, cold npm cache in a throwaway home):
 
 | Minutes | Step | Measured | If late |
 | --- | --- | --- | --- |
 | 0-10 | installs and checks | seconds each | never cut |
-| 10-15 | create and run the blank app | create 2-10 s (cold/warm), install 2-3 s, boot 1-3 s | never cut |
+| 10-15 | create and run the blank app | create 9 s cold (2 s warm), install 2 s, boot 2 s | never cut |
 | 15-22 | change one route | reload is instant | never cut |
 | 22-30 | tests and the typecheck | test 0.5-2 s, check 2.5-4 s | keep; cut the "write a test" exercise |
 | 30-38 | data: JSON then SQLite (**optional**) | two adds plus edits, ~8 min | **cut first** |
 | 38-45 | the desktop window | add 2 s, install 3 s, first Electron boot ~20 s | pre-warm Electron on every machine or demo it |
-| 45-53 | pull a starter | TODO(B1) until 1.0.2 | demo it in 2 minutes |
-| 53-60 | create from a template | create 2-3 s, install 2 s, window as above | drop the second app |
-| 60-75 | the agent builds a feature | codex wrote a route in ~4 min; 15 leaves room for the queue | never cut; demo it if the room is behind |
-| 75-82 | upgrade | upgrade + install + test, ~1 min | keep |
+| 45-53 | pull a starter | create 4 s, install 3 s, runs at once | keep; it is the fastest win in the room |
+| 53-60 | create from a template | create + install + add desktop 4 s | drop the second app |
+| 60-75 | the agent builds a feature | set-up 4 s; codex wrote a page and tests in about 7 minutes | never cut; demo it if the room is behind |
+| 75-82 | upgrade | seconds: a fresh app answers "everything is up to date" | keep; it is a 2-minute talk |
 | 82-90 | publish and the hero moment | the registry steps are seconds; the PR is talk | always keep at least the hero talk |
 
 Checkpoints in the handout, and what to look for as you walk the room: **15 minutes** every screen shows `{"app":"my-hero","ok":true}`; **45 minutes**
@@ -54,19 +54,18 @@ what the optional column is for, and the handout names the same choices so nobod
 
 These are the defects found by the walk. They are known; say so rather than letting people think they broke something.
 
-- **Pulling a starter (TODO(B1)).** The form is `npm create acrylblends@latest my-app -- --from <id>`, and only starters that declare `runtime:
-  acrylblends` can be pulled (the older `acryl.*` ACRYL Blueprints are refused with one line saying so). The ids this workshop uses ship with 1.0.2;
-  until Blends sends them, write the id on the board and demo the step.
-- **Upgrading.** An app's own copy shadows the bare command, so always `npx acrylblends@latest upgrade`; the handout says so with the reason (TODO(B2) until 1.0.2's migration guide says the same).
-- **The agent panel (TODO(C1)).** 1.0.2 makes `acrylblends add agent-panel` add the rows it needs, and refuse on a `blank` app with what is missing.
-  The handout uses the `agent` template for that step, so it works either way; on 1.0.x expect to make the two edits by hand.
-- **The agent's login (C2).** The panel's `codex`/`claude` drivers use the attendee's own login. Anyone who is not logged in sees the driver and a
-  failed run; `codex login` in a terminal fixes it. `pi` is offered only as a terminal driver (C3).
-- **The `todo` template (C4).** Its app is under `/todo`, so the printed URL is a 404. Not used in this workshop.
-- **Publishing target (TODO(registry-target)).** The workshop registry is `github.com/acryldev/workshop-2026-11-20`, kept live after the event and
-  built by Blends once 1.0.2 is out; the marker comes off when the repository exists. Attendees fork it, add `blends/<github-login>.<app>/`, open a
-  pull request, and the automatic check merges it: listed in about three or four minutes. They need a GitHub account and `gh auth login`, which the
-  handout's setup block now asks for. Pulling from it is the same command with `--registry https://github.com/acryldev/workshop-2026-11-20`.
+- **The data step is the slow one.** Wiring `kv` then `db` by hand is about ten minutes of edits for a newcomer (two rows, two registry lines, two
+  type imports, the migrations folder). It is the block the handout names optional, and the one to help with first.
+- **A relative migrations path in `blend.yaml` fails.** `migrations: migrations` in the row stops the app with "this app has no file base URL to
+  resolve it from". The folder is named in `src/app.ts`'s compose options instead; the handout teaches that form and the stuck line names the error.
+- **`pi` shows up only when the app can see its login.** 1.0.2 offers pi as a chat driver when `DEEPSEEK_API_KEY` is exported or `~/.pi/agent/auth.json`
+  holds a deepseek entry, read from the HOME the app runs in. On a normal attendee machine it is there; in a run with a moved HOME it is not (and pi
+  would fail on its first message anyway). `pty:pi` needs only the program.
+- **The agent run takes minutes, not seconds.** Codex wrote the page and its tests in about seven; tell the room to start it and keep talking.
+- **Publishing.** The workshop registry is `github.com/acryldev/workshop-2026-11-20`, public and open. Attendees fork it, run
+  `node scripts/make-entry.mjs ../agent-app <login>.agent-app --description "..."`, push and open a pull request; a check merges it, usually well under
+  two minutes, and a refusal comes as a comment. Taking an app down is a pull request that removes its folder. Pulling is
+  `--from <id> --registry github:acryldev/workshop-2026-11-20` (rehearsed on 1.0.2: create 12 s, install 3 s, runs at once).
 - **Browser-only attendees (TODO(M9)).** The handout's hosted-workspace stub is empty until M9 is live; until then a browser-only attendee can follow
   along but not create an app.
 - **node-pty's install script (C5).** `npm install` warns that npm 11 blocked `node-pty`'s script. The terminal drivers still list; the workshop does

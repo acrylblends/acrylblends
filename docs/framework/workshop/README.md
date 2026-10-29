@@ -83,10 +83,11 @@ seconds.
 
 ## 2. Change one thing (7 minutes)
 
-Open `src/routes.ts`. It builds an `Acryl` app and mounts it on the router. Add one line to that chain, above `.get('/health', …)`:
+Open `src/routes.ts`. It builds an `Acryl` app and mounts it on the router. Add one line to that chain, just above `.get('/health', …)`, and keep the
+indentation of the lines around it:
 
 ```ts
-  .get('/hello', (c) => c.json({ hello: 'workshop' }))
+      .get('/hello', (c) => c.json({ hello: 'workshop' }))
 ```
 
 Save. The terminal prints `Change detected … Restarting 'src/main.ts'`, and `http://127.0.0.1:3080/hello` answers `{"hello":"workshop"}`. No restart
@@ -112,25 +113,41 @@ again; a failure names the file and line.
 
 ## 4. Data: JSON, then SQLite (8 minutes, optional)
 
-An app keeps data through a **port**: a small interface that a plugin provides. The smallest is `kv`, a JSON file in the app's own folder.
+An app keeps data through a **port**: a small interface a plugin provides. The smallest is `kv`, a JSON file in the app's own folder.
 
 ```sh
 npx acrylblends add acryl-kv-json
 npm install
 ```
 
-`add` copies the plugin into `plugins/` and prints how to mount it. Two edits, in files you already know:
+`add` copies the plugin into `plugins/` and prints how to mount it. Three edits:
 
-1. `blend.yaml`, after `- id: instance`, add:
+1. `blend.yaml`, before `- id: server`: add the provider row (the row's id is yours to pick; the name is the plugin):
 
    ```yaml
-       - id: acryl-kv
-         name: acryl-kv
-       - id: acryl-kv-json
+       - id: kv
          name: acryl-kv-json
    ```
 
-2. `src/routes.ts`: change `inject: ['router']` to `inject: ['router', 'kv']`, and count visits in your route:
+2. `src/app.ts`: import the plugin and register it under that name:
+
+   ```ts
+   import * as kvJson from '../plugins/acryl-kv-json/src/index.ts'
+   ```
+
+   ```ts
+   export const registry = { 'acryl-router': router, 'acryl-node-server': nodeServer, 'acryl-kv-json': kvJson, routes }
+   ```
+
+3. `src/routes.ts`: declare the port and count visits in your route:
+
+   ```ts
+   import type {} from '../plugins/acryl-kv/src/cordis.ts'
+   ```
+
+   ```ts
+     inject: ['router', 'kv'],
+   ```
 
    ```ts
      .get('/hello', async (c) => {
@@ -138,8 +155,6 @@ npm install
        return c.json({ hello: 'workshop', visits })
      })
    ```
-
-   `apply(ctx)` already receives the context; register the plugin in `src/app.ts` the way the other rows are registered.
 
 `npm run dev` again and open `/hello` twice: `visits` goes 1, 2. The file is `my-hero/.acrylblends/kv.json`.
 
@@ -152,11 +167,23 @@ printf 'CREATE TABLE visits (id INTEGER PRIMARY KEY, at TEXT NOT NULL);\n' > mig
 npm install
 ```
 
-Add its two rows to `blend.yaml` the same way (`acryl-db`, then `acryl-db-sqlite`), give the plugin `inject: ['router', 'db', 'kv']`, and in the route
+A row in `blend.yaml` (`- id: db`, `name: acryl-db-sqlite`), then the migration folder in `src/app.ts`, where the app is composed: the path is set
+there, not in the manifest, because a relative path in the manifest has no folder to resolve against.
+
+```ts
+import * as dbSqlite from '../plugins/acryl-db-sqlite/src/index.ts'
+// in the registry: 'acryl-db-sqlite': dbSqlite
+const projectRoot = fileURLToPath(new URL('..', import.meta.url))
+// in the compose options next to server:
+db: { migrations: join(projectRoot, 'migrations') },
+```
+
+Then `inject: ['router', 'kv', 'db']` with `import type {} from '../plugins/acryl-db/src/cordis.ts'`, and in the route
 `await ctx.db.run('INSERT INTO visits (at) VALUES (?)', new Date().toISOString())` before the reply. The database is `my-hero/.acrylblends/data.sqlite`,
 and the migrations run at start, in order.
 
-**Stuck?** "no such table" means the migration file is not in `migrations/` at the app root, or the row is not mounted.
+**Stuck?** `migrations "migrations" is relative, but this app has no file base URL` means the folder was named in `blend.yaml`; move it into
+`src/app.ts` as above. "no such table" means the file is not in `migrations/` at the app root.
 
 ## 5. A desktop window (7 minutes)
 
@@ -194,8 +221,10 @@ For the workshop's own registry, name it:
 npm create acrylblends@latest from-the-workshop -- --from <id> --registry https://github.com/acryldev/workshop-2026-11-20
 ```
 
-**Stuck?** The `--` before `--from` is npm's, not ours: without it npm swallows the flag. An id that is not in the registry prints the ids it knows.
-TODO(B1): the ids of the starters this workshop uses are published with 1.0.2; the facilitator writes them on the board.
+Starters for this workshop: `acrylblends.notes-desktop` (notes with a desktop window), `acrylblends.chat`, `acrylblends.agent`.
+
+**Stuck?** The `--` before `--from` is npm's, not ours: without it npm swallows the flag. A refused id prints its reason first (`error: acryl.gtd is an
+ACRYL app starter: open it in the ACRYL app`) and then npm's own error block; read the first lines, not the last.
 
 ## 7. Create from a template (7 minutes)
 
@@ -239,20 +268,21 @@ npm install
 npm run dev
 ```
 
-`add agent-panel` adds the plugin rows the panel needs and prints what it changed. (On a `blank` app it refuses and says what is missing: that is why
-this step uses the `agent` template.) Open the page, click the panel button in the corner, pick `codex` (or `claude`, or `pi`), and ask:
+`add agent-panel` adds the plugin rows the panel needs and registers it for you, and prints what it changed. (On a `blank` app it refuses and says
+which rows are missing: that is why this step uses the `agent` template.) Open the page, click the panel button in the corner, pick `codex` (or
+`claude`, or `pi` when pi has its DeepSeek login in your home folder), and ask:
 
 > Add a page at /board that lists the app's tasks, newest first, and a test for it.
 
-The agent reads `AGENTS.md`, reads `docs/framework` (which is in your app), edits your files, runs your tests, and the app reloads itself. Open `/board`
-when it is done.
+The agent reads `AGENTS.md`, reads `docs/framework` (which is in your app), edits your files, runs your tests, and the app reloads itself. It takes a
+few minutes; the panel shows each step, and has a stop button. Open `/board` when it is done.
 
 A terminal agent works too: choose `pty:codex` (or `pty:claude`, `pty:pi`) for its normal interactive session inside the app folder, where it can use
 the door (`.acryl/bin/acryl`) to look at the page it built.
 
 **Stuck?** The panel uses your own agent account: `codex login` (or `claude`) in a terminal first. If `npm install` warns that npm blocked
-`node-pty`'s install script, `add driver-pty` prints the exact approve command; run it and `npm install` again. TODO(C1): the row-writing and the
-refusal land in 1.0.2, so on 1.0.x make the two edits `add` prints by hand.
+`node-pty`'s install script, ignore it: prebuilt binaries ship. Only if the panel lists no `pty:` terminal, run `npm approve-scripts node-pty` and
+`npm rebuild node-pty` (the `add` output says the same).
 
 ## 9. Upgrade (7 minutes)
 
@@ -267,8 +297,9 @@ npm install && npm test
 ```
 
 The dry run lists what would be replaced; the real run replaces untouched files and stops with a diff if you edited one (move your change into a plugin
-of your own, or use `--force`, which backs the edited copies up first). Your tests still pass afterwards. TODO(B2): 1.0.2's docs say the same thing in
-the migration guide; the command itself does not change.
+of your own, or use `--force`, which backs the edited copies up first). An app made by this version is already current, so both commands answer
+`everything is up to date`: that is the mechanism working, and an app made by an earlier release lists what it would move. Your tests still pass
+afterwards.
 
 ## 10. Publish it, and the hero moment (8 minutes)
 
@@ -278,44 +309,41 @@ The app you publish is `agent-app`, the one the agent changed in step 8 (keep `m
 **Your own copy first.** `npm run save` commits the app and pushes it to its remote (it refuses a file that looks like a secret, and refuses to push a
 private app to a public remote). Create an empty repository on your git host, set it as `origin`, run `npm run save`.
 
-**The registry.** Publishing is a pull request, and for this workshop it is a short one. TODO(registry-target): the repository exists after 1.0.2.
+**The registry.** Publishing is a pull request to the workshop registry, `github.com/acryldev/workshop-2026-11-20`, and it is four commands.
 
-1. In `agent-app/blend.yaml`, set `visibility: public`, add a `license`, a `category` and a one-line `description`.
-2. Fork the workshop registry and copy your app in under your GitHub login:
+1. Fork and clone it, then let its script build the entry from your app:
 
    ```sh
    cd ~/acryl-workshop
    gh repo fork acryldev/workshop-2026-11-20 --clone
    cd workshop-2026-11-20
-   mkdir -p blends/<your-github-login>.agent-app
-   cp ../agent-app/blend.yaml ../agent-app/package.json blends/<your-github-login>.agent-app/
-   cp -R ../agent-app/plugins blends/<your-github-login>.agent-app/plugins
-   cp ../agent-app/README.md blends/<your-github-login>.agent-app/README.md
+   node scripts/make-entry.mjs ../agent-app <your-github-login>.agent-app --description "the app I built in the workshop"
    ```
 
-3. Commit, push and open the pull request:
+   `make-entry` copies the app into `blends/<your-github-login>.agent-app/` without `node_modules`, `.git` or the app's data, marks its `blend.yaml`
+   public and licensed under that id, and writes the `acryl.template.json` that makes it pullable. The entry is the whole app: its dependencies come with
+   it, so whoever pulls it gets the desktop shell without adding it again. The id is lowercase, `<login>.<name>` with letters, digits and dashes.
+
+2. Commit, push and open the pull request:
 
    ```sh
-   git checkout -b my-agent-app
-   git add blends/<your-github-login>.agent-app
-   git commit -m "add <your-github-login>.agent-app"
-   git push -u origin my-agent-app
-   gh pr create --fill
+   git add blends && git commit -m "add <your-github-login>.agent-app"
+   git push
+   gh pr create --fill --repo acryldev/workshop-2026-11-20
    ```
 
-4. An automatic check validates the entry (the same check the public registry runs), and the pull request merges. Within three or four minutes your
-   starter is listed, and anyone can start from it:
+3. A check runs on the pull request, and when it passes the pull request is merged: your starter is listed, usually well under two minutes. If it
+   refuses, it comments what to change; fix, commit, push again and it re-checks. To take an app down, open a pull request that removes the folder:
+   `git rm -r blends/<your-github-login>.agent-app`.
 
-   ```sh
-   npm create acrylblends@latest my-app -- --from <your-github-login>.agent-app --registry https://github.com/acryldev/workshop-2026-11-20
-   ```
+Anyone can then start from it, in the browser or in a window:
 
-   The entry is the whole app: `blend.yaml`, `plugins/`, and the app's `package.json`, whose dependencies come with it (a starter that mounts
-   `desktop` brings `electron`, so whoever pulls it does not add the shell again). No `node_modules`.
+```sh
+npm create acrylblends@latest my-app -- --from <your-github-login>.agent-app --registry github:acryldev/workshop-2026-11-20
+```
 
-**Stuck?** A YAML error names the line; the classic one is an unquoted `:` in the description. `index.json is stale` is not an error: run the
-index tool the check names, or push again once CI has rebuilt it. `gh: not found` means the GitHub CLI is not installed, and `gh auth status` saying
-not logged in means `gh auth login`.
+**Stuck?** The check's comment is the answer: read it, fix, push again. An id with a capital or a dot inside a part is refused by `make-entry`; use
+lowercase `<login>.<name>`. `gh: not found` means the GitHub CLI is not installed, and `gh auth status` saying not logged in means `gh auth login`.
 
 > **The hero moment.** An app you created, with a page an agent wrote for it, running as a desktop window, saved in your own repository, and published
 > as a starter in the registry so the next person can pull it with one command. Along the way you built a second app from blank, a route, a test, a JSON
