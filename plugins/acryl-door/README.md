@@ -106,3 +106,7 @@ acryl look --window 2                     the page of that window (act ... --win
 
 Every call is in `.acryl/audit/ui-control.jsonl` with the window id. With no desktop app attached the verbs answer `no desktop window is attached; run npm run desktop`. A window is named to the door by an `AcrylWindow/<id>` suffix of its user agent. Settings are a path of the app (`window open --path /settings`) or a menu item (`menu click`). Native dialogs are not controlled. `node scripts/verify-desktop-door.mjs` checks all of it in a real Electron.
 
+## How the page talks to the door
+
+A page opens one WebSocket to `<prefix>/channel/ws` and the door's calls and the page's answers (an acknowledgement as soon as a call is heard, then the result) are JSON frames on it. A WebSocket is not one of the browser's six connections per host, so a page that streams its own state in two windows cannot starve the door; the event stream (`<prefix>/channel`) is the fallback when the server has no `ws` package or a proxy cannot upgrade, and the page says so once in the console. The upgrade is refused unless its `Origin` is exactly this app's own origin (a WebSocket has no CORS). `localStorage.setItem('acryl-door-transport', 'stream')` keeps one browser to the stream. A call to a page that does not acknowledge it in 3 s (a tab in the background, a page still loading) goes to the next page, for the read-only calls (`look`, `act wait`); when none answers the door says so and what to do, instead of waiting 30 s.
+

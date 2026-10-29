@@ -35,6 +35,7 @@
     "src/page/indicator.ts",
     "src/page/index.ts",
     "src/page/main.ts",
+    "src/page/socket-source.ts",
     "src/page/user-input.ts"
   ]
 }

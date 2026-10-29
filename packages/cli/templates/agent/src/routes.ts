@@ -19,6 +19,15 @@ const DOOR_TAG =
  * What changes is also streamed: `GET /api/state/tasks/events` and `GET /api/state/extensions/events`. In production `src/app.ts` leaves the agent and builder rows out
  * and starts the extensions read-only (unless `ACRYL_PRODUCTION_KEEP` names them), and then those routes are not mounted at all. The mounts are removed when the plugin is disposed.
  */
+/** The page's look: the person's choice from /settings (kept in this browser), applied before the page paints. */
+const APPEARANCE_STYLE =
+  '<style>:root{color-scheme:light dark}html[data-theme=dark]{color-scheme:dark;background:#111827;color:#f9fafb}html[data-theme=light]{color-scheme:light;background:#fff;color:#111827}body{font:16px system-ui,sans-serif;margin:2rem auto;max-width:42rem;padding:0 1rem}a{color:inherit}</style>'
+const APPEARANCE_SCRIPT =
+  "<script>(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}})()</script>"
+
+/** `/settings`: the one setting the template has, the appearance. The desktop app's Settings menu item opens this page. */
+const settingsPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Settings - ${APP_NAME}</title>${APPEARANCE_STYLE}${APPEARANCE_SCRIPT}</head><body><h1>Settings</h1><p><label for="theme">Appearance</label> <select id="theme" name="theme"><option value="system">Match the system</option><option value="light">Light</option><option value="dark">Dark</option></select></p><p id="saved" role="status"></p><p><a href="/">Back to ${APP_NAME}</a></p><script>(function(){var select=document.getElementById('theme'),saved=document.getElementById('saved');try{select.value=localStorage.getItem('theme')||'system'}catch(e){}select.addEventListener('change',function(){var value=select.value;try{if(value==='system'){localStorage.removeItem('theme');delete document.documentElement.dataset.theme}else{localStorage.setItem('theme',value);document.documentElement.dataset.theme=value}saved.textContent='Saved: '+select.options[select.selectedIndex].text}catch(e){saved.textContent='This browser would not keep the setting.'}})})()</script></body></html>`
+
 export const routes = {
   name: 'routes',
   inject: ['router'],
@@ -37,11 +46,12 @@ export const routes = {
       .get('/', (c) =>
         (c.req.header('accept') ?? '').includes('text/html')
           ? c.html(
-              `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${APP_NAME}</title></head><body><h1>${APP_NAME}</h1><p>This app runs an agent unless it is switched off (production switches it off, see ACRYL_PRODUCTION_KEEP in AGENTS.md). Ask it for a feature in the agent panel on this page (or with <code>POST /ask</code>).</p>${DOOR_TAG}</body></html>`,
+              `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${APP_NAME}</title>${APPEARANCE_STYLE}${APPEARANCE_SCRIPT}</head><body><h1>${APP_NAME}</h1><p>This app runs an agent unless it is switched off (production switches it off, see ACRYL_PRODUCTION_KEEP in AGENTS.md). Ask it for a feature in the agent panel on this page (or with <code>POST /ask</code>).</p>${DOOR_TAG}</body></html>`,
             )
           : c.json({ app: APP_NAME, ok: true }),
       )
       .get('/health', (c) => c.json({ ok: true }))
+      .get('/settings', (c) => c.html(settingsPage))
     ctx.router.route('/', base)
     // The routes that give a visitor the agent: mounted only while the agent, the extensions and the tasks run (see the header).
     ctx.inject(['agent', 'extensions', 'tasks'], (inner) => {

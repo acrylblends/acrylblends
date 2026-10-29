@@ -9,7 +9,7 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, Menu, type MenuItem, shell } from 'electron'
+import { app, BrowserWindow, Menu, MenuItem, screen, shell } from 'electron'
 import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
 import { selectInstance } from '../instance/index.ts'
@@ -20,9 +20,10 @@ import {
   startDoorShell,
   type WindowPort,
 } from './door-shell.ts'
+import { hasSettings, settingsPlacement } from './menu.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
-import { windowOptions } from './window.ts'
+import { cascade, windowOptions } from './window.ts'
 
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url))
 const chosen = selectInstance({ projectRoot, env: process.env })
@@ -91,7 +92,19 @@ if (!app.requestSingleInstanceLock()) {
     const origin = new URL(url).origin
     /** One window on a path of the app. Navigation stays on the app's own server; any other address opens in the system browser. The user agent names the window to the door (`AcrylWindow/<id>`), so an agent can drive it with `--window <id>`. */
     const createWindow = (path: string): BrowserWindow => {
-      const created = new BrowserWindow(windowOptions({ title: chosen.name }))
+      // A window opened while another is open sits a step down and to the right of it, not exactly on top.
+      const beside =
+        BrowserWindow.getFocusedWindow() ??
+        BrowserWindow.getAllWindows().find((other) => !other.isDestroyed())
+      const where = (() => {
+        if (beside === undefined) return {}
+        const bounds = beside.getBounds()
+        return cascade(bounds, screen.getDisplayMatching(bounds).workArea, {
+          width: 1100,
+          height: 760,
+        })
+      })()
+      const created = new BrowserWindow(windowOptions({ title: chosen.name, ...where }))
       created.webContents.setUserAgent(
         `${created.webContents.getUserAgent()} AcrylWindow/${String(created.id)}`,
       )
@@ -146,6 +159,40 @@ if (!app.requestSingleInstanceLock()) {
       windows: () => live().map(port),
       open: (path) => port(createWindow(path ?? startPath())),
       menu: () => (Menu.getApplicationMenu()?.items ?? []).map(menuItem),
+    }
+    // An app that serves a /settings page gets a Settings item in the menu (Electron's own menu otherwise): it opens that page, in the window that already shows it when there is one.
+    const settingsServed = await fetch(new URL('/settings', url), {
+      headers: { accept: 'text/html' },
+      signal: AbortSignal.timeout(2000),
+    }).then(
+      (answer) => answer.ok,
+      () => false,
+    )
+    const menu = Menu.getApplicationMenu()
+    const placement =
+      menu === null || !settingsServed || hasSettings(menu.items)
+        ? undefined
+        : settingsPlacement(menu.items, process.platform)
+    if (menu !== null && placement !== undefined) {
+      const target = menu.items[placement.menu]?.submenu
+      const openSettings = (): void => {
+        const shown = live().find(
+          (candidate) =>
+            new URL(candidate.webContents.getURL() || 'about:blank', url).pathname === '/settings',
+        )
+        if (shown === undefined) createWindow('/settings')
+        else {
+          if (shown.isMinimized()) shown.restore()
+          shown.focus()
+        }
+      }
+      target?.insert(
+        placement.at,
+        new MenuItem({ label: 'Settings...', accelerator: 'CmdOrCtrl+,', click: openSettings }),
+      )
+      if (placement.separatorAfter)
+        target?.insert(placement.at + 1, new MenuItem({ type: 'separator' }))
+      Menu.setApplicationMenu(menu)
     }
     stopDoorShell = startDoorShell(projectRoot, { desktop, log: console.log })
   })

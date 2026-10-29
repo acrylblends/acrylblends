@@ -281,6 +281,13 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   // D, the panel in a real browser: it sits beside the page (the page gets narrower and its fixed elements follow), it renders an answer as Markdown without ever making markup,
   // and it closes without leaving the page narrower.
   const panelCdp = await devtools(devPort)
+  const panelPageId = async () => {
+    const mark = `mark-${String(Date.now())}`
+    await panelCdp.send('Runtime.evaluate', {
+      expression: `document.title = ${JSON.stringify(mark)}; true`,
+    })
+    return (await tabs()).find((tab) => tab.title === mark)?.id
+  }
   const inPage = async (expression) => {
     const answer = await panelCdp.send('Runtime.evaluate', {
       expression,
@@ -348,6 +355,95 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
     fail(`D: the answer was not rendered as Markdown: ${markup.html}`)
   log(
     'D: an answer is rendered as Markdown, and an <img>, a script and a javascript: link in it stay text',
+  )
+
+  // E, a page that holds the browser's six connections per host (two windows that stream their own state do): the door's answers must still get through. The page channel runs over a
+  // WebSocket, which is not one of the six; forced back to the event stream, the same page cannot be looked at, which is the failure this section exists to catch.
+  // Only one page may be connected, or the door could answer from another one and show nothing.
+  for (const tab of await appTabs())
+    if (tab.id !== (await panelPageId()))
+      await fetch(`http://127.0.0.1:${devPort}/json/close/${tab.id}`)
+  await sleep(800)
+  if ((await appTabs()).length !== 1)
+    fail(`E: ${(await appTabs()).length} tabs of the app are open, expected one`)
+  const hogs = `window.__hogs = Array.from({ length: 6 }, () => new EventSource('/api/state/extensions/events')); true`
+  const saturated = () =>
+    inPage(
+      `Promise.race([fetch('/health').then(() => 'answered'), new Promise((r) => setTimeout(() => r('queued'), 2500))])`,
+    )
+  await panelCdp.send('Page.navigate', { url: `${base}/p1` })
+  await until(
+    async () => (await inPage("!!document.getElementById('agent-panel')")) === true,
+    20_000,
+  )
+  if (!(await until(async () => acryl('look').code === 0, 20_000)))
+    fail('E: the page is not connected to the door')
+  await inPage(hogs)
+  await sleep(1000)
+  if ((await saturated()) !== 'queued')
+    fail('E: six open streams did not saturate the page, so this section proves nothing')
+  const throughSocket = timed('look')
+  if (throughSocket.code !== 0 || throughSocket.ms > 2500 || !throughSocket.out.includes('Version'))
+    fail(
+      `E: with the page's six connections held, look took ${throughSocket.ms} ms and ${throughSocket.code === 0 ? 'read' : 'failed with'}:\n${throughSocket.out}${throughSocket.err}`,
+    )
+  log(
+    'E: with six streams held open in the page, a look still answers at once (the page channel is a WebSocket)',
+  )
+  // The panel in the same page, six connections still held: a question to the agent is asked and answered over its own socket, and Stop is sent on it too.
+  const panelLog = `(() => { const root = document.getElementById('agent-panel').shadowRoot; return Array.from(root.querySelectorAll('#log .msg')).map((el) => el.className + '|' + el.textContent) })()`
+  await inPage(
+    "(() => { const root = document.getElementById('agent-panel').shadowRoot; root.querySelector('button.open').click(); const box = root.querySelector('textarea'); box.value = 'add 2 3'; root.querySelector('form').requestSubmit(); return true })()",
+  )
+  const answered = await until(async () => {
+    const lines = await inPage(panelLog)
+    return (
+      Array.isArray(lines) &&
+      lines.some((entry) => entry.startsWith('msg md|') && entry.length > 'msg md|'.length) &&
+      !lines.some((entry) => entry.startsWith('msg working|')) &&
+      lines
+    )
+  }, 20_000)
+  if (!answered)
+    fail(
+      `E: with six connections held, the panel's question was not answered: ${JSON.stringify(await inPage(panelLog))}`,
+    )
+  log(
+    'E: with six streams held open in the page, the panel asks the agent and shows the answer (its run is a WebSocket too)',
+  )
+  // The same page kept to the event stream: its answers queue behind the six, and the door says so in seconds.
+  // (A navigation is a request too: it would queue behind the six, so they are let go first.)
+  await inPage('window.__hogs.forEach((source) => source.close()); true')
+  await sleep(500)
+  await inPage("localStorage.setItem('acryl-door-transport', 'stream'); true")
+  await panelCdp.send('Page.navigate', { url: `${base}/p1` })
+  await until(
+    async () => (await inPage("!!document.getElementById('agent-panel')")) === true,
+    20_000,
+  )
+  if (!(await until(async () => acryl('look').code === 0, 20_000)))
+    fail('E: the page kept to the event stream is not connected to the door')
+  await inPage(hogs)
+  await sleep(1000)
+  const throughStream = timed('look')
+  if (throughStream.code === 0)
+    fail(
+      'E: kept to the event stream, a page with six connections held was looked at; the section no longer shows the failure it guards against',
+    )
+  if (throughStream.ms > 9000 || !/none responded|did not answer|timeout/u.test(throughStream.err))
+    fail(
+      `E: kept to the event stream, the look should fail within seconds saying no page answered; it took ${throughStream.ms} ms:\n${throughStream.out}${throughStream.err}`,
+    )
+  await inPage('window.__hogs.forEach((source) => source.close()); true')
+  await sleep(500)
+  const recovered = await until(async () => {
+    const seen = acryl('look')
+    return seen.code === 0 && seen.out.includes('Version')
+  }, 20_000)
+  if (!recovered) fail('E: the event stream fallback does not work once the connections are free')
+  await inPage("localStorage.removeItem('acryl-door-transport'); true")
+  log(
+    'E: kept to the event stream, six held connections make a look fail in seconds with a named reason, and it works again once they are free',
   )
   panelCdp.close()
   log('OK')

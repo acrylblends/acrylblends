@@ -71,6 +71,8 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   const app = new Acryl()
   app.get('/one', (c) => c.html('<!doctype html><html><head><title>One</title></head><body><main><h1>Page one</h1></main></body></html>'))
   app.get('/two', (c) => c.html('<!doctype html><html><head><title>Two</title></head><body><main><h1>Page two</h1><button type="button" id="b">Press me</button></main><script>document.getElementById("b").onclick=()=>{document.querySelector("h1").textContent="Pressed"}</script></body></html>'))
+  // A page like a board that streams its own state: three event streams of its own, opened once the page has loaded and held for as long as it is open.
+  app.get('/hog', (c) => c.html('<!doctype html><html><head><title>Hog</title></head><body><main><h1>Hog page</h1><button type="button" id="b">Press</button></main><script>addEventListener("load",()=>{window.hogs=[1,2,3].map(()=>new EventSource("/api/state/extensions/events"))});document.getElementById("b").onclick=()=>{document.querySelector("h1").textContent="Hog pressed"}</script></body></html>'))
   ctx.router.route('/', app)
 }
 `
@@ -203,6 +205,110 @@ try {
   const pressedMenu = acryl('menu', 'click', '--path', 'View>Actual Size')
   if (pressedMenu.code !== 0) fail(`menu click failed:\n${pressedMenu.out}${pressedMenu.err}`)
   log('window resize and menu click work')
+
+  // Settings: the template serves /settings and the desktop menu has a Settings item that opens it (block 4 of the workshop: press a menu item, change a setting).
+  const settingsPath = menu.out
+    .split('\n')
+    .map((line) => line.split('  ')[0])
+    .find((path) => /Settings\.\.\.$/u.test(path))
+  if (settingsPath === undefined) fail(`menu list has no Settings item:\n${menu.out}`)
+  const windowsBefore = windowList()?.length ?? 0
+  const openedSettings = acryl('menu', 'click', '--path', settingsPath)
+  if (openedSettings.code !== 0)
+    fail(`menu click ${settingsPath} failed:\n${openedSettings.out}${openedSettings.err}`)
+  const settingsWindow = await until(async () => {
+    const list = windowList()
+    if (list === undefined || list.length !== windowsBefore + 1) return undefined
+    const added = list.find((entry) => entry.line.includes('/settings'))
+    return added !== undefined && Number.isInteger(added.id) ? added : undefined
+  }, 30_000)
+  if (!settingsWindow)
+    fail(`the Settings item did not open a window on /settings:\n${acryl('window', 'list').out}`)
+  const settingsLook = await until(async () => {
+    const seen = look(settingsWindow.id)
+    return seen.code === 0 && seen.out.includes('Appearance') && seen.out
+  }, 30_000)
+  if (!settingsLook)
+    fail(
+      `look --window ${settingsWindow.id} does not show the settings page:\n${look(settingsWindow.id).out}${look(settingsWindow.id).err}`,
+    )
+  const chooser = /\[ref=([\d.]+)\]/u.exec(
+    settingsLook
+      .split('\n')
+      .find((line) => /combobox|listbox|select|Appearance/iu.test(line) && /\[ref=/u.test(line)) ??
+      '',
+  )?.[1]
+  if (chooser === undefined)
+    fail(`no control for the appearance on the settings page:\n${settingsLook}`)
+  const chose = acryl(
+    'act',
+    'select',
+    '--window',
+    settingsWindow.id,
+    '--ref',
+    chooser,
+    '--option',
+    'Dark',
+  )
+  if (chose.code !== 0) fail(`act select on the settings page failed:\n${chose.out}${chose.err}`)
+  const saved = await until(async () => look(settingsWindow.id).out.includes('Saved: Dark'), 15_000)
+  if (!saved) fail(`the setting was not saved:\n${look(settingsWindow.id).out}`)
+  // The Settings item opens the window that already shows the page, not another.
+  acryl('menu', 'click', '--path', settingsPath)
+  await sleep(800)
+  if ((windowList()?.length ?? 0) !== windowsBefore + 1)
+    fail('a second click on Settings opened a second settings window')
+  if (acryl('window', 'close', '--id', settingsWindow.id).code !== 0)
+    fail('could not close the settings window')
+  log(
+    'the Settings menu item opens /settings in a window, the agent changes the appearance there, and a second click focuses that window',
+  )
+
+  // Two live windows that each hold three event streams of their own (a board that streams its state): six connections to the host, all a browser allows. A look at either window and
+  // a click in it must still answer at once, because the door's channel is a WebSocket and its answers travel on it. (With the event stream they queued forever.)
+  const hogIds = []
+  for (const _ of [1, 2]) {
+    const hog = acryl('window', 'open', '--path', '/hog')
+    const id = /window (\d+)/u.exec(hog.out)?.[1]
+    if (hog.code !== 0 || id === undefined) fail(`window open /hog failed:\n${hog.out}${hog.err}`)
+    hogIds.push(id)
+  }
+  for (const id of hogIds) {
+    const seen = await until(async () => {
+      const looked = look(id)
+      return looked.code === 0 && looked.out.includes('Hog page') && looked.out
+    }, 30_000)
+    if (!seen)
+      fail(
+        `look --window ${id} does not reach a window with streams of its own:\n${look(id).out}${look(id).err}`,
+      )
+  }
+  await sleep(1500) // the streams open on load
+  for (const id of hogIds) {
+    const started = Date.now()
+    const looked = look(id)
+    const took = Date.now() - started
+    if (looked.code !== 0 || took > 2500)
+      fail(
+        `with six streams held by two windows, look --window ${id} took ${took} ms and ${looked.code === 0 ? 'read' : 'failed with'}:\n${looked.out}${looked.err}`,
+      )
+  }
+  const press = /button "Press" \[ref=([\d.]+)\]/u.exec(look(hogIds[0]).out)?.[1]
+  if (press === undefined) fail(`no button on the first hog window:\n${look(hogIds[0]).out}`)
+  const pressedHog = acryl('act', 'click', '--window', hogIds[0], '--ref', press)
+  if (
+    pressedHog.code !== 0 ||
+    !look(hogIds[0]).out.includes('Hog pressed') ||
+    look(hogIds[1]).out.includes('Hog pressed')
+  )
+    fail(
+      `act click --window ${hogIds[0]} did not reach only that window:\n${pressedHog.out}${pressedHog.err}`,
+    )
+  for (const id of hogIds)
+    if (acryl('window', 'close', '--id', id).code !== 0) fail(`could not close window ${id}`)
+  log(
+    'two windows that hold six event streams between them are both looked at and clicked at once (the door is a WebSocket)',
+  )
 
   // The session cannot be ended by accident.
   const quitPath = menu.out

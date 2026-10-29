@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { Acryl } from 'acryl-router'
+import type { UpgradeWebSocket } from 'acryl-router/helpers'
 import { clientModules } from 'acryl-node-server/client-modules'
 import { auditPath, AuditLog } from './host/audit.ts'
 import { UiChannel } from './host/channel.ts'
@@ -23,6 +24,7 @@ import { DOOR_PREFIX, privateApi } from './host/http.ts'
 import { mcpRoutes } from './host/mcp-routes.ts'
 import { operatorRoutes } from './host/operator-routes.ts'
 import { pageChannelRoutes } from './host/page-routes.ts'
+import { pageSocketRoutes } from './host/page-socket.ts'
 import { ShellChannel, shellRoutes } from './host/shell.ts'
 import { realNode, writeShims, type ShimTarget } from './host/shim.ts'
 
@@ -154,10 +156,18 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   // An app whose router copy is older than this plugin has no `wrap`: the middleware then covers the routes mounted after the door, as the agent panel's does.
   if (typeof router.wrap === 'function') router.wrap(addScript)
   else ctx.router.route('/', new Acryl().use('*', addScript as never))
+  // The page channel also runs over a WebSocket, which is not one of the browser's six connections per host. Without the `ws` package or an adapter that upgrades, the pages use the stream.
+  let upgrade: UpgradeWebSocket | undefined
+  try {
+    upgrade = (ctx as unknown as { nodeServer?: { upgrades?: () => UpgradeWebSocket } }).nodeServer?.upgrades?.()
+  } catch (cause) {
+    reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
+  }
   ctx.router.route('/', privateApi(
     DOOR_PREFIX,
     pageModule,
     pageChannelRoutes(channel, { prefix: DOOR_PREFIX }),
+    ...(upgrade === undefined ? [] : [pageSocketRoutes(channel, { prefix: DOOR_PREFIX, upgrade })]),
     shellRoutes(DOOR_PREFIX, secret, shell),
     operatorRoutes(DOOR_PREFIX, secret, door, reportError),
     mcpRoutes(DOOR_PREFIX, secret, door, reportError),
