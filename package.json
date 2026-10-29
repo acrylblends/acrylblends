@@ -16,7 +16,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "verify:scaffolder": "node scripts/verify-scaffolder.mjs",
-    "check": "pnpm run lint && pnpm run build && pnpm run verify:framework && pnpm run verify:secrets && pnpm run typecheck && pnpm run test && pnpm run verify:scaffolder && pnpm run verify:byo && pnpm run verify:panel && pnpm run verify:door && pnpm run verify:driver-pty && pnpm run verify:packed && pnpm run verify:tarball",
+    "check": "pnpm run lint && pnpm run build && pnpm run verify:framework && pnpm run verify:secrets && pnpm run typecheck && pnpm run test && pnpm run verify:scaffolder && pnpm run verify:byo && pnpm run verify:panel && pnpm run verify:door && pnpm run verify:dev-install && pnpm run verify:driver-pty && pnpm run verify:packed && pnpm run verify:tarball",
     "verify:model": "node scripts/verify-real-model.mjs",
     "verify:framework": "node scripts/stage-framework.mjs --check",
     "verify:secrets": "node scripts/verify-docs-secrets.mjs",
@@ -24,6 +24,7 @@
     "verify:byo": "node scripts/verify-byo-tool.mjs",
     "verify:panel": "node scripts/verify-agent-panel.mjs",
     "verify:door": "node scripts/verify-door-reload.mjs",
+    "verify:dev-install": "node scripts/verify-dev-install.mjs",
     "verify:packed": "node scripts/verify-packed.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs"
   },

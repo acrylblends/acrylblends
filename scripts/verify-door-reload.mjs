@@ -80,11 +80,13 @@ try {
   mkdirSync(join(app, 'plugins', 'rowpage'))
   writeFileSync(
     join(app, 'plugins', 'rowpage', 'index.ts'),
-    `import { Acryl } from '../acryl-router/src/index.ts'
+    // A row is imported by src/app.ts before anything runs; it still imports the framework by name, as an agent writes it (acrylblends, acrylblends/body-limit).
+    `import { Acryl } from 'acrylblends'
+import { bodyLimit } from 'acrylblends/body-limit'
 export const name = 'rowpage'
 export const inject = ['router']
 export function apply(ctx: { router: { route(path: string, app: unknown): void } }) {
-  const app = new Acryl()
+  const app = new Acryl().use(bodyLimit({ maxSize: 16 * 1024 }))
   app.get('/r1', (c) => c.html('<!doctype html><html><head><title>Row</title></head><body><main><h1>A page of a row</h1></main></body></html>'))
   ctx.router.route('/', app)
 }
