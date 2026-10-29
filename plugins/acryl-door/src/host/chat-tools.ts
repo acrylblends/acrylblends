@@ -20,6 +20,8 @@ export function registerChatTools(tools: ToolsPort, door: Door): () => void {
     for (const verb of VERBS) {
       removers.push(tools.register(chatToolName(verb), {
         description: VERB_SPECS[verb].description,
+        // The model is told which fields the verb takes (an `act` needs its `op`), the same schema MCP lists.
+        parameters: VERB_SPECS[verb].arguments as unknown as Readonly<Record<string, unknown>>,
         run: async (input: unknown) => {
           try {
             return (await door.run(verb, input ?? {}, running.signal)).text

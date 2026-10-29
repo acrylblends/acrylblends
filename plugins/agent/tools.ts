@@ -3,6 +3,8 @@ import type { Context } from '@deepseek-ai/cordis'
 /** One tool: what it does (for the model) and how to run it. */
 export interface Tool {
   readonly description: string
+  /** The JSON Schema of the input (an object schema), sent to a real model so it knows which fields the tool takes. A tool without one takes any object. */
+  readonly parameters?: Readonly<Record<string, unknown>>
   /** `options.signal` aborts when the run is cancelled; a tool that can stop its work listens to it. */
   run(input: unknown, options?: { signal?: AbortSignal }): unknown | Promise<unknown>
 }
@@ -11,7 +13,11 @@ export interface Tool {
 export interface Tools {
   /** Register a tool. Returns the function that removes it. */
   register(name: string, tool: Tool): () => void
-  list(): Array<{ name: string; description: string }>
+  list(): Array<{
+    name: string
+    description: string
+    parameters?: Readonly<Record<string, unknown>>
+  }>
   call(name: string, input: unknown, options?: { signal?: AbortSignal }): Promise<unknown>
 }
 
@@ -31,7 +37,11 @@ export function tools(ctx: Context) {
       return () => void table.delete(name)
     },
     list: () =>
-      [...table.entries()].map(([name, tool]) => ({ name, description: tool.description })),
+      [...table.entries()].map(([name, tool]) => ({
+        name,
+        description: tool.description,
+        ...(tool.parameters === undefined ? {} : { parameters: tool.parameters }),
+      })),
     async call(name, input, options) {
       const tool = table.get(name)
       if (!tool) throw new Error(`unknown tool "${name}"`)
