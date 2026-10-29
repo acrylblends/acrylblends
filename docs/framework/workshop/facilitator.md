@@ -1,6 +1,6 @@
 # Facilitator notes: the 90-minute ACRYL Blends workshop
 
-Read the attendee handout first (`docs/workshop/README.md`); this page is the room around it: what to put on each machine, what actually breaks, and
+Read the attendee handout first (`docs/framework/workshop/README.md`); this page is the room around it: what to put on each machine, what actually breaks, and
 where to cut when the clock runs. Every timing and every failure below was measured on the published `acrylblends` 1.0.0 during the readiness walk
 (`docs/plans/workshop-readiness.md`).
 
@@ -13,8 +13,8 @@ where to cut when the clock runs. Every timing and every failure below was measu
 | A warm npm cache | the first `npm create` downloads the initializer, `npm install` downloads Electron | create one app and add the desktop shell once per machine (below) |
 | A coding agent, logged in | step 7 drives Codex or Claude Code through the panel | `codex login status` or run `claude` once |
 | `~/acryl-workshop/prepared/` | the no-network fallback and the reset | copy the two prepared apps (below) |
-| `~/acryl-workshop/blends-core` | step 8 runs the registry's own check | a sparse checkout of `acryldev/acryl` at `runtime/blends-core`, at the commit the registry CI pins, with `bun install --production` |
-| Bun | the registry index tool | `curl -fsSL https://bun.sh/install \| bash` or `npm i -g bun` |
+| A GitHub account with `gh auth login` | step 10 forks the workshop registry and opens a pull request | `gh auth status` |
+| A device with `git` and a text editor | the edits in steps 2, 4 and 8 are small but real | `git --version` |
 
 Warm-up, once per machine (this is also the exact smoke test that the room works):
 
@@ -63,6 +63,12 @@ These are the defects found by the walk. They are known; say so rather than lett
 - **`pi` was still not offered as a chat driver** in the rerun (only `pty:pi`), although 1.0.2 was expected to find it through the login-shell probe.
   Reported to Blends; on the day, `pty:pi` works.
 - **The agent run takes minutes, not seconds.** Codex wrote the page and its tests in about seven; tell the room to start it and keep talking.
+- **Publishing.** The workshop registry is `github.com/acryldev/workshop-2026-11-20`, public and open. Attendees fork it, run
+  `node scripts/make-entry.mjs ../agent-app <login>.agent-app --description "..."`, push and open a pull request; a check merges it, usually well under
+  two minutes, and a refusal comes as a comment. Taking an app down is a pull request that removes its folder. Pulling is
+  `--from <id> --registry github:acryldev/workshop-2026-11-20` (rehearsed on 1.0.2: create 12 s, install 3 s, runs at once).
+- **Browser-only attendees (TODO(M9)).** The handout's hosted-workspace stub is empty until M9 is live; until then a browser-only attendee can follow
+  along but not create an app.
 - **node-pty's install script (C5).** `npm install` warns that npm 11 blocked `node-pty`'s script. The terminal drivers still list; the workshop does
   not open one.
 

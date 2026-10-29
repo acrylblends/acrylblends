@@ -310,44 +310,41 @@ The app you publish is `agent-app`, the one the agent changed in step 8 (keep `m
 **Your own copy first.** `npm run save` commits the app and pushes it to its remote (it refuses a file that looks like a secret, and refuses to push a
 private app to a public remote). Create an empty repository on your git host, set it as `origin`, run `npm run save`.
 
-**The registry.** Publishing is a pull request, and for this workshop it is a short one. TODO(registry-target): the repository exists after 1.0.2.
+**The registry.** Publishing is a pull request to the workshop registry, `github.com/acryldev/workshop-2026-11-20`, and it is four commands.
 
-1. In `agent-app/blend.yaml`, set `visibility: public`, add a `license`, a `category` and a one-line `description`.
-2. Fork the workshop registry and copy your app in under your GitHub login:
+1. Fork and clone it, then let its script build the entry from your app:
 
    ```sh
    cd ~/acryl-workshop
    gh repo fork acryldev/workshop-2026-11-20 --clone
    cd workshop-2026-11-20
-   mkdir -p blends/<your-github-login>.agent-app
-   cp ../agent-app/blend.yaml ../agent-app/package.json blends/<your-github-login>.agent-app/
-   cp -R ../agent-app/plugins blends/<your-github-login>.agent-app/plugins
-   cp ../agent-app/README.md blends/<your-github-login>.agent-app/README.md
+   node scripts/make-entry.mjs ../agent-app <your-github-login>.agent-app --description "the app I built in the workshop"
    ```
 
-3. Commit, push and open the pull request:
+   `make-entry` copies the app into `blends/<your-github-login>.agent-app/` without `node_modules`, `.git` or the app's data, marks its `blend.yaml`
+   public and licensed under that id, and writes the `acryl.template.json` that makes it pullable. The entry is the whole app: its dependencies come with
+   it, so whoever pulls it gets the desktop shell without adding it again. The id is lowercase, `<login>.<name>` with letters, digits and dashes.
+
+2. Commit, push and open the pull request:
 
    ```sh
-   git checkout -b my-agent-app
-   git add blends/<your-github-login>.agent-app
-   git commit -m "add <your-github-login>.agent-app"
-   git push -u origin my-agent-app
-   gh pr create --fill
+   git add blends && git commit -m "add <your-github-login>.agent-app"
+   git push
+   gh pr create --fill --repo acryldev/workshop-2026-11-20
    ```
 
-4. An automatic check validates the entry (the same check the public registry runs), and the pull request merges. Within three or four minutes your
-   starter is listed, and anyone can start from it:
+3. A check runs on the pull request, and when it passes the pull request is merged: your starter is listed, usually well under two minutes. If it
+   refuses, it comments what to change; fix, commit, push again and it re-checks. To take an app down, open a pull request that removes the folder:
+   `git rm -r blends/<your-github-login>.agent-app`.
 
-   ```sh
-   npm create acrylblends@latest my-app -- --from <your-github-login>.agent-app --registry https://github.com/acryldev/workshop-2026-11-20
-   ```
+Anyone can then start from it, in the browser or in a window:
 
-   The entry is the whole app: `blend.yaml`, `plugins/`, and the app's `package.json`, whose dependencies come with it (a starter that mounts
-   `desktop` brings `electron`, so whoever pulls it does not add the shell again). No `node_modules`.
+```sh
+npm create acrylblends@latest my-app -- --from <your-github-login>.agent-app --registry github:acryldev/workshop-2026-11-20
+```
 
-**Stuck?** A YAML error names the line; the classic one is an unquoted `:` in the description. `index.json is stale` is not an error: run the
-index tool the check names, or push again once CI has rebuilt it. `gh: not found` means the GitHub CLI is not installed, and `gh auth status` saying
-not logged in means `gh auth login`.
+**Stuck?** The check's comment is the answer: read it, fix, push again. An id with a capital or a dot inside a part is refused by `make-entry`; use
+lowercase `<login>.<name>`. `gh: not found` means the GitHub CLI is not installed, and `gh auth status` saying not logged in means `gh auth login`.
 
 > **The hero moment.** An app you created, with a page an agent wrote for it, running as a desktop window, saved in your own repository, and published
 > as a starter in the registry so the next person can pull it with one command. Along the way you built a second app from blank, a route, a test, a JSON
