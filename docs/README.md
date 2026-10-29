@@ -41,6 +41,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Real-agent runs against 1.0.0-rc.1](plans/release-evidence-1-0.md) - M10 evidence: codex and pi on the agent, notes and chat starters, claude once
 - [The site patches](plans/site-patches/README.md) - patches for the hand-written pages of acrylblends.github.io (`git am`)
 - [WebSocket upgrades on the router (plan)](plans/router-websocket.md) - spec 047 T009: upgrade routes owned by the mounting plugin
+- [The workshop registry](plans/workshop-registry.md) - acryldev/workshop-2026-11-20: how a pull request becomes a listed app, the rules, the rehearsal and its timings
 - [After 1.0: tickets](plans/framework-1-1-tickets.md) - 1.0.1 security fix, the 1.1 items with priority and order, what is parked
 - [Framework 1.0 readiness](plans/framework-1-0-readiness.md) - audit: the API surface to freeze, the missing upgrade path, what is experimental; each item must-fix or later
 - [Workshop readiness](plans/workshop-readiness.md) - the newcomer path walked on 1.0.0 (macOS): the step table, the frictions ranked, and a 90-minute outline
