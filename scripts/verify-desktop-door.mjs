@@ -46,6 +46,12 @@ const env = { ...process.env, npm_config_loglevel: 'error' }
 delete env.ACRYL_DOOR
 // npm is a .cmd file on Windows: it needs the shell.
 const isWindows = process.platform === 'win32'
+/** Stop a process and what it started. Windows has no process groups: the whole tree (npm, node, Electron) goes by its root. */
+async function stopTree(child) {
+  if (isWindows && child.pid !== undefined)
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
+  await stopGroup(child)
+}
 const run = (command, args, cwd) => {
   const r = spawnSync(command, args, {
     cwd,
@@ -260,7 +266,7 @@ try {
   log(
     'window close --force on the last window ends the desktop app and leaves the dev server running',
   )
-  await stopGroup(dev.child)
+  await stopTree(dev.child)
   await until(async () => !existsSync(join(app, '.acryl', 'door.json')), 15_000)
 
   // 4. Without a dev server the desktop app starts the app itself, and the same verbs work; ending it stops that server.
@@ -293,12 +299,12 @@ try {
   log('the app that started its own server answers the same verbs, and ending it stops that server')
   log('OK')
 } finally {
-  for (const { child } of processes.reverse()) {
-    // Windows has no process groups: the whole tree (npm, node, Electron) goes by its root.
-    if (isWindows && child.pid !== undefined)
-      spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
-    await stopGroup(child)
-  }
+  for (const { child } of processes.reverse()) await stopTree(child)
   await sleep(500)
-  rmSync(scratch, { recursive: true, force: true })
+  // Windows may hold a file for a moment after its process ended; a failed clean-up must not hide the error of the run.
+  try {
+    rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
+  } catch (cause) {
+    log(`could not remove ${scratch}: ${cause.message}`)
+  }
 }
