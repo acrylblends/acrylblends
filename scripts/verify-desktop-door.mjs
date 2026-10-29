@@ -201,9 +201,10 @@ try {
   // The session cannot be ended by accident.
   const quitPath = menu.out
     .split('\n')
-    .find((line) => line.includes('(ends the app; needs force)') && /Quit/u.test(line))
+    .find((line) => line.includes('(ends the app; needs force)') && /Quit|Exit/u.test(line))
     ?.split('  ')[0]
-  if (quitPath === undefined) fail(`menu list does not mark Quit as ending the app:\n${menu.out}`)
+  if (quitPath === undefined)
+    fail(`menu list does not mark Quit (Exit on Windows) as ending the app:\n${menu.out}`)
   const quit = acryl('menu', 'click', '--path', quitPath)
   if (quit.code === 0 || !/force/u.test(quit.err))
     fail(`menu click ${quitPath} was not refused:\n${quit.out}${quit.err}`)
