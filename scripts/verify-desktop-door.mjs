@@ -44,8 +44,15 @@ if (
 const scratch = mkdtempSync(join(tmpdir(), 'desktop-door-'))
 const env = { ...process.env, npm_config_loglevel: 'error' }
 delete env.ACRYL_DOOR
+// npm is a .cmd file on Windows: it needs the shell.
+const isWindows = process.platform === 'win32'
 const run = (command, args, cwd) => {
-  const r = spawnSync(command, args, { cwd, env, encoding: 'utf8' })
+  const r = spawnSync(command, args, {
+    cwd,
+    env,
+    encoding: 'utf8',
+    shell: isWindows && command === 'npm',
+  })
   if (r.status !== 0) fail(`${command} ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
   return r.stdout
 }
@@ -91,7 +98,10 @@ try {
   const acryl = (...args) => {
     const r = spawnSync(
       join(app, '.acryl', 'bin', process.platform === 'win32' ? 'acryl.cmd' : 'acryl'),
-      args,
+      // Through cmd.exe on Windows a bare `>` (a menu path) is a redirect, and a space splits an argument: quote what needs it.
+      isWindows
+        ? args.map((arg) => (/[\s<>&|^"]/u.test(String(arg)) ? `"${String(arg)}"` : String(arg)))
+        : args,
       {
         cwd: app,
         env,
@@ -108,6 +118,7 @@ try {
       cwd: app,
       env: { ...env, ...extra },
       stdio: ['ignore', 'pipe', 'pipe'],
+      shell: isWindows,
     })
     const proc = { child, output: '' }
     child.stdout.on('data', (c) => (proc.output += c))
@@ -115,7 +126,7 @@ try {
     processes.push(proc)
     return proc
   }
-  const windows = () => {
+  const windowList = () => {
     const listed = acryl('window', 'list')
     if (listed.code !== 0) return undefined
     return listed.out
@@ -135,7 +146,7 @@ try {
   if (!base) fail(`the dev server did not start:\n${dev.output}`)
   const desktop = start('desktop')
   const first = await until(async () => {
-    const list = windows()
+    const list = windowList()
     return list?.length === 1 && list[0]
   }, 60_000)
   if (!first)
@@ -172,7 +183,7 @@ try {
   )
 
   const resized = acryl('window', 'resize', '--id', second, '--width', '900', '--height', '640')
-  if (resized.code !== 0 || windows()?.find((w) => String(w.id) === second)?.size !== '900x640')
+  if (resized.code !== 0 || windowList()?.find((w) => String(w.id) === second)?.size !== '900x640')
     fail(`window resize did not take:\n${resized.out}${resized.err}`)
   const menu = acryl('menu', 'list')
   if (menu.code !== 0 || !/\n?View>Actual Size/u.test(menu.out))
@@ -191,12 +202,12 @@ try {
   if (quit.code === 0 || !/force/u.test(quit.err))
     fail(`menu click ${quitPath} was not refused:\n${quit.out}${quit.err}`)
   const closed = acryl('window', 'close', '--id', second)
-  if (closed.code !== 0 || windows()?.length !== 1)
+  if (closed.code !== 0 || windowList()?.length !== 1)
     fail(`window close did not close the second window:\n${closed.out}${closed.err}`)
   const last = acryl('window', 'close', '--id', first.id)
   if (last.code === 0 || !/last window/u.test(last.err))
     fail(`closing the last window was not refused:\n${last.out}${last.err}`)
-  if (windows()?.length !== 1) fail('the refused close closed the window anyway')
+  if (windowList()?.length !== 1) fail('the refused close closed the window anyway')
   log('Quit and the last window are refused without force')
 
   // 2. The dev server restarts (a change of src/): the shell follows it and the same window is driven again.
@@ -211,7 +222,7 @@ try {
   )
     fail(`the dev server did not restart:\n${dev.output}`)
   const again = await until(async () => {
-    const list = windows()
+    const list = windowList()
     if (list?.length !== 1) return undefined
     const seen = look(list[0].id)
     return seen.code === 0 && seen.out
@@ -248,7 +259,7 @@ try {
   // 4. Without a dev server the desktop app starts the app itself, and the same verbs work; ending it stops that server.
   const alone = start('desktop')
   const only = await until(async () => {
-    const list = windows()
+    const list = windowList()
     return list?.length === 1 && list[0]
   }, 60_000)
   if (!only)
@@ -275,7 +286,12 @@ try {
   log('the app that started its own server answers the same verbs, and ending it stops that server')
   log('OK')
 } finally {
-  for (const { child } of processes.reverse()) await stopGroup(child)
+  for (const { child } of processes.reverse()) {
+    // Windows has no process groups: the whole tree (npm, node, Electron) goes by its root.
+    if (isWindows && child.pid !== undefined)
+      spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
+    await stopGroup(child)
+  }
   await sleep(500)
   rmSync(scratch, { recursive: true, force: true })
 }

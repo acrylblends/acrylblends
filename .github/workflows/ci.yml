@@ -71,3 +71,33 @@ jobs:
       - run: pnpm run test:packages
       # The real terminal (node-pty) on every OS, Windows included: a load failure fails here with its reason, it is not skipped.
       - run: pnpm run test:driver-pty
+
+  # The desktop door in a real Electron (windows and menu as door verbs, a window attached to a dev server, the guards on Quit and the last window). Its own job, not in `check`:
+  # it downloads Electron and opens windows. Linux runs it under a virtual display; a failure here fails the build, it is not skipped.
+  desktop:
+    name: desktop (${{ matrix.os }}, Node 24)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Virtual display (Linux)
+        if: runner.os == 'Linux'
+        run: command -v xvfb-run >/dev/null || (sudo apt-get update && sudo apt-get install -y xvfb)
+      - name: verify:desktop (Linux, virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm run verify:desktop
+      - name: verify:desktop
+        if: runner.os != 'Linux'
+        run: pnpm run verify:desktop
+
