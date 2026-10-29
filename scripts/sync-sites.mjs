@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // One step of the release checklist: bring both sites up to this repository. For each of acrylblends.github.io (the framework site) and acryl.dev, in a scratch clone:
-//   - copy docs/framework over the site's src/docs/framework (the sites never edit it);
+//   - copy docs/framework over the site's src/docs/framework (the sites never edit it), and on the framework site docs/plans/site-assets over public/docs-assets (the pictures the docs use, served as /docs-assets/...);
 //   - on the framework site, add every release of docs/release-notes/ the site does not have yet (the entry and the list item), newest first;
 //   - apply the site's patches from docs/plans/site-patches/<site>/ (`git am`), skipping any whose subject the site already has: they carry the hand-written pages the sync does not;
 //   - on the framework site, regenerate the registry's acrylblends starters from this repository's templates and rewrite registry/index.json (scripts/make-registry-starters.mjs, then the site's own scripts/registry-index.ts on blends-core at the pin its workflow names);
@@ -154,6 +154,12 @@ try {
       recursive: true,
       filter: (path) => !/(upstream\.json|UPSTREAM\.md)$/u.test(path),
     })
+    // Pictures the docs use (docs/plans/site-assets/<folder>/...): served by the framework site as /docs-assets/<folder>/..., root-absolute, so a page needs no sync step of its own.
+    const assets = join(root, 'docs', 'plans', 'site-assets')
+    if (site.releaseNotes && existsSync(assets)) {
+      cpSync(assets, join(dir, 'public', 'docs-assets'), { recursive: true })
+      log(`${site.id}: pictures copied to public/docs-assets`)
+    }
     if (site.releaseNotes) {
       const docFile = join(dir, 'src', 'lib', 'doc-content.ts')
       const contentFile = join(dir, 'src', 'lib', 'content.ts')
