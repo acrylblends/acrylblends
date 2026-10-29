@@ -18,6 +18,7 @@ import { streamSSE } from '../acryl-router/src/helpers/index.ts'
 import { Acryl } from '../acryl-router/src/index.ts'
 import type {} from '../agent/index.ts'
 import type {} from '../extensions/index.ts'
+import type { ChatDriver } from './drivers.ts'
 import { agentDriver, availableHeadless, type HeadlessName, headlessDriver } from './headless.ts'
 import { provideDrivers } from './registry.ts'
 
@@ -70,7 +71,6 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
   ctx.effect(() => registry.register(agentDriver(ctx)))
   for (const program of availableHeadless(config.drivers))
     ctx.effect(() => registry.register(headlessDriver(program, root)))
-  let running = false
 
   const tag = `<script type="module" src="${PREFIX}/panel.js"></script>`
   const app = new Acryl()
@@ -121,32 +121,122 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
           },
           400,
         )
-      if (running) return c.json({ error: 'a run is already going; wait for it to end' }, 409)
-      running = true
-      return streamSSE(c, async (stream) => {
-        const send = (event: string, data: unknown): Promise<void> =>
-          stream.writeSSE({ event, data: JSON.stringify(data) })
-        let changed = false
-        const off = ctx.on('extensions/changed', (extension: string, action: string) => {
-          changed = true
-          void send('change', { extension, action })
+      if (current !== undefined && !current.ended)
+        return c.json({ error: 'a run is already going; wait for it to end' }, 409)
+      const run = startRun(driverName, message, driver)
+      return follow(c, run, false)
+    })
+    // Stop: the only thing that cancels a run. A page that goes away (a reload, a move to another page, a closed tab) does not: the agent goes on, and the page picks it up again.
+    .post(`${PREFIX}/stop`, (c) => {
+      if (!fromOwnPage(c.req.raw.headers) || c.req.header('x-agent-panel-token') !== token)
+        return c.json({ error: "only the app's own page may stop a run" }, 403)
+      current?.cancel.abort()
+      return c.json({ ok: true })
+    })
+    // The latest run, for a page that just loaded: what was asked, then every event so far, then the rest as it happens (until the run ends).
+    .get(`${PREFIX}/run`, (c) => {
+      if (!fromOwnPage(c.req.raw.headers) || c.req.header('x-agent-panel-token') !== token)
+        return c.json({ error: "only the app's own page may read the run" }, 403)
+      return current === undefined ? c.json({ run: null }) : follow(c, current, true)
+    })
+  /** One run of an agent: its events as they came, and who is following. It lives in the app, not in a page. */
+  interface Run {
+    readonly id: number
+    readonly driver: string
+    readonly message: string
+    readonly events: Array<{ event: string; data: unknown }>
+    readonly followers: Set<(item: { event: string; data: unknown }) => void>
+    readonly cancel: AbortController
+    ended: boolean
+    endedAt?: number
+  }
+  let current: Run | undefined
+  let runs = 0
+  const startRun = (driverName: string, message: string, driver: ChatDriver): Run => {
+    runs += 1
+    const run: Run = {
+      id: runs,
+      driver: driverName,
+      message,
+      events: [],
+      followers: new Set(),
+      cancel: new AbortController(),
+      ended: false,
+    }
+    current = run
+    const emit = (event: string, data: unknown): void => {
+      const item = { event, data }
+      run.events.push(item)
+      for (const follower of [...run.followers]) follower(item)
+    }
+    let changed = false
+    const off = ctx.on('extensions/changed', (extension: string, action: string) => {
+      changed = true
+      emit('change', { extension, action })
+    })
+    ctx.effect(() => () => run.cancel.abort(), `agent-panel: run ${runs}`)
+    audit({ ask: 'start', driver: driverName, characters: message.length })
+    void (async () => {
+      try {
+        for await (const { event, data } of driver.start({ message, signal: run.cancel.signal }))
+          emit(event, data)
+        emit('done', { changed })
+      } catch (error) {
+        emit('error', { message: error instanceof Error ? error.message : String(error) })
+      } finally {
+        off()
+        run.ended = true
+        run.endedAt = Date.now()
+        audit({ ask: 'end', driver: driverName, changed })
+        for (const follower of [...run.followers]) follower({ event: 'end', data: {} })
+      }
+    })()
+    return run
+  }
+  /** Follow a run as server-sent events: a `run` event (what it is, whether it already ended), the events so far, then the new ones until it ends. Following does not keep it alive. */
+  const follow = (c: Parameters<typeof streamSSE>[0], run: Run, announce: boolean): Response =>
+    streamSSE(c, async (stream) => {
+      if (announce)
+        await stream.writeSSE({
+          event: 'run',
+          data: JSON.stringify({
+            id: run.id,
+            driver: run.driver,
+            message: run.message,
+            ended: run.ended,
+            endedAt: run.endedAt ?? null,
+          }),
         })
-        audit({ ask: 'start', driver: driverName, characters: message.length })
-        // Stop in the page closes the stream; that cancels the run (the model call, the tool or the program in flight is dropped).
-        const cancel = new AbortController()
-        stream.onAbort(() => cancel.abort())
-        try {
-          for await (const { event, data } of driver.start({ message, signal: cancel.signal }))
-            await send(event, data)
-          await send('done', { changed })
-        } catch (error) {
-          await send('error', { message: error instanceof Error ? error.message : String(error) })
-        } finally {
-          off()
-          running = false
-          audit({ ask: 'end', driver: driverName, changed })
-        }
+      const queue: Array<{ event: string; data: unknown }> = [...run.events]
+      let wake: (() => void) | undefined
+      const follower = (item: { event: string; data: unknown }): void => {
+        queue.push(item)
+        wake?.()
+      }
+      if (!run.ended) run.followers.add(follower)
+      let open = true
+      stream.onAbort(() => {
+        open = false
+        run.followers.delete(follower)
+        wake?.()
       })
+      try {
+        while (open) {
+          const item = queue.shift()
+          if (item === undefined) {
+            if (run.ended) break
+            await new Promise<void>((resolve) => {
+              wake = resolve
+            })
+            wake = undefined
+            continue
+          }
+          if (item.event === 'end') break
+          await stream.writeSSE({ event: item.event, data: JSON.stringify(item.data) })
+        }
+      } finally {
+        run.followers.delete(follower)
+      }
     })
   ctx.router.route('/', app)
 }

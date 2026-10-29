@@ -130,3 +130,38 @@ describe('UiChannel', () => {
     expect(await codeOf(channel.call(click))).toBe('disconnected')
   })
 })
+
+
+describe('waiting for pages to come back', () => {
+  it('expectAttach resolves true when a page connects, false when none does in time', async () => {
+    const channel = new UiChannel()
+    const waiting = channel.expectAttach(1000)
+    fakePage(channel, 'w1')
+    expect(await waiting).toBe(true)
+    expect(await channel.expectAttach(20)).toBe(false)
+  })
+
+  it('reloadAll asks every page to reload, resolves when as many pages have come back, and answers 0 when nobody is connected', async () => {
+    const channel = new UiChannel()
+    expect(await channel.reloadAll(20)).toBe(0)
+    const first = fakePage(channel, 'w1')
+    const second = fakePage(channel, 'w2')
+    const done = channel.reloadAll(1000)
+    expect(first.sent.at(-1)).toMatchObject({ t: 'call', request: { op: 'reload' } })
+    expect(second.sent.at(-1)).toMatchObject({ t: 'call', request: { op: 'reload' } })
+    // The pages reload: new streams, new window ids.
+    first.end()
+    second.end()
+    fakePage(channel, 'w3')
+    fakePage(channel, 'w4')
+    expect(await done).toBe(2)
+  })
+
+  it('reloadAll gives up after its time when a page does not come back', async () => {
+    const channel = new UiChannel()
+    fakePage(channel, 'w1')
+    const started = Date.now()
+    expect(await channel.reloadAll(60)).toBe(1)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(50)
+  })
+})

@@ -5,7 +5,7 @@
  * shows. It touches only the document it is given, never another window and never the OS.
  */
 
-import { UiControlError, MUTATING_OPS, type UiRequest, type UiResult } from '../protocol.ts'
+import { UiControlError, MUTATING_OPS, type UiActionResult, type UiRequest, type UiResult } from '../protocol.ts'
 import { click, pressKey, scroll, selectOption, typeText, wait, type ActionEnvironment } from './actions.ts'
 import { RefTable } from './ref-table.ts'
 import { SnapshotBuilder } from './snapshot.ts'
@@ -13,6 +13,8 @@ import { SnapshotBuilder } from './snapshot.ts'
 /** After the user touches the page, agent actions wait this long, so the user always wins. */
 const YIELD_MS = 400
 const MAX_YIELD_MS = 2000
+/** How long after the answer a reload or a move starts, so the answer is on its way first. */
+export const LEAVE_DELAY_MS = 150
 
 export interface DriverActivity {
   /** True from the moment a call starts until it ends. */
@@ -28,6 +30,8 @@ export interface UiDriverOptions {
   /** Milliseconds since the user last used the page (mouse, keyboard); Infinity when never. */
   readonly msSinceUserInput?: () => number
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>
+  /** Leave the page: reload it, or go to a path of the app. Default: the document's own `location`, a moment after the answer is sent. */
+  readonly leave?: (to: { readonly reload: true } | { readonly path: string }) => void
 }
 
 function realSleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -130,7 +134,24 @@ export class UiDriver {
       case 'press': return pressKey(this.env, request)
       case 'scroll': return scroll(this.env, request)
       case 'wait': return wait(this.env, request, signal)
+      case 'reload': return this.leave({ reload: true }, 'reloading')
+      case 'navigate': return this.leave({ path: request.path }, `going to ${request.path}`)
     }
+  }
+
+  /**
+   * The page is about to be replaced, so the answer is given first and the move happens a moment later (the answer is a POST that the page's own unload would cut off).
+   * The Host does not wait for this answer to be the last word: it waits for the page to come back.
+   */
+  private leave(to: { readonly reload: true } | { readonly path: string }, detail: string): UiActionResult {
+    const go = this.options.leave ?? ((target) => {
+      const location = this.options.document().defaultView?.location
+      if (location === undefined) return
+      if ('reload' in target) location.reload()
+      else location.assign(target.path)
+    })
+    setTimeout(() => { if (!this.disposed) go(to) }, LEAVE_DELAY_MS)
+    return { ok: true, detail }
   }
 
   private async yieldToUser(signal: AbortSignal): Promise<void> {

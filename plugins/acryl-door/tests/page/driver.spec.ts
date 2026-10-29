@@ -371,3 +371,40 @@ describe('kill switch, disposal and the user’s priority', () => {
     expect(seen).toEqual(['busy:snapshot', 'idle:'])
   })
 })
+
+
+describe('reload and navigate', () => {
+  it('answer first, then leave the page a moment later: a reload, or a move to a path of the app', async () => {
+    vi.useFakeTimers()
+    try {
+      const left: Array<{ reload: true } | { path: string }> = []
+      const driver = new UiDriver({ document: () => document, leave: (to) => { left.push(to) } })
+      expect(await driver.handle({ op: 'reload' })).toEqual({ ok: true, detail: 'reloading' })
+      expect(left).toEqual([])
+      await vi.advanceTimersByTimeAsync(200)
+      expect(left).toEqual([{ reload: true }])
+      expect(await driver.handle({ op: 'navigate', path: '/demo' })).toEqual({ ok: true, detail: 'going to /demo' })
+      await vi.advanceTimersByTimeAsync(200)
+      expect(left).toEqual([{ reload: true }, { path: '/demo' }])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not leave once the driver is gone, and is refused after the kill switch', async () => {
+    vi.useFakeTimers()
+    try {
+      const left: unknown[] = []
+      const driver = new UiDriver({ document: () => document, leave: (to) => { left.push(to) } })
+      await driver.handle({ op: 'reload' })
+      driver.dispose()
+      await vi.advanceTimersByTimeAsync(200)
+      expect(left).toEqual([])
+      const killed = new UiDriver({ document: () => document, leave: (to) => { left.push(to) } })
+      killed.kill()
+      expect(await codeOf(killed.handle({ op: 'reload' }))).toBe('killed')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

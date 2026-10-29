@@ -7,6 +7,7 @@
  * app is running in the folder (exit 3). It carries no secret; the client reads `door.json` at each call.
  */
 
+import { spawnSync } from 'node:child_process'
 import { chmodSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensureStateDir } from './door-file.ts'
@@ -23,6 +24,28 @@ export interface ShimTarget {
   readonly client: string
   /** True when `node` is Electron, which runs as Node only with `ELECTRON_RUN_AS_NODE` set. */
   readonly electron: boolean
+}
+
+/** The oldest Node the client runs on (the framework's own floor). */
+const MIN_NODE = [22, 19]
+
+/**
+ * A real Node for the command, when the app runs inside Electron: Electron can run the client as Node, but on macOS every such call prints a code-signing complaint on stderr,
+ * which lands in an agent's transcript. A `node` on the PATH that is new enough is used instead; without one, Electron runs the client. `find` is replaceable for tests.
+ */
+export function realNode(find: () => { path: string; version: string } | undefined = findNodeOnPath): string | undefined {
+  const found = find()
+  if (found === undefined) return undefined
+  const [major = 0, minor = 0] = found.version.replace(/^v/u, '').split('.').map(Number)
+  return major > MIN_NODE[0]! || (major === MIN_NODE[0] && minor >= MIN_NODE[1]!) ? found.path : undefined
+}
+
+function findNodeOnPath(): { path: string; version: string } | undefined {
+  const located = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['node'], { encoding: 'utf8', env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } })
+  const path = located.status === 0 ? located.stdout.split(/\r?\n/u).find((line) => line.trim() !== '')?.trim() : undefined
+  if (path === undefined) return undefined
+  const asked = spawnSync(path, ['--version'], { encoding: 'utf8' })
+  return asked.status === 0 ? { path, version: asked.stdout.trim() } : undefined
 }
 
 /** A word for `sh`: single-quoted, with each `'` closed, escaped and reopened. */

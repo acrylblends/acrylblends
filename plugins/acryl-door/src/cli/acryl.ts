@@ -15,8 +15,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readDoorFile, STATE_DIR, DOOR_FILE } from '../host/door-file.ts'
 
-const ACT_OPS = new Set(['click', 'type', 'select', 'press', 'scroll', 'wait'])
-const VALUED = new Set(['--dir', '--ref', '--text', '--option', '--key', '--direction', '--amount', '--cursor', '--max-nodes', '--role', '--name', '--timeout-ms', '--tool', '--args'])
+const ACT_OPS = new Set(['click', 'type', 'select', 'press', 'scroll', 'wait', 'reload', 'navigate'])
+const VALUED = new Set(['--dir', '--ref', '--text', '--option', '--key', '--direction', '--amount', '--cursor', '--max-nodes', '--role', '--name', '--timeout-ms', '--tool', '--args', '--path'])
 const FLAGS = new Set(['--json', '--submit', '--no-clear', '--gone', '--help'])
 
 export class UsageError extends Error {}
@@ -36,6 +36,8 @@ const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
   act select --ref <r> --option <o>
   act press --key <key> [--ref <r>]
   act scroll --direction up|down|left|right [--ref <r>] [--amount <px>]
+  act reload
+  act navigate --path <path of the app, e.g. /demo>
   act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]
   plugin list | plugin add <folder> | plugin remove <name> | plugin reload
   tool list | tool call --tool <name> [--args '<json>']
@@ -90,7 +92,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       return make('act', {
         op: second,
         ...pick('--ref', 'ref'), ...pick('--text', 'text'), ...pick('--option', 'option'), ...pick('--key', 'key'),
-        ...pick('--direction', 'direction'), ...pick('--role', 'role'), ...pick('--name', 'name'),
+        ...pick('--direction', 'direction'), ...pick('--role', 'role'), ...pick('--name', 'name'), ...pick('--path', 'path'),
         ...(amount === undefined ? {} : { amount }),
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
         ...(set.has('--submit') ? { submit: true } : {}),

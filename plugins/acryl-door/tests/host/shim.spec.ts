@@ -96,3 +96,15 @@ describe('the folder\'s command with two apps running', () => {
     expect(after.err).toMatch(/no running app/u)
   })
 })
+
+describe('a real Node under Electron', () => {
+  it('is used when the PATH has one new enough, and Electron runs the client otherwise', async () => {
+    const { realNode } = await import('../../src/host/shim.ts')
+    expect(realNode(() => ({ path: '/usr/local/bin/node', version: 'v24.19.0' }))).toBe('/usr/local/bin/node')
+    expect(realNode(() => ({ path: '/usr/bin/node', version: 'v22.19.0' }))).toBe('/usr/bin/node')
+    expect(realNode(() => ({ path: '/usr/bin/node', version: 'v26.8.1' }))).toBe('/usr/bin/node')
+    expect(realNode(() => ({ path: '/usr/bin/node', version: 'v22.18.0' }))).toBeUndefined()
+    expect(realNode(() => ({ path: '/usr/bin/node', version: 'v18.19.1' }))).toBeUndefined()
+    expect(realNode(() => undefined)).toBeUndefined()
+  })
+})

@@ -48,3 +48,20 @@ describe('channel messages', () => {
     for (const bad of ['', 'a b', 'w\n', 'x'.repeat(81), '../x']) expect(WINDOW_ID.test(bad)).toBe(false)
   })
 })
+
+
+describe('reload and navigate', () => {
+  it('parse: reload takes nothing, navigate takes a path of the app', () => {
+    expect(parseUiRequest({ op: 'reload' })).toEqual({ op: 'reload' })
+    expect(parseUiRequest({ op: 'navigate', path: '/demo' })).toEqual({ op: 'navigate', path: '/demo' })
+    expect(parseUiRequest({ op: 'navigate', path: '/notes?q=a#top' })).toEqual({ op: 'navigate', path: '/notes?q=a#top' })
+  })
+
+  it('refuses a navigate that would leave the app, and fields reload does not have', () => {
+    for (const path of ['//evil.example', 'https://evil.example/', 'demo', '', '/a\\b', '/\\evil', '/a\0b']) {
+      expect(() => parseUiRequest({ op: 'navigate', path }), JSON.stringify(path)).toThrow(/path must be a path of this app/)
+    }
+    expect(() => parseUiRequest({ op: 'navigate' })).toThrow(/path must be/)
+    expect(() => parseUiRequest({ op: 'reload', path: '/x' })).toThrow(/unknown field path/)
+  })
+})

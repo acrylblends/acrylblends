@@ -182,8 +182,8 @@ Then `inject: ['router', 'kv', 'db']` with `import type {} from '../plugins/acry
 `await ctx.db.run('INSERT INTO visits (at) VALUES (?)', new Date().toISOString())` before the reply. The database is `my-hero/.acrylblends/data.sqlite`,
 and the migrations run at start, in order.
 
-**Stuck?** `migrations "migrations" is relative, but this app has no file base URL` means the folder was named in `blend.yaml`; move it into
-`src/app.ts` as above. "no such table" means the file is not in `migrations/` at the app root.
+**Stuck?** `migrations "migrations" is relative, but this app has no file base URL` means the app has `acrylblends` older than 1.0.3, where a relative path in `blend.yaml` was not read
+from the app folder; move it into `src/app.ts` as above, or update (`npx acrylblends@latest upgrade`). "no such table" means the file is not in `migrations/` at the app root.
 
 ## 5. A desktop window (7 minutes)
 
@@ -280,7 +280,7 @@ few minutes; the panel shows each step, and has a stop button. Open `/board` whe
 A terminal agent works too: choose `pty:codex` (or `pty:claude`, `pty:pi`) for its normal interactive session inside the app folder, where it can use
 the door (`.acryl/bin/acryl`) to look at the page it built.
 
-**Stuck?** The panel uses your own agent account: `codex login` (or `claude`) in a terminal first. If `npm install` warns that npm blocked
+**Stuck?** The panel uses your own agent account: `codex login` (or `claude`) in a terminal first. Your own agent settings travel with it: skills or hooks of your own can make it stop and ask for approval instead of acting, so write the task as "do it now, without asking for approval", or start the agent from a clean configuration (a fresh `CODEX_HOME`, or no personal skills). If `npm install` warns that npm blocked
 `node-pty`'s install script, ignore it: prebuilt binaries ship. Only if the panel lists no `pty:` terminal, run `npm approve-scripts node-pty` and
 `npm rebuild node-pty` (the `add` output says the same).
 

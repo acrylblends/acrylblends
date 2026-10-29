@@ -45,6 +45,8 @@ export class UiChannel {
   private nextId = 1
   private clock = 0
   private closed = false
+  /** Callers waiting for a page to (re)connect: each is told once, by the next stream that attaches. */
+  private readonly attachWaiters = new Set<() => void>()
 
   /**
    * Register a page's stream. A stream already open for the same window is closed first, and its calls settle as `disconnected`.
@@ -55,6 +57,7 @@ export class UiChannel {
     if (previous !== undefined) this.drop(previous, true)
     const connection: Connection = { stream, windowId, focused, lastActive: ++this.clock }
     this.connections.set(windowId, connection)
+    for (const waiter of [...this.attachWaiters]) waiter()
     return () => { if (this.connections.get(windowId) === connection) this.drop(connection, false) }
   }
 
@@ -107,6 +110,39 @@ export class UiChannel {
         this.settle(id, undefined, new UiControlError('disconnected', 'the page could not be reached'))
       }
     })
+  }
+
+  /**
+   * A promise for the next time a page connects (a page that reloaded or moved opens a new stream). Ask for it BEFORE the call that makes the page leave, or a fast page is missed.
+   * @returns whether a page connected within `timeoutMs`.
+   */
+  expectAttach(timeoutMs: number, count = 1): Promise<boolean> {
+    return new Promise((resolve) => {
+      let left = count
+      const done = (value: boolean): void => { clearTimeout(timer); this.attachWaiters.delete(waiter); resolve(value) }
+      const waiter = (): void => { left -= 1; if (left <= 0) done(true) }
+      const timer = setTimeout(() => { done(false) }, timeoutMs)
+      this.attachWaiters.add(waiter)
+    })
+  }
+
+  /**
+   * Ask every connected page to reload (the app just changed under them) and wait, up to `timeoutMs`, for them to come back. Best effort: a page that does not come back
+   * (it was closed, or it moved to a page without the door) is not an error here.
+   * @returns how many pages were asked.
+   */
+  async reloadAll(timeoutMs = 8000): Promise<number> {
+    const targets = this.byRecency()
+    if (this.closed || targets.length === 0) return 0
+    const back = this.expectAttach(timeoutMs, targets.length)
+    for (const target of targets) {
+      const id = this.nextId
+      this.nextId += 1
+      // No call is waiting for the answer: the page answers by POST and the Host ignores an id it does not know.
+      try { target.stream.send(JSON.stringify({ t: 'call', id, request: { op: 'reload' } } satisfies ChannelToPage)) } catch { /* that page is gone */ }
+    }
+    await back
+    return targets.length
   }
 
   /** Close every page's stream and settle every pending call as `unloaded`. */

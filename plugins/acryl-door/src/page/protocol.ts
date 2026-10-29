@@ -7,11 +7,14 @@
  */
 
 /** The operations the driver performs on the page. */
-export const UI_OPS = ['snapshot', 'click', 'type', 'select', 'press', 'scroll', 'wait'] as const
+export const UI_OPS = ['snapshot', 'click', 'type', 'select', 'press', 'scroll', 'wait', 'reload', 'navigate'] as const
 export type UiOp = (typeof UI_OPS)[number]
 
 /** Operations that change the page, so each call needs approval. `snapshot`, `scroll` and `wait` only look. */
-export const MUTATING_OPS: readonly UiOp[] = ['click', 'type', 'select', 'press']
+export const MUTATING_OPS: readonly UiOp[] = ['click', 'type', 'select', 'press', 'reload', 'navigate']
+
+/** A place in the app to go to: a path on the page's own origin (`/demo`, `/notes?q=a#top`), never another site and never a `//host` address. */
+export const APP_PATH = /^\/(?![/\\])[^\0\\]{0,2000}$/u
 
 export const MAX_TEXT_LENGTH = 10_000
 export const MAX_WAIT_MS = 10_000
@@ -77,6 +80,8 @@ export type UiRequest =
   | { readonly op: 'press'; readonly key: string; readonly ref?: string }
   | { readonly op: 'scroll'; readonly direction: 'up' | 'down' | 'left' | 'right'; readonly ref?: string; readonly amount?: number }
   | { readonly op: 'wait'; readonly text?: string; readonly role?: string; readonly name?: string; readonly gone?: boolean; readonly timeoutMs?: number }
+  | { readonly op: 'reload' }
+  | { readonly op: 'navigate'; readonly path: string }
 
 /** What the page did, and to which control (for the audit log and the approval prompt). */
 export interface UiActionResult {
@@ -163,6 +168,12 @@ export function parseUiRequest(value: unknown): UiRequest {
         ...(value.gone === undefined ? {} : { gone: value.gone }),
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
       }
+    }
+    case 'reload': only([]); return { op }
+    case 'navigate': {
+      only(['path'])
+      if (typeof value.path !== 'string' || !APP_PATH.test(value.path)) return invalid('path must be a path of this app, such as /demo (it starts with one /, and names no other site)')
+      return { op, path: value.path }
     }
     default: return invalid(`unknown op ${String(op)}`)
   }
