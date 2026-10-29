@@ -134,7 +134,7 @@ try {
       .split('\n')
       .filter(Boolean)
       .map((line) => {
-        const [id, , , size] = /^(\d+)\s+"([^"]*)"\s+(\S+)\s+(\d+x\d+)/u.exec(line)?.slice(1) ?? []
+        const [id, , , size] = /^(\d+)\s+"([^"]*)"\s+(\S*)\s+(\d+x\d+)/u.exec(line)?.slice(1) ?? []
         return { id: Number(id), size, line }
       })
   }
@@ -147,7 +147,7 @@ try {
   const desktop = start('desktop')
   const first = await until(async () => {
     const list = windowList()
-    return list?.length === 1 && list[0]
+    return list?.length === 1 && Number.isInteger(list[0].id) && list[0]
   }, 60_000)
   if (!first)
     fail(
@@ -266,7 +266,7 @@ try {
   const alone = start('desktop')
   const only = await until(async () => {
     const list = windowList()
-    return list?.length === 1 && list[0]
+    return list?.length === 1 && Number.isInteger(list[0].id) && list[0]
   }, 60_000)
   if (!only)
     fail(`the desktop app that started its own server did not answer window list:\n${alone.output}`)

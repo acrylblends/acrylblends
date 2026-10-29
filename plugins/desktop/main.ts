@@ -135,7 +135,8 @@ if (!app.requestSingleInstanceLock()) {
       visible: item.visible,
       type: item.type,
       role: item.role,
-      submenu: item.submenu === undefined ? null : { items: item.submenu.items.map(menuItem) },
+      // Electron gives a plain item `submenu: null` on Linux and `undefined` elsewhere.
+      submenu: item.submenu ? { items: item.submenu.items.map(menuItem) } : null,
       click: () => {
         const target = BrowserWindow.getFocusedWindow() ?? live()[0]
         item.click(undefined, target, target?.webContents)
