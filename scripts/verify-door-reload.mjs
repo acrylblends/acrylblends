@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // The gate of 1.0.4's door: an agent that builds a page can look at it and click through it in the same run.
-//   node scripts/verify-door-reload.mjs
+//   node scripts/verify-door-reload.mjs [--npm <version>]
+// With --npm the app is made by the PUBLISHED acrylblends of that version (npx), not by this checkout: the registry check of a release.
 // In a fresh agent app, a plugin serves a page that has NO door script tag, a real (headless) Chrome opens it, and the folder's own command (`.acryl/bin/acryl`) is used as an agent
 // uses it: `look` sees the page (the door adds its script to every HTML page in development); a change to the plugin followed by `plugin reload` shows the new page without anyone
 // reloading it (the door reloads the open pages and answers once they are back); a change the plugin system does not know about is picked up by `act reload`; `act navigate --path`
@@ -30,6 +31,8 @@ async function until(fn, ms, every = 300) {
   }
 }
 
+const npmArg =
+  process.argv.indexOf('--npm') === -1 ? undefined : process.argv[process.argv.indexOf('--npm') + 1]
 const chrome = findChrome()
 if (!chrome) {
   log('skipped: no Chrome or Chromium on this machine (set CHROME_BIN)')
@@ -63,7 +66,14 @@ let server
 let browser
 try {
   const app = join(scratch, 'app')
-  run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
+  if (npmArg === undefined)
+    run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
+  else
+    run(
+      'npx',
+      ['--yes', `acrylblends@${npmArg}`, 'init', app, '--template', 'agent', '-y'],
+      scratch,
+    )
   run('npm', ['install', '--no-audit', '--no-fund'], app)
   mkdirSync(join(app, 'plugins', 'pages'))
   writeFileSync(join(app, 'plugins', 'pages', 'index.ts'), plugin('one'))
