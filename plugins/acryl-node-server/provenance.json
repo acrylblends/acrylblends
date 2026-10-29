@@ -50,7 +50,8 @@
     },
     "src/adapter/request.ts": {
       "upstreamSha256": "26644541d3cfa9a2dc3fc94fcfffe73feefb720b52dae6b0905cd1ef93523261",
-      "sha256": "7a7c605fafc9ddd4ec97e339d181e842b18cd02b9365c50134c3c6ce2b4026be"
+      "sha256": "1768785e688eb892b9fc4b4edb6b5fca7563a6bf029ad33e3e73cb4cad6e66fe",
+      "deviation": "the buffered body of a destroyed stream is drained by reading until read() returns null; one read() returned all of it on Node 22 to 24 and only the first chunk on Node 26, which truncated a body that arrived complete (the two ported tests of this case fail on Node 26 without it)"
     },
     "src/adapter/response.ts": {
       "upstreamSha256": "24d52364b21773acee188bef6a8ed0cd58c2a6fe0ec78cd3440b111e2cca1aa2",
