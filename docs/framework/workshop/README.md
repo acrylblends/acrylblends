@@ -139,7 +139,7 @@ Then hand the agent the window itself, not only the page inside it. Ask:
 
 The agent lists the windows, opens a second one, picks a menu item and changes an application setting; each shows in the window as it happens.
 
-Navigate only to paths the app really serves: a path with no page leaves the window on nothing.
+**Tip.** `navigate` answers with the status: a `404` means the app does not serve that path, and you can navigate straight back to one it does.
 
 TODO(1.0.4-C): the window, menu and application-settings control (target 2026-11-05). Until it ships, the first half of this block - the page inside
 the window - works, and the second prompt is the part that arrives with C.
