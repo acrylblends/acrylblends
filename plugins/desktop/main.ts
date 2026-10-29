@@ -9,7 +9,7 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, Menu, type MenuItem, shell } from 'electron'
+import { app, BrowserWindow, Menu, type MenuItem, screen, shell } from 'electron'
 import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
 import { selectInstance } from '../instance/index.ts'
@@ -22,7 +22,7 @@ import {
 } from './door-shell.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
-import { windowOptions } from './window.ts'
+import { cascade, windowOptions } from './window.ts'
 
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url))
 const chosen = selectInstance({ projectRoot, env: process.env })
@@ -91,7 +91,19 @@ if (!app.requestSingleInstanceLock()) {
     const origin = new URL(url).origin
     /** One window on a path of the app. Navigation stays on the app's own server; any other address opens in the system browser. The user agent names the window to the door (`AcrylWindow/<id>`), so an agent can drive it with `--window <id>`. */
     const createWindow = (path: string): BrowserWindow => {
-      const created = new BrowserWindow(windowOptions({ title: chosen.name }))
+      // A window opened while another is open sits a step down and to the right of it, not exactly on top.
+      const beside =
+        BrowserWindow.getFocusedWindow() ??
+        BrowserWindow.getAllWindows().find((other) => !other.isDestroyed())
+      const where = (() => {
+        if (beside === undefined) return {}
+        const bounds = beside.getBounds()
+        return cascade(bounds, screen.getDisplayMatching(bounds).workArea, {
+          width: 1100,
+          height: 760,
+        })
+      })()
+      const created = new BrowserWindow(windowOptions({ title: chosen.name, ...where }))
       created.webContents.setUserAgent(
         `${created.webContents.getUserAgent()} AcrylWindow/${String(created.id)}`,
       )
