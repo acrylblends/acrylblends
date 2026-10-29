@@ -34,7 +34,7 @@ const env = {
   NO_COLOR: '1',
   FORCE_COLOR: '0',
 }
-const plain = (text) => text.replace(/\u001b\[[0-9;]*m/gu, '')
+const plain = (text) => text.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu'), '')
 function run(command, args, cwd, allowFailure = false) {
   const r = spawnSync(command, args, {
     cwd,
