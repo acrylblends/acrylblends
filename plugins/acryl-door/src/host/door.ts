@@ -9,10 +9,12 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import { parseUiRequest, UiControlError, type AuditEntry, type UiActionResult, type UiRequest, type UiResult, type UiSnapshot } from '../page/protocol.ts'
 import { renderSnapshot } from '../page/snapshot-text.ts'
 import type { AuditLog } from './audit.ts'
+import { ShellError, parseShellRequest, type ShellErrorCode, type ShellOp, type ShellRequest, type ShellResult } from '../shell/protocol.ts'
 import type { UiChannel } from './channel.ts'
+import { NO_DESKTOP, type ShellChannel } from './shell.ts'
 import { VERB_SPECS, VERBS } from './verbs.ts'
 
-export type DoorErrorCode = 'invalid' | 'unknown-verb' | 'unavailable' | 'not-exposed' | 'outside-app' | 'failed'
+export type DoorErrorCode = 'invalid' | 'unknown-verb' | 'unavailable' | 'not-exposed' | 'outside-app' | 'failed' | ShellErrorCode
 
 export class DoorError extends Error {
   readonly code: DoorErrorCode
@@ -42,6 +44,8 @@ export interface ToolsPort {
 
 export interface DoorDeps {
   readonly channel: UiChannel
+  /** The desktop shell (the Electron main process of `npm run desktop`), when the app can have one. */
+  readonly shell?: ShellChannel
   readonly audit: AuditLog
   /** The app's name, folder and, when it listens, its address (what `brief` prints so an agent can curl the running app). */
   readonly app: { readonly name: string; readonly root: string; readonly url?: string | undefined }
@@ -60,6 +64,17 @@ export interface DoorDeps {
 export interface VerbAnswer {
   readonly value: unknown
   readonly text: string
+}
+
+/** A shell answer as text an agent reads: windows and menu items one to a line. */
+function renderShell(result: ShellResult): string {
+  if ('windows' in result) {
+    return result.windows.length === 0
+      ? 'no windows are open'
+      : result.windows.map(window => `${String(window.id)}  ${JSON.stringify(window.title)}  ${window.path}  ${String(window.width)}x${String(window.height)}${window.focused ? '  focused' : ''}`).join('\n')
+  }
+  if ('items' in result) return result.items.length === 0 ? 'the app has no menu' : result.items.map(item => `${item.path}${item.enabled ? '' : '  (disabled)'}`).join('\n')
+  return result.detail
 }
 
 /** The files an agent should read first, when the app has them. */
@@ -101,6 +116,8 @@ export class Door {
         return { value: offered, text: offered.length === 0 ? 'no app tools are offered through the door (tools.expose is empty)' : offered.map(tool => `${tool.name}: ${tool.description}`).join('\n') }
       }
       case 'tool-call': return this.callTool(input)
+      case 'window-list': case 'window-open': case 'window-focus': case 'window-close': case 'window-resize': case 'menu-list': case 'menu-click':
+        return this.desktop(verb, input, signal)
       default: throw new DoorError('unknown-verb', `unknown verb ${JSON.stringify(verb)}; the verbs are ${VERBS.join(', ')}`)
     }
   }
@@ -165,6 +182,47 @@ export class Door {
       return response.ok ? `${response.status} at ${path}` : `${response.status} at ${path}: the app serves no page there, look at what is shown and navigate to a path it does`
     } catch {
       return undefined
+    }
+  }
+
+  /**
+   * The windows and the menu of the desktop app, through the shell. Every call is audited with the window it was about; a call with no shell attached answers one line that says what to run;
+   * closing the last window is refused unless the call says `force` (it ends the desktop app, and the session an agent works in with it).
+   */
+  private async desktop(verb: ShellOp, input: Record<string, unknown>, signal: AbortSignal): Promise<VerbAnswer> {
+    const shell = this.deps.shell
+    let request: ShellRequest
+    try {
+      request = parseShellRequest(verb, input)
+    } catch (cause) {
+      throw new DoorError('invalid', cause instanceof Error ? cause.message : 'invalid request')
+    }
+    const windowId = 'id' in request ? request.id : undefined
+    const record = (outcome: AuditEntry['outcome'], detail?: string, windowOf?: number): void => {
+      const id = windowOf ?? windowId
+      this.deps.audit.record({
+        at: new Date().toISOString(), tool: verb,
+        ...(request.op === 'menu-click' ? { target: { role: 'menuitem', name: request.path } } : {}),
+        ...(id === undefined ? {} : { window: id }),
+        outcome, ...(detail === undefined ? {} : { detail }), approval: 'token',
+      })
+    }
+    try {
+      if (shell === undefined || !shell.connected) throw new ShellError('no-desktop', NO_DESKTOP)
+      if (request.op === 'window-close' && request.force !== true) {
+        const { windows } = await shell.call({ op: 'window-list' }, { signal }) as Extract<ShellResult, { windows: unknown }>
+        if (windows.length === 1 && windows[0]?.id === request.id) {
+          throw new ShellError('last-window', `window ${String(request.id)} is the app's last window: closing it ends the desktop app. Open another window first, or pass force to end it on purpose`)
+        }
+      }
+      const result = await shell.call(request, { signal })
+      const openedId = 'id' in result ? result.id : undefined
+      record('ok', undefined, openedId)
+      return { value: result, text: renderShell(result) }
+    } catch (cause) {
+      if (!(cause instanceof ShellError)) throw cause
+      record(['invalid', 'no-such-window', 'last-window', 'no-such-menu-item', 'disabled', 'no-desktop'].includes(cause.code) ? 'refused' : 'failed', cause.code)
+      throw new DoorError(cause.code, cause.message)
     }
   }
 

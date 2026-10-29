@@ -212,6 +212,8 @@ export interface AuditEntry {
   readonly tool: string
   /** The control touched, when the call had one. */
   readonly target?: { readonly role: string; readonly name: string }
+  /** The desktop window the call was about (the number `window list` prints), when it had one. */
+  readonly window?: number
   readonly outcome: 'ok' | 'refused' | 'failed'
   /** The error code for a refusal or failure, or a short note for a success. */
   readonly detail?: string

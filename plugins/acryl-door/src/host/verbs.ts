@@ -6,7 +6,7 @@
 import { MAX_SNAPSHOT_NODES, MAX_WAIT_MS } from '../page/protocol.ts'
 
 /** Every verb, in the order `brief` lists them. */
-export const VERBS = ['brief', 'look', 'act', 'plugin-list', 'plugin-add', 'plugin-remove', 'plugin-reload', 'tool-list', 'tool-call'] as const
+export const VERBS = ['brief', 'look', 'act', 'plugin-list', 'plugin-add', 'plugin-remove', 'plugin-reload', 'tool-list', 'tool-call', 'window-list', 'window-open', 'window-focus', 'window-close', 'window-resize', 'menu-list', 'menu-click'] as const
 export type Verb = (typeof VERBS)[number]
 
 /** The JSON Schema of a verb's arguments, as MCP lists it. */
@@ -100,6 +100,41 @@ export const VERB_SPECS: Readonly<Record<Verb, VerbSpec>> = {
     usage: 'tool call --tool <name> [--args <json>]: run one of them',
     description: 'Run one of the app tools that tool-list names.',
     arguments: { type: 'object', properties: { tool: { type: 'string' }, args: { description: 'the tool\'s input' } }, required: ['tool'], additionalProperties: false },
+  },
+  'window-list': {
+    usage: 'window list: the windows of the desktop app',
+    description: 'The windows of the desktop app: id, title, path, size, and which one is focused. Needs the desktop app (npm run desktop).',
+    arguments: none,
+  },
+  'window-open': {
+    usage: 'window open [--path <path of the app>]: open a new window',
+    description: 'Open a new window of the desktop app on a path of the app (default: its start page). Answers with the new window\'s id; look and act take it as window.',
+    arguments: { type: 'object', properties: { path: { type: 'string', description: 'a path of this app, e.g. /settings' } }, additionalProperties: false },
+  },
+  'window-focus': {
+    usage: 'window focus --id <n>: bring a window to the front',
+    description: 'Bring a window of the desktop app to the front. Look and act without a window then drive it.',
+    arguments: { type: 'object', properties: { id: { type: 'integer', minimum: 1, description: 'the id window-list prints' } }, required: ['id'], additionalProperties: false },
+  },
+  'window-close': {
+    usage: 'window close --id <n> [--force]: close a window',
+    description: 'Close a window of the desktop app. The last window cannot be closed without force, because that ends the desktop app.',
+    arguments: { type: 'object', properties: { id: { type: 'integer', minimum: 1 }, force: { type: 'boolean', description: 'allow closing the last window, which ends the desktop app' } }, required: ['id'], additionalProperties: false },
+  },
+  'window-resize': {
+    usage: 'window resize --id <n> --width <px> --height <px>',
+    description: 'Resize a window of the desktop app.',
+    arguments: { type: 'object', properties: { id: { type: 'integer', minimum: 1 }, width: { type: 'integer', minimum: 200, maximum: 10_000 }, height: { type: 'integer', minimum: 200, maximum: 10_000 } }, required: ['id', 'width', 'height'], additionalProperties: false },
+  },
+  'menu-list': {
+    usage: 'menu list: the application menu',
+    description: 'The desktop app\'s application menu as paths such as File>New Note, with the disabled items marked.',
+    arguments: none,
+  },
+  'menu-click': {
+    usage: 'menu click --path "File>New Note": press a menu item',
+    description: 'Press an item of the desktop app\'s application menu by its path (labels joined with >, as menu-list prints them). A disabled item is refused.',
+    arguments: { type: 'object', properties: { path: { type: 'string', description: 'e.g. File>New Note' } }, required: ['path'], additionalProperties: false },
   },
 }
 

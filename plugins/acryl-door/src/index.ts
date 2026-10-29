@@ -23,6 +23,7 @@ import { DOOR_PREFIX, privateApi } from './host/http.ts'
 import { mcpRoutes } from './host/mcp-routes.ts'
 import { operatorRoutes } from './host/operator-routes.ts'
 import { pageChannelRoutes } from './host/page-routes.ts'
+import { ShellChannel, shellRoutes } from './host/shell.ts'
 import { realNode, writeShims, type ShimTarget } from './host/shim.ts'
 
 /** Stable Cordis plugin name, equal to the package name and the Loader row id. */
@@ -113,9 +114,11 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   }
   const secret = newSecret()
   const channel = new UiChannel()
+  const shell = new ShellChannel()
   const audit = new AuditLog(auditPath(stateDir(app.root)))
   const door = new Door({
     channel,
+    shell,
     audit,
     app: { name: app.name, root: app.root, url: loopbackUrl(server.url) },
     extensions: () => ctx.get('extensions') as unknown as ExtensionsPort | undefined,
@@ -124,6 +127,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     reloadOnChange: config.reloadOnChange !== false,
   })
   ctx.effect(() => () => { channel.close() }, 'acryl-door: page channel')
+  ctx.effect(() => () => { shell.close() }, 'acryl-door: desktop shell channel')
   // One script tag for the page (`page.js`): it imports the module tree served below it.
   const pageModule = new Acryl()
     .get(`${DOOR_PREFIX}/page.js`, c => c.body(`import '${DOOR_PREFIX}/page/main.ts'\n`, 200, { 'content-type': 'text/javascript; charset=utf-8' }))
@@ -154,6 +158,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     DOOR_PREFIX,
     pageModule,
     pageChannelRoutes(channel, { prefix: DOOR_PREFIX }),
+    shellRoutes(DOOR_PREFIX, secret, shell),
     operatorRoutes(DOOR_PREFIX, secret, door, reportError),
     mcpRoutes(DOOR_PREFIX, secret, door, reportError),
   ))
