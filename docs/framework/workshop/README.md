@@ -85,7 +85,7 @@ Open the address it prints (`/` is the app's page) and click the panel button in
 > and tell me what you saw.
 
 What happens next is the workshop: the agent reads `AGENTS.md` and `docs/framework` (both are in your app), writes a Cordis plugin under `plugins/`,
-installs it into the running app, and goes to `/board` through the door to look at what it built. The page it built is at `/board`; keep the app's own
+installs it into the running app as an extension (`.acryl/bin/acryl plugin add plugins/board`), and goes to `/board` through the door to look at what it built. It must be an extension, not a row of `blend.yaml`: a row is imported at start-up, where the framework's package name does not resolve, and the app then fails to boot. The page it built is at `/board`; keep the app's own
 page (`/`) open in a second tab, because the panel lives there.
 
 Then make it yours: open the plugin it wrote, change a colour or a label, save, and watch the app reload. The code is in your folder and belongs to you;

@@ -46,6 +46,8 @@ Still open, and what to say:
   opens a second one, picks a menu item and changes an app setting. If C slips, cut that second prompt and keep the first half - the page inside the
   window is driven today, so the block still lands.
 - **F (the door through a DeepSeek model with no login).** Do not promise it; it is what a workshop without a hosted model login would want.
+- **A plugin must be an extension, not a row.** An agent that adds its plugin as a row of `blend.yaml` makes the app fail to boot (`Cannot find package 'acrylblends'`, imported from the plugin): rows are imported at start-up, extensions at install time. Say it in block 2 and check the first board: it belongs in `plugins/` and installed with `.acryl/bin/acryl plugin add`.
+- **Live installs race `npm run dev`.** The staged copy lives under `.acrylblends/extensions-staged/`, which `node --watch` watches, so an install can restart the app mid-install and the door then reports the app stopped. If a build goes quiet after an install, restart the server and ask the agent to install again. (Reported; 1.0.5 territory.)
 - **The door allows one process per app.** Starting `npm run desktop` while `npm run dev` runs stops the window with `acryl-door: another process (pid …)
   serves the door of …; stop it first`. The handout now says to stop the server first; say it out loud too, it is the first thing a room hits.
 - **Screenshots.** S3 (the board the agent built) and S6 (the registry listing) are taken from the run. S2 (the panel mid-build) needs the panel fix
