@@ -164,3 +164,72 @@ Do **not** put F1 or F2 in the room as hands-on steps: F1 fails outright and F2 
 - A browser-only attendee (WebBoxes): not tested here.
 - Real model quality: step 9 used codex as the agent; the app's own offline agent and a DeepSeek-backed model were not part of this walk.
 - The PTY terminals (`pty:claude`, `pty:codex`, `pty:pi`) were listed but not opened (see C5).
+
+## The walk on Windows (recheck on 1.0.7, 2026-10-29)
+
+Replayed on `mbpi9win` (Windows 10 Pro 19045, x64) on the published `acrylblends@1.0.7`, with `create-acrylblends@1.0.7`; the guide is
+`docs/framework/workshop/README.md` on `workshop-guide`. Isolation: a scratch root with its own `HOME`/`USERPROFILE`/`APPDATA`/`LOCALAPPDATA`
+and npm cache, and a **portable Node 22.23.4 (npm 10.9.9)** unzipped in it; no system installs. The app and its window ran in the console
+session through one-shot `/IT` scheduled tasks, each deleted afterwards.
+
+**The isolation trap, found first:** on Windows PowerShell 5.1, `~` and `$HOME` follow `USERPROFILE` only when it is set **before**
+PowerShell starts. Setting `$env:USERPROFILE` (or even `$HOME`) inside a script leaves `~` at the real home. Every PowerShell step here was
+launched from a small `.cmd` that sets the scratch variables first.
+
+| # | Item | Result | Evidence (exact) |
+| --- | --- | --- | --- |
+| 1 | `npx acrylblends@latest preflight` | **PASS** | exit 0; `PASS node 22.23.4`, `PASS npm 10.9.9`, `PASS git 2.55.0.windows.2`, `PASS agent claude, codex`, `PASS port 127.0.0.1:3100 is free`, `PASS powershell Windows PowerShell 5.1.19041.6456`, `NOTE gh not logged in`, `NOTE long paths off`, `NOTE git bash this shell rewrites /paths: the door handles it from acrylblends 1.0.7`, `Ready for the workshop.` |
+| 2 | `npm create acrylblends@1.0.7 my-app agent`, install, dev, `/hello` | **PASS** | created with no workaround (`created my-app (agent) ... 115 files`); `npm install` `added 15 packages ... found 0 vulnerabilities` in 4 s; `npm run dev` listening on `http://127.0.0.1:3503` in 3 s; `/health` 200; after adding `.get('/hello', (c) => c.json({ hello: 'workshop' }))` the log printed `Restarting 'src/main.ts'` and `/hello` answered `{"hello":"workshop"}` 200 |
+| 3 | The panel starts pi (or codex) with no patch | **FAIL** | session lists `agent`, `codex`, `pi`; `/ask` with `codex` starts it (tool event arrives) but the run ends: `{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account.",...}}`, then `codex ended with exit code 1`. `/ask` with `pi`: `{"error":"the driver \"pi\" is not available here (agent, codex)"}` although the session listed it. Two causes below (B1, B2). |
+| 4 | `act navigate /nope` from Git Bash, back; two Edge tabs | **PASS** | `acryl act navigate --path /nope` -> `{"ok":true,"detail":"going to /nope; 404 at /nope: the app serves no page there, ..."}` in 489 ms; `--path /` -> `200 at /` in 463 ms; `look` 191 ms; two Edge tabs through CDP each answered `health 200` in 38 ms together, twice, while both stayed open |
+| 5 | Block 4: desktop | **PASS, with the gaps below** | `npm run desktop`: `Downloading Electron binary...` then `desktop: attached to the app already running from this folder at http://127.0.0.1:3503`; `window list` -> window 1 `my-app /`; `window open --path /settings` -> window 2 opened in 204 ms but titled `404 Not Found` (the app serves no `/settings`); `look --window 1` 198 ms, `look --window 2` 203 ms; `act navigate --window 2 --path /` -> `200 at /` in 200 ms; `menu click --path "Edit>Copy"` -> `{"ok":true,"detail":"pressed Edit>Copy"}` in 194 ms; `window close --id 2` closed it; `window close --id 1` -> `{"ok":false,"code":"last-window","message":"window 1 is the app's last window: closing it ends the desktop app. Open another window first, or pass force to end it on purpose"}`; `--force` closes it. The panel inside the window was not visually confirmed: a console screenshot through the task service came back blank (locked console). |
+| 6 | Block 5: `NODE_ENV=production npm start` | **FAIL** | start line reads `extensions: none found in plugins/` (the guide expects `extensions (read-only): board`); `/` 200, `/health` 200, `/board` 404, `/api/agent-panel/session` 404, `/ask` 404. The board extension cannot exist because item 3's agent cannot run on this box; nothing else in production was wrong. |
+| + | Two Electron windows at once, `look --window` on each | **PASS** | both windows open; `look --window 1` 198 ms and `look --window 2` 203 ms back to back, no queueing (the 1.0.6 six-connection stall is gone). The panel's Stop could not be exercised: no agent run could start (item 3). |
+
+Both Edge and the two-window case were driven over Chromium DevTools from the ssh session; every door call ran from Git Bash, so the
+1.0.7 path handling held (`/nope` reached the door unchanged).
+
+### Frictions, ranked
+
+**Blockers**
+
+- **B1. An agent spawned by an app started over ssh dies before it runs.** With the dev server started from an ssh (session 0) shell, `/ask`
+  with `codex` answered `{"event":"error","data":{"message":"codex ended with exit code 3221225794"}}` (0xC0000142, DLL init failed); the same
+  app started in the console session ran codex normally. Anyone rehearsing remotely, or a facilitator on a remote machine, hits this; the
+  guide says nothing about the session an app must run in.
+- **B2. codex ignores the isolated HOME and reads the real user profile; the panel surfaces only its model error.** On Windows, codex resolves
+  its home through the OS Known Folder API, so `USERPROFILE`/`HOME` overrides do not move `~/.codex` - copying `auth.json` and `config.toml`
+  into the scratch home changed nothing, and the real `C:\Users\alexa\.codex` was written during the attempts. With a real config that pins
+  `model = "gpt-5.6-sol"` (rejected for a ChatGPT account), no run can complete, and preflight still says PASS for the agent.
+
+**Confusing**
+
+- **C1. `pi` is listed as a chat driver and refused when used.** `GET /api/agent-panel/session` offered `pi`; `/ask` with `pi` answered
+  `the driver "pi" is not available here (agent, codex)`. Same shape as the macOS walk's C3, now with an exact message.
+- **C2. Block 4's prompt has no target in 1.0.7.** The guide asks the agent to "use the File menu to open its settings" and the item names
+  `/settings`; the window's menu is Electron's default (File>Exit, Edit, View, Window) with no Settings item, and the app serves no `/settings`
+  page (window 2 opened on `404 Not Found`).
+- **C3. The first desktop launch downloads Electron at run time** (`Downloading Electron binary...`), not at `npm install`, so the window is
+  silent for a while after the attach line; the guide's "Stuck?" text says about 200 MB but not that the download happens then.
+
+**Cosmetic**
+
+- **K1. A clean `preflight` ends with an npm-update notice on stderr**, which PowerShell 5.1 prints as a `NativeCommandError` block
+  (`node.exe : npm notice ... CategoryInfo : NotSpecified`) after `Ready for the workshop.` - it reads like a failure though the exit is 0.
+- **K2. PowerShell 5.1 `~` isolation trap** (above): setting `$env:USERPROFILE`/`$HOME` inside the script leaves `~` at the real home; the
+  scratch variables must be set by a `.cmd` (or `cmd /c "set ... && powershell ..."`) before PowerShell starts.
+
+### PowerShell vs cmd, as walked
+
+| | cmd | PowerShell 5.1 |
+| --- | --- | --- |
+| One env var for one command | `set NODE_ENV=production&& npm start` | `$env:NODE_ENV="production"; npm start` |
+| Scratch HOME that `~` honours | `set USERPROFILE=...` then start PowerShell from the same .cmd | setting `$env:USERPROFILE`/`$HOME` inside the script is too late: launch PowerShell with the variables already set |
+| Find the dev server's port | `netstat -ano | findstr :3503` | same output through `netstat`, or `Get-NetTCPConnection -LocalPort 3503` |
+| Stop it | `taskkill /PID <pid> /F` | same; `Stop-Process -Id <pid>` needs the pid from `Get-NetTCPConnection` |
+| A window that needs the desktop | a `/IT` scheduled task (as walked) | same |
+
+**Cleanup, checked at the end:** the five `w107-*` scheduled tasks deleted, no `node.exe`, `electron.exe` or walk-owned `msedge.exe`
+process left, the scratch root `C:\Users\alexa\scratch-acryl\w107` removed, and the real `~/.acryl` (2026-10-09) and `~/.dsh`
+(2026-10-08) untouched. One exception, and it is B2: codex wrote into the real `~/.codex` (its sqlite state and model cache) because it does
+not honour the HOME override; the walk's own app data all stayed in the scratch folder.
