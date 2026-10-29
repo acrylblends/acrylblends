@@ -16,8 +16,8 @@ const DOOR_TAG =
 /**
  * The app's own routes on the router. Always: the page and `GET /health`. While the agent, the extensions and the task recorder run: `POST /ask` for the agent; `GET /extensions`
  * (and `POST /extensions/approve` and `/deny`) and `GET /tasks` to observe and steer what it did (every run is a durable task owning one task per tool call); `POST /tasks/cancel`.
- * What changes is also streamed: `GET /api/state/tasks/events` and `GET /api/state/extensions/events`. In production `src/app.ts` leaves the agent, builder and extensions rows
- * out (unless `ACRYL_PRODUCTION_KEEP` names them), and then those routes are not mounted at all. The mounts are removed when the plugin is disposed.
+ * What changes is also streamed: `GET /api/state/tasks/events` and `GET /api/state/extensions/events`. In production `src/app.ts` leaves the agent and builder rows out
+ * and starts the extensions read-only (unless `ACRYL_PRODUCTION_KEEP` names them), and then those routes are not mounted at all. The mounts are removed when the plugin is disposed.
  */
 export const routes = {
   name: 'routes',

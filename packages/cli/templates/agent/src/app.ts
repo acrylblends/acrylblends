@@ -64,7 +64,12 @@ export interface App {
   stop(): Promise<void>
 }
 
-/** The development rows production leaves out, and what each one gives a visitor. */
+/**
+ * The development rows, and what each one gives a visitor. Production leaves the agent and the builder out. The extensions row is not left out: it starts again, read-only,
+ * the extensions in the app's `plugins/` folder (what the agent built and installed in development, committed with the app), so a deployed app has its own features; nothing
+ * can be installed, updated or approved while it runs, and `/ask`, `/extensions*` and `/tasks*` stay unmounted (they need the agent). `ACRYL_PRODUCTION_KEEP=extensions` keeps the
+ * live install itself.
+ */
 const DEVELOPMENT_ROWS: Record<string, string> = {
   agent: 'POST /ask runs the agent, which spends the model key and calls its tools',
   builder: 'the agent can write plugin source into plugins/',
@@ -91,6 +96,7 @@ export async function createApp(
   // serves a folder's door, so the tests that start several apps set it).
   const listen = options.listen !== false
   const leaveOut = new Set<string>()
+  let extensionsReadOnly = false
   if (!listen) leaveOut.add('acryl-node-server').add('acryl-door')
   if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off')
     leaveOut.add('acryl-door')
@@ -114,6 +120,7 @@ export async function createApp(
         console.warn(
           `WARNING: the "${row}" row runs in production because ACRYL_PRODUCTION_KEEP names it: ${danger}. Nothing here is behind a login; put the app behind your own.`,
         )
+      else if (row === 'extensions') extensionsReadOnly = true
       else leaveOut.add(row)
     }
   }
@@ -141,6 +148,7 @@ export async function createApp(
       tasks: { manifest: `sha256:${manifest.digest}` },
       // The `approval` parameter in blend.yaml (the extensions row) turns this source into one that asks.
       extensions: {
+        ...(extensionsReadOnly ? { readOnly: true } : {}),
         sources: [
           { dir: extensionsDir, trust: 'install' },
           ...(legacy ? [{ dir: legacyDir, trust: 'install' as const }] : []),

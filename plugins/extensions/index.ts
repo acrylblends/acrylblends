@@ -75,7 +75,18 @@ export interface ExtensionsConfig {
   sources?: readonly ExtensionSource[]
   /** When true, every source that would install by itself asks for approval instead (`ask`). */
   approval?: boolean
+  /**
+   * Production: the extension folders of the sources that install by themselves are started straight from where they are, once, and nothing can be installed, updated or
+   * removed afterwards (those calls are refused). No staging, no state file, no ledger, no approval queue are written or asked: the code that runs is the code in the folder,
+   * as it is deployed. One line says what was started, and a recorded extension whose folder is missing is a warning.
+   */
+  readOnly?: boolean
+  /** Where the read-only start says what it did (the console by default). */
+  log?: (line: string) => void
 }
+
+const READ_ONLY =
+  'the extensions of this app are read-only here (production): nothing can be installed, updated, removed or approved while it runs'
 
 export interface ExtensionInfo {
   readonly name: string
@@ -215,6 +226,8 @@ export class Extensions extends Service {
   private readonly requests = new Map<string, { dir: string; version: string }>()
   private tail: Promise<unknown> = Promise.resolve()
   private disposed = false
+  private readonly readOnly: boolean
+  private readonly say: (line: string) => void
   /**
    * The context the service was constructed with. Inside a service method `this.ctx` is Cordis's shadow context, which resolves services as the
    * service's own fiber, so a plugin mounted from it would read `ctx.router` from the installer's fiber and fail. Extensions mount from this one.
@@ -224,6 +237,8 @@ export class Extensions extends Service {
   constructor(ctx: Context, config: ExtensionsConfig = {}) {
     super(ctx, 'extensions')
     this.owner = ctx
+    this.readOnly = config.readOnly === true
+    this.say = config.log ?? ((line) => console.log(line))
     const { home, root } = ctx.appInstance
     this.sources = (config.sources ?? [{ dir: join(home, 'extensions'), trust: 'install' }]).map(
       (source) => ({
@@ -235,10 +250,12 @@ export class Extensions extends Service {
     this.stateFile = join(home, 'extensions.json')
     this.ledgerFile = join(home, 'extensions-ledger.jsonl')
     // Effects run their disposers newest first: settle pending operations, then dispose every mounted extension, then drop the hook.
-    ctx.effect(
-      () => resolveFromApp(this.stageRoot, root, routerAliases()),
-      'extensions: resolve staged imports from the app',
-    )
+    // Staged copies live in the app's home, outside the app: their bare imports are resolved from the app. A read-only start imports the folders where they are (inside the app).
+    if (!this.readOnly)
+      ctx.effect(
+        () => resolveFromApp(this.stageRoot, root, routerAliases()),
+        'extensions: resolve staged imports from the app',
+      )
     ctx.effect(
       () => async () => {
         for (const entry of [...this.installed.values()].reverse())
@@ -265,16 +282,19 @@ export class Extensions extends Service {
 
   /** Install a folder, or update the installed extension of the same name. The folder must be inside one of the sources. */
   install(source: string): Promise<InstallResult> {
+    if (this.readOnly) return Promise.reject(new Error(READ_ONLY))
     return this.serial(() => this.installNow(source))
   }
 
   /** Remove an installed extension: dispose it, forget it, delete its staged copies. Its source folder is left alone. */
   remove(name: string): Promise<RemoveResult> {
+    if (this.readOnly) return Promise.reject(new Error(READ_ONLY))
     return this.serial(() => this.removeNow(name))
   }
 
   /** Bring every installed extension in line with its source, and install new folders from sources trusted to install. */
   reload(): Promise<InstallResult[]> {
+    if (this.readOnly) return Promise.reject(new Error(READ_ONLY))
     return this.serial(async () => {
       const results: InstallResult[] = []
       for (const entry of [...this.installed.values()]) {
@@ -317,6 +337,7 @@ export class Extensions extends Service {
 
   /** Approve the version that is waiting, then install it. Refused when the source changed since it was requested. */
   approve(name: string): Promise<InstallResult> {
+    if (this.readOnly) return Promise.reject(new Error(READ_ONLY))
     return this.serial(async (): Promise<InstallResult> => {
       const request = this.requests.get(name)
       if (!request) {
@@ -349,6 +370,7 @@ export class Extensions extends Service {
 
   /** Refuse the version that is waiting. Nothing changes except the ledger. */
   deny(name: string): Promise<RemoveResult> {
+    if (this.readOnly) return Promise.reject(new Error(READ_ONLY))
     return this.serial(async (): Promise<RemoveResult> => {
       const request = this.requests.get(name)
       if (!request)
@@ -701,7 +723,62 @@ export class Extensions extends Service {
   }
 
   /** Never throws: one extension's failure is recorded and the others still start. */
+  /**
+   * The production start: every folder of a source that installs by itself is loaded from where it is and mounted; the line says which. An extension that the app's own record
+   * (`extensions.json`, written by dev) names while its folder is gone is named in a warning, because it is not started.
+   */
+  private async startupReadOnly(): Promise<StartupSummary> {
+    const summary: StartupSummary = { installed: [], pending: [], stale: [], failed: [] }
+    const found = this.discover()
+    for (const folder of found) {
+      if (folder.trust !== 'install') {
+        summary.pending.push(folder.name)
+        continue
+      }
+      try {
+        const module = await this.load(folder.dir, folder.name)
+        const mounted = await this.mount(module)
+        this.installed.set(folder.name, {
+          name: folder.name,
+          source: folder.dir,
+          version: hashFolder(folder.dir),
+          dir: folder.dir,
+          module,
+          fiber: mounted.fiber,
+        })
+        if (mounted.error !== undefined)
+          summary.failed.push({ name: folder.name, error: message(mounted.error) })
+        else summary.installed.push(folder.name)
+      } catch (error) {
+        summary.failed.push({ name: folder.name, error: message(error) })
+      }
+    }
+    this.say(
+      summary.installed.length === 0
+        ? `extensions: none found in ${this.sources.map((source) => basename(source.dir)).join(', ')}/`
+        : `extensions (read-only): ${summary.installed.join(', ')}`,
+    )
+    for (const failure of summary.failed)
+      this.say(`WARNING: extension "${failure.name}" did not start: ${failure.error}`)
+    try {
+      if (existsSync(this.stateFile)) {
+        for (const recorded of Object.keys(
+          JSON.parse(readFileSync(this.stateFile, 'utf8')) as Record<string, unknown>,
+        )) {
+          if (!found.some((folder) => folder.name === recorded))
+            this.say(
+              `WARNING: ${basename(this.stateFile)} records the extension "${recorded}", but ${this.sources.map((source) => basename(source.dir)).join(', ')}/ has no folder for it: it is not started in production. Commit its folder, or run the app in development and install it again`,
+            )
+        }
+      }
+    } catch {
+      // A record that cannot be read says nothing about what to start.
+    }
+    return summary
+  }
+
   private async startup(): Promise<StartupSummary> {
+    if (this.readOnly) return this.startupReadOnly()
     const summary: StartupSummary = { installed: [], pending: [], stale: [], failed: [] }
     let records: Record<string, Record_> = {}
     try {
