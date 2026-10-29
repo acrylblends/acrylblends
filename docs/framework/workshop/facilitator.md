@@ -1,107 +1,78 @@
-# Facilitator notes: the 90-minute ACRYL Blends workshop
+# Facilitator notes: an app that builds and drives itself
 
-Read the attendee handout first (`docs/framework/workshop/README.md`); this page is the room around it: what to put on each machine, what actually breaks, and
-where to cut when the clock runs. Every timing and every failure below was measured on the published `acrylblends` 1.0.0 during the readiness walk
-(`docs/plans/workshop-readiness.md`).
+Read the handout first (`docs/framework/workshop/README.md`); this page is the room around it. The workshop changed shape on 2026-10-29: the agent living in
+the app both builds its interface and drives it (clicks, sidebars, dialogs, settings), on the web and in a desktop window. The data layer and the template
+tour are asides now, and `/hello` is only the introduction to the framework core.
 
 ## Before the room: put this on every machine
 
 | What | Why | How |
 | --- | --- | --- |
-| Node.js 22.19 or newer, npm 11 | the app runs TypeScript directly, no build step | `node -v`; if missing, the LTS from nodejs.org or `brew install node` |
-| git | the registry block clones the registry | `git --version` |
-| A warm npm cache | the first `npm create` downloads the initializer, `npm install` downloads Electron | create one app and add the desktop shell once per machine (below) |
-| A coding agent, logged in | step 7 drives Codex or Claude Code through the panel | `codex login status` or run `claude` once |
-| `~/acryl-workshop/prepared/` | the no-network fallback and the reset | copy the two prepared apps (below) |
-| A GitHub account with `gh auth login` | step 10 forks the workshop registry and opens a pull request | `gh auth status` |
-| A device with `git` and a text editor | the edits in steps 2, 4 and 8 are small but real | `git --version` |
+| Node.js 22.19 or newer (26 tested) | the app runs TypeScript directly | `node -v`; the app's own `scripts/check-node.cjs` refuses an older Node with a clear line |
+| git, and a GitHub account with `gh auth login` | the last block forks the workshop registry and opens a pull request | `git --version`, `gh auth status` |
+| One coding agent, logged in | the panel drives it; `codex`, `claude` and `pi` all worked | `codex login` once, or run `claude`/`pi` in a terminal |
+| A prepared app with Electron already downloaded | the desktop block is 15 minutes and the download is the slowest part | run the handout's blocks 1 and 4 once per machine, then keep the folder as `~/acryl-workshop/prepared/` |
+| A warm npm cache | the first `npm create` and the Electron download dominate the first ten minutes | the prepared app does it |
 
-Warm-up, once per machine (this is also the exact smoke test that the room works):
+**The agent config that decides the day.** The panel's agent is configured to act rather than describe. Check on every machine that a plain request
+produces files, not a plan: ask the prepared app's panel "say hello in a card on the page" and watch the first tool call appear within a few seconds. If
+it only describes, the config is not in place (1.0.4-E) or the model is waiting for permission; the handout's sentence is "do it now".
 
-```sh
-mkdir -p ~/acryl-workshop && cd ~/acryl-workshop
-npm create acrylblends@latest warmup notes
-cd warmup && npm install && npm test
-npx acrylblends add desktop && npm install
-cd ~/acryl-workshop && cp -R warmup prepared-notes && rm -rf warmup
-```
+## Timings, from the capability run
 
-That leaves `prepared-notes` with everything installed, including Electron.
-
-## Timings, checkpoints, and what to make optional
-
-The handout's own timings, as measured on the published 1.0.2 (macOS, cold npm cache in a throwaway home):
-
-| Minutes | Step | Measured | If late |
+| Minutes | Block | Measured | If late |
 | --- | --- | --- | --- |
-| 0-10 | installs and checks | seconds each | never cut |
-| 10-15 | create and run the blank app | create 9 s cold (2 s warm), install 2 s, boot 2 s | never cut |
-| 15-22 | change one route | reload is instant | never cut |
-| 22-30 | tests and the typecheck | test 0.5-2 s, check 2.5-4 s | keep; cut the "write a test" exercise |
-| 30-38 | data: JSON then SQLite (**optional**) | two adds plus edits, ~8 min | **cut first** |
-| 38-45 | the desktop window | add 2 s, install 3 s, first Electron boot ~20 s | pre-warm Electron on every machine or demo it |
-| 45-53 | pull a starter | create 4 s, install 3 s, runs at once | keep; it is the fastest win in the room |
-| 53-60 | create from a template | create + install + add desktop 4 s | drop the second app |
-| 60-75 | the agent builds a feature | set-up 4 s; codex wrote a page and tests in about 7 minutes | never cut; demo it if the room is behind |
-| 75-82 | upgrade | seconds: a fresh app answers "everything is up to date" | keep; it is a 2-minute talk |
-| 82-90 | publish and the hero moment | the registry steps are seconds; the PR is talk | always keep at least the hero talk |
+| 0-10 | setup and `/hello` | create and install seconds; the route reload instant | never cut |
+| 10-40 | the agent builds the interface | the build is one run; allow 8-12 minutes, plus edits | if late, keep the board minimal (one column) |
+| 40-60 | the agent drives the app | a model-driven drive took codex 28 s, claude 17 s, pi 48 s (on the desktop window, 1.0.x) | the drive is the point; cut the second "check its own work" prompt |
+| 60-75 | the same app in a window | add + install seconds; first Electron boot about 20 s | pre-warm Electron or demo it |
+| 75-90 | deploy and publish | the registry check merges in about 2 minutes | keep the publish; the deploy talk can be 3 minutes |
 
-Checkpoints in the handout, and what to look for as you walk the room: **15 minutes** every screen shows `{"app":"my-hero","ok":true}`; **45 minutes**
-every screen has the app in a desktop window; **75 minutes** every screen has `/board` open with the agent's page. A machine behind at a checkpoint is
-what the optional column is for, and the handout names the same choices so nobody has to guess.
+Checkpoints in the handout: 10 minutes a route answers; 40 minutes the agent's board is on screen; 60 minutes the agent has clicked through it; 75 minutes
+the window is open. Walk the room at those minutes and help the machine that is behind, rather than the one that is ahead.
 
-## What breaks in the room, and what to say
+## What is not in 1.0.x yet, and what to say
 
-These are the defects found by the walk. They are known; say so rather than letting people think they broke something.
+The capability report is the source; these are the ones the handout touches.
 
-- **The data step is the slow one.** Wiring `kv` then `db` by hand is about ten minutes of edits for a newcomer (two rows, two registry lines, two
-  type imports, the migrations folder). It is the block the handout names optional, and the one to help with first.
-- **A relative migrations path in `blend.yaml` fails.** `migrations: migrations` in the row stops the app with "this app has no file base URL to
-  resolve it from". The folder is named in `src/app.ts`'s compose options instead; the handout teaches that form and the stuck line names the error.
-- **`pi` shows up only when the app can see its login.** 1.0.2 offers pi as a chat driver when `DEEPSEEK_API_KEY` is exported or `~/.pi/agent/auth.json`
-  holds a deepseek entry, read from the HOME the app runs in. On a normal attendee machine it is there; in a run with a moved HOME it is not (and pi
-  would fail on its first message anyway). `pty:pi` needs only the program.
-- **The agent run takes minutes, not seconds.** Codex wrote the page and its tests in about seven; tell the room to start it and keep talking.
-- **Publishing.** The workshop registry is `github.com/acryldev/workshop-2026-11-20`, public and open. Attendees fork it, run
-  `node scripts/make-entry.mjs ../agent-app <login>.agent-app --description "..."`, push and open a pull request; a check merges it, usually well under
-  two minutes, and a refusal comes as a comment. Taking an app down is a pull request that removes its folder. Pulling is
-  `--from <id> --registry github:acryldev/workshop-2026-11-20` (rehearsed on 1.0.2: create 12 s, install 3 s, runs at once).
-- **Browser-only attendees (TODO(M9)).** The handout's hosted-workspace stub is empty until M9 is live; until then a browser-only attendee can follow
-  along but not create an app.
-- **node-pty's install script (C5).** `npm install` warns that npm 11 blocked `node-pty`'s script. The terminal drivers still list; the workshop does
-  not open one.
+- **TODO(1.0.4-A), reload and navigate inside one run.** Today the user reloads the browser after the agent installs the plugin, and asks it to check in
+  a second message. Say so plainly; it costs one sentence, not a step.
+- **TODO(1.0.4-B), the door script on every development page.** On a page without it the agent cannot see anything and says so. Fallback: the `pty:` tab
+  and `.acryl/bin/acryl look` / `act`.
+- **TODO(1.0.4-E), a clean agent config.** The prompt noise and the "shall I proceed?" habit are what the config fixes; until every machine has it, the
+  "do it now" sentence in the handout is the workaround.
+- **TODO(1.0.4-D), CLI noise.** The `acryl` command's chatter is being trimmed; nothing in the workshop depends on it, but it is the difference between a
+  screen that reads well and one that does not.
+- **Later: C (Electron windows, menus and native settings, target 11-05) and F (the door through a DeepSeek model with no login).** Do not promise either
+  in the room. C is the difference between driving the page in the window (works) and driving the app's own menus (not yet); F is what a workshop without
+  a hosted model login would want.
 
 ## The no-network fallback
 
-If the venue has no reliable network:
+1. Prepared apps on every machine cover blocks 1-3; the agent's model still needs the network, so block 2 and 3 need a connection or a demo.
+2. Block 5's registry needs GitHub; if the venue is offline, publish from your machine on a hotspot at the end, or show the recording.
+3. Keep one phone hotspot for the room.
 
-1. Every machine gets `prepared-notes` and a prepared agent app from the sheet above, so steps 1-6 skip creation and installs.
-2. Step 8 uses the cloned registry and the installed `blends-core`; no network needed.
-3. Step 7 needs the agent's own model, so it cannot run offline. Demo it from your machine on a tethered connection, or record it (a 4-minute
-   screen recording of the codex run is enough).
-4. Keep one machine on a phone hotspot for `npm create` failures.
+## Demo script (five minutes, if the room is behind)
 
-## Demo script for the agent block (5 minutes, if you demo instead of hands-on)
+1. Prepared app, panel open: ask for a card with a count. Narrate the tool calls as they stream and the page as it reloads.
+2. Ask: "open the sidebar, tick one card, change the filter to done, tell me the counts." Point at the "agent is driving" indicator and the stop button.
+3. Show `.acryl/audit/` afterwards: every action is a line.
+4. Switch to the desktop window and repeat one click there.
+5. Show the registry listing with an app already published, and the four commands that put it there.
 
-1. On the prepared agent app: `npm run dev`, open the page, click the panel button.
-2. Ask: "Add a route GET /agent-built to src/routes.ts that returns {\"built\": true}, then run the tests and tell me what happened."
-3. Narrate while it runs: the agent reads `AGENTS.md`, reads `docs/framework`, edits `src/routes.ts`, runs the tests; the terminal prints
-   `Change detected … Restarting`; reload `/agent-built` and show `{"built":true}`.
-4. Point at the panel's stop button and the audit line the panel writes under `.acrylblends/audit/`.
+## Screenshots
+
+Not shot yet. They are taken once 1.0.4 is published, from real runs: the terminal after `npm create` and the first URL (S1), the panel mid-build (S2), the
+page the agent built (S3), the agent driving with the indicator and an opened sidebar (S4), the real Electron window (S5), the registry listing (S6).
+1280 wide, light theme, no personal data, tokens or real home paths; WebP or an optimised PNG next to the handout with alt text.
 
 ## Resetting between sessions
 
-Everything a person makes lives inside their app folder and `~/acryl-workshop`. To reset a machine:
-
-```sh
-rm -rf ~/acryl-workshop/[a-z]*-app ~/acryl-workshop/registry
-cp -R ~/acryl-workshop/prepared/* ~/acryl-workshop/    # if you keep a prepared/ folder
-```
-
-Nothing is installed globally except the agent and Bun; neither needs cleaning between sessions.
+Everything a person makes lives inside their app folder and `~/acryl-workshop`. To reset a machine, delete the app folders and copy the prepared one back;
+nothing is installed globally except the agent, `gh` and Node.
 
 ## What is still open
 
-- Starter pull (B1), the panel's rows (C1) and the upgrade command in the docs (B2) are with the framework team; when they land, the handout's
-  TODO lines become normal steps and this page's "what breaks" list shrinks.
-- The Windows and Linux runs of the attendee handout are being replayed separately; add what differs to the handout's OS column rather than here.
+- The full text is written against 1.0.4-A and 1.0.4-B as designed; when those ship the TODO lines become normal steps, and the screenshots are taken.
+- The handout's hosted-workspace section (browser-only attendees) stays TODO(M9) until that workspace is live.
