@@ -9,12 +9,17 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, type MenuItem, shell } from 'electron'
 import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
 import { selectInstance } from '../instance/index.ts'
 import { runningApp } from './attach.ts'
-import { type DesktopPort, startDoorShell, type WindowPort } from './door-shell.ts'
+import {
+  type DesktopPort,
+  type MenuItemPort,
+  startDoorShell,
+  type WindowPort,
+} from './door-shell.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { windowOptions } from './window.ts'
@@ -123,10 +128,23 @@ if (!app.requestSingleInstanceLock()) {
       close: () => candidate.close(),
       setSize: (width, height) => candidate.setSize(width, height),
     })
+    // Pressing an item as Electron's own menu does: with the window that has focus (the roles reload, zoom and close act on it).
+    const menuItem = (item: MenuItem): MenuItemPort => ({
+      label: item.label,
+      enabled: item.enabled,
+      visible: item.visible,
+      type: item.type,
+      role: item.role,
+      submenu: item.submenu === undefined ? null : { items: item.submenu.items.map(menuItem) },
+      click: () => {
+        const target = BrowserWindow.getFocusedWindow() ?? live()[0]
+        item.click(undefined, target, target?.webContents)
+      },
+    })
     const desktop: DesktopPort = {
       windows: () => live().map(port),
       open: (path) => port(createWindow(path ?? startPath())),
-      menu: () => Menu.getApplicationMenu()?.items ?? [],
+      menu: () => (Menu.getApplicationMenu()?.items ?? []).map(menuItem),
     }
     stopDoorShell = startDoorShell(projectRoot, { desktop, log: console.log })
   })

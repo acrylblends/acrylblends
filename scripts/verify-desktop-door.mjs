@@ -153,7 +153,13 @@ try {
     fail(
       `the desktop shell did not connect to the door (window list):\n${acryl('window', 'list').err}\n${desktop.output}\n${dev.output}`,
     )
-  if (!desktop.output.includes('attached to the app already running'))
+  // The line comes from Electron's own stdout, which a Windows pipe delivers a moment after the window works.
+  if (
+    !(await until(
+      async () => desktop.output.includes('attached to the app already running'),
+      20_000,
+    ))
+  )
     fail(`the desktop app did not attach:\n${desktop.output}`)
   log(`attached: window list sees window ${first.id}`)
 
