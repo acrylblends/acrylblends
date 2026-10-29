@@ -13,6 +13,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
 import { selectInstance } from '../instance/index.ts'
+import { runningApp } from './attach.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { windowOptions } from './window.ts'
@@ -65,9 +66,21 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     // The hook above is registered before the app's modules are loaded, so the app may have .tsx pages: they are loaded here, not as a static import.
-    const { createApp } = await import('../../src/app.ts')
-    running = await createApp(chosen)
-    const origin = new URL(running.url).origin
+    // A dev server is already running from this folder (`npm run dev`): the door allows one process per folder, so the window opens on that server instead of starting a second one,
+    // and closing the window leaves it running.
+    const attached = await runningApp(projectRoot)
+    let url: string
+    if (attached !== undefined) {
+      console.log(
+        `desktop: attached to the app already running from this folder at ${attached.url} (its server keeps running when the window closes)`,
+      )
+      url = attached.url
+    } else {
+      const { createApp } = await import('../../src/app.ts')
+      running = await createApp(chosen)
+      url = running.url
+    }
+    const origin = new URL(url).origin
     window = new BrowserWindow(windowOptions({ title: chosen.name }))
     window.once('ready-to-show', () => window?.show())
     // Navigation stays on the app's own server; any other address opens in the system browser.
@@ -80,6 +93,6 @@ if (!app.requestSingleInstanceLock()) {
       event.preventDefault()
       void shell.openExternal(url)
     })
-    await window.loadURL(new URL(startPath(), running.url).href)
+    await window.loadURL(new URL(startPath(), url).href)
   })
 }

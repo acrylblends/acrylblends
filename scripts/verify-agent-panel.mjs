@@ -70,7 +70,7 @@ try {
   const app = join(scratch, 'app')
   run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
   // `add` mounts the panel (and driver-acp) itself: the rows in blend.yaml and the entries in the registry of src/app.ts.
-  run(process.execPath, [cli, 'add', 'agent-panel', ...(acp ? ['driver-acp'] : [])], app)
+  if (acp) run(process.execPath, [cli, 'add', 'driver-acp'], app)
   run('npm', ['install', '--no-audit', '--no-fund'], app)
   run('npm', ['run', 'check'], app)
   log('the panel is added to a fresh agent app, which type-checks')

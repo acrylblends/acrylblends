@@ -565,26 +565,32 @@ describe('add agent-panel and driver-pty', () => {
     expect(pty.err()).toContain('needs the `agent-panel` row')
   })
 
-  it('mounts the panel and the PTY driver in an agent app: the rows and the registry, once, and says how to approve node-pty', async () => {
+  it('the agent template ships the panel; add driver-pty and driver-acp mount after it, once, and add agent-panel says it is there', async () => {
     expect(
       await runCli(['init', 'agent-panel-app', '--template', 'agent', '-y'], fakeIo().io),
     ).toBe(0)
     const dir = join(scratch, 'agent-panel-app')
+    const shipped = readFileSync(join(dir, 'blend.yaml'), 'utf8')
+    expect(shipped).toMatch(/- id: agent-panel\n {6}name: agent-panel\n {4}- id: routes\n/u)
+    expect(readFileSync(join(dir, 'src/app.ts'), 'utf8')).toContain("'agent-panel': panel,")
+    expect(existsSync(join(dir, 'plugins/agent-panel/index.ts'))).toBe(true)
+    const again = fakeIo()
+    expect(await runCli(['add', 'agent-panel', '--dir', dir], again.io)).toBe(1)
+    expect(again.err()).toContain('already has plugins/agent-panel')
     const session = fakeIo()
-    expect(await runCli(['add', 'agent-panel', 'driver-pty', '--dir', dir], session.io)).toBe(0)
+    expect(
+      await runCli(['add', 'driver-pty', 'driver-acp', '--dir', dir], session.io),
+      session.err(),
+    ).toBe(0)
     const rows = readFileSync(join(dir, 'blend.yaml'), 'utf8')
     expect(rows).toMatch(
-      /- id: agent-panel\n {6}name: agent-panel\n {4}- id: driver-pty\n {6}name: driver-pty\n {4}- id: routes\n/u,
+      /- id: agent-panel\n {6}name: agent-panel\n(?: {4}- id: driver-(?:pty|acp)\n {6}name: driver-(?:pty|acp)\n){2} {4}- id: routes\n/u,
     )
     const app = readFileSync(join(dir, 'src/app.ts'), 'utf8')
-    expect(app).toContain("import * as panel from '../plugins/agent-panel/index.ts'")
     expect(app).toContain("import * as driverPty from '../plugins/driver-pty/index.ts'")
-    expect(app).toContain("'agent-panel': panel,")
     expect(app).toContain("'driver-pty': driverPty,")
-    expect(session.out()).toContain('mounted in blend.yaml (row agent-panel) and src/app.ts')
-    expect(session.out()).toContain('npm approve-scripts node-pty')
-    // The rows are in place for the next start; nothing else of the app changed.
-    expect(rows).toContain('- id: agent\n      name: agent')
+    expect(app).toContain("'driver-acp': driverAcp,")
+    expect(session.out()).toContain('node-pty')
   })
 })
 

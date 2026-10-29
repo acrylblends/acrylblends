@@ -67,7 +67,7 @@ try {
   const app = join(scratch, 'app')
   run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
   // `add` mounts both itself (the rows and the registry); the gate only gives the driver its scripted program.
-  run(process.execPath, [cli, 'add', 'agent-panel', 'driver-pty'], app)
+  run(process.execPath, [cli, 'add', 'driver-pty'], app)
   writeFileSync(join(app, 'agent-script.mjs'), AGENT)
   const yaml = join(app, 'blend.yaml')
   const before = readFileSync(yaml, 'utf8')

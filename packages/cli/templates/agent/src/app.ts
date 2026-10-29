@@ -7,6 +7,7 @@ import * as nodeServer from '../plugins/acryl-node-server/src/index.ts'
 import * as router from '../plugins/acryl-router/src/index.ts'
 import * as state from '../plugins/acryl-state/src/index.ts'
 import { agent, memory, model, tools } from '../plugins/agent/index.ts'
+import * as panel from '../plugins/agent-panel/index.ts'
 import { builder } from '../plugins/builder/index.ts'
 import { extensions } from '../plugins/extensions/index.ts'
 import { type AppInstance, instance } from '../plugins/instance/index.ts'
@@ -37,6 +38,7 @@ export const registry = {
   sandbox: sandboxPlugin,
   routes,
   'acryl-node-server': nodeServer,
+  'agent-panel': panel,
   'acryl-door': door,
 }
 
