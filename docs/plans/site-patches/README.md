@@ -44,6 +44,20 @@ Nine primitives, none checkable - "Checkpoint & rollback" (a differentiation eng
 - "Plugins like the one above are published on cordisplugins.github.io, the sibling registry this site's own Blends pull from" is replaced by a link to the plugin-lifecycle page: no Blend in the registry composes that plugin, so the claim could not be shown.
 - The oldest release-notes page (0.3.0) now points at the GitHub releases list for the releases without a page (0.5.1, 0.6.0, 0.6.2, 0.6.3, 0.6.4) instead of leaving the gap silent; no pages are added for them.
 
+## acrylblends.github.io/0008 - every docs code block gets a copy button, and its scrollbar is visible
+
+Patch 0004-0007 came from Blends. This one is the workshop page's usability fix, found by opening the live page in a browser: the long registry command
+continued past the code block's right edge and the reader could not tell, because the theme's overlay scrollbar only shows while scrolling, and there was
+no way to copy a command without selecting it by hand.
+
+- The markdown renderer wraps every `<pre>` in a `.md-code` container with a copy button: it copies the block's exact text (no prompt characters), shows
+  "Copied" for 1.5 s, and falls back to selecting the block and `document.execCommand('copy')` when `navigator.clipboard` is refused.
+- The scrollbar is thin and visible in both themes (`scrollbar-width: thin`, `scrollbar-color: var(--code-muted) transparent`, with the webkit
+  pseudo-elements styled so Chrome and Safari draw a classic thin bar rather than an overlay).
+- Checked in a headless browser without `--hide-scrollbars` at 1280 px and 400 px, light and dark: the long block scrolls inside itself (scrollWidth 988
+  against clientWidth 766 and 358) while the document never scrolls sideways, the bar is visible, and the button's clipboard content equals the block's
+  text at both widths.
+
 ## acryl.dev/0001 - /docs/platform is the Cordis platform, not the DSH one
 
 The page described ACRYL as "a clean plugin layer over DeepSeek Harness", installed DSH packages as its main path, and listed a five-item DSH compatibility contract.

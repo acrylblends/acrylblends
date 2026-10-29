@@ -135,8 +135,9 @@ const readBodyBufferedBeforeDisconnect = (
     result = newBodyUnusableError()
   } else {
     const bodyChunks = chunks ?? []
-    const chunk = incoming.read() as Buffer | string | null
-    if (chunk !== null) {
+    // Drain what is still buffered. On a destroyed stream one read() returns all of it on some Node versions and only the first chunk on others (Node 26), so read until
+    // the stream says there is no more: that is what Readable#read() promises, and it needs nothing of Node's internals.
+    for (let chunk = incoming.read() as Buffer | string | null; chunk !== null; chunk = incoming.read()) {
       bodyChunks.push(toBufferChunk(chunk, incoming.readableEncoding))
     }
     const buffer = bodyChunks.length === 1 ? bodyChunks[0] : Buffer.concat(bodyChunks)

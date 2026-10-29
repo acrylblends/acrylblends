@@ -1,8 +1,9 @@
 /** The standalone adapter over real sockets: serving, connection facts, port scan, streams, disposal, reload. */
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { Acryl, apply as routerApply, connectionOf, name as routerName } from 'acryl-router'
 import { streamSSE } from 'acryl-router/helpers'
@@ -70,13 +71,20 @@ describe('acryl-node-server', () => {
 
   it('serves files from disk through a mounted app', async () => {
     const ctx = await boot()
-    const root = fileURLToPath(new URL('./adapter/assets', import.meta.url))
-    ctx.router.route('/', new Acryl().use('/static/*', nodeServer.serveStatic({ root })))
-    const found = await fetch(`${ctx.nodeServer.url}/static/plain.txt`)
-    expect(found.status).toBe(200)
-    expect(found.headers.get('content-type')).toBe('text/plain; charset=utf-8')
-    expect(await found.text()).toBe(readFileSync(`${root}/static/plain.txt`, 'utf8'))
-    expect((await fetch(`${ctx.nodeServer.url}/static/missing.txt`)).status).toBe(404)
+    // The test's own folder: the shared fixtures of tests/adapter/assets are changed by other test files running at the same time (serve-static.test.ts removes the read permission of static/plain.txt for one test).
+    const root = mkdtempSync(join(tmpdir(), 'node-server-static-'))
+    mkdirSync(join(root, 'static'))
+    writeFileSync(join(root, 'static', 'plain.txt'), 'This is plain.txt\n')
+    try {
+      ctx.router.route('/', new Acryl().use('/static/*', nodeServer.serveStatic({ root })))
+      const found = await fetch(`${ctx.nodeServer.url}/static/plain.txt`)
+      expect(found.status).toBe(200)
+      expect(found.headers.get('content-type')).toBe('text/plain; charset=utf-8')
+      expect(await found.text()).toBe('This is plain.txt\n')
+      expect((await fetch(`${ctx.nodeServer.url}/static/missing.txt`)).status).toBe(404)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('aborts the handler signal when the client goes away', async () => {
