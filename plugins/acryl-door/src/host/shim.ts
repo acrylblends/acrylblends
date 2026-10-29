@@ -8,7 +8,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensureStateDir } from './door-file.ts'
 
@@ -70,11 +70,47 @@ export function windowsShim(root: string, target: ShimTarget): string {
   return `@echo off\r\nsetlocal\r\nrem This app's door (acryl-door): reaches only the app running from this folder. Rewritten each time the app starts.\r\n${env}${words} %*\r\n`
 }
 
-function writeAtomically(file: string, content: string, mode: number): void {
+/** The error codes with which Windows refuses to replace a file that a running process (a `cmd.exe` executing the batch file) has open. */
+const LOCKED = new Set(['EPERM', 'EBUSY', 'EACCES'])
+
+export interface ShimFs {
+  readonly rename: (from: string, to: string) => void
+  readonly pause: (ms: number) => void
+}
+
+const realFs: ShimFs = {
+  rename: renameSync,
+  // A synchronous sleep: the door writes the shims while it starts, and the wait is a few milliseconds at most.
+  pause: (ms) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) },
+}
+
+/**
+ * Write `content` to `file` so a reader never sees half of it. A shim that already holds this content is left alone: a restart of the app (the dev server restarts on a change)
+ * rewrites the same text, and on Windows replacing a batch file that an agent's `acryl` call is running fails with EPERM, which stopped the app from starting. A file that
+ * is held while its content differs is retried for about a second, and then reported: the old shim stays (it still works), and the app starts.
+ */
+export function writeAtomically(file: string, content: string, mode: number, fs: ShimFs = realFs): void {
+  try {
+    if (readFileSync(file, 'utf8') === content) return
+  } catch {
+    // Not there yet, or unreadable: write it.
+  }
   const temporary = `${file}.${String(process.pid)}.tmp`
   writeFileSync(temporary, content, { mode })
   if (process.platform !== 'win32') chmodSync(temporary, mode)
-  renameSync(temporary, file)
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      fs.rename(temporary, file)
+      return
+    } catch (cause) {
+      const code = (cause as NodeJS.ErrnoException).code
+      if (code === undefined || !LOCKED.has(code) || attempt >= 10) {
+        rmSync(temporary, { force: true })
+        throw cause
+      }
+      fs.pause(25 * (attempt + 1))
+    }
+  }
 }
 
 /** Write `.acryl/bin/acryl` and `.acryl/bin/acryl.cmd` for the app at `root`. @returns the folder they are in. */

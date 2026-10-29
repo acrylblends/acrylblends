@@ -169,7 +169,8 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   ctx.effect(function* () {
     yield ctx.reflect.provide('door', door)
     writeDoorFile(app.root, loopbackUrl(server.url), secret)
-    writeShims(app.root, shimTarget())
+    // A shim that cannot be replaced (Windows, held open by a running `acryl`) leaves the old one in place; it must not stop the app from starting.
+    try { writeShims(app.root, shimTarget()) } catch (cause) { reportError('write .acryl/bin', cause) }
     yield () => { removeDoorFile(app.root, secret) }
   }, 'acryl-door: the door service, .acryl/door.json and .acryl/bin/acryl')
 }
