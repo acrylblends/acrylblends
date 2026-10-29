@@ -99,10 +99,17 @@ if (!app.requestSingleInstanceLock()) {
       const where = (() => {
         if (beside === undefined) return {}
         const bounds = beside.getBounds()
-        return cascade(bounds, screen.getDisplayMatching(bounds).workArea, {
-          width: 1100,
-          height: 760,
-        })
+        // The places of the windows that are open: a new window never goes exactly where one already is.
+        const taken = BrowserWindow.getAllWindows()
+          .filter((other) => !other.isDestroyed())
+          .map((other) => other.getPosition())
+          .map(([x = 0, y = 0]) => ({ x, y }))
+        return cascade(
+          bounds,
+          screen.getDisplayMatching(bounds).workArea,
+          { width: 1100, height: 760 },
+          taken,
+        )
       })()
       const created = new BrowserWindow(windowOptions({ title: chosen.name, ...where }))
       created.webContents.setUserAgent(
@@ -136,6 +143,7 @@ if (!app.requestSingleInstanceLock()) {
       isFocused: () => candidate.isFocused(),
       isMinimized: () => candidate.isMinimized(),
       getSize: () => candidate.getSize(),
+      getPosition: () => candidate.getPosition(),
       restore: () => candidate.restore(),
       focus: () => candidate.focus(),
       close: () => candidate.close(),

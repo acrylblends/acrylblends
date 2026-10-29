@@ -298,6 +298,28 @@ describe('waiting for pages to come back', () => {
       await back
     })
 
+    it('waits for a page that is moving to register (a look right after a navigate), and fails with no-window when none does', async () => {
+      const channel = new UiChannel({ attachWaitMs: 300 })
+      const looking = channel.call(lookOp)
+      setTimeout(() => { fakePage(channel, 'back', true, undefined, 'full') }, 60)
+      expect(await looking).toEqual({ ok: true, detail: 'back' })
+      const none = new UiChannel({ attachWaitMs: 100 })
+      const started = Date.now()
+      expect(await codeOf(none.call(lookOp))).toBe('no-window')
+      expect(Date.now() - started).toBeGreaterThanOrEqual(90)
+      // A call that changes the page never waits: it would be a guess about which page the person meant.
+      expect(await codeOf(none.call(click))).toBe('no-window')
+    })
+
+    it('gives a read-only call that no page acknowledged one more try when a page registered meanwhile', async () => {
+      const channel = new UiChannel({ ackMs: 40, attachWaitMs: 400 })
+      fakePage(channel, 'old', true)
+      const looking = channel.call(lookOp)
+      // The old page never speaks; the page it was moving to registers while the door waits.
+      setTimeout(() => { fakePage(channel, 'new', true, undefined, 'full') }, 120)
+      expect(await looking).toEqual({ ok: true, detail: 'new' })
+    })
+
     it('tells expectNewPage which page came back: a window id that was not connected when it was asked', async () => {
       const channel = new UiChannel()
       fakePage(channel, 'old', true)

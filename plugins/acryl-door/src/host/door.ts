@@ -71,7 +71,7 @@ function renderShell(result: ShellResult): string {
   if ('windows' in result) {
     return result.windows.length === 0
       ? 'no windows are open'
-      : result.windows.map(window => `${String(window.id)}  ${JSON.stringify(window.title)}  ${window.path}  ${String(window.width)}x${String(window.height)}${window.focused ? '  focused' : ''}`).join('\n')
+      : result.windows.map(window => `${String(window.id)}  ${JSON.stringify(window.title)}  ${window.path}  ${String(window.width)}x${String(window.height)}${window.x === undefined || window.y === undefined ? '' : `@${String(window.x)},${String(window.y)}`}${window.focused ? '  focused' : ''}`).join('\n')
   }
   if ('items' in result) return result.items.length === 0 ? 'the app has no menu' : result.items.map(item => `${item.path}${item.enabled ? '' : '  (disabled)'}${item.ends === true ? '  (ends the app; needs force)' : ''}`).join('\n')
   return result.detail

@@ -316,25 +316,38 @@ async function start(): Promise<void> {
    */
   const watch = async (source: RunSource, own: boolean): Promise<void> => {
     let live = true
-    following = true
-    send.disabled = true
-    stop.disabled = false
     let changed = false
     let answer: HTMLElement | undefined
     let answered = ''
-    // A coding agent started headless says little until it is done, so the panel says it is working, and for how long.
-    const started = Date.now()
-    const working = line('', 'working')
+    // A coding agent started headless says little until it is done, so the panel says it is working, and for how long (from when the run began, not from when this page loaded).
+    let started = Date.now()
+    let working: HTMLElement | undefined
+    let timer: ReturnType<typeof setInterval> | undefined
     const tick = (): void => {
-      const seconds = Math.floor((Date.now() - started) / 1000)
+      if (working === undefined) return
+      const seconds = Math.max(0, Math.floor((Date.now() - started) / 1000))
       working.textContent = `Working... ${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`
       log.append(working)
     }
-    tick()
-    const timer = setInterval(tick, 1000)
+    // The panel is busy once there is a run to show. A page that just loaded asks the server for the latest run first, and "there is none" must not make a message typed in that moment
+    // wait or vanish, so a run that is only being looked for does not count (it begins at its first event).
+    const begin = (): void => {
+      if (working !== undefined) return
+      following = true
+      send.disabled = true
+      stop.disabled = false
+      working = line('', 'working')
+      tick()
+      timer = setInterval(tick, 1000)
+    }
+    if (own) begin()
     try {
       for await (const { event, data } of source.events) {
+        if (event === 'idle') continue
+        begin()
         if (event === 'run') {
+          if (typeof data.startedAt === 'number') started = data.startedAt
+          tick()
           live = data.ended !== true
           if (!own) {
             if (typeof data.message === 'string') line(data.message, 'me')
@@ -365,11 +378,13 @@ async function start(): Promise<void> {
     } catch (error) {
       line(`The request failed: ${error instanceof Error ? error.message : String(error)}`, 'err')
     } finally {
-      clearInterval(timer)
-      working.remove()
-      following = false
-      send.disabled = false
-      stop.disabled = true
+      if (timer !== undefined) clearInterval(timer)
+      if (working !== undefined) {
+        working.remove()
+        following = false
+        send.disabled = false
+        stop.disabled = true
+      }
     }
     // A plugin was installed or removed while this page watched: the new feature is served by the running app, so the page only needs to be loaded again (unless something is being typed).
     // A run that ended before this page loaded was already shown after its reload, and does not reload it again.

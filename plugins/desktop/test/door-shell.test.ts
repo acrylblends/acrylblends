@@ -27,6 +27,7 @@ function fakeDesktop() {
       isFocused: () => id === 1,
       isMinimized: () => window.minimized,
       getSize: () => window.size,
+      getPosition: () => [100 + 32 * (id - 1), 80 + 32 * (id - 1)],
       restore: () => {
         window.minimized = false
         log.push(`restore ${String(id)}`)
@@ -86,7 +87,9 @@ const refused = (code: string) => (error: unknown) =>
 test('window list names each window with its path (never its origin), size and focus', () => {
   const { desktop } = fakeDesktop()
   assert.deepEqual(handleShellCall({ op: 'window-list' }, desktop), {
-    windows: [{ id: 1, title: 'demo 1', path: '/', focused: true, width: 1000, height: 700 }],
+    windows: [
+      { id: 1, title: 'demo 1', path: '/', focused: true, width: 1000, height: 700, x: 100, y: 80 },
+    ],
   })
 })
 
@@ -270,7 +273,18 @@ test('the shell answers a call of the door, or refuses it with a code, and follo
         t: 'result',
         id: 4,
         value: {
-          windows: [{ id: 1, title: 'demo 1', path: '/', focused: true, width: 1000, height: 700 }],
+          windows: [
+            {
+              id: 1,
+              title: 'demo 1',
+              path: '/',
+              focused: true,
+              width: 1000,
+              height: 700,
+              x: 100,
+              y: 80,
+            },
+          ],
         },
       },
     })

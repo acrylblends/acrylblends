@@ -445,6 +445,55 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   log(
     'E: kept to the event stream, six held connections make a look fail in seconds with a named reason, and it works again once they are free',
   )
+
+  // F, a message typed the moment the page loads: the panel is still asking the server for the latest run (over its socket) and the answer "there is none" is slow. The message must be
+  // asked and answered, not dropped because the panel believed it was busy following a run that does not exist (this lost a message in CI on a slow runner).
+  const slow = await panelCdp.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `(() => {
+      const Real = window.WebSocket
+      window.WebSocket = new Proxy(Real, {
+        construct(target, args) {
+          const socket = new target(...args)
+          if (String(args[0]).includes('/run/ws')) {
+            // Frames and the close arrive late but in their order, as a slow network would deliver them.
+            for (const name of ['onmessage', 'onclose']) {
+              const own = Object.getOwnPropertyDescriptor(Real.prototype, name)
+              Object.defineProperty(socket, name, { configurable: true, set(handler) { own.set.call(socket, (event) => setTimeout(() => handler.call(socket, event), 1500)) } })
+            }
+          }
+          return socket
+        },
+      })
+    })()`,
+  })
+  await panelCdp.send('Page.navigate', { url: `${base}/p1` })
+  await until(
+    async () =>
+      (await inPage(
+        "!!document.getElementById('agent-panel')?.shadowRoot?.querySelector('button.open')",
+      )) === true,
+    20_000,
+  )
+  await sleep(300)
+  await inPage(
+    "(() => { const root = document.getElementById('agent-panel').shadowRoot; root.querySelector('button.open').click(); const box = root.querySelector('textarea'); box.value = 'add 4 5'; root.querySelector('form').requestSubmit(); return true })()",
+  )
+  const typedEarly = await until(async () => {
+    const lines = await inPage(panelLog)
+    return (
+      Array.isArray(lines) &&
+      lines.some((entry) => entry.startsWith('msg md|') && entry.includes('9')) &&
+      lines
+    )
+  }, 20_000)
+  if (!typedEarly)
+    fail(
+      `F: a message typed while the panel looked for the latest run was dropped: ${JSON.stringify(await inPage(panelLog))}`,
+    )
+  await panelCdp.send('Page.removeScriptToEvaluateOnNewDocument', {
+    identifier: slow.result.identifier,
+  })
+  log('F: a message typed while the panel is still asking for the latest run is asked and answered')
   panelCdp.close()
   log('OK')
 } finally {

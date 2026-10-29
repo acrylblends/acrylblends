@@ -27,6 +27,9 @@ export interface ShellWindow {
   readonly focused: boolean
   readonly width: number
   readonly height: number
+  /** Where the window's top left corner is on the screen (so two windows on top of each other can be told). */
+  readonly x?: number
+  readonly y?: number
 }
 
 export interface ShellMenuItem {
