@@ -88,3 +88,21 @@ once they are back, so an agent that builds a feature sees the new page in the s
 
 In development the door adds its page script to every HTML response of the routes mounted after it (as the agent panel does for its own), unless the page already carries it.
 A page an agent writes can therefore be looked at and driven without anyone adding the tag.
+
+## The desktop app: windows, menu and settings
+
+In the desktop app (`npm run desktop`, with or without `npm run dev` running) the door also controls what is around the page. The Electron main process connects to the door the way a page does (`plugins/desktop/door-shell.ts`, over `/api/acryl-door/shell/*`, which needs this run's secret), so it works when the window is attached to a dev server in another process.
+
+```
+acryl window list                         id, title, path, size, focused
+acryl window open [--path /settings]      a new window (answers its id)
+acryl window focus --id 2
+acryl window resize --id 2 --width 900 --height 640
+acryl window close --id 2                 the last window needs --force: it ends the desktop app
+acryl menu list                           the application menu as paths: File>New Note
+acryl menu click --path "File>New Note"   Quit and Close Window on the last window need --force
+acryl look --window 2                     the page of that window (act ... --window 2 too); without --window, the page used last
+```
+
+Every call is in `.acryl/audit/ui-control.jsonl` with the window id. With no desktop app attached the verbs answer `no desktop window is attached; run npm run desktop`. A window is named to the door by an `AcrylWindow/<id>` suffix of its user agent. Settings are a path of the app (`window open --path /settings`) or a menu item (`menu click`). Native dialogs are not controlled. `node scripts/verify-desktop-door.mjs` checks all of it in a real Electron.
+
