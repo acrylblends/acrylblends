@@ -73,7 +73,7 @@ function renderShell(result: ShellResult): string {
       ? 'no windows are open'
       : result.windows.map(window => `${String(window.id)}  ${JSON.stringify(window.title)}  ${window.path}  ${String(window.width)}x${String(window.height)}${window.focused ? '  focused' : ''}`).join('\n')
   }
-  if ('items' in result) return result.items.length === 0 ? 'the app has no menu' : result.items.map(item => `${item.path}${item.enabled ? '' : '  (disabled)'}`).join('\n')
+  if ('items' in result) return result.items.length === 0 ? 'the app has no menu' : result.items.map(item => `${item.path}${item.enabled ? '' : '  (disabled)'}${item.ends === true ? '  (ends the app; needs force)' : ''}`).join('\n')
   return result.detail
 }
 
@@ -223,7 +223,7 @@ export class Door {
       return { value: result, text: renderShell(result) }
     } catch (cause) {
       if (!(cause instanceof ShellError)) throw cause
-      record(['invalid', 'no-such-window', 'last-window', 'no-such-menu-item', 'disabled', 'no-desktop'].includes(cause.code) ? 'refused' : 'failed', cause.code)
+      record(['invalid', 'no-such-window', 'last-window', 'no-such-menu-item', 'disabled', 'quits-app', 'no-desktop'].includes(cause.code) ? 'refused' : 'failed', cause.code)
       throw new DoorError(cause.code, cause.message)
     }
   }

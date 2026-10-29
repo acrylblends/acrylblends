@@ -43,7 +43,7 @@ const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
   plugin list | plugin add <folder> | plugin remove <name> | plugin reload
   window list | window open [--path <p>] | window focus --id <n> | window close --id <n> [--force]
   window resize --id <n> --width <px> --height <px>
-  menu list | menu click --path "File>New Note"
+  menu list | menu click --path "File>New Note" [--force]
   tool list | tool call --tool <name> [--args '<json>']
   verbs`
 
@@ -133,7 +133,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       if (second === 'click') {
         const path = values.get('--path')
         if (path === undefined) throw new UsageError('menu click needs --path "File>New Note" (menu list prints the paths)')
-        return make('menu-click', { path })
+        return make('menu-click', { path, ...(set.has('--force') ? { force: true } : {}) })
       }
       throw new UsageError(`menu needs list or click\n${USAGE}`)
     }

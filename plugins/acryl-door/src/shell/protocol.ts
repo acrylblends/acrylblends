@@ -15,7 +15,8 @@ export type ShellRequest =
   | { readonly op: 'window-close'; readonly id: number; readonly force?: boolean }
   | { readonly op: 'window-resize'; readonly id: number; readonly width: number; readonly height: number }
   | { readonly op: 'menu-list' }
-  | { readonly op: 'menu-click'; readonly path: string }
+  /** `force`: the item may end the desktop app (Quit, or Close Window on the last window). */
+  | { readonly op: 'menu-click'; readonly path: string; readonly force?: boolean }
 
 export interface ShellWindow {
   /** Electron's own window id: the number `window list` prints and `--window` takes. */
@@ -33,6 +34,8 @@ export interface ShellMenuItem {
   readonly path: string
   readonly label: string
   readonly enabled: boolean
+  /** True for an item that ends the desktop app (Quit, or Close Window): `menu click` presses it only with `force`. */
+  readonly ends?: boolean
 }
 
 export type ShellResult =
@@ -52,7 +55,7 @@ export type ShellAnswer =
   | { readonly t: 'result'; readonly id: number; readonly value: ShellResult }
   | { readonly t: 'error'; readonly id: number; readonly code: string; readonly message: string }
 
-export type ShellErrorCode = 'invalid' | 'no-desktop' | 'no-such-window' | 'last-window' | 'no-such-menu-item' | 'disabled' | 'timeout' | 'disconnected' | 'unloaded' | 'aborted' | 'failed'
+export type ShellErrorCode = 'invalid' | 'no-desktop' | 'no-such-window' | 'last-window' | 'no-such-menu-item' | 'disabled' | 'quits-app' | 'timeout' | 'disconnected' | 'unloaded' | 'aborted' | 'failed'
 
 export class ShellError extends Error {
   readonly code: ShellErrorCode
@@ -105,9 +108,10 @@ export function parseShellRequest(op: ShellOp, input: unknown): ShellRequest {
     case 'window-resize': only(value, ['id', 'width', 'height']); return { op, id: windowId(value), width: size(value, 'width'), height: size(value, 'height') }
     case 'menu-list': only(value, []); return { op }
     case 'menu-click': {
-      only(value, ['path'])
+      only(value, ['path', 'force'])
       if (typeof value.path !== 'string' || value.path.trim() === '' || value.path.length > 300) throw new ShellError('invalid', 'path is the labels from the top of the menu joined with >, e.g. "File>New Note" (`menu list` prints them)')
-      return { op, path: value.path }
+      if (value.force !== undefined && typeof value.force !== 'boolean') throw new ShellError('invalid', 'force must be true or false')
+      return { op, path: value.path, ...(value.force === true ? { force: true } : {}) }
     }
   }
 }
@@ -122,5 +126,5 @@ export function parseShellAnswer(value: unknown): ShellAnswer | null {
 
 /** Whatever code the shell used, as one the door knows (an unknown code is `failed`). */
 export function shellErrorCode(code: string): ShellErrorCode {
-  return (['invalid', 'no-such-window', 'last-window', 'no-such-menu-item', 'disabled'] as const).find(known => known === code) ?? 'failed'
+  return (['invalid', 'no-such-window', 'last-window', 'no-such-menu-item', 'disabled', 'quits-app'] as const).find(known => known === code) ?? 'failed'
 }

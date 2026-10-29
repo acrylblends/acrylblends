@@ -134,9 +134,9 @@ export const VERB_SPECS: Readonly<Record<Verb, VerbSpec>> = {
     arguments: none,
   },
   'menu-click': {
-    usage: 'menu click --path "File>New Note": press a menu item',
-    description: 'Press an item of the desktop app\'s application menu by its path (labels joined with >, as menu-list prints them). A disabled item is refused.',
-    arguments: { type: 'object', properties: { path: { type: 'string', description: 'e.g. File>New Note' } }, required: ['path'], additionalProperties: false },
+    usage: 'menu click --path "File>New Note" [--force]: press a menu item',
+    description: 'Press an item of the desktop app\'s application menu by its path (labels joined with >, as menu-list prints them). A disabled item is refused, and so is one that ends the app (Quit, Close Window on the last window) unless force is set.',
+    arguments: { type: 'object', properties: { path: { type: 'string', description: 'e.g. File>New Note' }, force: { type: 'boolean', description: 'allow an item that ends the desktop app' } }, required: ['path'], additionalProperties: false },
   },
 }
 

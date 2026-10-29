@@ -61,6 +61,8 @@ function fakeDesktop() {
           item('', { type: 'separator' }),
           item('Export', { enabled: false }),
           item('Hidden', { visible: false }),
+          item('Close Window', { role: 'close' }),
+          item('Quit', { role: 'quit' }),
         ],
       },
     }),
@@ -98,7 +100,11 @@ test('window open adds a window on the path and answers its id; focus restores a
   second.minimized = true
   handleShellCall({ op: 'window-focus', id: 2 }, desktop)
   assert.deepEqual(log, ['restore 2', 'focus 2'])
-  assert.deepEqual(handleShellCall({ op: 'window-open' }, desktop), { ok: true, detail: 'opened window 3 on /', id: 3 })
+  assert.deepEqual(handleShellCall({ op: 'window-open' }, desktop), {
+    ok: true,
+    detail: 'opened window 3 on /',
+    id: 3,
+  })
 })
 
 test('window resize and close act on the window asked for; an unknown id names the windows there are', () => {
@@ -143,6 +149,8 @@ test('menu list prints paths in order, leaving out separators and hidden items; 
     items: [
       { path: 'File>New Note', label: 'New Note', enabled: true },
       { path: 'File>Export', label: 'Export', enabled: false },
+      { path: 'File>Close Window', label: 'Close Window', enabled: true, ends: true },
+      { path: 'File>Quit', label: 'Quit', enabled: true, ends: true },
       { path: 'Help>About', label: 'About', enabled: true },
     ],
   })
@@ -304,4 +312,25 @@ test('with no door file the shell keeps looking and connects when one appears; s
   door.closers[0]?.()
   await new Promise((resolve) => setTimeout(resolve, 80))
   assert.equal(door.streams.length, 1)
+})
+
+test('Quit, and Close Window on the last window, are pressed only with force; Close Window with two windows is an ordinary item', () => {
+  const { desktop, log } = fakeDesktop()
+  assert.throws(
+    () => handleShellCall({ op: 'menu-click', path: 'File>Quit' }, desktop),
+    refused('quits-app'),
+  )
+  assert.throws(
+    () => handleShellCall({ op: 'menu-click', path: 'File>Close Window' }, desktop),
+    refused('quits-app'),
+  )
+  assert.deepEqual(log, [])
+  handleShellCall({ op: 'window-open' }, desktop)
+  const listed = handleShellCall({ op: 'menu-list' }, desktop)
+  assert.ok('items' in listed)
+  assert.equal(listed.items.find((entry) => entry.path === 'File>Close Window')?.ends, undefined)
+  assert.equal(listed.items.find((entry) => entry.path === 'File>Quit')?.ends, true)
+  handleShellCall({ op: 'menu-click', path: 'File>Close Window' }, desktop)
+  handleShellCall({ op: 'menu-click', path: 'File>Quit', force: true }, desktop)
+  assert.deepEqual(log, ['click Close Window', 'click Quit'])
 })

@@ -29,6 +29,8 @@ export interface MenuItemPort {
   readonly enabled: boolean
   readonly visible: boolean
   readonly type: string
+  /** Electron's role of the item (`quit`, `close`, ...). */
+  readonly role?: string | undefined
   readonly submenu?: { readonly items: readonly MenuItemPort[] } | null | undefined
   click(): void
 }
@@ -55,7 +57,7 @@ export type ShellRequest =
       readonly height: number
     }
   | { readonly op: 'menu-list' }
-  | { readonly op: 'menu-click'; readonly path: string }
+  | { readonly op: 'menu-click'; readonly path: string; readonly force?: boolean }
 
 export type ShellResult =
   | {
@@ -68,7 +70,7 @@ export type ShellResult =
         height: number
       }[]
     }
-  | { readonly items: readonly { path: string; label: string; enabled: boolean }[] }
+  | { readonly items: readonly { path: string; label: string; enabled: boolean; ends?: boolean }[] }
   | { readonly ok: true; readonly detail: string; readonly id?: number }
 
 /** A refusal with a code the door passes on to the agent. */
@@ -106,6 +108,11 @@ export function menuPaths(
     else found.push({ path, label: item.label, enabled: item.enabled, item })
   }
   return found
+}
+
+/** Whether pressing this item ends the desktop app: Quit always, Close Window when it is the last window. */
+function endsApp(item: MenuItemPort, windows: number): boolean {
+  return item.role === 'quit' || (item.role === 'close' && windows <= 1)
 }
 
 /** Answer one call of the door. @throws ShellRefusal for what the app cannot do (no such window, the last window, a disabled item). */
@@ -173,10 +180,11 @@ export function handleShellCall(request: ShellRequest, desktop: DesktopPort): Sh
     }
     case 'menu-list':
       return {
-        items: menuPaths(desktop.menu()).map(({ path, label, enabled }) => ({
+        items: menuPaths(desktop.menu()).map(({ path, label, enabled, item }) => ({
           path,
           label,
           enabled,
+          ...(endsApp(item, desktop.windows().length) ? { ends: true } : {}),
         })),
       }
     case 'menu-click': {
@@ -191,6 +199,13 @@ export function handleShellCall(request: ShellRequest, desktop: DesktopPort): Sh
           `the menu has no item ${JSON.stringify(wanted)}; menu list prints the paths`,
         )
       if (!found.enabled) throw new ShellRefusal('disabled', `${found.path} is disabled`)
+      // Quit, or Close Window on the last window, ends the desktop app: an agent must not end the session it works in by accident.
+      if (endsApp(found.item, desktop.windows().length) && request.force !== true) {
+        throw new ShellRefusal(
+          'quits-app',
+          `${found.path} ends the desktop app${found.item.role === 'close' ? ' (it is the last window)' : ''}. Pass force to do it on purpose`,
+        )
+      }
       found.item.click()
       return { ok: true, detail: `pressed ${found.path}` }
     }

@@ -75,7 +75,7 @@ function defaultAnswer(call: ShellCall, windows: ShellWindow[]): ShellResult {
     case 'window-close': windows.splice(windows.findIndex(window => window.id === request.id), 1); return { ok: true, detail: `closed window ${String(request.id)}` }
     case 'window-focus': return { ok: true, detail: `focused window ${String(request.id)}` }
     case 'window-resize': return { ok: true, detail: `window ${String(request.id)} is now ${String(request.width)}x${String(request.height)}` }
-    case 'menu-list': return { items: [{ path: 'File>New Note', label: 'New Note', enabled: true }, { path: 'File>Export', label: 'Export', enabled: false }] }
+    case 'menu-list': return { items: [{ path: 'File>New Note', label: 'New Note', enabled: true }, { path: 'File>Export', label: 'Export', enabled: false }, { path: 'app>Quit', label: 'Quit', enabled: true, ends: true }] }
     case 'menu-click': return { ok: true, detail: `pressed ${request.path}` }
   }
 }
@@ -193,19 +193,24 @@ describe('the window and menu verbs', () => {
     const running = await app()
     const fake = await shell(running, (call) => {
       if (call.request.op === 'menu-click' && call.request.path === 'File>Export') return new ShellError('disabled', 'File>Export is disabled')
+      if (call.request.op === 'menu-click' && call.request.path === 'app>Quit' && call.request.force !== true) return new ShellError('quits-app', 'app>Quit ends the desktop app. Pass force to do it on purpose')
       if (call.request.op === 'window-focus') return new ShellError('no-such-window', 'there is no window 9; window list prints the ids')
       return defaultAnswer(call, [])
     })
     const menu = await operator(running.root, ['menu', 'list'])
-    expect(menu.out).toBe('File>New Note\nFile>Export  (disabled)\n')
+    expect(menu.out).toBe('File>New Note\nFile>Export  (disabled)\napp>Quit  (ends the app; needs force)\n')
     expect((await operator(running.root, ['menu', 'click', '--path', 'File>New Note'])).out).toContain('pressed File>New Note')
     const disabled = await operator(running.root, ['menu', 'click', '--path', 'File>Export'])
     expect(disabled.code).toBe(1)
     expect(disabled.err).toContain('disabled')
+    const quit = await operator(running.root, ['menu', 'click', '--path', 'app>Quit'])
+    expect(quit.code).toBe(1)
+    expect(quit.err).toContain('force')
+    expect((await operator(running.root, ['menu', 'click', '--path', 'app>Quit', '--force'])).code).toBe(0)
     const missing = await operator(running.root, ['window', 'focus', '--id', '9'])
     expect(missing.err).toContain('no window 9')
     expect(auditLines(running).map(line => [line.tool, line.outcome, line.detail])).toEqual([
-      ['menu-list', 'ok', undefined], ['menu-click', 'ok', undefined], ['menu-click', 'refused', 'disabled'], ['window-focus', 'refused', 'no-such-window'],
+      ['menu-list', 'ok', undefined], ['menu-click', 'ok', undefined], ['menu-click', 'refused', 'disabled'], ['menu-click', 'refused', 'quits-app'], ['menu-click', 'ok', undefined], ['window-focus', 'refused', 'no-such-window'],
     ])
     fake.stop()
   })
