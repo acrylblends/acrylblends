@@ -59,10 +59,10 @@ drive this app. For the next two minutes forget the panel: an Acryl app is a fun
 Open `src/routes.ts` and add one line to the chain, just above `.get('/health', …)`, keeping the indentation of the lines around it:
 
 ```ts
-      .get('/hello', (c) => c.json({ hello: 'workshop' }))
+      .get('/hi', (c) => c.json({ hello: 'workshop' }))
 ```
 
-Save: the terminal prints `Change detected … Restarting`, and `/hello` answers `{"hello":"workshop"}`. Stop the server (`Ctrl-C`), run `npm test` and
+Save: the terminal prints `Change detected … Restarting`, and `/hi` answers `{"hello":"workshop"}`. Stop the server (`Ctrl-C`), run `npm test` and
 `npm run check`: both pass. That is the whole core: a route, a test, a typecheck.
 
 **Stuck?** A busy port means the app printed the next free one; use that address. `npm test` failing on your line names the file and the type.
