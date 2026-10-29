@@ -58,10 +58,9 @@ These are the defects found by the walk. They are known; say so rather than lett
   type imports, the migrations folder). It is the block the handout names optional, and the one to help with first.
 - **A relative migrations path in `blend.yaml` fails.** `migrations: migrations` in the row stops the app with "this app has no file base URL to
   resolve it from". The folder is named in `src/app.ts`'s compose options instead; the handout teaches that form and the stuck line names the error.
-- **A refused starter shows no reason under `npm create`.** `npm create ... -- --from acryl.gtd` prints only `npm error command failed`; the one-line
-  refusal appears when the same command runs through `npx create-acrylblends@latest`. The handout's stuck line says so.
-- **`pi` was still not offered as a chat driver** in the rerun (only `pty:pi`), although 1.0.2 was expected to find it through the login-shell probe.
-  Reported to Blends; on the day, `pty:pi` works.
+- **`pi` shows up only when the app can see its login.** 1.0.2 offers pi as a chat driver when `DEEPSEEK_API_KEY` is exported or `~/.pi/agent/auth.json`
+  holds a deepseek entry, read from the HOME the app runs in. On a normal attendee machine it is there; in a run with a moved HOME it is not (and pi
+  would fail on its first message anyway). `pty:pi` needs only the program.
 - **The agent run takes minutes, not seconds.** Codex wrote the page and its tests in about seven; tell the room to start it and keep talking.
 - **Publishing.** The workshop registry is `github.com/acryldev/workshop-2026-11-20`, public and open. Attendees fork it, run
   `node scripts/make-entry.mjs ../agent-app <login>.agent-app --description "..."`, push and open a pull request; a check merges it, usually well under

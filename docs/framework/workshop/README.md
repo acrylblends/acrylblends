@@ -223,9 +223,8 @@ npm create acrylblends@latest from-the-workshop -- --from <id> --registry https:
 
 Starters for this workshop: `acrylblends.notes-desktop` (notes with a desktop window), `acrylblends.chat`, `acrylblends.agent`.
 
-**Stuck?** The `--` before `--from` is npm's, not ours: without it npm swallows the flag. If the command fails with only `npm error command failed`,
-npm has hidden the reason; run `npx create-acrylblends@latest my-app --from <id>` to see it (an `acryl.*` id, for instance, is an ACRYL app starter
-and is refused in one line).
+**Stuck?** The `--` before `--from` is npm's, not ours: without it npm swallows the flag. A refused id prints its reason first (`error: acryl.gtd is an
+ACRYL app starter: open it in the ACRYL app`) and then npm's own error block; read the first lines, not the last.
 
 ## 7. Create from a template (7 minutes)
 
@@ -271,7 +270,7 @@ npm run dev
 
 `add agent-panel` adds the plugin rows the panel needs and registers it for you, and prints what it changed. (On a `blank` app it refuses and says
 which rows are missing: that is why this step uses the `agent` template.) Open the page, click the panel button in the corner, pick `codex` (or
-`claude`, or `pi`), and ask:
+`claude`, or `pi` when pi has its DeepSeek login in your home folder), and ask:
 
 > Add a page at /board that lists the app's tasks, newest first, and a test for it.
 
