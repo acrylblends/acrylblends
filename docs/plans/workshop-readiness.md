@@ -233,3 +233,28 @@ Both Edge and the two-window case were driven over Chromium DevTools from the ss
 process left, the scratch root `C:\Users\alexa\scratch-acryl\w107` removed, and the real `~/.acryl` (2026-10-09) and `~/.dsh`
 (2026-10-08) untouched. One exception, and it is B2: codex wrote into the real `~/.codex` (its sqlite state and model cache) because it does
 not honour the HOME override; the walk's own app data all stayed in the scratch folder.
+
+### Rerun in the console session (same day) and two corrections
+
+The first pass started the app from the ssh shell (session 0) and failed item 3 for that reason; the rerun started it in the console session through a
+one-shot `/IT` task, with the real `~/.pi` linked into the scratch home by a directory junction (no copy), so `pi` is offered. What the rerun found:
+
+- **`pi` is offered and starts, but its credential is rejected.** The panel listed `agent, codex, pi` and the run began, then the panel's log showed the
+  provider's answer - `Your api key: ****49f3 is invalid (authentication_error, request_id 6015eaa1-336a-4516-895f-b2535f56b9cb)` - and `pi ended with
+  exit code 1`, within 5 s. Run directly on the box, `pi -p "say ok"` answers a different 400: `Third-party apps now draw from your extra usage, not your
+  plan limits. Add more at claude.ai/settings/usage` (its own default provider is Claude). Neither credential on this machine can complete a turn.
+- **Correction to C1 above: `pi` listed and then refused was not a registry bug.** The list and the drivers agree: `pi` is registered only when a
+  DeepSeek key is present (`DEEPSEEK_API_KEY`, or a `deepseek` entry in `~/.pi/agent/auth.json`), and the refusal I quoted came from a *second* app
+  instance (the console one, whose scratch home had no `~/.pi`) - the same registry that refused it also omitted it from its own list. With the junction
+  in place the isolated app lists `pi` again. The real lesson is the one below: the agent's credentials live in the user's real profile.
+- **The two-window case and item 6 could not be re-tested with a live run.** No agent run survives its first provider call on this machine, so (b) two
+  windows during a live run and the panel's Stop have no run to test (the panel's Stop also cannot be clicked from outside: the desktop window exposes no
+  debugging port, and the button lives in the panel's shadow root, invisible to the door). The earlier two-window measurement stands as a page-level
+  result only: `look --window 1` 198 ms, `look --window 2` 203 ms, no queueing. For the same reason item 6 stays failing here: production has no `board`
+  extension to serve because no agent could build one.
+- **For attendees with codex:** if the panel answers `model_not_found` ("The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT
+  account"), the attendee's own `~/.codex/config.toml` names a model their account does not include; pick a supported model there (or in codex's
+  `/model`) before the session. ACRYL cannot fix it and does not mask it.
+- **Codex files written into the real profile during the first pass** (names and sizes only; nothing was changed or reverted): `logs_2.sqlite` 16,523,264;
+  `state_5.sqlite-wal` 510,912; `models_cache.json` 177,492; `thread_history_1.sqlite-wal` 193,672; `cache/codex_apps_tools/71a3cb5f….json` 3,213,439;
+  six `plugins/cache/openai-curated-remote/*/.codex-remote-plugin-install.json` files of 100-104 bytes each; and five `*.sqlite-shm` files of 32,768.
