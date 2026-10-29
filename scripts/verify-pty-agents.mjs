@@ -161,7 +161,6 @@ try {
   const app = join(scratch, 'app')
   const specifier = `acrylblends@${values.version}`
   run('npm', ['exec', '--yes', specifier, '--', 'init', app, '--template', 'agent', '-y'], scratch)
-  run('npm', ['exec', '--yes', specifier, '--', 'add', 'agent-panel'], app)
   run('npm', ['exec', '--yes', specifier, '--', 'add', 'driver-pty'], app)
   const installed = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
   const yaml = join(app, 'blend.yaml')

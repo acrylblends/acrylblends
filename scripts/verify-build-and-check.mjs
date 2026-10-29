@@ -51,7 +51,6 @@ let browser
 try {
   const app = join(scratch, 'app')
   run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
-  run(process.execPath, [cli, 'add', 'agent-panel'], app)
   run('npm', ['install', '--no-audit', '--no-fund'], app)
   const port = await freePort()
   server = startGroup('npm', ['start'], {

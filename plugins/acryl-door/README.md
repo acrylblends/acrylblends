@@ -77,7 +77,7 @@ The verbs are one table, `src/host/verbs.ts`, and each face reads it, so a verb 
 
 ## Reload and navigate
 
-`act reload` reloads the page and `act navigate --path /settings` goes to another path of the app (a path that starts with one `/`, never another site). Both answer first and
+`act reload` reloads the page and `act navigate --path /settings` goes to another path of the app (a path that starts with one `/`, never another site). Both answer first and `act navigate` also says what the app answered at the path (`404 at /nope`, `200 at /settings`). In development a path the app does not serve, opened as a page, answers its 404 with a small page that names the missing path, links back to `/` and carries the door's script, so a mistyped path never leaves the window where nothing can be looked at; a script's `fetch` and an app's own JSON 404 are untouched.
 move the page a moment later, then wait up to 15 s for the new page to connect to the door, so the next `look` sees it; a page that does not come back (a path with no page, or
 a page without the door script) fails with a `timeout` that says so. They are `act` operations like the others: the same verb in the CLI, MCP and the built-in chat.
 

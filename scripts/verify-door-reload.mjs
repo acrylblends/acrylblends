@@ -5,9 +5,10 @@
 // In a fresh agent app, a plugin serves a page that has NO door script tag, a real (headless) Chrome opens it, and the folder's own command (`.acryl/bin/acryl`) is used as an agent
 // uses it: `look` sees the page (the door adds its script to every HTML page in development); a change to the plugin followed by `plugin reload` shows the new page without anyone
 // reloading it (the door reloads the open pages and answers once they are back); a change the plugin system does not know about is picked up by `act reload`; `act navigate --path`
-// goes to another page of the app and refuses a path that would leave it. Offline: no model, no key.
+// goes to another page of the app and refuses a path that would leave it. The door's script AND the agent panel's script reach every page an agent can build: a plugin installed
+// while the app runs, one loaded at boot from plugins/, and one mounted as a row of blend.yaml ahead of both. Offline: no model, no key.
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -75,6 +76,41 @@ try {
       scratch,
     )
   run('npm', ['install', '--no-audit', '--no-fund'], app)
+  // A plugin that is a row of blend.yaml, mounted before the panel's and the door's rows: its pages come first in the order of mounts.
+  mkdirSync(join(app, 'plugins', 'rowpage'))
+  writeFileSync(
+    join(app, 'plugins', 'rowpage', 'index.ts'),
+    // A row is imported by src/app.ts before anything runs; it still imports the framework by name, as an agent writes it (acrylblends, acrylblends/body-limit).
+    `import { Acryl } from 'acrylblends'
+import { bodyLimit } from 'acrylblends/body-limit'
+export const name = 'rowpage'
+export const inject = ['router']
+export function apply(ctx: { router: { route(path: string, app: unknown): void } }) {
+  const app = new Acryl().use(bodyLimit({ maxSize: 16 * 1024 }))
+  app.get('/r1', (c) => c.html('<!doctype html><html><head><title>Row</title></head><body><main><h1>A page of a row</h1></main></body></html>'))
+  ctx.router.route('/', app)
+}
+`,
+  )
+  const manifest = join(app, 'blend.yaml')
+  const rows = readFileSync(manifest, 'utf8')
+  const withRow = rows.replace(
+    '    - id: router\n',
+    '    - id: rowpage\n      name: rowpage\n    - id: router\n',
+  )
+  if (withRow === rows) fail('the agent template has no router row where this gate puts its own')
+  writeFileSync(manifest, withRow)
+  const source = join(app, 'src', 'app.ts')
+  const code = readFileSync(source, 'utf8')
+  const withEntry = code
+    .replace(
+      'import * as router from',
+      "import * as rowpage from '../plugins/rowpage/index.ts'\nimport * as router from",
+    )
+    .replace('export const registry = {\n', 'export const registry = {\n  rowpage,\n')
+  if (!withEntry.includes('  rowpage,\n') || !withEntry.includes('import * as rowpage'))
+    fail('the agent template no longer has the registry where this gate registers its own plugin')
+  writeFileSync(source, withEntry)
   mkdirSync(join(app, 'plugins', 'pages'))
   writeFileSync(join(app, 'plugins', 'pages', 'index.ts'), plugin('one'))
   writeFileSync(join(app, 'page.txt'), 'first text')
@@ -98,6 +134,20 @@ try {
     )
     return { code: r.status, out: r.stdout, err: r.stderr }
   }
+  // The pages of the plugin loaded at boot (pages) and of the row (rowpage) carry both scripts in the HTML the server sends, however early their plugin was mounted.
+  for (const path of ['/p1', '/r1']) {
+    const html = await (await fetch(`${base}${path}`)).text()
+    for (const [what, marker] of [
+      ['the door', '/api/acryl-door/page.js'],
+      ['the agent panel', '/api/agent-panel/panel.js'],
+    ])
+      if (!html.includes(marker)) fail(`${path} was served without ${what}'s script:\n${html}`)
+    if (html.split('/api/acryl-door/page.js').length !== 2)
+      fail(`${path} carries the door's script more than once`)
+  }
+  log(
+    "B: a page of a plugin loaded at boot and a page of a row mounted ahead of the door and the panel both carry the door's and the panel's scripts",
+  )
   const added = acryl('plugin', 'add', 'plugins/pages')
   if (added.code !== 0) fail(`plugin add failed:\n${added.out}${added.err}`)
 
@@ -162,6 +212,33 @@ try {
   if (!acryl('look').out.includes('Second page')) fail('the refused navigate moved the page')
   log('A: act navigate --path goes to another page of the app, and refuses a path that leaves it')
   cdp.close()
+
+  // A, a mistyped path: the window is not stranded. The app answers 404 with a page that carries the door's script, `navigate` names the status, and the agent looks, clicks the way
+  // back and navigates on, all in the same window.
+  const lost = acryl('act', 'navigate', '--path', '/nope')
+  if (lost.code !== 0 || !lost.out.includes('404 at /nope'))
+    fail(`act navigate to a missing path did not say 404:\n${lost.out}${lost.err}`)
+  const lostLook = acryl('look')
+  if (lostLook.code !== 0 || !lostLook.out.includes('404 Not Found'))
+    fail(`the window cannot be looked at on a missing path:\n${lostLook.out}${lostLook.err}`)
+  const back = /\[ref=([\d.]+)\]/u.exec(
+    lostLook.out.split('\n').find((line) => line.includes('Back to the app')) ?? '',
+  )?.[1]
+  if (back === undefined) fail(`the 404 page has no way back in what look shows:\n${lostLook.out}`)
+  const clicked = acryl('act', 'click', '--ref', back)
+  if (clicked.code !== 0) fail(`clicking the way back failed:\n${clicked.out}${clicked.err}`)
+  const home = await until(async () => {
+    const seen = acryl('look')
+    return seen.code === 0 && !seen.out.includes('404 Not Found') && seen.out
+  }, 15_000)
+  if (!home) fail('the way back did not lead to a page of the app')
+  const again = acryl('act', 'navigate', '--path', '/p1')
+  if (again.code !== 0 || !again.out.includes('200 at /p1'))
+    fail(`act navigate back to /p1 did not say 200:\n${again.out}${again.err}`)
+  if (!acryl('look').out.includes('Version')) fail('the window did not come back to /p1')
+  log(
+    'A: a mistyped path gives a 404 page the door can still drive, navigate names the 404, and the window comes back',
+  )
   log('OK')
 } finally {
   browser?.kill('SIGKILL')

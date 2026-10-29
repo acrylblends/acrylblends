@@ -111,7 +111,7 @@ has a tool registry. It never reads, stores or asks for a token: git and gh use 
 
 ## agent-panel
 
-**Experimental, development only** (it does nothing with `NODE_ENV=production`; see [what runs in production](framework/guides/production.md)). A chat panel inside the running app (spec 049 slice 14). `npx acrylblends add agent-panel` copies it (with the agent family it needs) into an app made from the `agent` template; add a row
+**Experimental, development only** (it does nothing with `NODE_ENV=production`; see [what runs in production](framework/guides/production.md)). A chat panel inside the running app (spec 049 slice 14). an app made from the `agent` template has it (`npx acrylblends add agent-panel` copies it, with the agent family it needs, into an older one); add a row
 `- id: agent-panel` / `name: agent-panel` to `blend.yaml` **before** the `routes` row and `'agent-panel': panel` to the registry in `src/app.ts` (the line `acrylblends add` prints). Open the app in a browser:
 a button at the corner opens a side panel. Write what you want; the panel's agent builds it **through the same door** (`.acryl/bin/acryl`, see the app's `AGENTS.md`), and when a plugin was installed or
 removed the page reloads, so the feature shows with no restart.

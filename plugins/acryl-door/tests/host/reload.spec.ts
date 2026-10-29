@@ -3,6 +3,8 @@
  * and a new page connects; the verb answers once it is back, so the next look sees the new page.
  */
 
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
 import { Door, type ExtensionsPort } from '../../src/host/door.ts'
 import { UiChannel, type PageStream } from '../../src/host/channel.ts'
@@ -106,5 +108,33 @@ describe('the open pages reload after a live plugin change', () => {
     const started = Date.now()
     await door(new UiChannel(), { extensions: extensions() }).run('plugin-add', { folder: 'plugins/demo-ui' }, never)
     expect(Date.now() - started).toBeLessThan(500)
+  })
+})
+
+describe('act navigate says what the app answered at the path', () => {
+  it('names a 404 so an agent that mistyped a path knows, and a 200 for a page that is there', async () => {
+    const server = createServer((request, response) => {
+      response.statusCode = request.url === '/demo' ? 200 : 404
+      response.end('x')
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const url = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
+      const channel = new UiChannel()
+      browser(channel, { backAfterMs: 20 })
+      const there = new Door({ channel, audit, app: { name: 'demo', root: '/tmp/demo', url }, extensions: () => undefined, tools: () => undefined, expose: [], pageBackMs: 1000 })
+      const missing = await there.run('act', { op: 'navigate', path: '/nope' }, never)
+      expect(missing.text).toContain('404 at /nope')
+      expect(missing.text).toContain('the page is back: look again')
+      const found = await there.run('act', { op: 'navigate', path: '/demo' }, never)
+      expect(found.text).toContain('200 at /demo')
+      expect(found.text).not.toContain('404')
+      // No address (an app that does not listen): the verb still answers, without a status.
+      const quiet = await door(channel).run('act', { op: 'navigate', path: '/demo' }, never)
+      expect(quiet.text).toContain('going to /demo; the page is back: look again')
+      expect(quiet.text).not.toMatch(/\d{3} at /u)
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
   })
 })

@@ -1,5 +1,7 @@
 // The panel in the page: a button at the corner opens a side panel (a shadow root, so the app's CSS cannot touch it and it cannot touch the app's). It asks the app's
 // agent through POST /api/agent-panel/ask, shows the answer as it arrives, and reloads the page after a run that installed or removed a plugin.
+import { describeTool } from './describe.ts'
+
 const PREFIX = '/api/agent-panel'
 
 interface Session {
@@ -181,7 +183,8 @@ async function start(): Promise<void> {
           answer ??= line('')
           answer.textContent += String(data.text ?? '')
         } else if (event === 'tool') {
-          line(`${String(data.tool)}${data.error ? ` failed: ${String(data.error)}` : ''}`, 'tool')
+          const described = describeTool(data)
+          if (described !== undefined) line(described, 'tool')
         } else if (event === 'change') {
           changed = true
           line(`plugin ${String(data.extension)}: ${String(data.action)}`, 'tool')

@@ -48,6 +48,9 @@ spec:
       name: builder
     - id: save
       name: save
+    # The panel: a chat button on every page in development (the app's own agent, or Codex, Claude or pi started in this folder). It starts nothing in production.
+    - id: agent-panel
+      name: agent-panel
     - id: routes
       name: routes
     - id: server

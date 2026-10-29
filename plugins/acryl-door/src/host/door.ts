@@ -148,7 +148,24 @@ export class Door {
       answer = { ok: true, detail: request.op === 'reload' ? 'reloading' : `going to ${request.path}` }
     }
     if (!await back) throw new UiControlError('timeout', request.op === 'reload' ? 'the page did not come back after the reload' : `the page did not come back after going to ${request.path}: is there a page at that path, and does it load the door's script?`)
-    return { ...answer, detail: `${answer.detail ?? 'done'}; the page is back: look again` }
+    const landed = request.op === 'navigate' ? await this.statusAt(request.path) : undefined
+    return { ...answer, detail: `${answer.detail ?? 'done'}${landed === undefined ? '' : `; ${landed}`}; the page is back: look again` }
+  }
+
+  /**
+   * What the app answers at a path the page was sent to, so an agent that mistyped one is told ("404 at /nope") and not left to find out from a page it did not expect.
+   * A second GET of the same path (a page is read-only); nothing when the app has no address or does not answer in time.
+   */
+  private async statusAt(path: string): Promise<string | undefined> {
+    const base = this.deps.app.url
+    if (base === undefined) return undefined
+    try {
+      const response = await fetch(new URL(path, base), { headers: { accept: 'text/html' }, signal: AbortSignal.timeout(3000) })
+      await response.body?.cancel()
+      return response.ok ? `${response.status} at ${path}` : `${response.status} at ${path}: the app serves no page there, look at what is shown and navigate to a path it does`
+    } catch {
+      return undefined
+    }
   }
 
   private parse(input: Record<string, unknown>): UiRequest {

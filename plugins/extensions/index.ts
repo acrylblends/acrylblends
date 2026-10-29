@@ -21,7 +21,6 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
@@ -33,7 +32,7 @@ import type {} from '../instance/index.ts'
 import type { Sandbox } from '../sandbox/index.ts'
 import { appendLedger, type LedgerEntry, readLedger } from './ledger.ts'
 import { resolveFromApp, routerAliases } from './resolve.ts'
-import { hashFolder, prune, stage } from './stage.ts'
+import { discard, hashFolder, prune, stage } from './stage.ts'
 
 /** A fiber's lifecycle state, by name (Cordis's own enum is a `const enum`, which does not exist at run time). */
 export type ExtensionState = 'pending' | 'loading' | 'active' | 'failed' | 'disposed' | 'unloading'
@@ -611,7 +610,7 @@ export class Extensions extends Service {
     try {
       module = await this.load(staged.dir, name)
     } catch (error) {
-      rmSync(staged.dir, { recursive: true, force: true })
+      discard(staged.dir)
       this.record({ kind: 'refused', name, version: staged.version, error: message(error) })
       return {
         ok: false,
@@ -638,7 +637,7 @@ export class Extensions extends Service {
           : undefined
     if (failure) {
       await mounted.fiber.dispose().catch(() => undefined)
-      rmSync(staged.dir, { recursive: true, force: true })
+      discard(staged.dir)
       const error = failure.error
       this.record({ kind: 'refused', name, version: staged.version, error })
       let restored = false

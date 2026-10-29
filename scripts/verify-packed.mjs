@@ -120,7 +120,6 @@ console.log('ws-check: ok')
   // The agent panel and the PTY driver, added by the installed command: copied, installed (node-pty from the registry) and type-checked.
   const agentApp = join(scratch, 'app-agent')
   run(bin('acrylblends'), ['init', agentApp, '--template', 'agent', '-y'], scratch)
-  run(bin('acrylblends'), ['add', 'agent-panel'], agentApp)
   run(bin('acrylblends'), ['add', 'driver-pty'], agentApp)
   run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], agentApp)
   run('npm', ['run', 'check'], agentApp)

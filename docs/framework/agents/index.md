@@ -35,18 +35,20 @@ See [Acryl in a Cordis app](../cordis/acryl-in-a-cordis-app.md), [Plugin lifecyc
 
 ## The agent panel and the terminals
 
-The panel is a chat button on every page of the running app, and `driver-pty` adds real terminals to it. Both are **development only** (see [what runs in production](../guides/production.md)). They need the rows of the `agent` template (`agent` and `extensions`, with the `model`, `tools` and `memory` the agent brings), so start from that template:
+The panel is a chat button on every page of the running app. **A new app from the `agent` template has it** (`npm create acrylblends@latest my-app agent`), and `driver-pty` adds real terminals to it. Both are **development only** (see [what runs in production](../guides/production.md)).
 
 ```sh
 npm create acrylblends@latest my-app agent
 cd my-app
 npm install
-npx acrylblends add agent-panel driver-pty
+npm run dev          # the panel is the button at the corner of the page
+npx acrylblends add driver-pty   # optional: real terminals (pty:claude, pty:codex, pty:pi) in the panel
 npm install
-npm run dev
 ```
 
-- `add` puts the `agent-panel` row (and `driver-pty`'s after it) in `blend.yaml` before the `routes` row and registers both in `src/app.ts`. On an app without the `agent` and `extensions` rows, such as `blank`, it refuses before it copies anything and says which rows are missing.
+- The panel needs the `agent` and `extensions` rows, which only the `agent` template has: `add agent-panel` on an app without them (a `blank` app) refuses before it copies anything and says which rows are missing, and on an `agent` app it says the panel is already there. An agent-template app made before 1.0.5 gets it with `npx acrylblends add agent-panel`.
+- `add driver-pty` puts the driver's row after the panel's in `blend.yaml` and registers it in `src/app.ts`.
+- A **run belongs to the app, not to the page**: when the page reloads (the door reloads it after a plugin change) the panel shows the question and the events so far and follows the run to its end; **Stop** is the only thing that cancels it.
 - **The panel's coding agents are yours.** `claude`, `codex` and `pi` run on the machine that runs the app, in the app folder, with the login of the person who started it: `claude` and `codex` use their own signed-in sessions, and `pi` is offered when `DEEPSEEK_API_KEY` is set or `pi` has stored a DeepSeek login (`~/.pi/agent/auth.json`, read from the `HOME` of the process that runs the app: an app started under another `HOME` does not see the login, and the panel then lists `pty:pi` but no chat `pi`). A program that is not installed, or is not logged in, is not offered; nothing is shared between machines, and a workshop laptop needs its own login. The panel's own `agent` (the offline scripted one) needs none.
 - `pi` has to be an executable on the `PATH`; a shell function that wraps the binary is fine as long as the binary itself is found by `which pi`.
 - `driver-pty` brings `node-pty`, which ships prebuilt binaries for macOS, Windows and Linux. npm 11 and pnpm warn that its install script was not run (they ask you to approve dependency install scripts); you can ignore the warning. If no `pty:` terminal is offered and the app prints why at start, approve and rebuild: `npm approve-scripts node-pty`, then `npm rebuild node-pty` (pnpm: `pnpm approve-builds`).

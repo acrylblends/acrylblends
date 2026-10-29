@@ -36,3 +36,24 @@ What the first run found, and what changed:
 1. The panel did not appear on a plugin's page that loaded at boot, for the same ordering reason as the door's script: its middleware only wrapped routes mounted after it. It now uses `ctx.router.wrap` too.
 2. The model sent one `door_act` with no `op`: the tool was described to it only as "an object". The tools registry now carries each tool's JSON Schema (`parameters`), the door registers its verbs with the schema MCP lists, and the openai plugin sends it; the malformed call went away.
 3. The run stopped "after 6 steps without an answer": looking, pressing and looking again takes six steps before the answer. The agent template's `steps` parameter now defaults to 12.
+
+## The desktop window attached to a running dev server (by hand, 1.0.5, macOS)
+
+A fresh `acrylblends init app --template agent --desktop`, `npm install`, then:
+
+1. `npm run dev` in one terminal: `app listening on http://127.0.0.1:3591`.
+2. `npm run desktop` in another: it printed `desktop: attached to the app already running from this folder at http://127.0.0.1:3591 (its server keeps running when the window closes)` (on 1.0.4 it failed with "another process serves the door"), and an Electron window opened on the dev server.
+3. Through the door, from the folder: `acryl look` read the window's page (heading "app", 6 elements), `act click --ref 1.1` answered done, `act reload` and `act navigate --path /` both answered "the page is back", and a second `look` saw the page again.
+4. The window was closed by stopping the desktop launcher (SIGTERM, which quits Electron): the dev server still answered 200 on `/` and `.acryl/door.json` was still there. A second `npm run desktop` attached again and the door worked as before.
+
+Found on the way, not fixed in 1.0.5 (it belongs to the Electron adapter, C): `act navigate --path /extra` to a path the app does not serve leaves the window on a page without the door's script, and every door call after that answers `no-window` until the window is opened on a real page again. The same page also still said "add the chat panel with `npx acrylblends add agent-panel`"; the agent template's home page now says the panel is on the page.
+
+## A live install under `npm run dev` (1.0.5)
+
+`node scripts/verify-dev-install.mjs` (in `pnpm run check`): a fresh agent app under `npm run dev`; a plugin is installed with `.acryl/bin/acryl plugin add plugins/board`, changed and reloaded, then the app's own `src/main.ts` is changed. On 1.0.4 the gate fails: `node --watch` watches every module the process imported and keeps watching the paths of earlier runs, so deleting a staged copy (the old version after a reload, a copy a refused install left) restarts the app, and each start stages the extensions again and prunes the older copies: a restart loop, with the door answering "no running app" in between (four restarts in a row in the first reproduction). Now: an unchanged source reuses its staged copy (copies are made under a temporary name and renamed, so a final name is whole), and under the watcher (`WATCH_REPORT_DEPENDENCIES=1`, which Node sets) staged copies are not deleted; a start without the watcher prunes. The gate sees no restart for the install or the reload, the door up throughout, and exactly one restart, with the plugin back, for a change of `src/main.ts`.
+
+## A mistyped path (1.0.5)
+
+The hand test above stranded the Electron window: `act navigate --path /extra` to a path the app does not serve left it on a bare 404 with no door script, and every call after answered `no-window`. Fixed at the cause: in development the door's `router.wrap` turns a 404 for a page request (Accept lists `text/html`, the body is not JSON) into a small HTML page that names the path, links back and carries the script; `act navigate` reports what the app answered. `verify:door` (a real headless Chrome) now navigates to `/nope`, gets `404 at /nope`, looks (`404 Not Found`), clicks "Back to the app", navigates to `/p1` (`200 at /p1`) and looks. Unit tests: `plugins/acryl-door/tests/host/door.spec.ts` (the 404 page, a script `fetch` and an app's JSON 404 untouched) and `reload.spec.ts` (the status text).
+
+The same sequence by hand in the Electron window attached to `npm run dev` (the app of the hand test above, its door upgraded from this checkout): `look` (heading "app"); `act navigate --path /nope` answered `going to /nope; 404 at /nope: the app serves no page there, look at what is shown and navigate to a path it does; the page is back`; `look` read the window (`Page: 404 Not Found`, heading "404 Not Found", the path `/nope`, link "Back to the app"); `act click` on the link brought the app's page back (`look`: heading "app"); `act navigate /nope` then `/` answered `404 at /nope` and `200 at /`, and `look` saw the app again. The window behaves as headless Chrome does, and the dev server answered 200 throughout.
