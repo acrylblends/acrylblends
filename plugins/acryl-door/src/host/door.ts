@@ -158,7 +158,7 @@ export class Door {
     const request = this.parse(rest)
     if (request.op !== 'reload' && request.op !== 'navigate') return await this.callPage(`act ${String(input.op)}`, request, signal, window) as UiActionResult
     // The page is replaced: wait for the new one to connect, so the next look sees it. The page may drop before it has answered; that is the reload working.
-    const back = this.deps.channel.expectAttach(this.deps.pageBackMs ?? PAGE_BACK_MS)
+    const back = this.deps.channel.expectNewPage(this.deps.pageBackMs ?? PAGE_BACK_MS)
     let answer: UiActionResult
     try {
       answer = await this.callPage(`act ${request.op}`, request, signal, window) as UiActionResult
@@ -166,7 +166,10 @@ export class Door {
       if (!(cause instanceof UiControlError && cause.code === 'disconnected')) { void back; throw cause }
       answer = { ok: true, detail: request.op === 'reload' ? 'reloading' : `going to ${request.path}` }
     }
-    if (!await back) throw new UiControlError('timeout', request.op === 'reload' ? 'the page did not come back after the reload' : `the page did not come back after going to ${request.path}: is there a page at that path, and does it load the door's script?`)
+    const came = await back
+    // The page that came back is the one this agent was driving: it stays the target until the person focuses another page.
+    if (came !== undefined) this.deps.channel.prefer(came)
+    if (came === undefined) throw new UiControlError('timeout', request.op === 'reload' ? 'the page did not come back after the reload' : `the page did not come back after going to ${request.path}: is there a page at that path, and does it load the door's script?`)
     const landed = request.op === 'navigate' ? await this.statusAt(request.path) : undefined
     return { ...answer, detail: `${answer.detail ?? 'done'}${landed === undefined ? '' : `; ${landed}`}; the page is back: look again` }
   }

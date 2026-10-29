@@ -119,6 +119,8 @@ export class PageChannel {
       // A malformed call carries no usable id; there is nothing to answer.
       return
     }
+    // Alive: said before anything is done, so the Host can tell a page that heard the call from one that is frozen or gone.
+    this.send({ t: 'ack', id: call.id })
     this.driver.handle(call.request).then(
       (value) => { this.send({ t: 'result', id: call.id, value }) },
       (cause: unknown) => {

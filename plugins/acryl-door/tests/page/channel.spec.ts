@@ -52,8 +52,10 @@ describe('PageChannel', () => {
     page.connect()
     expect(sources[0]?.url).toBe('/api/acryl-door/channel?window=w-1&focused=1')
     sources[0]?.emit('call', JSON.stringify({ t: 'call', id: 7, request: { op: 'snapshot' } }))
-    await vi.waitFor(() => { expect(posts).toHaveLength(1) })
-    expect(posts[0]).toMatchObject({ url: '/api/acryl-door/channel/answer', body: { window: 'w-1', message: { t: 'result', id: 7 } } })
+    await vi.waitFor(() => { expect(posts).toHaveLength(2) })
+    // The page says it heard the call before it does anything, then answers it.
+    expect(posts[0]).toMatchObject({ url: '/api/acryl-door/channel/answer', body: { window: 'w-1', message: { t: 'ack', id: 7 } } })
+    expect(posts[1]).toMatchObject({ url: '/api/acryl-door/channel/answer', body: { window: 'w-1', message: { t: 'result', id: 7 } } })
     page.dispose()
   })
 

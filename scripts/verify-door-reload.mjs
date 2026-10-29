@@ -239,6 +239,44 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   log(
     'A: a mistyped path gives a 404 page the door can still drive, navigate names the 404, and the window comes back',
   )
+
+  // C, two tabs of the app (the workshop's normal state: the panel's tab and a tab the agent navigates). The door drives one page, deterministically: the one it just sent
+  // somewhere (it comes back as a new page), else the one in front. A look right after a navigate must answer at once, whichever tab the person last touched.
+  const tabs = () => fetch(`http://127.0.0.1:${devPort}/json`).then((r) => r.json())
+  const appTabs = async () =>
+    (await tabs()).filter((t) => t.type === 'page' && t.url.startsWith(base))
+  const first = (await appTabs())[0]
+  if (first === undefined) fail('C: the first tab is gone')
+  const secondTab = await fetch(`http://127.0.0.1:${devPort}/json/new?${base}/p2`, {
+    method: 'PUT',
+  }).then((r) => r.json())
+  await until(async () => (await appTabs()).length === 2, 15_000)
+  const timed = (...args) => {
+    const started = Date.now()
+    const answer = acryl(...args)
+    return { ...answer, ms: Date.now() - started }
+  }
+  const activate = (tab) => fetch(`http://127.0.0.1:${devPort}/json/activate/${tab.id}`)
+  for (const [front, back, path, heading] of [
+    [first, secondTab, '/p2', 'Second page'],
+    [secondTab, first, '/p1', 'Version'],
+    [first, secondTab, '/p2', 'Second page'],
+  ]) {
+    await activate(front)
+    await sleep(700)
+    const moved = timed('act', 'navigate', '--path', path)
+    if (moved.code !== 0)
+      fail(`C: act navigate ${path} with two tabs failed:\n${moved.out}${moved.err}`)
+    const seen = timed('look')
+    if (seen.code !== 0 || !seen.out.includes(heading) || seen.ms > 5000)
+      fail(
+        `C: the look after navigating ${path} with two tabs took ${seen.ms} ms and ${seen.code === 0 ? 'read' : 'failed with'}:\n${seen.out}${seen.err}`,
+      )
+    void back
+  }
+  log(
+    'C: with two tabs a look right after a navigate answers at once with the page that was navigated',
+  )
   log('OK')
 } finally {
   browser?.kill('SIGKILL')
