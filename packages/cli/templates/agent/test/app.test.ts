@@ -161,4 +161,6 @@ test('the app has a /settings page with the appearance setting, and the home pag
       await app.root.router.request('/', { headers: { accept: 'text/html' } })
     ).text()
     assert.match(home, /localStorage\.getItem\('theme'\)/)
+    // ... without leaving a global behind for the page's own code to collide with.
+    assert.doesNotMatch(home, /<script>\s*(?:var|let|const) /)
   }))
