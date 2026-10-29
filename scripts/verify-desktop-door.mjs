@@ -175,6 +175,11 @@ try {
   const second = /window (\d+)/u.exec(opened.out)?.[1]
   if (opened.code !== 0 || second === undefined)
     fail(`window open failed:\n${opened.out}${opened.err}`)
+  // The list names the path a window was opened on from the first moment, before its page has reported in.
+  if (!windowList()?.some((entry) => entry.id === Number(second) && entry.line.includes('/two')))
+    fail(
+      `window list does not show /two for the window just opened:\n${acryl('window', 'list').out}`,
+    )
   // A window opened while another is open is not exactly on top of it.
   const places = (windowList() ?? []).map((entry) =>
     /@(-?\d+),(-?\d+)/u.exec(entry.line)?.slice(1).join(','),

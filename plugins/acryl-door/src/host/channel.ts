@@ -179,7 +179,7 @@ export class UiChannel {
       const fresh = await this.expectNewPage(this.attachWaitMs)
       if (fresh !== undefined && !tried.has(fresh)) return await this.call(request, options, true)
     }
-    throw new UiControlError('timeout', `no page of the app answered within ${String(Math.round(this.ackMs / 1000))} s: the app's pages are open but none responded. Likely causes: a tab in the background, a page that is still loading after a navigation (look again), or a page that holds the browser's six connections with event streams of its own (a page should keep to two). Bring the app's tab to the front, or navigate it, then look again`)
+    throw new UiControlError('timeout', `no page of the app answered within ${String(Math.round(this.ackMs / 1000))} s: the app's pages are open but none responded. Likely causes: a tab in the background, a page that is still loading after a navigation (look again), a page busy running a long script, or a page that holds the browser's six connections with event streams of its own (a page should keep to two). Bring the app's tab to the front, or navigate it, then look again`)
   }
 
   private callOne(target: Connection, request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number }, failOver: boolean): Promise<UiResult> {

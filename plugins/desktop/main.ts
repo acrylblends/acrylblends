@@ -91,6 +91,8 @@ if (!app.requestSingleInstanceLock()) {
     }
     const origin = new URL(url).origin
     /** One window on a path of the app. Navigation stays on the app's own server; any other address opens in the system browser. The user agent names the window to the door (`AcrylWindow/<id>`), so an agent can drive it with `--window <id>`. */
+    // Where each window was opened: `window list` shows it until the page reports its own address (Electron gives none while the first load has not started).
+    const openedOn = new Map<number, string>()
     const createWindow = (path: string): BrowserWindow => {
       // A window opened while another is open sits a step down and to the right of it, not exactly on top.
       const beside =
@@ -112,6 +114,7 @@ if (!app.requestSingleInstanceLock()) {
         )
       })()
       const created = new BrowserWindow(windowOptions({ title: chosen.name, ...where }))
+      openedOn.set(created.id, path)
       created.webContents.setUserAgent(
         `${created.webContents.getUserAgent()} AcrylWindow/${String(created.id)}`,
       )
@@ -139,7 +142,8 @@ if (!app.requestSingleInstanceLock()) {
     const port = (candidate: BrowserWindow): WindowPort => ({
       id: candidate.id,
       getTitle: () => candidate.getTitle(),
-      getURL: () => candidate.webContents.getURL(),
+      getURL: () =>
+        candidate.webContents.getURL() || new URL(openedOn.get(candidate.id) ?? '/', url).href,
       isFocused: () => candidate.isFocused(),
       isMinimized: () => candidate.isMinimized(),
       getSize: () => candidate.getSize(),

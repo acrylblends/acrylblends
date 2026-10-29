@@ -27,14 +27,15 @@ const fail = (message) => {
 const isWindows = process.platform === 'win32'
 const scratch = mkdtempSync(join(tmpdir(), 'vitest-peer-'))
 const env = { ...process.env, npm_config_loglevel: 'error', CI: '1' }
-function run(command, args, cwd) {
+function run(command, args, cwd, allowFailure = false) {
   const r = spawnSync(command, args, {
     cwd,
     env,
     encoding: 'utf8',
     shell: isWindows && /^(pnpm|npm)$/u.test(command),
   })
-  if (r.status !== 0) fail(`${command} ${args.join(' ')} failed in ${cwd}:\n${r.stdout}${r.stderr}`)
+  if (r.status !== 0 && !allowFailure)
+    fail(`${command} ${args.join(' ')} failed in ${cwd}:\n${r.stdout}${r.stderr}`)
   return r.stdout
 }
 
@@ -68,7 +69,20 @@ try {
   ]) {
     if ('vitest' in (manifest[field] ?? {})) fail(`the package declares vitest in ${field}`)
   }
-  log('the package declares no vitest (not a dependency, not a peer)')
+  const importing = run(
+    'grep',
+    [
+      '-rlE',
+      '^[[:space:]]*(import|export)[^;]*from [\'"]vitest[\'"]|import\\([\'"]vitest',
+      join(unpacked, 'package', 'lib'),
+    ],
+    scratch,
+    true,
+  )
+  if (importing.trim() !== '') fail(`files of the package import vitest:\n${importing}`)
+  log(
+    'the package declares no vitest (not a dependency, not a peer), and no file of it imports vitest',
+  )
 
   // 2. A production install has none in its closure.
   const production = join(scratch, 'production')
@@ -130,6 +144,7 @@ try {
     `import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import * as vitest from 'vitest'
 import { openKv } from 'acrylblends/kv/json'
 import { describeKvConformance } from 'acrylblends/kv/conformance'
 
@@ -140,15 +155,30 @@ describeKvConformance('json file', async () => {
     return { kv: opened.kv, close: opened.close, reopen: async () => { await opened.close(); return open() } }
   }
   return open()
+}, vitest)
+`,
+  )
+  writeFileSync(
+    join(provider, 'tests', 'missing.spec.ts'),
+    `import { expect, it } from 'vitest'
+import { describeKvConformance } from 'acrylblends/kv/conformance'
+
+it('says what to pass when the suite is not given vitest', () => {
+  expect(() => describeKvConformance('x', async () => { throw new Error('unused') }, undefined as never)).toThrow(/third argument/)
 })
 `,
   )
   run('pnpm', ['install', '--no-frozen-lockfile', '--ignore-scripts'], provider)
-  const ran = run('pnpm', ['exec', 'vitest', 'run'], provider)
+  // The project's own vitest, by its path: under `pnpm run` the repository's node_modules/.bin comes first on the PATH, and `pnpm exec vitest` would start that one.
+  const ran = run(
+    process.execPath,
+    [join(provider, 'node_modules', 'vitest', 'vitest.mjs'), 'run'],
+    provider,
+  )
   if (!/Tests\s+\d+ passed/u.test(ran))
     fail(`the conformance suite did not run under pnpm:\n${ran}`)
   log(
-    `a provider's project with its own vitest runs the kv conformance suite from acrylblends/kv/conformance (${/Tests\s+(\d+) passed/u.exec(ran)?.[1]} cases)`,
+    `a provider's project with its own vitest runs the kv conformance suite from acrylblends/kv/conformance (${/Tests\s+(\d+) passed/u.exec(ran)?.[1]} cases), and says what to pass when it is not given vitest`,
   )
   log('OK')
 } finally {
