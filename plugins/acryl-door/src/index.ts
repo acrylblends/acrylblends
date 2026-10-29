@@ -23,7 +23,7 @@ import { DOOR_PREFIX, privateApi } from './host/http.ts'
 import { mcpRoutes } from './host/mcp-routes.ts'
 import { operatorRoutes } from './host/operator-routes.ts'
 import { pageChannelRoutes } from './host/page-routes.ts'
-import { writeShims, type ShimTarget } from './host/shim.ts'
+import { realNode, writeShims, type ShimTarget } from './host/shim.ts'
 
 /** Stable Cordis plugin name, equal to the package name and the Loader row id. */
 export const name = 'acryl-door'
@@ -54,10 +54,13 @@ export interface Config {
    * run it in production (a packaged desktop app whose user drives it with an agent) says so here; `ACRYL_DOOR=off` still wins.
    */
   allowInProduction?: boolean
+  /** Reload the open pages after a live plugin change, so an agent that built a feature sees it on the page it has open. Default: true. */
+  reloadOnChange?: boolean
 }
 
 export const Config: z<Config> = z.object({
   allowInProduction: z.boolean().default(false).description('Run in production too (NODE_ENV=production); ACRYL_DOOR=off still turns it off.'),
+  reloadOnChange: z.boolean().default(true).description('Reload the open pages after a plugin was added, removed or reloaded while the app runs.'),
   tools: z.object({
     // Not a `door_` name: those are the door's own verbs in the registry, never offered back as app tools.
     expose: z.array(z.string().pattern(/^(?!door_)[A-Za-z][A-Za-z0-9_-]{0,63}$/u)).description('App tools (from the tools registry) the door offers; none by default.'),
@@ -73,11 +76,14 @@ const CLIENT = import.meta.url.endsWith('.ts') ? join(import.meta.dirname, 'cli'
 /** How the folder's `.acryl/bin/acryl` starts the client: with the Node that runs the app, and its type-stripping flag when run from source. */
 function shimTarget(): ShimTarget {
   const fromSource = CLIENT.endsWith('.ts')
+  const inElectron = process.versions.electron !== undefined
+  // Inside Electron the command prefers a real Node (no code-signing noise on every call); without one, Electron runs the client.
+  const node = inElectron ? realNode() : undefined
   return {
-    node: process.execPath,
+    node: node ?? process.execPath,
     nodeOptions: fromSource ? process.execArgv.filter(option => /^--experimental-(strip|transform)-types$/u.test(option)) : [],
     client: CLIENT,
-    electron: process.versions.electron !== undefined,
+    electron: inElectron && node === undefined,
   }
 }
 
@@ -108,12 +114,29 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     extensions: () => ctx.get('extensions') as unknown as ExtensionsPort | undefined,
     tools: () => ctx.get('tools') as unknown as ToolsPort | undefined,
     expose: config.tools?.expose ?? [],
+    reloadOnChange: config.reloadOnChange !== false,
   })
   ctx.effect(() => () => { channel.close() }, 'acryl-door: page channel')
   // One script tag for the page (`page.js`): it imports the module tree served below it.
   const pageModule = new Acryl()
     .get(`${DOOR_PREFIX}/page.js`, c => c.body(`import '${DOOR_PREFIX}/page/main.ts'\n`, 200, { 'content-type': 'text/javascript; charset=utf-8' }))
     .route(`${DOOR_PREFIX}/page`, clientModules({ root: PAGE_DIR }))
+  // The page script on every HTML page the app answers, whenever its plugin was mounted (the pages of a plugin that loaded at boot, before this one, included): a page an agent writes
+  // can be looked at and driven without anyone adding the tag. A page that already carries it (the templates' own pages) is left as it is. Development only, like the rest of the door.
+  const tag = `<script type="module" src="${DOOR_PREFIX}/page.js"></script>`
+  const addScript = async (c: { res: Response }, next: () => Promise<void>): Promise<void> => {
+    await next()
+    if (!(c.res.headers.get('content-type') ?? '').includes('text/html')) return
+    const html = await c.res.text()
+    const headers = new Headers(c.res.headers)
+    headers.delete('content-length')
+    const carries = html.includes(`${DOOR_PREFIX}/page.js`)
+    c.res = new Response(carries ? html : html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag, { status: c.res.status, headers })
+  }
+  const router = ctx.router as unknown as { wrap?: (middleware: typeof addScript) => unknown }
+  // An app whose router copy is older than this plugin has no `wrap`: the middleware then covers the routes mounted after the door, as the agent panel's does.
+  if (typeof router.wrap === 'function') router.wrap(addScript)
+  else ctx.router.route('/', new Acryl().use('*', addScript as never))
   ctx.router.route('/', privateApi(
     DOOR_PREFIX,
     pageModule,

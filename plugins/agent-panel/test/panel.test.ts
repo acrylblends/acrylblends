@@ -278,3 +278,119 @@ test('pi is offered when it has a DeepSeek key, from the environment or from its
   writeFileSync(join(home, '.pi', 'agent', 'auth.json'), 'not json')
   assert.equal(piHasDeepseekKey({}, home), false, 'an unreadable file is no login')
 })
+
+test('a run belongs to the app: it goes on when the page that asked goes away, a page that loads next replays and follows it, and only Stop cancels it', async () => {
+  const { app } = await boot()
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let cancelled = false
+  const fiber = app.plugin({
+    name: 'slow-driver',
+    inject: ['drivers'],
+    apply(ctx: Context) {
+      ctx.effect(() =>
+        ctx.drivers.register({
+          kind: 'chat',
+          name: 'slow',
+          async *start({ message, signal }) {
+            signal.addEventListener('abort', () => {
+              cancelled = true
+            })
+            yield { event: 'text', data: { text: `start: ${message}` } }
+            await Promise.race([
+              gate,
+              new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve())),
+            ])
+            yield { event: 'text', data: { text: 'finish' } }
+          },
+        }),
+      )
+    },
+  })
+  await fiber.await()
+  const { token } = (await (
+    await app.router.request('/api/agent-panel/session', { headers: OWN })
+  ).json()) as { token: string }
+  const headers = { 'content-type': 'application/json', ...OWN, 'x-agent-panel-token': token }
+  assert.equal(
+    (await app.router.request('/api/agent-panel/run', { headers })).headers
+      .get('content-type')
+      ?.includes('json'),
+    true,
+    'no run yet',
+  )
+
+  // The page that asked reads the first event and goes away.
+  const asked = await app.router.request('/api/agent-panel/ask', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message: 'build', driver: 'slow' }),
+  })
+  const reader = asked.body!.getReader()
+  const first = new TextDecoder().decode((await reader.read()).value)
+  assert.match(first, /start: build/)
+  await reader.cancel()
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.equal(cancelled, false, 'the run went on')
+  assert.equal(
+    (
+      await app.router.request('/api/agent-panel/ask', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ message: 'again', driver: 'slow' }),
+      })
+    ).status,
+    409,
+    'one run at a time',
+  )
+
+  // The next page: the question, the events so far, and the rest.
+  const followed = app.router.request('/api/agent-panel/run', { headers })
+  const events = eventsOf(await followed)
+  release()
+  const seen = await events
+  assert.deepEqual(
+    seen.map((e) => [e.event, e.data.message ?? e.data.text ?? e.data.changed]),
+    [
+      ['run', 'build'],
+      ['text', 'start: build'],
+      ['text', 'finish'],
+      ['done', false],
+    ],
+  )
+  assert.equal(seen[0]!.data.ended, false)
+  // After it ended, a page that loads gets it again, marked ended, and it does not restart.
+  const later = await eventsOf(await app.router.request('/api/agent-panel/run', { headers }))
+  assert.equal(later[0]!.data.ended, true)
+  assert.deepEqual(
+    later.slice(1).map((e) => e.event),
+    ['text', 'text', 'done'],
+  )
+
+  // Stop cancels.
+  const second = await app.router.request('/api/agent-panel/ask', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message: 'stop me', driver: 'slow' }),
+  })
+  const secondReader = second.body!.getReader()
+  await secondReader.read()
+  assert.equal(
+    (await app.router.request('/api/agent-panel/stop', { method: 'POST', headers })).status,
+    200,
+  )
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.equal(cancelled, true, 'Stop cancelled the run')
+  await secondReader.cancel()
+  assert.equal(
+    (
+      await app.router.request('/api/agent-panel/stop', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+      })
+    ).status,
+    403,
+  )
+})

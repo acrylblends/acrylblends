@@ -50,6 +50,10 @@ export interface DoorDeps {
   readonly tools: () => ToolsPort | undefined
   /** The app tools the door offers; anything else is refused before it reaches the registry. */
   readonly expose: readonly string[]
+  /** Reload the open pages after a plugin was added, removed or reloaded, so the page an agent looks at next is the new one. Default: true. */
+  readonly reloadOnChange?: boolean
+  /** How long a reload or a move may take before the new page has connected again (tests shorten it). Default 15 s. */
+  readonly pageBackMs?: number
 }
 
 /** What one verb answered: the value for `--json` and programs, the text for an agent reading a terminal. */
@@ -60,6 +64,9 @@ export interface VerbAnswer {
 
 /** The files an agent should read first, when the app has them. */
 const SELF_KNOWLEDGE = ['AGENTS.md', 'CLAUDE.md', '.agents/skills', '.claude/skills', 'docs', 'plugins']
+
+/** How long a reload or a move may take before the new page has connected to the door again. */
+const PAGE_BACK_MS = 15_000
 
 export class Door {
   private readonly deps: DoorDeps
@@ -81,7 +88,7 @@ export class Door {
         const result = await this.act(input, signal)
         return { value: result, text: `done${result.target === undefined ? '' : `: ${result.target.role} "${result.target.name}"`}${result.detail === undefined ? '' : ` (${result.detail})`}; look again before the next act` }
       }
-      case 'plugin-list': return this.plugin(extensions => extensions.list())
+      case 'plugin-list': return this.plugin(extensions => extensions.list(), false)
       case 'plugin-add': return this.plugin(extensions => extensions.install(this.insideApp(input.folder)))
       case 'plugin-remove': {
         const name = input.name
@@ -127,9 +134,21 @@ export class Door {
     return this.callPage('look', request, signal) as Promise<UiSnapshot>
   }
 
-  act(input: Record<string, unknown>, signal: AbortSignal): Promise<UiActionResult> {
+  async act(input: Record<string, unknown>, signal: AbortSignal): Promise<UiActionResult> {
     if (input.op === 'snapshot') throw new DoorError('invalid', 'use look to see the page')
-    return this.callPage(`act ${String(input.op)}`, this.parse(input), signal) as Promise<UiActionResult>
+    const request = this.parse(input)
+    if (request.op !== 'reload' && request.op !== 'navigate') return await this.callPage(`act ${String(input.op)}`, request, signal) as UiActionResult
+    // The page is replaced: wait for the new one to connect, so the next look sees it. The page may drop before it has answered; that is the reload working.
+    const back = this.deps.channel.expectAttach(this.deps.pageBackMs ?? PAGE_BACK_MS)
+    let answer: UiActionResult
+    try {
+      answer = await this.callPage(`act ${request.op}`, request, signal) as UiActionResult
+    } catch (cause) {
+      if (!(cause instanceof UiControlError && cause.code === 'disconnected')) { void back; throw cause }
+      answer = { ok: true, detail: request.op === 'reload' ? 'reloading' : `going to ${request.path}` }
+    }
+    if (!await back) throw new UiControlError('timeout', request.op === 'reload' ? 'the page did not come back after the reload' : `the page did not come back after going to ${request.path}: is there a page at that path, and does it load the door's script?`)
+    return { ...answer, detail: `${answer.detail ?? 'done'}; the page is back: look again` }
   }
 
   private parse(input: Record<string, unknown>): UiRequest {
@@ -156,10 +175,13 @@ export class Door {
     }
   }
 
-  private async plugin(run: (extensions: ExtensionsPort) => unknown): Promise<VerbAnswer> {
+  private async plugin(run: (extensions: ExtensionsPort) => unknown, mutates = true): Promise<VerbAnswer> {
     const extensions = this.deps.extensions()
     if (extensions === undefined) throw new DoorError('unavailable', 'this app has no extensions plugin, so plugins cannot be installed while it runs')
     const value = await run(extensions)
+    // The app changed under the open pages: reload them (not when the plugin was already as it should be), and answer once they are back.
+    const unchanged = typeof value === 'object' && value !== null && (value as { action?: unknown }).action === 'unchanged'
+    if (mutates && !unchanged && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
     return { value, text: JSON.stringify(value, null, 2) }
   }
 

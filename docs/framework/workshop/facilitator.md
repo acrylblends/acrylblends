@@ -54,6 +54,7 @@ what the optional column is for, and the handout names the same choices so nobod
 
 These are the defects found by the walk. They are known; say so rather than letting people think they broke something.
 
+- **An agent with its own settings acts differently.** Skills, hooks and instructions in a person's own Codex or Claude configuration travel into the panel's run: on the owner's laptop Codex stopped to "present a design for approval" instead of building. Word every task for the agent as "do it now, without asking for approval", and for a demo machine start the agent from a clean configuration (a fresh `CODEX_HOME`, no personal skills).
 - **The data step is the slow one.** Wiring `kv` then `db` by hand is about ten minutes of edits for a newcomer (two rows, two registry lines, two
   type imports, the migrations folder). It is the block the handout names optional, and the one to help with first.
 - **A relative migrations path in `blend.yaml` fails.** `migrations: migrations` in the row stops the app with "this app has no file base URL to

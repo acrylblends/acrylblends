@@ -276,3 +276,22 @@ describe('the door is a development tool', () => {
     expect(readDoorFile(running.root)?.url).toBe(running.origin)
   })
 })
+
+describe('the page script on every HTML page', () => {
+  it('is added to a page that has none, once to a page that has it, and never to anything that is not HTML', async () => {
+    const running = await app()
+    const { Acryl } = await import('acryl-router')
+    running.ctx.router.route('/', new Acryl()
+      .get('/plain', c => c.html('<!doctype html><html><body><p>hi</p></body></html>'))
+      .get('/fragment', c => c.html('<p>no body tag</p>'))
+      .get('/has', c => c.html('<html><body><p>x</p><script type="module" src="/api/acryl-door/page.js"></script></body></html>'))
+      .get('/data', c => c.json({ ok: true })))
+    const tag = '<script type="module" src="/api/acryl-door/page.js"></script>'
+    const count = (text: string): number => text.split('/api/acryl-door/page.js').length - 1
+    const plain = await (await fetch(`${running.origin}/plain`)).text()
+    expect(plain).toBe(`<!doctype html><html><body><p>hi</p>${tag}</body></html>`)
+    expect(await (await fetch(`${running.origin}/fragment`)).text()).toBe(`<p>no body tag</p>${tag}`)
+    expect(count(await (await fetch(`${running.origin}/has`)).text())).toBe(1)
+    expect(await (await fetch(`${running.origin}/data`)).json()).toEqual({ ok: true })
+  })
+})

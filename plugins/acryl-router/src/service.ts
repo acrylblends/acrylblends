@@ -94,6 +94,8 @@ interface Mount {
 
 interface RouterState {
   readonly mounts: Set<Mount>
+  /** Middleware around every request, whenever it was added (see {@link Router.wrap}). */
+  readonly wrappers: Set<H>
   errorHandler: ErrorHandler | undefined
   notFoundHandler: NotFoundHandler | undefined
   /** The app composed from the live mounts; dropped on every change and composed again by the next request. */
@@ -125,7 +127,7 @@ async function drain(tasks: readonly Promise<unknown>[]): Promise<void> {
 
 export class Router extends Service {
   /** Everything that changes after construction, kept in one object so the service's live state is in one place. */
-  private readonly state: RouterState = { mounts: new Set(), errorHandler: undefined, notFoundHandler: undefined, composed: undefined, closing: false }
+  private readonly state: RouterState = { mounts: new Set(), wrappers: new Set(), errorHandler: undefined, notFoundHandler: undefined, composed: undefined, closing: false }
   private readonly flights = new Set<Flight>()
   /** The flight of each request the router dispatched, keyed by the request its handlers see as `c.req.raw`. */
   private readonly flightOf = new WeakMap<Request, Flight>()
@@ -183,6 +185,21 @@ export class Router extends Service {
       yield remove
     }, `acryl-router: route ${path}`)
     return () => { void remove() }
+  }
+
+  /**
+   * Run `middleware` around every request the router serves, whenever the plugin that asks was mounted: a middleware in a plain mount wraps only the routes mounted after it,
+   * which is the wrong tool for a plugin that must see every page (the door adds its script to each HTML response, the pages of a plugin that loaded earlier included). It goes
+   * outside all mounts, in the order wrappers were added, and goes away when the calling plugin unloads or when the returned function is called.
+   */
+  wrap(middleware: H): () => void {
+    this.state.wrappers.add(middleware)
+    this.state.composed = undefined
+    const remove = (): void => {
+      if (this.state.wrappers.delete(middleware)) this.state.composed = undefined
+    }
+    this.ctx.effect(() => remove, 'acryl-router: wrapper')
+    return remove
   }
 
   /**
@@ -331,6 +348,7 @@ export class Router extends Service {
     // over all routes on its first request, which grows faster than the route count (measured: 22 ms at 1000 routes, 163 ms at 2000),
     // while the trie rebuilds in about 1 ms per 1000 routes and matches as fast (scripts/bench-remount.mjs).
     const root = new Acryl({ strict: this.strict, router: new TrieRouter() })
+    for (const wrapper of this.state.wrappers) root.use('*', wrapper)
     for (const mount of this.state.mounts) root.route(mount.path, mount.app)
     root.onError(this.state.errorHandler ?? this.logError)
     if (this.state.notFoundHandler !== undefined) root.notFound(this.state.notFoundHandler)

@@ -74,3 +74,17 @@ The verbs are one table, `src/host/verbs.ts`, and each face reads it, so a verb 
   verb throws `<code>: <message>`. `tools.expose` refuses `door_` names, so the door never offers its own verbs back as app tools.
 
 `tests/host/verbs.spec.ts` lists the verbs from each face of a running app and compares them.
+
+## Reload and navigate
+
+`act reload` reloads the page and `act navigate --path /settings` goes to another path of the app (a path that starts with one `/`, never another site). Both answer first and
+move the page a moment later, then wait up to 15 s for the new page to connect to the door, so the next `look` sees it; a page that does not come back (a path with no page, or
+a page without the door script) fails with a `timeout` that says so. They are `act` operations like the others: the same verb in the CLI, MCP and the built-in chat.
+
+After a live plugin change (`plugin add`, `plugin remove`, `plugin reload`, except for a plugin that was already as it should be) the door reloads every open page and answers
+once they are back, so an agent that builds a feature sees the new page in the same run. `reloadOnChange: false` in the row's config turns that off.
+
+## The page script is added for you
+
+In development the door adds its page script to every HTML response of the routes mounted after it (as the agent panel does for its own), unless the page already carries it.
+A page an agent writes can therefore be looked at and driven without anyone adding the tag.

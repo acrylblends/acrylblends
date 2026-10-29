@@ -424,3 +424,38 @@ describe('acryl-router lifecycle through Cordis', () => {
     expect(fiber.state).toBe(DISPOSED)
   })
 })
+
+describe('wrap', () => {
+  it('runs around every request, also for a route mounted before the wrapper, and goes away with the plugin that added it', async () => {
+    const { ctx, router } = await mountRouter()
+    ctx.plugin({ name: 'early', inject: ['router'], apply: (inner: Context) => { inner.router.route('/', new Acryl().get('/early', c => c.text('early'))) } })
+    await settle()
+    const wrapper = ctx.plugin({
+      name: 'wrapper',
+      inject: ['router'],
+      apply: (inner: Context) => {
+        inner.router.wrap(async (c, next) => {
+          await next()
+          c.res = new Response(`[${await c.res.text()}]`, c.res)
+        })
+      },
+    })
+    ctx.plugin({ name: 'late', inject: ['router'], apply: (inner: Context) => { inner.router.route('/', new Acryl().get('/late', c => c.text('late'))) } })
+    await settle()
+    expect(await (await router.request('/early')).text()).toBe('[early]')
+    expect(await (await router.request('/late')).text()).toBe('[late]')
+    await wrapper.dispose()
+    expect(await (await router.request('/early')).text()).toBe('early')
+  })
+
+  it('applies wrappers in the order they were added, and a returned remover takes one away', async () => {
+    const { router } = await mountRouter()
+    router.route('/', new Acryl().get('/x', c => c.text('x')))
+    const tag = (label: string) => async (c: Parameters<Parameters<Router['wrap']>[0]>[0], next: () => Promise<void>) => { await next(); c.res = new Response(`${label}(${await c.res.text()})`, c.res) }
+    const removeA = router.wrap(tag('a'))
+    router.wrap(tag('b'))
+    expect(await (await router.request('/x')).text()).toBe('a(b(x))')
+    removeA()
+    expect(await (await router.request('/x')).text()).toBe('b(x)')
+  })
+})

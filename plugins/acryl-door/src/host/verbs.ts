@@ -47,12 +47,13 @@ export const VERB_SPECS: Readonly<Record<Verb, VerbSpec>> = {
     },
   },
   'act': {
-    usage: 'act click|type|select|press|scroll|wait ...: do one thing on the page (refs from the latest look)',
-    description: 'Do one thing on the page: click, type, select, press a key, scroll, or wait for text or a control. Look again before the next act.',
+    usage: 'act click|type|select|press|scroll|wait|reload|navigate ...: do one thing on the page (refs from the latest look)',
+    description: 'Do one thing on the page: click, type, select, press a key, scroll, wait for text or a control, reload the page, or navigate to another path of the app. Look again before the next act.',
     arguments: {
       type: 'object',
       properties: {
-        op: { type: 'string', enum: ['click', 'type', 'select', 'press', 'scroll', 'wait'] },
+        op: { type: 'string', enum: ['click', 'type', 'select', 'press', 'scroll', 'wait', 'reload', 'navigate'] },
+        path: { type: 'string', description: 'navigate: a path of this app, e.g. /demo (the page must load the door script to be controlled afterwards)' },
         ref,
         text: { type: 'string', description: 'type: what to type; wait: the text to wait for' },
         submit: { type: 'boolean', description: 'type: press Enter after' },

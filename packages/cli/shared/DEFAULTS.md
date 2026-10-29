@@ -34,11 +34,15 @@ The door is a command in this folder, `.acryl/bin/acryl`, that lets you look at 
 .acryl/bin/acryl act press --key <Enter|Escape|...>
 .acryl/bin/acryl act scroll [--ref <r>] --direction up|down [--amount <n>]
 .acryl/bin/acryl act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]
+.acryl/bin/acryl act reload                 reload the page; answers once the new page is back
+.acryl/bin/acryl act navigate --path <path> go to another path of the app, e.g. /settings (never another site)
 .acryl/bin/acryl plugin list | add <folder> | remove <name> | reload
 .acryl/bin/acryl tool list | call --tool <name> --args '<json>'
 .acryl/bin/acryl verbs                      the verb list
 ```
 
+- **Check your own UI work with `look` and `act`.** After you build or change something people see, open the page and use it the way a person would: look, click through the new feature, look again, and say what you saw. A plugin you add, remove or reload with `plugin add|remove|reload` reloads the open pages by itself and the verb answers once they are back; after you change any other file (`src/`, a page) run `act reload`, then `look`. A page is a path of the app: `act navigate --path /demo`.
+- The door's page script is added to every HTML page in development, so a page you write needs no tag for `look` and `act` to see it.
 - `look` and `act` need the app's page open in a browser (`brief` says `Page: not open` when it is not). Look again before each `act`: refs belong to the latest `look`.
 - A password field is not shown and cannot be typed into through the door; sign in by hand, or test the sign-in with a test.
 - Every verb takes `--json`. The exit code is 0 for done, 1 when the verb failed, 2 for a usage error and 3 when no app is running in this folder.

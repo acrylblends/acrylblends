@@ -88,6 +88,7 @@ async function start(): Promise<void> {
   const termStop = $<HTMLButtonElement>('.termstop')
   termStop.addEventListener('click', () => void terminal?.stop())
   const form = $<HTMLFormElement>('form')
+  document.body.append(host)
   const kindOf = (name: string): 'chat' | 'terminal' =>
     session.drivers.find((d) => d.name === name)?.kind ?? 'chat'
   let terminal: { detach(): void; stop(): Promise<void> } | undefined
@@ -147,36 +148,36 @@ async function start(): Promise<void> {
     return el
   }
 
-  let controller: AbortController | undefined
-  stop.addEventListener('click', () => controller?.abort())
-  shadow.querySelector('form')!.addEventListener('submit', async (submitted) => {
-    submitted.preventDefault()
-    const message = input.value.trim()
-    if (message === '' || controller) return
-    input.value = ''
-    line(message, 'me')
-    controller = new AbortController()
+  // A run belongs to the app, not to this page: it goes on when the page reloads (the door reloads it after a plugin change, an agent may move it to another page) and the page that
+  // loads next follows it again. Only Stop cancels it.
+  const headers = { 'content-type': 'application/json', 'x-agent-panel-token': session.token }
+  let following = false
+  stop.addEventListener('click', () => void fetch(`${PREFIX}/stop`, { method: 'POST', headers }))
+  /**
+   * Show one run, as its events come, until it ends. `own` is true for a run this page just started (its question is on screen); a run found on load is shown from its question, and
+   * a run that had already ended before the page loaded is only shown, never reloads the page.
+   */
+  const watch = async (response: Response, own: boolean): Promise<void> => {
+    let live = true
+    following = true
     send.disabled = true
     stop.disabled = false
     let changed = false
     let answer: HTMLElement | undefined
     try {
-      const response = await fetch(`${PREFIX}/ask`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-agent-panel-token': session.token },
-        body: JSON.stringify({ message, driver: driver.value }),
-        signal: controller.signal,
-      })
-      if (!response.ok) {
-        line(
-          ((await response.json().catch(() => ({}))) as { error?: string }).error ??
-            `The panel answered ${response.status}.`,
-          'err',
-        )
-        return
-      }
       for await (const { event, data } of events(response)) {
-        if (event === 'text') {
+        if (event === 'run') {
+          live = data.ended !== true
+          if (!own) {
+            if (typeof data.message === 'string') line(data.message, 'me')
+            if (typeof data.driver === 'string' && kindOf(data.driver) === 'chat')
+              driver.value = data.driver
+            const recent =
+              data.ended !== true ||
+              (typeof data.endedAt === 'number' && Date.now() - data.endedAt < 120_000)
+            if (recent) show(true)
+          }
+        } else if (event === 'text') {
           answer ??= line('')
           answer.textContent += String(data.text ?? '')
         } else if (event === 'tool') {
@@ -191,24 +192,52 @@ async function start(): Promise<void> {
         }
       }
     } catch (error) {
-      line(
-        controller?.signal.aborted
-          ? 'Stopped.'
-          : `The request failed: ${error instanceof Error ? error.message : String(error)}`,
-        'err',
-      )
+      line(`The request failed: ${error instanceof Error ? error.message : String(error)}`, 'err')
     } finally {
-      controller = undefined
+      following = false
       send.disabled = false
       stop.disabled = true
     }
-    // A plugin was installed or removed: the new feature is served by the running app, so the page only needs to be loaded again (unless something is being typed).
-    if (changed && input.value.trim() === '') {
+    // A plugin was installed or removed while this page watched: the new feature is served by the running app, so the page only needs to be loaded again (unless something is being typed).
+    // A run that ended before this page loaded was already shown after its reload, and does not reload it again.
+    if (live && changed && input.value.trim() === '') {
       line('Reloading the page to show it.', 'tool')
       setTimeout(() => location.reload(), 900)
     }
+  }
+  form.addEventListener('submit', async (submitted) => {
+    submitted.preventDefault()
+    const message = input.value.trim()
+    if (message === '' || following) return
+    input.value = ''
+    line(message, 'me')
+    try {
+      const response = await fetch(`${PREFIX}/ask`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ message, driver: driver.value }),
+      })
+      if (!response.ok) {
+        line(
+          ((await response.json().catch(() => ({}))) as { error?: string }).error ??
+            `The panel answered ${response.status}.`,
+          'err',
+        )
+        return
+      }
+      await watch(response, true)
+    } catch (error) {
+      line(`The request failed: ${error instanceof Error ? error.message : String(error)}`, 'err')
+    }
   })
-  document.body.append(host)
+  // The latest run, if there is one: shown again after a reload (its question, its events), and followed if it is still going.
+  try {
+    const latest = await fetch(`${PREFIX}/run`, { headers })
+    if (latest.ok && (latest.headers.get('content-type') ?? '').includes('text/event-stream'))
+      void watch(latest, false)
+  } catch {
+    // No run to show.
+  }
   // A terminal that was open before a reload is still running on the server: show it again.
   try {
     const remembered = JSON.parse(sessionStorage.getItem('driver-pty-session') ?? 'null') as {
