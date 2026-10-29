@@ -113,4 +113,21 @@ describe('PageChannel', () => {
     expect(posts[0]?.body).toEqual({ window: 'w-1', message: { t: 'focus', focused: false } })
     page.dispose()
   })
+
+  it('lets go of its stream when the page is left (a browser may keep the page, and six kept streams hold up every request of the live page) and opens it again, with the same window id, when the page is restored', () => {
+    const page = channel()
+    page.connect()
+    expect(sources).toHaveLength(1)
+    page.suspend()
+    expect(sources[0]?.closed).toBe(true)
+    // No reconnect on its own: a suspended page stays quiet.
+    vi.advanceTimersByTime(60_000)
+    expect(sources).toHaveLength(1)
+    page.resume()
+    expect(sources).toHaveLength(2)
+    expect(sources[1]?.url).toBe('/api/acryl-door/channel?window=w-1&focused=1')
+    page.dispose()
+    page.resume()
+    expect(sources).toHaveLength(2)
+  })
 })

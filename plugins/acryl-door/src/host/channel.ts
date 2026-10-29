@@ -87,7 +87,8 @@ export class UiChannel {
   attach(windowId: string, focused: boolean, stream: PageStream, shellWindow?: number): () => void {
     const previous = this.connections.get(windowId)
     if (previous !== undefined) this.drop(previous, true)
-    const connection: Connection = { stream, windowId, shellWindow, focused, lastActive: ++this.clock, suspect: false }
+    // A page that did not answer stays last in line when its stream reconnects: a tab that cannot answer reconnects just as readily, and would otherwise be first again.
+    const connection: Connection = { stream, windowId, shellWindow, focused, lastActive: ++this.clock, suspect: previous?.suspect === true }
     this.connections.set(windowId, connection)
     for (const waiter of [...this.attachWaiters]) waiter(windowId)
     return () => { if (this.connections.get(windowId) === connection) this.drop(connection, false) }
@@ -154,14 +155,14 @@ export class UiChannel {
     if (candidates.length === 0) throw new UiControlError('no-window', 'no page of the app is open to control')
     if (options.signal?.aborted === true) throw new UiControlError('aborted', 'the call was cancelled')
     const readOnly = request.op === 'snapshot' || request.op === 'wait'
-    for (const [at, target] of candidates.entries()) {
+    for (const target of candidates) {
       try {
-        return await this.callOne(target, request, options, readOnly && at < candidates.length - 1)
+        return await this.callOne(target, request, options, readOnly)
       } catch (cause) {
         if (!(cause instanceof Silent)) throw cause
       }
     }
-    throw new UiControlError('timeout', 'no page of the app answered')
+    throw new UiControlError('timeout', `no page of the app answered within ${String(Math.round(this.ackMs / 1000))} s: the app's pages are open but none responded (a tab in the background, or a page that is still loading). Bring the app's tab to the front, or navigate it, then look again`)
   }
 
   private callOne(target: Connection, request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number }, failOver: boolean): Promise<UiResult> {

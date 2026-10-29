@@ -261,6 +261,38 @@ describe('waiting for pages to come back', () => {
       await third
     })
 
+    it('gives up on a read-only call when every page is silent, in the time a page has to acknowledge and not the whole call timeout, and says what to do', async () => {
+      const channel = new UiChannel({ ackMs: 30 })
+      fakePage(channel, 'one', true)
+      fakePage(channel, 'two', true)
+      const started = Date.now()
+      await expect(channel.call(lookOp)).rejects.toMatchObject({ code: 'timeout', message: expect.stringMatching(/none responded.*front/u) })
+      expect(Date.now() - started).toBeLessThan(2000)
+    })
+
+    it('keeps a silent page last in line when its stream reconnects, and trusts it again once it speaks', async () => {
+      const channel = new UiChannel({ ackMs: 30 })
+      const live = fakePage(channel, 'live', true)
+      fakePage(channel, 'tab', true)
+      const answered = channel.call(lookOp)
+      await new Promise(resolve => setTimeout(resolve, 60))
+      live.answer({ t: 'ack', id: 2 })
+      live.answer({ t: 'result', id: 2, value: { ok: true } })
+      await answered
+      // The tab reconnects (a new stream, the same window), as an unreachable tab does: it is the newest page, and still last.
+      const tab = fakePage(channel, 'tab', true)
+      const next = channel.call(click)
+      expect(live.sent).toHaveLength(2)
+      expect(tab.sent).toHaveLength(0)
+      live.answer({ t: 'result', id: 3, value: { ok: true } })
+      await next
+      tab.answer({ t: 'focus', focused: true })
+      const back = channel.call(click)
+      expect(tab.sent).toHaveLength(1)
+      tab.answer({ t: 'result', id: 4, value: { ok: true } })
+      await back
+    })
+
     it('tells expectNewPage which page came back: a window id that was not connected when it was asked', async () => {
       const channel = new UiChannel()
       fakePage(channel, 'old', true)

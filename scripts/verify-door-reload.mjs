@@ -241,7 +241,7 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   )
 
   // C, two tabs of the app (the workshop's normal state: the panel's tab and a tab the agent navigates). The door drives one page, deterministically: the one it just sent
-  // somewhere (it comes back as a new page), else the one in front. A look right after a navigate must answer at once, whichever tab the person last touched.
+  // somewhere (it comes back as a new page), else the one in front. A look right after a navigate must answer within a few seconds, whichever tab the person last touched, and never wait the whole call timeout on a page in the background.
   const tabs = () => fetch(`http://127.0.0.1:${devPort}/json`).then((r) => r.json())
   const appTabs = async () =>
     (await tabs()).filter((t) => t.type === 'page' && t.url.startsWith(base))
@@ -268,7 +268,7 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
     if (moved.code !== 0)
       fail(`C: act navigate ${path} with two tabs failed:\n${moved.out}${moved.err}`)
     const seen = timed('look')
-    if (seen.code !== 0 || !seen.out.includes(heading) || seen.ms > 5000)
+    if (seen.code !== 0 || !seen.out.includes(heading) || seen.ms > 2500)
       fail(
         `C: the look after navigating ${path} with two tabs took ${seen.ms} ms and ${seen.code === 0 ? 'read' : 'failed with'}:\n${seen.out}${seen.err}`,
       )
