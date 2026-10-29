@@ -139,7 +139,23 @@ describe('acrylblends preflight', () => {
       await preflight(machine({ onPath: (program) => ['claude', 'codex'].includes(program) })),
       'agent',
     )
-    expect(check.detail).toMatch(/^claude, codex /)
+    expect(check.detail).toBe(
+      'claude (be logged in: run claude once), codex (be logged in: codex login)',
+    )
+  })
+
+  it('says what each agent needs, and does not ask for a login pi does not use', async () => {
+    const check = byName(
+      await preflight(
+        machine({
+          onPath: (program) => program === 'pi',
+          env: { DEEPSEEK_API_KEY: 'sk-test-key' },
+        }),
+      ),
+      'agent',
+    )
+    expect(check.status).toBe('PASS')
+    expect(check.detail).toBe('pi (DeepSeek key found)')
   })
 
   it('names the free port, and the cause when loopback refuses every one', async () => {

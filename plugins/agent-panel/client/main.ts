@@ -68,6 +68,7 @@ textarea { width: 100%; min-height: 64px; resize: vertical; padding: 8px; border
 .row { display: flex; gap: 8px; align-items: center }
 .row button, header button { padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer }
 .row button.send { background: #1f2937; color: #fff; border-color: #1f2937 }
+.row button:disabled { opacity: 0.45; cursor: not-allowed }
 `
 
 async function start(): Promise<void> {

@@ -103,6 +103,12 @@ export function piHasKey(probes: Pick<Probes, 'env' | 'home' | 'readFile'>): boo
  * The coding agents the agent panel would offer: on the PATH, and pi only with a DeepSeek key. On Windows the panel also reads an npm shim to find
  * its script (plugins/agent-panel/launch.ts); that is plugin code an app carries, not something the command imports, so the PATH is checked here.
  */
+const HINT: Record<(typeof AGENTS)[number], string> = {
+  claude: 'be logged in: run claude once',
+  codex: 'be logged in: codex login',
+  pi: 'DeepSeek key found',
+}
+
 export function checkAgent(probes: Probes): Check {
   const installed = AGENTS.filter((agent) => probes.onPath(agent))
   const usable = installed.filter((agent) => agent !== 'pi' || piHasKey(probes))
@@ -110,7 +116,8 @@ export function checkAgent(probes: Probes): Check {
     return {
       name: 'agent',
       status: 'PASS',
-      detail: `${usable.join(', ')} (be logged in: codex login, or run claude / pi once)`,
+      // Each agent says what it needs, so a line never asks for a login pi does not use: claude and codex use their own login, pi uses the DeepSeek key.
+      detail: usable.map((agent) => `${agent} (${HINT[agent]})`).join(', '),
     }
   if (installed.includes('pi'))
     return {
