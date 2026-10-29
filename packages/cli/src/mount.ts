@@ -12,12 +12,18 @@ export interface Mounted {
   readonly needs: readonly string[]
   /** The row this one goes after (it goes before `routes` otherwise). */
   readonly after?: string
+  /** The `id:` of its row, when it is not the plugin's name (`db` for acryl-db-sqlite). */
+  readonly row?: string
+  /** Its entry file inside the plugin's folder (`index.ts`, or `src/index.ts` for the plugins that keep their source in `src/`). */
+  readonly entry?: string
 }
 
 export const MOUNTED: readonly Mounted[] = [
   { name: 'agent-panel', local: 'panel', needs: ['agent', 'extensions'] },
   { name: 'driver-pty', local: 'driverPty', needs: ['agent-panel'], after: 'agent-panel' },
   { name: 'driver-acp', local: 'driverAcp', needs: ['agent-panel'], after: 'agent-panel' },
+  { name: 'acryl-db-sqlite', local: 'dbSqlite', needs: [], row: 'db', entry: 'src/index.ts' },
+  { name: 'acryl-kv-json', local: 'kvJson', needs: [], row: 'kv', entry: 'src/index.ts' },
 ]
 
 const ROW = /^( *)- id: ?(\S+)\n\1 {2}name: ?(\S+)\n/gmu
@@ -64,7 +70,7 @@ export function mount(appDir: string, plugin: Mounted): MountResult {
       const found = anchor.exec(text)
       if (found) {
         const indent = found[1] as string
-        const row = `${indent}- id: ${plugin.name}\n${indent}  name: ${plugin.name}\n`
+        const row = `${indent}- id: ${plugin.row ?? plugin.name}\n${indent}  name: ${plugin.name}\n`
         const at = plugin.after ? found.index + found[0].length : found.index
         text = text.slice(0, at) + row + text.slice(at)
         writeFileSync(manifestFile, text)
@@ -83,20 +89,21 @@ export function mount(appDir: string, plugin: Mounted): MountResult {
     else {
       const imports = [...text.matchAll(/^import .* from '\.\.\/plugins\/[^']+'\n/gmu)]
       const last = imports.at(-1)
-      const table = /^export const registry = \{\n/mu.exec(text)
+      // The registry as the templates write it: one entry per line, or all on one line (`{ 'acryl-router': router, routes }`).
+      const table = /^export const registry = \{(\s)/mu.exec(text)
       if (last && table) {
-        const line = `import * as ${plugin.local} from '../plugins/${plugin.name}/index.ts'\n`
+        const file = plugin.entry ?? 'index.ts'
+        const line = `import * as ${plugin.local} from '../plugins/${plugin.name}/${file}'\n`
+        const at = table.index + table[0].length
         text =
-          text.slice(0, table.index + table[0].length) +
-          `  ${entry},\n` +
-          text.slice(table.index + table[0].length)
+          text.slice(0, at) + (table[1] === '\n' ? `  ${entry},\n` : `${entry}, `) + text.slice(at)
         const lastEnd = last.index + last[0].length
         text = text.slice(0, lastEnd) + line + text.slice(lastEnd)
         writeFileSync(appFile, text)
         done.push(`src/app.ts (registered as ${plugin.local})`)
       } else
         failed.push(
-          `src/app.ts: import it as \`${plugin.local}\` from '../plugins/${plugin.name}/index.ts' and add \`${entry}\` to the registry`,
+          `src/app.ts: import it as \`${plugin.local}\` from '../plugins/${plugin.name}/${plugin.entry ?? 'index.ts'}' and add \`${entry}\` to the registry`,
         )
     }
   } else failed.push(`src/app.ts: not found; register ${entry(plugin)} in the app's registry`)
