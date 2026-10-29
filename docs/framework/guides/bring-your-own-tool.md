@@ -119,6 +119,8 @@ export async function apply(ctx: Context, config: { path?: string } = {}): Promi
 
 The suite is the contract: it runs the same cases against every provider. A test gives it a fresh store for each case and a way to reopen the same storage.
 
+The suite imports `vitest` from your project, where `--suite` put it as a dev dependency. The same suite is in the package as `acrylblends/kv/conformance` (and `acrylblends/db/conformance`), and there it runs on the vitest your test hands it: `import * as vitest from 'vitest'` and `describeKvConformance('my-provider', open, vitest)`. The package does not declare `vitest` as a peer, so a production install of an app that uses `acrylblends` carries no vitest, vite or native build tools (1.0.10 and later; before that, `pnpm deploy --prod` pulled them in).
+
 ```ts no-check
 // test/kv-lowdb.spec.ts
 import { mkdir, mkdtemp } from 'node:fs/promises'

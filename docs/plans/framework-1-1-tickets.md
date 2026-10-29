@@ -33,14 +33,14 @@ From DS_Fork3's macOS walk and Fork3's Linux walk (`docs/plans/workshop-readines
 | 3 | **8.** Release-notes pages for the versions that have none: 0.5.1, 0.6.0, 0.6.2, 0.6.3, 0.6.4 (generated from the tags, so the sites list a complete history) | medium | not started |
 | 4 | **3.** `acrylblends doctor` (what is installed, which rows are on, which are development-only, whether `NODE_ENV=production` would leave them out) | medium | not started |
 | 5 | **5.** A docs coverage test: every PUBLIC subpath has a page that names it; docs for the tasks recorder and its conformance suite | medium | not started |
-| 6 | **14.** The state client shares ONE event stream per page for all its cells. Today each cell a page reads (`/api/state/<cell>/events`) holds its own stream, and a browser lets a page hold six connections to a host across all windows, so a board with a few cells in two windows starves every request. The door and the panel use none since 1.0.8 (they are WebSockets); the app's own streams are the rest | high | not started |
+| 6 | **14.** The state client's live events stop counting against the browser's six connections per host. Today each cell a page reads (`/api/state/<cell>/events`) holds its own event stream; sharing one stream per page is not enough (8 windows of a board is still 8), so the events should travel over a WebSocket, like the door's and the panel's (1.0.8), with the stream as the fallback. Found on macOS with 8 board windows (windows past the sixth loaded only partly). The door and the panel use none | high | not started |
 | 7 | **15.** The panel lies beside the page (1.0.7), but an element the page fixes to the window (`position: fixed` to the right edge) can still sit under it. Reserve the panel's width for fixed elements too, without a transform on the root (which would move the panel) | low | not started |
 
 ## P1, below the workshop capability work
 
 | Item | Priority | Status |
 | --- | --- | --- |
-| **13.** `acrylblends` declares `vitest` as an optional peer (for `acrylblends/testing`). pnpm resolves it wherever the workspace has vitest, so `pnpm deploy --prod` pulls vitest, vite, rolldown, lightningcss and fsevents into production closures (about 30 MB in ACRYL's CLI runtime, and foreign native paths break ACRYL's darwin web archive). Move the vitest-dependent testing helper out of the main package's peer surface: a separate `acrylblends-testing` package, or a subpath with no peer declaration that resolves vitest from the app; with a migration note. ACRYL carries a pnpmfile stopgap until then. (Raised by the coordinator, 2026-10-29.) | P1 | not started; after the workshop capability work |
+| **13.** DONE in 1.0.10: `acrylblends` no longer declares `vitest` as a peer (it was for the two conformance suites, `acrylblends/db/conformance` and `acrylblends/kv/conformance`, not for `acrylblends/testing`, which never imported it). A production install no longer pulls vitest, vite, rolldown or lightningcss; the suites still run in a provider's own project, which has vitest as its dev dependency. `verify:vitest-peer` checks the manifest, the closure of a `pnpm install --prod` with vitest in the workspace beside it, and a provider's suite under pnpm. | P1 | done |
 
 ## Next release that ships
 

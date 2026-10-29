@@ -50,6 +50,18 @@ const plainRouter = {
   },
 }
 
+/**
+ * The conformance suites import `vitest`; in the package they import the binding instead (`src/vitest-binding.ts`), which uses the vitest a test hands them. The package then holds
+ * no import of vitest at all.
+ */
+const suiteVitest = {
+  name: 'suite-vitest',
+  resolveId(source: string, importer: string | undefined) {
+    if (source !== 'vitest' || importer === undefined || !/acryl-(?:kv|db)[\\/]src[\\/]conformance\.ts$/u.test(importer)) return null
+    return here('./src/vitest-binding.ts')
+  },
+}
+
 export default defineConfig([{
   name: 'acrylblends-framework',
   entry: Object.fromEntries(Object.entries(SUBPATHS).map(([subpath, source]) => [entryName(subpath), source])),
@@ -62,9 +74,9 @@ export default defineConfig([{
   // not pick up a plugin's own `lib/`. The table is the `entries` of each plugin's `plugin.json`. The Cordis-free modules (the Node adapter, `client-modules`) import the router's
   // core by relative path, so nothing of the plain subpaths reaches Cordis.
   alias: pluginAliases(),
-  plugins: [plainRouter],
-  // The Cordis forms and the conformance suites use these; they are optional peer dependencies of the package, never part of its output.
-  neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@deepseek-ai/cosmokit', 'react', 'vitest'],
+  plugins: [plainRouter, suiteVitest],
+  // The Cordis forms use these; they are optional peer dependencies of the package, never part of its output.
+  neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@deepseek-ai/cosmokit', 'react'],
   dts: { tsconfig: here('./tsconfig.json') },
   // `scripts/clean.mjs` empties lib once: the configs build in parallel, so one config's clean could remove another's output.
   clean: false,

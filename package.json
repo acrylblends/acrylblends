@@ -16,7 +16,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "verify:scaffolder": "node scripts/verify-scaffolder.mjs",
-    "check": "pnpm run lint && pnpm run build && pnpm run verify:framework && pnpm run verify:secrets && pnpm run typecheck && pnpm run test && pnpm run verify:scaffolder && pnpm run verify:byo && pnpm run verify:panel && pnpm run verify:door && pnpm run verify:dev-install && pnpm run verify:production && pnpm run verify:driver-pty && pnpm run verify:packed && pnpm run verify:tarball",
+    "check": "pnpm run lint && pnpm run build && pnpm run verify:framework && pnpm run verify:secrets && pnpm run typecheck && pnpm run test && pnpm run verify:scaffolder && pnpm run verify:byo && pnpm run verify:panel && pnpm run verify:door && pnpm run verify:dev-install && pnpm run verify:production && pnpm run verify:driver-pty && pnpm run verify:packed && pnpm run verify:tarball && pnpm run verify:vitest-peer",
     "verify:model": "node scripts/verify-real-model.mjs",
     "verify:framework": "node scripts/stage-framework.mjs --check",
     "verify:secrets": "node scripts/verify-docs-secrets.mjs",
@@ -27,6 +27,7 @@
     "verify:dev-install": "node scripts/verify-dev-install.mjs",
     "verify:desktop": "node scripts/verify-desktop-door.mjs",
     "verify:production": "node scripts/verify-production-extension.mjs",
+    "verify:vitest-peer": "node scripts/verify-vitest-peer.mjs",
     "verify:create": "node scripts/verify-create-npm.mjs",
     "verify:packed": "node scripts/verify-packed.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs"

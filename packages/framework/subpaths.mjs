@@ -88,9 +88,9 @@ export const SUBPATHS = {
   'kv': `${KV}/index.ts`,
   'kv/json': `${KV_JSON}/open.ts`,
   'kv/db': `${KV_DB}/open.ts`,
-  // The conformance suites a provider of a port passes (spec 049): they run on vitest, an optional peer dependency.
-  'db/conformance': `${DB}/conformance.ts`,
-  'kv/conformance': `${KV}/conformance.ts`,
+  // The conformance suites a provider of a port passes (spec 049): they run on the vitest the provider's test hands them as the third argument (`describeKvConformance(name, open, vitest)`). vitest is NOT a peer dependency of the package: a peer would put vitest, vite and their native files into a production install of every app.
+  'db/conformance': 'src/db-conformance.ts',
+  'kv/conformance': 'src/kv-conformance.ts',
   // The driver contract (spec 046 T028/T029): `ChatDriver`, `ChatEvent`, `TerminalDriver`, `TerminalSession`, `Drivers` and `createDrivers`, with no Cordis in it. The agent panel and the driver plugins write against it.
   'drivers': `${P}/agent-panel/drivers.ts`,
   // The door's three parts that other packages build on: the host API, the page protocol and the page API (browser code).
