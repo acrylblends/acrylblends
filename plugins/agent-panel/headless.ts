@@ -1,10 +1,11 @@
 /** The panel's own drivers, all `chat`: the app's agent, and the coding agents (`claude`, `codex`, `pi`) started headless in the app folder. */
-import { spawn, spawnSync } from 'node:child_process'
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ChatDriver, ChatEvent } from './drivers.ts'
+import { resolveLaunch } from './launch.ts'
 
 export type HeadlessName = 'claude' | 'codex' | 'pi'
 
@@ -58,6 +59,15 @@ export function command(
   }
 }
 
+/** Stop a program and what it started: Windows has no process groups, so the tree goes by its root (`SIGTERM` there ends only the one process). */
+function stopProgram(child: ChildProcess): void {
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
+    return
+  }
+  child.kill('SIGTERM')
+}
+
 export function onPath(program: string): boolean {
   const found = spawnSync(process.platform === 'win32' ? 'where' : 'which', [program], {
     encoding: 'utf8',
@@ -89,7 +99,10 @@ export function availableHeadless(wanted?: readonly HeadlessName[]): HeadlessNam
   const found: HeadlessName[] = []
   for (const driver of wanted ?? (['claude', 'codex', 'pi'] as const)) {
     if (driver === 'pi' && !piHasDeepseekKey()) continue
-    if (onPath(driver)) found.push(driver)
+    if (!onPath(driver)) continue
+    // On Windows an npm-installed program is offered only when its script can be started directly: a driver that is listed must start.
+    if ('error' in resolveLaunch(driver, [])) continue
+    found.push(driver)
   }
   return found
 }
@@ -131,8 +144,13 @@ export function headlessDriver(name: HeadlessName, root: string): ChatDriver {
     kind: 'chat',
     name,
     async *start({ message, signal }) {
-      const { file, args } = command(name, message, root)
-      const child = spawn(file, args, {
+      const wanted = command(name, message, root)
+      const launch = resolveLaunch(wanted.file, wanted.args)
+      if ('error' in launch) {
+        yield { event: 'error', data: { message: launch.error } }
+        return
+      }
+      const child = spawn(launch.file, launch.args, {
         cwd: root,
         env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -144,16 +162,19 @@ export function headlessDriver(name: HeadlessName, root: string): ChatDriver {
         queue.push(event)
         wake?.()
       }
-      signal.addEventListener('abort', () => child.kill('SIGTERM'), { once: true })
+      signal.addEventListener('abort', () => stopProgram(child), { once: true })
       child.stdout.on('data', (chunk: Buffer) =>
         push({ event: 'text', data: { text: chunk.toString() } }),
       )
       child.stderr.on('data', (chunk: Buffer) =>
         push({ event: 'tool', data: { tool: name, info: chunk.toString().slice(0, 500) } }),
       )
-      child.on('error', () => {
+      child.on('error', (cause) => {
         ended = true
-        push({ event: 'error', data: { message: `${name} could not be started` } })
+        push({
+          event: 'error',
+          data: { message: `${name} could not be started: ${cause.message}` },
+        })
       })
       child.on('exit', (code) => {
         ended = true
@@ -169,7 +190,7 @@ export function headlessDriver(name: HeadlessName, root: string): ChatDriver {
           else await new Promise<void>((resolve) => (wake = resolve))
         }
       } finally {
-        if (child.exitCode === null) child.kill('SIGTERM')
+        if (child.exitCode === null) stopProgram(child)
       }
     },
   }

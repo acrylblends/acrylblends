@@ -25,6 +25,8 @@
     "verify:panel": "node scripts/verify-agent-panel.mjs",
     "verify:door": "node scripts/verify-door-reload.mjs",
     "verify:dev-install": "node scripts/verify-dev-install.mjs",
+    "verify:desktop": "node scripts/verify-desktop-door.mjs",
+    "verify:create": "node scripts/verify-create-npm.mjs",
     "verify:packed": "node scripts/verify-packed.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs"
   },

@@ -31,6 +31,8 @@ interface Pending {
 interface Connection {
   readonly stream: PageStream
   readonly windowId: string
+  /** The desktop window the page is in, when the Electron shell tagged it. */
+  readonly shellWindow: number | undefined
   focused: boolean
   /** Order of last focus (or connection), so the most recent wins. */
   lastActive: number
@@ -52,10 +54,10 @@ export class UiChannel {
    * Register a page's stream. A stream already open for the same window is closed first, and its calls settle as `disconnected`.
    * @returns the function to call when this stream ends.
    */
-  attach(windowId: string, focused: boolean, stream: PageStream): () => void {
+  attach(windowId: string, focused: boolean, stream: PageStream, shellWindow?: number): () => void {
     const previous = this.connections.get(windowId)
     if (previous !== undefined) this.drop(previous, true)
-    const connection: Connection = { stream, windowId, focused, lastActive: ++this.clock }
+    const connection: Connection = { stream, windowId, shellWindow, focused, lastActive: ++this.clock }
     this.connections.set(windowId, connection)
     for (const waiter of [...this.attachWaiters]) waiter()
     return () => { if (this.connections.get(windowId) === connection) this.drop(connection, false) }
@@ -82,17 +84,23 @@ export class UiChannel {
   }
 
   /** The windows currently connected, most recently active first (for diagnostics and tests). */
-  windows(): readonly { windowId: string; focused: boolean }[] {
-    return this.byRecency().map(({ windowId, focused }) => ({ windowId, focused }))
+  windows(): readonly { windowId: string; focused: boolean; shellWindow?: number }[] {
+    return this.byRecency().map(({ windowId, focused, shellWindow }) => ({ windowId, focused, ...(shellWindow === undefined ? {} : { shellWindow }) }))
   }
 
   /**
    * Ask the current page to do something.
    * @throws UiControlError `no-window`, `timeout`, `aborted`, `unloaded`, `disconnected`, or whatever the page refused with.
    */
-  call(request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<UiResult> {
+  call(request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number; window?: number } = {}): Promise<UiResult> {
     if (this.closed) return Promise.reject(new UiControlError('unloaded', 'the door was unloaded'))
-    const target = this.byRecency()[0]
+    const ordered = this.byRecency()
+    // `window` is the number `window list` prints: that desktop window's page, not the one used last.
+    const target = options.window === undefined ? ordered[0] : ordered.find(connection => connection.shellWindow === options.window)
+    if (target === undefined && options.window !== undefined) {
+      const known = ordered.flatMap(connection => (connection.shellWindow === undefined ? [] : [String(connection.shellWindow)]))
+      return Promise.reject(new UiControlError('no-window', `no page of window ${String(options.window)} is connected to the door${known.length === 0 ? ' (no desktop window has a page connected)' : `; windows with a page: ${known.join(', ')}`}; window list prints the windows`))
+    }
     if (target === undefined) return Promise.reject(new UiControlError('no-window', 'no page of the app is open to control'))
     const signal = options.signal
     if (signal?.aborted === true) return Promise.reject(new UiControlError('aborted', 'the call was cancelled'))

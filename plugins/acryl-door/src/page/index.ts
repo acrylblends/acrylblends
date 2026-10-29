@@ -21,7 +21,8 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
   const focused = (): boolean => document.visibilityState === 'visible' && document.hasFocus()
   const detachInput = clock.attach(document)
   const removeIndicator = mountIndicator(driver, document)
-  const channel = new PageChannel(driver, { windowId, focused, base })
+  const shellWindow = Number(/\bAcrylWindow\/(\d{1,9})\b/u.exec(view.navigator?.userAgent ?? '')?.[1])
+  const channel = new PageChannel(driver, { windowId, focused, base, ...(Number.isSafeInteger(shellWindow) && shellWindow > 0 ? { shellWindow } : {}) })
   const reportFocus = (): void => { channel.reportFocus(focused()) }
   view.addEventListener('focus', reportFocus)
   view.addEventListener('blur', reportFocus)

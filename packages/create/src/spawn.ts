@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, win32 } from 'node:path'
 
 export interface Invocation {
   file: string
@@ -8,7 +8,7 @@ export interface Invocation {
 
 /**
  * How to start a package manager without the shell option (Node warns about passing args to a shell, DEP0190, and a `.cmd` shim cannot be spawned directly).
- * Off Windows the command runs as it is. On Windows npm runs as `node npm-cli.js` (the one npm is running from, else the one beside `node`); any other
+ * Off Windows the command runs as it is, and so does a program given by its path on Windows (Node, started with `process.execPath`). On Windows npm runs as `node npm-cli.js` (the one npm is running from, else the one beside `node`); any other
  * manager goes through `cmd.exe /d /s /c <name>.cmd`, whose arguments stay an array.
  */
 export function packageManagerInvocation(
@@ -20,6 +20,8 @@ export function packageManagerInvocation(
   execPath: string = process.execPath,
 ): Invocation {
   if (platform !== 'win32') return { file: command, args: [...args] }
+  // A program given by its path (Node itself, `process.execPath`) is not a package manager: it has no `.cmd` shim, and `node.exe.cmd` does not exist.
+  if (isAbsolute(command) || win32.isAbsolute(command)) return { file: command, args: [...args] }
   if (command === 'npm') {
     const running = env.npm_execpath
     const cli =

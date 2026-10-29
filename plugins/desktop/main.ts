@@ -9,11 +9,17 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, Menu, type MenuItem, shell } from 'electron'
 import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
 import { selectInstance } from '../instance/index.ts'
 import { runningApp } from './attach.ts'
+import {
+  type DesktopPort,
+  type MenuItemPort,
+  startDoorShell,
+  type WindowPort,
+} from './door-shell.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { windowOptions } from './window.ts'
@@ -41,9 +47,11 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   let running: App | undefined
   let window: BrowserWindow | undefined
+  let stopDoorShell: (() => void) | undefined
 
   const shutdown = createDesktopShutdown(
     async () => {
+      stopDoorShell?.()
       await running?.stop()
     },
     (code) => {
@@ -81,18 +89,64 @@ if (!app.requestSingleInstanceLock()) {
       url = running.url
     }
     const origin = new URL(url).origin
-    window = new BrowserWindow(windowOptions({ title: chosen.name }))
-    window.once('ready-to-show', () => window?.show())
-    // Navigation stays on the app's own server; any other address opens in the system browser.
-    window.webContents.setWindowOpenHandler(({ url }) => {
-      void shell.openExternal(url)
-      return { action: 'deny' }
+    /** One window on a path of the app. Navigation stays on the app's own server; any other address opens in the system browser. The user agent names the window to the door (`AcrylWindow/<id>`), so an agent can drive it with `--window <id>`. */
+    const createWindow = (path: string): BrowserWindow => {
+      const created = new BrowserWindow(windowOptions({ title: chosen.name }))
+      created.webContents.setUserAgent(
+        `${created.webContents.getUserAgent()} AcrylWindow/${String(created.id)}`,
+      )
+      created.once('ready-to-show', () => created.show())
+      created.webContents.setWindowOpenHandler(({ url }) => {
+        void shell.openExternal(url)
+        return { action: 'deny' }
+      })
+      created.webContents.on('will-navigate', (event, url) => {
+        if (new URL(url).origin === origin) return
+        event.preventDefault()
+        void shell.openExternal(url)
+      })
+      created.loadURL(new URL(path, url).href).catch((cause: unknown) => {
+        console.warn(
+          `desktop: the window could not load ${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        )
+      })
+      return created
+    }
+    window = createWindow(startPath())
+    // The door (development) reaches the windows and the menu through this port: `acryl window list`, `acryl menu click`.
+    const live = (): BrowserWindow[] =>
+      BrowserWindow.getAllWindows().filter((candidate) => !candidate.isDestroyed())
+    const port = (candidate: BrowserWindow): WindowPort => ({
+      id: candidate.id,
+      getTitle: () => candidate.getTitle(),
+      getURL: () => candidate.webContents.getURL(),
+      isFocused: () => candidate.isFocused(),
+      isMinimized: () => candidate.isMinimized(),
+      getSize: () => candidate.getSize(),
+      restore: () => candidate.restore(),
+      focus: () => candidate.focus(),
+      close: () => candidate.close(),
+      setSize: (width, height) => candidate.setSize(width, height),
     })
-    window.webContents.on('will-navigate', (event, url) => {
-      if (new URL(url).origin === origin) return
-      event.preventDefault()
-      void shell.openExternal(url)
+    // Pressing an item as Electron's own menu does: with the window that has focus (the roles reload, zoom and close act on it).
+    const menuItem = (item: MenuItem): MenuItemPort => ({
+      label: item.label,
+      enabled: item.enabled,
+      visible: item.visible,
+      type: item.type,
+      role: item.role,
+      // Electron gives a plain item `submenu: null` on Linux and `undefined` elsewhere.
+      submenu: item.submenu ? { items: item.submenu.items.map(menuItem) } : null,
+      click: () => {
+        const target = BrowserWindow.getFocusedWindow() ?? live()[0]
+        item.click(undefined, target, target?.webContents)
+      },
     })
-    await window.loadURL(new URL(startPath(), url).href)
+    const desktop: DesktopPort = {
+      windows: () => live().map(port),
+      open: (path) => port(createWindow(path ?? startPath())),
+      menu: () => (Menu.getApplicationMenu()?.items ?? []).map(menuItem),
+    }
+    stopDoorShell = startDoorShell(projectRoot, { desktop, log: console.log })
   })
 }

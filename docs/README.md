@@ -39,6 +39,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [The PTY driver with real agents](plans/pty-driver-evidence.md) - M8 evidence: claude, codex and pi each build a feature in the terminal tab
 - [The 1.0 docs claim audit](plans/docs-1-0-claim-audit.md) - every claim on the framework docs and the sites checked against the code; what was fixed
 - [Real-agent runs against 1.0.0-rc.1](plans/release-evidence-1-0.md) - M10 evidence: codex and pi on the agent, notes and chat starters, claude once
+- [The Electron adapter (design)](plans/electron-adapter.md) - windows and menu as door verbs, `--window` on look and act, how the desktop shell reaches the door
 - [The site patches](plans/site-patches/README.md) - patches for the hand-written pages of acrylblends.github.io (`git am`)
 - [WebSocket upgrades on the router (plan)](plans/router-websocket.md) - spec 047 T009: upgrade routes owned by the mounting plugin
 - [Build, then check it through the door](plans/door-build-and-check-evidence.md) - the recorded run: an agent builds a page, installs it, and clicks through it in one run
@@ -53,6 +54,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 0.9.2](release-notes/0.9.2.md) - Stop cancels the app's own agent, a secrets scan in check
 - [Release notes 0.10.0](release-notes/0.10.0.md) - driver-pty: a coding agent in a real terminal in the app, the panel's drivers as a registry
 - [Release notes 1.0.5](release-notes/1.0.5.md) - the app's own agent drives the page with a real model; the agent template's tests no longer collide with /hello
+- [Release notes 1.0.6](release-notes/1.0.6.md) - the desktop app's windows and menu as door verbs (window, menu, --window), guarded against ending the session; a clean tarball
 - [Release notes 1.0.4](release-notes/1.0.4.md) - act reload and navigate, the page script on every page, runs that outlive the page
 - [Release notes 1.0.3](release-notes/1.0.3.md) - Node 26, relative paths in manifest rows, a pasted GitHub address as a source
 - [Release notes 1.0.2](release-notes/1.0.2.md) - the chat template closed in production, create-acrylblends --from, the newcomer-path fixes

@@ -3,10 +3,10 @@
  * reaches its own app, never the other one and never an `acryl` on PATH.
  */
 
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { posixShim, windowsShim } from '../../src/host/shim.ts'
+import { posixShim, type ShimFs, windowsShim, writeAtomically } from '../../src/host/shim.ts'
 import { UiDriver } from '../../src/page/driver/driver.ts'
 import { appFolder, connectPage, domPage, removeFolders, runCommand, startApp, type Running } from '../harness.ts'
 
@@ -106,5 +106,70 @@ describe('a real Node under Electron', () => {
     expect(realNode(() => ({ path: '/usr/bin/node', version: 'v22.18.0' }))).toBeUndefined()
     expect(realNode(() => ({ path: '/usr/bin/node', version: 'v18.19.1' }))).toBeUndefined()
     expect(realNode(() => undefined)).toBeUndefined()
+  })
+})
+
+describe('writing a shim while the app restarts', () => {
+  const locked = (code: string): Error => Object.assign(new Error(`${code}: operation not permitted`), { code })
+  const folder = (): string => join(appFolder(), 'bin')
+  const fsOf = (failures: Error[]): ShimFs & { renames: number; pauses: number } => {
+    const fake = {
+      renames: 0,
+      pauses: 0,
+      rename(from: string, to: string): void {
+        fake.renames += 1
+        const failure = failures.shift()
+        if (failure !== undefined) throw failure
+        writeFileSync(to, readFileSync(from))
+        rmSync(from)
+      },
+      pause(): void { fake.pauses += 1 },
+    }
+    return fake
+  }
+
+  it('leaves a shim that already holds the text alone: a restart rewrites the same text, and Windows refuses to replace a batch file a running acryl has open', () => {
+    const dir = folder()
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, 'acryl.cmd')
+    writeFileSync(file, 'same text')
+    const fs = fsOf([locked('EPERM')])
+    writeAtomically(file, 'same text', 0o600, fs)
+    expect(fs.renames).toBe(0)
+    expect(readdirSync(dir)).toEqual(['acryl.cmd'])
+  })
+
+  it('retries a file that is held for a moment, then writes it', () => {
+    const dir = folder()
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, 'acryl.cmd')
+    writeFileSync(file, 'old text')
+    const fs = fsOf([locked('EPERM'), locked('EBUSY'), locked('EACCES')])
+    writeAtomically(file, 'new text', 0o600, fs)
+    expect(readFileSync(file, 'utf8')).toBe('new text')
+    expect(fs.renames).toBe(4)
+    expect(fs.pauses).toBe(3)
+    expect(readdirSync(dir)).toEqual(['acryl.cmd'])
+  })
+
+  it('gives up on a file that stays held, reports it, and leaves the old shim and no temporary file', () => {
+    const dir = folder()
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, 'acryl.cmd')
+    writeFileSync(file, 'old text')
+    const fs = fsOf(Array.from({ length: 20 }, () => locked('EPERM')))
+    expect(() => writeAtomically(file, 'new text', 0o600, fs)).toThrow(/EPERM/u)
+    expect(readFileSync(file, 'utf8')).toBe('old text')
+    expect(readdirSync(dir)).toEqual(['acryl.cmd'])
+  })
+
+  it('does not retry an error that is not a lock (a missing folder, no space)', () => {
+    const dir = folder()
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, 'acryl')
+    const fs = fsOf([Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })])
+    expect(() => writeAtomically(file, 'text', 0o700, fs)).toThrow(/ENOSPC/u)
+    expect(fs.renames).toBe(1)
+    expect(existsSync(file)).toBe(false)
   })
 })

@@ -68,6 +68,13 @@ const CLI_FORMS: Readonly<Record<Verb, readonly string[]>> = {
   'plugin-reload': ['plugin', 'reload'],
   'tool-list': ['tool', 'list'],
   'tool-call': ['tool', 'call', '--tool', 'add'],
+  'window-list': ['window', 'list'],
+  'window-open': ['window', 'open', '--path', '/settings'],
+  'window-focus': ['window', 'focus', '--id', '2'],
+  'window-close': ['window', 'close', '--id', '2'],
+  'window-resize': ['window', 'resize', '--id', '2', '--width', '900', '--height', '640'],
+  'menu-list': ['menu', 'list'],
+  'menu-click': ['menu', 'click', '--path', 'File>New Note'],
 }
 
 describe('one verb list', () => {

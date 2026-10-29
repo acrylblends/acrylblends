@@ -32,6 +32,8 @@ export function pageChannelRoutes(channel: UiChannel, options: PageRoutesOptions
       const windowId = c.req.query('window')
       if (windowId === undefined || !WINDOW_ID.test(windowId)) return c.json(error('a window id is required'), 400)
       const focused = c.req.query('focused') === '1'
+      const shellQuery = Number(c.req.query('shell'))
+      const shellWindow = Number.isSafeInteger(shellQuery) && shellQuery > 0 ? shellQuery : undefined
       const signal = c.req.raw.signal
       return streamSSE(c, async (stream) => {
         let end = (): void => {}
@@ -41,7 +43,7 @@ export function pageChannelRoutes(channel: UiChannel, options: PageRoutesOptions
         const write = (event: string, data: string): void => {
           stream.writeSSE({ event, data }).catch(end)
         }
-        const detach = channel.attach(windowId, focused, { send: (data) => { write('call', data) }, close: end })
+        const detach = channel.attach(windowId, focused, { send: (data) => { write('call', data) }, close: end }, shellWindow)
         const beat = setInterval(() => { write('ping', '') }, heartbeatMs)
         try {
           write('ready', '')

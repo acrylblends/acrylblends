@@ -4,7 +4,7 @@
  * `.acryl/door.json` upward, or `--dir`), never through PATH or a machine-wide registry, so it reaches only the app running from that
  * folder. The secret is read from that file and sent as a `Bearer` header; it is never printed.
  *
- *   acryl brief | look | act <op> ... | plugin list|add|remove|reload | tool list|call | verbs      (--json for the raw value)
+ *   acryl brief | look | act <op> ... | plugin list|add|remove|reload | tool list|call | window list|open|focus|close|resize | menu list|click | verbs      (--json for the raw value)
  *   acryl control <...>   the same, the ACRYL Host form (`control snapshot`, `control click`, ... are look and act)
  *
  * Exit codes: 0 done, 1 the verb failed (its code and message are printed), 2 a usage error, 3 no running app in this folder.
@@ -16,8 +16,8 @@ import { fileURLToPath } from 'node:url'
 import { readDoorFile, STATE_DIR, DOOR_FILE } from '../host/door-file.ts'
 
 const ACT_OPS = new Set(['click', 'type', 'select', 'press', 'scroll', 'wait', 'reload', 'navigate'])
-const VALUED = new Set(['--dir', '--ref', '--text', '--option', '--key', '--direction', '--amount', '--cursor', '--max-nodes', '--role', '--name', '--timeout-ms', '--tool', '--args', '--path'])
-const FLAGS = new Set(['--json', '--submit', '--no-clear', '--gone', '--help'])
+const VALUED = new Set(['--dir', '--ref', '--text', '--option', '--key', '--direction', '--amount', '--cursor', '--max-nodes', '--role', '--name', '--timeout-ms', '--id', '--width', '--height', '--window', '--tool', '--args', '--path'])
+const FLAGS = new Set(['--json', '--submit', '--no-clear', '--gone', '--force', '--help'])
 
 export class UsageError extends Error {}
 
@@ -30,7 +30,7 @@ export interface Invocation {
 
 const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
   brief
-  look [--cursor <n>] [--max-nodes <n>]
+  look [--cursor <n>] [--max-nodes <n>] [--window <n>]
   act click --ref <r>
   act type --ref <r> --text <t> [--submit] [--no-clear]
   act select --ref <r> --option <o>
@@ -39,7 +39,11 @@ const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
   act reload
   act navigate --path <path of the app, e.g. /demo>
   act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]
+  (look and every act take --window <n>: the desktop window whose page it is for; window list prints the numbers)
   plugin list | plugin add <folder> | plugin remove <name> | plugin reload
+  window list | window open [--path <p>] | window focus --id <n> | window close --id <n> [--force]
+  window resize --id <n> --width <px> --height <px>
+  menu list | menu click --path "File>New Note" [--force]
   tool list | tool call --tool <name> [--args '<json>']
   verbs`
 
@@ -82,12 +86,14 @@ export function parseInvocation(argv: readonly string[]): Invocation {
     case 'look': {
       const cursor = integer(values, '--cursor')
       const maxNodes = integer(values, '--max-nodes')
-      return make('look', { ...(cursor === undefined ? {} : { cursor }), ...(maxNodes === undefined ? {} : { maxNodes }) })
+      const window = integer(values, '--window')
+      return make('look', { ...(cursor === undefined ? {} : { cursor }), ...(maxNodes === undefined ? {} : { maxNodes }), ...(window === undefined ? {} : { window }) })
     }
     case 'act': {
       if (second === undefined || !ACT_OPS.has(second)) throw new UsageError(`act needs one of ${[...ACT_OPS].join(', ')}\n${USAGE}`)
       const amount = integer(values, '--amount')
       const timeoutMs = integer(values, '--timeout-ms')
+      const window = integer(values, '--window')
       const pick = (flag: string, key: string): Record<string, string> => (values.has(flag) ? { [key]: values.get(flag) as string } : {})
       return make('act', {
         op: second,
@@ -95,6 +101,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
         ...pick('--direction', 'direction'), ...pick('--role', 'role'), ...pick('--name', 'name'), ...pick('--path', 'path'),
         ...(amount === undefined ? {} : { amount }),
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        ...(window === undefined ? {} : { window }),
         ...(set.has('--submit') ? { submit: true } : {}),
         ...(set.has('--no-clear') ? { clear: false } : {}),
         ...(set.has('--gone') ? { gone: true } : {}),
@@ -105,6 +112,30 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       if (second === 'add') { if (third === undefined) throw new UsageError('plugin add needs a folder, e.g. plugin add plugins/pomodoro'); return make('plugin-add', { folder: third }) }
       if (second === 'remove') { if (third === undefined) throw new UsageError('plugin remove needs a plugin name'); return make('plugin-remove', { name: third }) }
       throw new UsageError(`plugin needs list, add, remove or reload\n${USAGE}`)
+    }
+    case 'window': {
+      const id = integer(values, '--id')
+      if (second === 'list') return make('window-list')
+      if (second === 'open') return make('window-open', values.has('--path') ? { path: values.get('--path') } : {})
+      if (second === 'focus' || second === 'close' || second === 'resize') {
+        if (id === undefined) throw new UsageError(`window ${second} needs --id <n> (window list prints the ids)`)
+        if (second === 'focus') return make('window-focus', { id })
+        if (second === 'close') return make('window-close', { id, ...(set.has('--force') ? { force: true } : {}) })
+        const width = integer(values, '--width')
+        const height = integer(values, '--height')
+        if (width === undefined || height === undefined) throw new UsageError('window resize needs --width <px> and --height <px>')
+        return make('window-resize', { id, width, height })
+      }
+      throw new UsageError(`window needs list, open, focus, close or resize\n${USAGE}`)
+    }
+    case 'menu': {
+      if (second === 'list') return make('menu-list')
+      if (second === 'click') {
+        const path = values.get('--path')
+        if (path === undefined) throw new UsageError('menu click needs --path "File>New Note" (menu list prints the paths)')
+        return make('menu-click', { path, ...(set.has('--force') ? { force: true } : {}) })
+      }
+      throw new UsageError(`menu needs list or click\n${USAGE}`)
     }
     case 'tool': {
       if (second === 'list') return make('tool-list')
