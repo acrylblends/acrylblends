@@ -41,12 +41,19 @@ export const Config: z<Config> = z.object({
 /** The file name used in the app home when `path` is not configured. */
 export const DEFAULT_FILE = 'kv.json'
 
-/** A configured path as a file path: absolute as given, relative to the Loader's base URL (the app) otherwise. */
+/** The project folder of an acrylblends app (`appInstance.root`), when the instance has one: where a relative path in a row's config is read from, since such an app has no Loader base URL. */
+function appRoot(value: unknown): string | undefined {
+  return typeof value === 'object' && value !== null && 'root' in value && typeof value.root === 'string' ? value.root : undefined
+}
+
+/** A configured path as a file path: absolute as given, relative to the Loader's base URL (the app) otherwise, or to the app's project folder (`appInstance.root`) where there is no base URL. */
 function resolveFromApp(ctx: Context, path: string): string {
   if (path.startsWith('file:')) return fileURLToPath(path)
   if (isAbsolute(path)) return path
   const base = ctx.baseUrl
   if (base === undefined || !base.startsWith('file:')) {
+    const root = appRoot(ctx.get('appInstance'))
+    if (root !== undefined) return resolve(root, path)
     throw new Error(`acryl-kv-json: path ${JSON.stringify(path)} is relative, but this app has no file base URL to resolve it from; give an absolute path`)
   }
   const appDir = base.endsWith('/') ? fileURLToPath(base) : dirname(fileURLToPath(base))

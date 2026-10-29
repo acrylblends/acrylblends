@@ -8,7 +8,7 @@
     "@deepseek-ai/cordis": "4.0.4",
     "@deepseek-ai/schemastery": "3.18.4"
   },
-  "mount": "mount it after instance: root.plugin(dbSqlite, { migrations: 'migrations' }) with the migrations/ folder (001-name.sql, ...) next to src/; then a plugin that declares inject: ['db'] calls await ctx.db.all('SELECT ...', value)",
+  "mount": "mount it after instance, either as a row in blend.yaml (`- id: db` / `name: acryl-db-sqlite` / `config: { migrations: migrations }`, registered in src/app.ts as 'acryl-db-sqlite') or as root.plugin(dbSqlite, { migrations: 'migrations' }); a relative path is read from the app's folder, and the migrations/ folder (001-name.sql, ...) sits next to src/. Then a plugin that declares inject: ['db'] calls await ctx.db.all('SELECT ...', value)",
   "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"],
   "imports": {
     "#acryl-db-sqlite": "acryl-db-sqlite/src/index.ts"

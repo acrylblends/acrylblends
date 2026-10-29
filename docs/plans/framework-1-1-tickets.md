@@ -20,6 +20,10 @@ Same-shape check (a template or built-in row that stays mounted in production an
 
 From DS_Fork3's macOS walk and Fork3's Linux walk (`docs/plans/workshop-readiness.md`), ahead of the 1.1 list because they stand between a newcomer and the 2026-11-20 workshop. Built and in `docs/release-notes/1.0.2.md`: B1 `create-acrylblends --from <id | source>` with `--registry`, registry `runtime` field and badge, three acrylblends starters; B2/L3 `npx acrylblends@latest upgrade`; C1 `add agent-panel` mounts or refuses; C2 login documented; C3 pi detection; C4 todo URL; C5 node-pty approval text; cosmetics (one `Next:`, `--desktop` wording); L1 Linux sandbox launcher; L2 Node 22.19 preflight; the chat template closed in production. Not in 1.0.2: Windows findings (DS2's walk is not in yet), the workshop registry repo (designed, not created).
 
+## 1.0.3 and 1.0.4
+
+1.0.3 (built, published with this note): Node 26 in CI and the adapter's body read, relative paths in manifest rows (`add db`, `add kv` mount), a pasted GitHub address as a source, two flakes fixed at the root. 1.0.4: the Windows walk (DS2) when it lands. The original `ECONNRESET` in the node-server websocket test never reproduced (0 failures in about 135 runs under load); the flake found and fixed instead was the shared static fixture.
+
 ## 1.1, in order
 
 | Order | Item | Priority | Status |
@@ -29,6 +33,12 @@ From DS_Fork3's macOS walk and Fork3's Linux walk (`docs/plans/workshop-readines
 | 3 | **8.** Release-notes pages for the versions that have none: 0.5.1, 0.6.0, 0.6.2, 0.6.3, 0.6.4 (generated from the tags, so the sites list a complete history) | medium | not started |
 | 4 | **3.** `acrylblends doctor` (what is installed, which rows are on, which are development-only, whether `NODE_ENV=production` would leave them out) | medium | not started |
 | 5 | **5.** A docs coverage test: every PUBLIC subpath has a page that names it; docs for the tasks recorder and its conformance suite | medium | not started |
+
+## P1, below the workshop capability work
+
+| Item | Priority | Status |
+| --- | --- | --- |
+| **13.** `acrylblends` declares `vitest` as an optional peer (for `acrylblends/testing`). pnpm resolves it wherever the workspace has vitest, so `pnpm deploy --prod` pulls vitest, vite, rolldown, lightningcss and fsevents into production closures (about 30 MB in ACRYL's CLI runtime, and foreign native paths break ACRYL's darwin web archive). Move the vitest-dependent testing helper out of the main package's peer surface: a separate `acrylblends-testing` package, or a subpath with no peer declaration that resolves vitest from the app; with a migration note. ACRYL carries a pnpmfile stopgap until then. (Raised by the coordinator, 2026-10-29.) | P1 | not started; after the workshop capability work |
 
 ## Next release that ships
 

@@ -142,6 +142,18 @@ CREATE TABLE tags (
 - A database whose version is newer than your files (an older build started on newer data) is refused. The app does not start.
 - A migration is plain SQL. Put the data change next to the shape change in the same file when they belong together.
 
+**In an app made by `acrylblends init`** (a Cordis app) the provider is a row of `blend.yaml` (and an entry in the `registry` of `src/app.ts`, which `acrylblends add db` prints how to write):
+
+```yaml
+    - id: db
+      name: acryl-db-sqlite
+      config:
+        path: data/app.sqlite
+        migrations: migrations
+```
+
+A relative `path` or `migrations` in a row is read from the app's folder (the one that holds `blend.yaml`), not from where the command was started. (Since 1.0.3; before it a relative path stopped the app with "no file base URL", and an absolute path, or the `db: { migrations: join(projectRoot, 'migrations') }` option of `compose` in `src/app.ts` as the notes template does, was the way.)
+
 To add a feature that needs a column or a table, the work is always the same three steps: write the next migration, change the store that
 reads and writes it, and change the handlers and views that use the store.
 

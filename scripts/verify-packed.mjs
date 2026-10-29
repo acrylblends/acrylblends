@@ -5,7 +5,15 @@
 //
 //   node scripts/verify-packed.mjs
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -163,12 +171,24 @@ console.log('ws-check: ok')
   run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], pulled)
   run('npm', ['test'], pulled, { ACRYL_DOOR: 'off' })
   run('npm', ['run', 'check'], pulled)
+  // The refusal is run the way `npm create acrylblends` runs it (`npm exec`): npm adds its own error lines, and the reason must still be on stderr.
   let refusal = ''
   try {
     run(
-      bin('create-acrylblends'),
-      [join(scratch, 'app-refused'), '--from', 'acryl.gtd', '--registry', registry, '-y'],
-      scratch,
+      'npm',
+      [
+        'exec',
+        '--no',
+        '--',
+        'create-acrylblends',
+        join(scratch, 'app-refused'),
+        '--from',
+        'acryl.gtd',
+        '--registry',
+        registry,
+        '-y',
+      ],
+      tools,
     )
   } catch (error) {
     refusal = String(error.stderr ?? '')
@@ -177,6 +197,63 @@ console.log('ws-check: ok')
     throw new Error(`the ACRYL starter was not refused in a line:\n${refusal}`)
   log(
     'registry: --from made an app from a runtime acrylblends entry (tests and type-check pass) and refused an ACRYL one',
+  )
+  // A relative path in a row of blend.yaml (`migrations: migrations`) is read from the app's folder: `add db` mounts the provider, the row gets its config, and the app's own tests boot it.
+  const dbApp = join(scratch, 'app-db')
+  run(bin('acrylblends'), ['init', dbApp, '--template', 'blank', '-y'], scratch)
+  run(bin('acrylblends'), ['add', 'db'], dbApp)
+  mkdirSync(join(dbApp, 'migrations'))
+  writeFileSync(
+    join(dbApp, 'migrations', '001-notes.sql'),
+    'CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);\n',
+  )
+  const manifestFile = join(dbApp, 'blend.yaml')
+  // The hint of `add db`: a row of blend.yaml with the relative paths, and the plugin in the registry of src/app.ts.
+  const rows = readFileSync(manifestFile, 'utf8')
+  const withRow = rows.replace(
+    '    - id: routes\n',
+    '    - id: db\n      name: acryl-db-sqlite\n      config:\n        path: data/app.sqlite\n        migrations: migrations\n    - id: routes\n',
+  )
+  if (withRow === rows)
+    throw new Error('the blank template no longer has a routes row where this gate adds the db row')
+  writeFileSync(manifestFile, withRow)
+  const appFile = join(dbApp, 'src', 'app.ts')
+  const appSource = readFileSync(appFile, 'utf8')
+  const registered = appSource
+    .replace(
+      'import * as nodeServer from',
+      "import * as dbSqlite from '../plugins/acryl-db-sqlite/src/index.ts'\nimport * as nodeServer from",
+    )
+    .replace(
+      'export const registry = { ',
+      "export const registry = { 'acryl-db-sqlite': dbSqlite, ",
+    )
+  if (
+    !registered.includes("'acryl-db-sqlite': dbSqlite") ||
+    !registered.includes('import * as dbSqlite')
+  )
+    throw new Error(
+      'the blank template no longer has the registry where this gate registers the db provider',
+    )
+  writeFileSync(appFile, registered)
+  run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], dbApp)
+  run('npm', ['run', 'check'], dbApp)
+  // The template's own test lists the rows of its manifest; the app now has one more, as its author would update it.
+  const rowsTest = join(dbApp, 'test', 'app.test.ts')
+  const listed = readFileSync(rowsTest, 'utf8').replace(
+    "['router', 'routes', 'server']",
+    "['router', 'db', 'routes', 'server']",
+  )
+  if (listed === readFileSync(rowsTest, 'utf8'))
+    throw new Error('the blank template no longer lists its rows where this gate expects them')
+  writeFileSync(rowsTest, listed)
+  run('npm', ['test'], dbApp, { ACRYL_DOOR: 'off' })
+  if (!existsSync(join(dbApp, 'data', 'app.sqlite')))
+    throw new Error(
+      'the relative database path was not read from the app folder (no data/app.sqlite there)',
+    )
+  log(
+    'db: a row with a relative migrations path was read from the app folder (the app boots in its tests)',
   )
   // An app made by an older published version, upgraded by the installed command: `upgrade` replaces its library plugins, and the upgraded app installs, type-checks and passes its tests.
   // The fixtures are apps made by the published 0.9.1 and 0.10.0 (`scripts/make-upgrade-fixtures.mjs`).
