@@ -136,12 +136,7 @@ npm install
    ```
 
    ```ts
-   export const registry = {
-     'acryl-router': router,
-     'acryl-node-server': nodeServer,
-     'acryl-kv-json': kvJson,
-     routes,
-   }
+   export const registry = { 'acryl-router': router, 'acryl-node-server': nodeServer, 'acryl-kv-json': kvJson, routes }
    ```
 
 3. `src/routes.ts`: declare the port and count visits in your route:
@@ -223,8 +218,7 @@ published, with its plugins, its dependencies and its `blend.yaml`, in your fold
 For the workshop's own registry, name it:
 
 ```sh
-npm create acrylblends@latest from-the-workshop -- --from <id> \
-  --registry https://github.com/acryldev/workshop-2026-11-20
+npm create acrylblends@latest from-the-workshop -- --from <id> --registry https://github.com/acryldev/workshop-2026-11-20
 ```
 
 Starters for this workshop: `acrylblends.notes-desktop` (notes with a desktop window), `acrylblends.chat`, `acrylblends.agent`.
@@ -323,8 +317,7 @@ private app to a public remote). Create an empty repository on your git host, se
    cd ~/acryl-workshop
    gh repo fork acryldev/workshop-2026-11-20 --clone
    cd workshop-2026-11-20
-   node scripts/make-entry.mjs ../agent-app <your-github-login>.agent-app \
-     --description "the app I built in the workshop"
+   node scripts/make-entry.mjs ../agent-app <your-github-login>.agent-app --description "the app I built in the workshop"
    ```
 
    `make-entry` copies the app into `blends/<your-github-login>.agent-app/` without `node_modules`, `.git` or the app's data, marks its `blend.yaml`
@@ -346,8 +339,7 @@ private app to a public remote). Create an empty repository on your git host, se
 Anyone can then start from it, in the browser or in a window:
 
 ```sh
-npm create acrylblends@latest my-app -- --from <your-github-login>.agent-app \
-  --registry github:acryldev/workshop-2026-11-20
+npm create acrylblends@latest my-app -- --from <your-github-login>.agent-app --registry github:acryldev/workshop-2026-11-20
 ```
 
 **Stuck?** The check's comment is the answer: read it, fix, push again. An id with a capital or a dot inside a part is refused by `make-entry`; use
