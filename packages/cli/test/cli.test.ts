@@ -608,22 +608,3 @@ describe('the Node preflight', () => {
     )
   })
 })
-
-describe('add db and add kv mount the providers', () => {
-  it('adds the row before routes and the registry entry (in a registry written on one line), and a second add refuses', async () => {
-    expect(await runCli(['init', 'with-db', '--template', 'blank', '-y'], fakeIo().io)).toBe(0)
-    const dir = join(scratch, 'with-db')
-    const session = fakeIo()
-    expect(await runCli(['add', 'db', 'kv', '--dir', dir], session.io), session.err()).toBe(0)
-    const rows = readFileSync(join(dir, 'blend.yaml'), 'utf8')
-    expect(rows).toMatch(/- id: db\n {6}name: acryl-db-sqlite\n/u)
-    expect(rows).toMatch(/- id: kv\n {6}name: acryl-kv-json\n/u)
-    expect(rows.indexOf('id: db')).toBeLessThan(rows.indexOf('id: routes'))
-    const app = readFileSync(join(dir, 'src/app.ts'), 'utf8')
-    expect(app).toContain("import * as dbSqlite from '../plugins/acryl-db-sqlite/src/index.ts'")
-    expect(app).toContain("import * as kvJson from '../plugins/acryl-kv-json/src/index.ts'")
-    expect(app).toMatch(/export const registry = \{[^}]*'acryl-db-sqlite': dbSqlite/u)
-    expect(app).toMatch(/export const registry = \{[^}]*'acryl-kv-json': kvJson/u)
-    expect(session.out()).toContain('mounted in blend.yaml')
-  })
-})

@@ -208,13 +208,34 @@ console.log('ws-check: ok')
     'CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);\n',
   )
   const manifestFile = join(dbApp, 'blend.yaml')
-  const withConfig = readFileSync(manifestFile, 'utf8').replace(
-    '      name: acryl-db-sqlite\n',
-    '      name: acryl-db-sqlite\n      config:\n        path: data/app.sqlite\n        migrations: migrations\n',
+  // The hint of `add db`: a row of blend.yaml with the relative paths, and the plugin in the registry of src/app.ts.
+  const rows = readFileSync(manifestFile, 'utf8')
+  const withRow = rows.replace(
+    '    - id: routes\n',
+    '    - id: db\n      name: acryl-db-sqlite\n      config:\n        path: data/app.sqlite\n        migrations: migrations\n    - id: routes\n',
   )
-  if (!withConfig.includes('migrations: migrations'))
-    throw new Error('add db did not mount the db row in blend.yaml')
-  writeFileSync(manifestFile, withConfig)
+  if (withRow === rows)
+    throw new Error('the blank template no longer has a routes row where this gate adds the db row')
+  writeFileSync(manifestFile, withRow)
+  const appFile = join(dbApp, 'src', 'app.ts')
+  const appSource = readFileSync(appFile, 'utf8')
+  const registered = appSource
+    .replace(
+      'import * as nodeServer from',
+      "import * as dbSqlite from '../plugins/acryl-db-sqlite/src/index.ts'\nimport * as nodeServer from",
+    )
+    .replace(
+      'export const registry = { ',
+      "export const registry = { 'acryl-db-sqlite': dbSqlite, ",
+    )
+  if (
+    !registered.includes("'acryl-db-sqlite': dbSqlite") ||
+    !registered.includes('import * as dbSqlite')
+  )
+    throw new Error(
+      'the blank template no longer has the registry where this gate registers the db provider',
+    )
+  writeFileSync(appFile, registered)
   run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], dbApp)
   run('npm', ['run', 'check'], dbApp)
   // The template's own test lists the rows of its manifest; the app now has one more, as its author would update it.
@@ -232,7 +253,7 @@ console.log('ws-check: ok')
       'the relative database path was not read from the app folder (no data/app.sqlite there)',
     )
   log(
-    'db: add db mounted the provider, and a relative migrations path in the row was read from the app folder (the app boots in its tests)',
+    'db: a row with a relative migrations path was read from the app folder (the app boots in its tests)',
   )
   // An app made by an older published version, upgraded by the installed command: `upgrade` replaces its library plugins, and the upgraded app installs, type-checks and passes its tests.
   // The fixtures are apps made by the published 0.9.1 and 0.10.0 (`scripts/make-upgrade-fixtures.mjs`).

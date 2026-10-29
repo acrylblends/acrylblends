@@ -22,8 +22,6 @@ export const MOUNTED: readonly Mounted[] = [
   { name: 'agent-panel', local: 'panel', needs: ['agent', 'extensions'] },
   { name: 'driver-pty', local: 'driverPty', needs: ['agent-panel'], after: 'agent-panel' },
   { name: 'driver-acp', local: 'driverAcp', needs: ['agent-panel'], after: 'agent-panel' },
-  { name: 'acryl-db-sqlite', local: 'dbSqlite', needs: [], row: 'db', entry: 'src/index.ts' },
-  { name: 'acryl-kv-json', local: 'kvJson', needs: [], row: 'kv', entry: 'src/index.ts' },
 ]
 
 const ROW = /^( *)- id: ?(\S+)\n\1 {2}name: ?(\S+)\n/gmu

@@ -142,7 +142,7 @@ CREATE TABLE tags (
 - A database whose version is newer than your files (an older build started on newer data) is refused. The app does not start.
 - A migration is plain SQL. Put the data change next to the shape change in the same file when they belong together.
 
-**In an app made by `acrylblends init`** (a Cordis app) the provider is a row of `blend.yaml`, and `acrylblends add db` puts the row and the registry entry in place:
+**In an app made by `acrylblends init`** (a Cordis app) the provider is a row of `blend.yaml` (and an entry in the `registry` of `src/app.ts`, which `acrylblends add db` prints how to write):
 
 ```yaml
     - id: db
