@@ -69,46 +69,56 @@ Save: the terminal prints `Change detected … Restarting`, and `/hi` answers `{
 
 ## 2. The agent builds the interface (30 minutes)
 
-Start the app again (`npm run dev`) and open the page. Click the panel button in the corner.
+The `agent` template ships the agent but not its panel; add the panel once, then start the app again:
 
-Ask it, in one message:
+```sh
+npx acrylblends add agent-panel
+npm install
+npm run dev
+```
 
-> Build a board page at /board: three columns (backlog, doing, done) with cards, a sidebar with filters (all, mine, done) and a count on each filter,
-> and a header button "New card" that adds one. Use the app's own state so the counts update live. Do it now, then install it and reload the page.
+Open the address it prints (`/` is the app's page) and click the panel button in the corner. Ask it, in one message:
 
-What happens next is the workshop: the agent reads `AGENTS.md` and `docs/framework` (both are in your app), writes a Cordis plugin under `plugins/`, and
-installs it into the running app. The page reloads when the plugin is live. The panel shows each tool call as it happens.
+> Do it now, without asking for approval. Build a board page at /board: three columns (backlog, doing, done) with cards that have a checkbox to mark
+> them done, a sidebar with filters (all, mine, done) and a count on each filter, and a header button "New card" that adds one. Use the app's own state
+> so the counts update live. Build it as a plugin in plugins/, install it into the running app, then go to /board yourself and check it looks right,
+> and tell me what you saw.
 
-Then make it yours: open the plugin it wrote, change a colour or a label, save, and watch the app reload again. The code is in your folder and belongs to
-you; the agent wrote it, you own it.
+What happens next is the workshop: the agent reads `AGENTS.md` and `docs/framework` (both are in your app), writes a Cordis plugin under `plugins/`,
+installs it into the running app, and goes to `/board` through the door to look at what it built. The page it built is at `/board`; keep the app's own
+page (`/`) open in a second tab, because the panel lives there.
 
-TODO(1.0.4-A): the reload and navigate inside one run. Until that ships, do the two steps it would do: after the agent says it installed the plugin,
-reload the browser yourself, and ask it to check the page in a second message.
+Then make it yours: open the plugin it wrote, change a colour or a label, save, and watch the app reload. The code is in your folder and belongs to you;
+the agent wrote it, you own it.
 
-**Stuck?** Nothing in `/api/agent-panel` (404) means the panel's plugin rows are missing; re-run `npx acrylblends add agent-panel` and restart. If the
-agent describes the plan and stops, tell it "do it now". If the page does not reload, that is the gap above; reload by hand.
+**Stuck?** `404` under `/api/agent-panel` means the panel is not mounted: `npx acrylblends add agent-panel`, `npm install`, restart. The panel's tool
+lines can read as just the driver's name on 1.0.4 (TODO(1.0.5-panel)); read the agent's own messages, not those lines. If the agent describes the plan
+and stops, tell it "do it now, without asking for approval".
 
 ## 3. The agent drives the app (20 minutes)
 
-The same agent, in the same panel, now uses the door: a channel into the running page with `look` (a snapshot of what is on screen, with refs) and `act`
-(click, type, select, press, scroll, wait).
+The same agent, in the same panel, now uses the door: a channel into the running page with `look` (a snapshot of what is on screen, with refs) and
+`act` (click, type, select, press, scroll, wait, and `navigate` or `reload` the page).
 
 Ask it:
 
-> Open the sidebar, tick one card in doing, change the filter to done, and tell me what the counts say now.
+> Do it now, without asking for approval. On /board, use the door to open the sidebar, tick one card with its checkbox, set the filter to done, then
+> look again and tell me what the counts say.
 
-Watch the page: the sidebar opens, the card ticks, the counts change, and an indicator in the corner says the agent is driving, with a stop button. Every
-action is in `.acryl/audit/` as a line you can read afterwards. On 1.0.x a drive like that takes the agent 17 to 48 seconds, depending on the model.
+Watch the page: the card ticks, the filter changes, the counts move, and an indicator in the corner says the agent is driving, with a stop button. Every
+action is a line in `.acryl/audit/` afterwards. On 1.0.4 a drive like that was seven door calls in about twenty seconds with codex.
 
 Then ask it to check its own work in the way a person would:
 
-> Click "New card" twice, then read the board back to me and say whether the counts agree.
+> Do it now, without asking for approval. Click "New card" twice, look at the board, and tell me whether the counts agree.
 
-**Stuck?** If the agent says the door is not on the page, that is TODO(1.0.4-B): the page script ships on every development page in 1.0.4. Until then,
-the fallback is the terminal: open the `pty:codex` (or `pty:claude`, `pty:pi`) tab in the panel and type `.acryl/bin/acryl look`, then
-`.acryl/bin/acryl act click --ref <ref>` with a ref from the snapshot.
+**Stuck?** If the agent says it cannot see a page, open `/` (the app's page) in a tab first: that is where the panel and the page channel live. In an
+Electron window the page works the same way (see block 4).
 
 ## 4. The same app in a desktop window (15 minutes)
+
+Stop the development server first (`Ctrl-C`). The desktop app runs its own server for the same app folder, and the door allows one process per app: with
+the server still running, the window stops with `acryl-door: another process (pid …) serves the door of …; stop it first`.
 
 ```sh
 npx acrylblends add desktop
@@ -197,5 +207,5 @@ yours.
 | A port is taken | use the address the app printed |
 | The agent cannot log in | `codex login` / `claude` / `pi` in a terminal, then retry in the panel |
 | The agent plans and stops | reply "do it now"; the config asks it to act, but a model sometimes waits |
-| The agent cannot see the page | TODO(1.0.4-B); use the `pty:` tab and `.acryl/bin/acryl look` |
+| The agent cannot see the page | open `/` (the app's page) in a tab first; the panel and the page channel live there |
 | Anything else | the **Stuck?** line of the step, then your facilitator |

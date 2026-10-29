@@ -22,32 +22,35 @@ it only describes, the config is not in place (1.0.4-E) or the model is waiting 
 
 | Minutes | Block | Measured | If late |
 | --- | --- | --- | --- |
-| 0-10 | setup and `/hello` | create and install seconds; the route reload instant | never cut |
-| 10-40 | the agent builds the interface | the build is one run; allow 8-12 minutes, plus edits | if late, keep the board minimal (one column) |
-| 40-60 | the agent drives the app | a model-driven drive took codex 28 s, claude 17 s, pi 48 s (on the desktop window, 1.0.x) | the drive is the point; cut the second "check its own work" prompt |
-| 60-75 | the same app in a window | add + install seconds; first Electron boot about 20 s | pre-warm Electron or demo it |
+| 0-10 | setup and `/hello` | create+install 9 s; the route reload instant; `add agent-panel` and `npm install` seconds | never cut |
+| 10-40 | the agent builds the interface | one codex run built and installed the board in about 2.5 minutes; the agent then checked it through the door | if late, keep the board minimal (one column) |
+| 40-60 | the agent drives the app | seven door calls in about 20 s with codex; the earlier capability run measured 17-48 s per model | the drive is the point; cut the second "check its own work" prompt |
+| 60-75 | the same app in a window | add + install seconds; first Electron boot about 20 s; navigate+reload+look in the window under 3 s | pre-warm Electron or demo it |
 | 75-90 | deploy and publish | the registry check merges in about 2 minutes | keep the publish; the deploy talk can be 3 minutes |
 
 Checkpoints in the handout: 10 minutes a route answers; 40 minutes the agent's board is on screen; 60 minutes the agent has clicked through it; 75 minutes
 the window is open. Walk the room at those minutes and help the machine that is behind, rather than the one that is ahead.
 
-## What is not in 1.0.x yet, and what to say
+## What is in 1.0.4, and what is still coming
 
-The capability report is the source; these are the ones the handout touches.
+1.0.4 has A (`act reload`, `act navigate --path /x`, pages reloading themselves after a plugin change), B (the door's script on every development
+page), D (the CLI's noise) and E (the clean agent config), and a run now survives page reloads: only Stop cancels it. Measured in this run: one prompt
+built the board and installed it (about two and a half minutes with codex), the drive took seven door calls in about twenty seconds, and the window leg -
+`act navigate`, `act reload`, `look` - worked in the Electron window first time.
 
-- **TODO(1.0.4-A), reload and navigate inside one run.** Today the user reloads the browser after the agent installs the plugin, and asks it to check in
-  a second message. Say so plainly; it costs one sentence, not a step.
-- **TODO(1.0.4-B), the door script on every development page.** On a page without it the agent cannot see anything and says so. Fallback: the `pty:` tab
-  and `.acryl/bin/acryl look` / `act`.
-- **TODO(1.0.4-E), a clean agent config.** The prompt noise and the "shall I proceed?" habit are what the config fixes; until every machine has it, the
-  "do it now" sentence in the handout is the workaround.
-- **TODO(1.0.4-D), CLI noise.** The `acryl` command's chatter is being trimmed; nothing in the workshop depends on it, but it is the difference between a
-  screen that reads well and one that does not.
-- **TODO(1.0.4-C), the window, menu and application-settings control (target 11-05).** This is in scope and the handout teaches it: the agent lists the
-  windows, opens a second one, picks a menu item and changes an app setting. If C slips, cut that second prompt and keep the first half of block 4 - the
-  page inside the window is driven today, so the block still lands; say the window control is coming, do not improvise it.
-- **Later: F (the door through a DeepSeek model with no login).** Do not promise it in the room; it is what a workshop without a hosted model login would
-  want.
+Still open, and what to say:
+
+- **TODO(1.0.5-panel), the panel's tool lines.** They can render as just the driver's name ("codex" repeated down the panel) instead of what the tool is
+  doing. The agent's own messages are readable; tell the room to read those. It matters for the screenshot of the panel mid-build.
+- **TODO(1.0.4-C), the window, menu and application-settings control (target 11-05).** In scope and taught in block 4: the agent lists the windows,
+  opens a second one, picks a menu item and changes an app setting. If C slips, cut that second prompt and keep the first half - the page inside the
+  window is driven today, so the block still lands.
+- **F (the door through a DeepSeek model with no login).** Do not promise it; it is what a workshop without a hosted model login would want.
+- **The door allows one process per app.** Starting `npm run desktop` while `npm run dev` runs stops the window with `acryl-door: another process (pid …)
+  serves the door of …; stop it first`. The handout now says to stop the server first; say it out loud too, it is the first thing a room hits.
+- **Screenshots.** S3 (the board the agent built) and S6 (the registry listing) are taken from the run. S2 (the panel mid-build) needs the panel fix
+  first, or it shows the "codex" wall; S1 (the first page), S4 (driving) and S5 (the real window) are pending, and S5 needs screen-recording permission
+  on the machine that takes it.
 
 ## The no-network fallback
 
