@@ -37,6 +37,77 @@ async function* events(response: Response): AsyncGenerator<PanelEvent> {
   }
 }
 
+/** What a run is read from: its events, and a way to end the run. A socket and a stream give the same events. */
+interface RunSource {
+  readonly events: AsyncIterable<PanelEvent>
+}
+
+/** A WebSocket is not one of the browser's six connections per host, so the panel's Stop and a run still work when two windows stream their own state. */
+let socketBroken = false
+let activeSocket: WebSocket | undefined
+
+/** Open the run socket and send the token and the first action. Rejects when the page cannot upgrade (a proxy, a server without `ws`): the caller falls back to the stream. */
+function openSocket(token: string, action: Record<string, unknown>): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(
+      `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${PREFIX}/run/ws`,
+    )
+    const timer = setTimeout(() => {
+      socket.close()
+      reject(new Error('the socket did not open in time'))
+    }, 4000)
+    socket.onopen = () => {
+      clearTimeout(timer)
+      socket.send(JSON.stringify({ t: 'hello', token }))
+      socket.send(JSON.stringify(action))
+      resolve(socket)
+    }
+    socket.onerror = () => {
+      clearTimeout(timer)
+      reject(new Error('the server refused the upgrade'))
+    }
+  })
+}
+
+/** The frames of an open run socket as panel events, until it closes. */
+async function* socketEvents(socket: WebSocket): AsyncGenerator<PanelEvent> {
+  const queue: PanelEvent[] = []
+  let wake: (() => void) | undefined
+  let closed: CloseEvent | undefined
+  socket.onmessage = (message) => {
+    try {
+      const frame = JSON.parse(String(message.data)) as { e?: unknown; d?: unknown }
+      if (typeof frame.e === 'string')
+        queue.push({ event: frame.e, data: (frame.d ?? {}) as Record<string, unknown> })
+    } catch {
+      // Not a frame of ours.
+    }
+    wake?.()
+  }
+  socket.onclose = (event) => {
+    closed = event
+    wake?.()
+  }
+  for (;;) {
+    const next = queue.shift()
+    if (next !== undefined) {
+      yield next
+      continue
+    }
+    if (closed !== undefined) {
+      if (closed.code === 4401)
+        yield {
+          event: 'error',
+          data: { message: 'the panel was not accepted (reload the page and try again)' },
+        }
+      return
+    }
+    await new Promise<void>((resolve) => {
+      wake = resolve
+    })
+  }
+}
+
 const css = `
 :host { all: initial }
 * { box-sizing: border-box; font: 14px system-ui, sans-serif }
@@ -195,12 +266,55 @@ async function start(): Promise<void> {
   // loads next follows it again. Only Stop cancels it.
   const headers = { 'content-type': 'application/json', 'x-agent-panel-token': session.token }
   let following = false
-  stop.addEventListener('click', () => void fetch(`${PREFIX}/stop`, { method: 'POST', headers }))
+  stop.addEventListener('click', () => {
+    // On the run's socket when there is one: a request would wait behind the browser's six connections per host.
+    if (activeSocket?.readyState === WebSocket.OPEN)
+      activeSocket.send(JSON.stringify({ t: 'stop' }))
+    else void fetch(`${PREFIX}/stop`, { method: 'POST', headers })
+  })
+  /** A run over the socket when the server upgrades, else over the stream, with one console warning saying why. */
+  const openRun = async (
+    action: { t: 'ask'; message: string; driver: string } | { t: 'follow' },
+  ): Promise<RunSource | { error: string } | undefined> => {
+    if (!socketBroken && typeof WebSocket !== 'undefined') {
+      try {
+        const socket = await openSocket(session.token, action)
+        activeSocket = socket
+        socket.addEventListener('close', () => {
+          if (activeSocket === socket) activeSocket = undefined
+        })
+        return { events: socketEvents(socket) }
+      } catch (cause) {
+        socketBroken = true
+        console.warn(
+          `agent-panel: the run could not open a WebSocket (${cause instanceof Error ? cause.message : String(cause)}); using server-sent events, which count against the browser's six connections per host`,
+        )
+      }
+    }
+    if (action.t === 'ask') {
+      const response = await fetch(`${PREFIX}/ask`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ message: action.message, driver: action.driver }),
+      })
+      if (!response.ok)
+        return {
+          error:
+            ((await response.json().catch(() => ({}))) as { error?: string }).error ??
+            `The panel answered ${response.status}.`,
+        }
+      return { events: events(response) }
+    }
+    const latest = await fetch(`${PREFIX}/run`, { headers })
+    return latest.ok && (latest.headers.get('content-type') ?? '').includes('text/event-stream')
+      ? { events: events(latest) }
+      : undefined
+  }
   /**
    * Show one run, as its events come, until it ends. `own` is true for a run this page just started (its question is on screen); a run found on load is shown from its question, and
    * a run that had already ended before the page loaded is only shown, never reloads the page.
    */
-  const watch = async (response: Response, own: boolean): Promise<void> => {
+  const watch = async (source: RunSource, own: boolean): Promise<void> => {
     let live = true
     following = true
     send.disabled = true
@@ -219,7 +333,7 @@ async function start(): Promise<void> {
     tick()
     const timer = setInterval(tick, 1000)
     try {
-      for await (const { event, data } of events(response)) {
+      for await (const { event, data } of source.events) {
         if (event === 'run') {
           live = data.ended !== true
           if (!own) {
@@ -271,29 +385,21 @@ async function start(): Promise<void> {
     input.value = ''
     line(message, 'me')
     try {
-      const response = await fetch(`${PREFIX}/ask`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ message, driver: driver.value }),
-      })
-      if (!response.ok) {
-        line(
-          ((await response.json().catch(() => ({}))) as { error?: string }).error ??
-            `The panel answered ${response.status}.`,
-          'err',
-        )
+      const run = await openRun({ t: 'ask', message, driver: driver.value })
+      if (run === undefined) return
+      if ('error' in run) {
+        line(run.error, 'err')
         return
       }
-      await watch(response, true)
+      await watch(run, true)
     } catch (error) {
       line(`The request failed: ${error instanceof Error ? error.message : String(error)}`, 'err')
     }
   })
   // The latest run, if there is one: shown again after a reload (its question, its events), and followed if it is still going.
   try {
-    const latest = await fetch(`${PREFIX}/run`, { headers })
-    if (latest.ok && (latest.headers.get('content-type') ?? '').includes('text/event-stream'))
-      void watch(latest, false)
+    const latest = await openRun({ t: 'follow' })
+    if (latest !== undefined && !('error' in latest)) void watch(latest, false)
   } catch {
     // No run to show.
   }

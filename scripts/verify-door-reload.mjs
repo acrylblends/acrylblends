@@ -390,6 +390,27 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   log(
     'E: with six streams held open in the page, a look still answers at once (the page channel is a WebSocket)',
   )
+  // The panel in the same page, six connections still held: a question to the agent is asked and answered over its own socket, and Stop is sent on it too.
+  const panelLog = `(() => { const root = document.getElementById('agent-panel').shadowRoot; return Array.from(root.querySelectorAll('#log .msg')).map((el) => el.className + '|' + el.textContent) })()`
+  await inPage(
+    "(() => { const root = document.getElementById('agent-panel').shadowRoot; root.querySelector('button.open').click(); const box = root.querySelector('textarea'); box.value = 'add 2 3'; root.querySelector('form').requestSubmit(); return true })()",
+  )
+  const answered = await until(async () => {
+    const lines = await inPage(panelLog)
+    return (
+      Array.isArray(lines) &&
+      lines.some((entry) => entry.startsWith('msg md|') && entry.length > 'msg md|'.length) &&
+      !lines.some((entry) => entry.startsWith('msg working|')) &&
+      lines
+    )
+  }, 20_000)
+  if (!answered)
+    fail(
+      `E: with six connections held, the panel's question was not answered: ${JSON.stringify(await inPage(panelLog))}`,
+    )
+  log(
+    'E: with six streams held open in the page, the panel asks the agent and shows the answer (its run is a WebSocket too)',
+  )
   // The same page kept to the event stream: its answers queue behind the six, and the door says so in seconds.
   // (A navigation is a request too: it would queue behind the six, so they are let go first.)
   await inPage('window.__hogs.forEach((source) => source.close()); true')
