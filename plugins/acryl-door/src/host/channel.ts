@@ -57,6 +57,11 @@ const DEFAULT_ACK_MS = 3000
 export interface ChannelOptions {
   /** How long a page has to acknowledge a read-only call (`look`, `wait`) before the next page is tried. */
   readonly ackMs?: number
+  /**
+   * How long a read-only call waits for a page to register when there is none, or when every page was silent and a new one may be on its way (a page that is moving to another
+   * address registers again a moment later). 0 (the default) fails at once.
+   */
+  readonly attachWaitMs?: number
 }
 
 /**
@@ -65,11 +70,13 @@ export interface ChannelOptions {
  */
 export class UiChannel {
   private readonly ackMs: number
+  private readonly attachWaitMs: number
   /** The page the Host sent to a new place and that came back: it keeps being driven until the person focuses another page. */
   private preferred: string | undefined
 
   constructor(options: ChannelOptions = {}) {
     this.ackMs = options.ackMs ?? DEFAULT_ACK_MS
+    this.attachWaitMs = options.attachWaitMs ?? 0
   }
 
   private readonly connections = new Map<string, Connection>()
@@ -143,8 +150,11 @@ export class UiChannel {
    * until it speaks; a call that changes the page is never sent to a second page, because the first might still run it.
    * @throws UiControlError `no-window`, `timeout`, `aborted`, `unloaded`, `disconnected`, or whatever the page refused with.
    */
-  async call(request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number; window?: number } = {}): Promise<UiResult> {
+  async call(request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number; window?: number } = {}, retried = false): Promise<UiResult> {
     if (this.closed) throw new UiControlError('unloaded', 'the door was unloaded')
+    const readOnlyCall = request.op === 'snapshot' || request.op === 'wait'
+    // A page that is moving to another address registers again a moment later: a read-only call right after a navigate or reload waits for it, rather than failing.
+    if (readOnlyCall && this.attachWaitMs > 0 && this.connections.size === 0) await this.expectNewPage(this.attachWaitMs)
     const ordered = this.ordered()
     // `window` is the number `window list` prints: that desktop window's page, not the one used last.
     const candidates = options.window === undefined ? ordered : ordered.filter(connection => connection.shellWindow === options.window)
@@ -154,15 +164,22 @@ export class UiChannel {
     }
     if (candidates.length === 0) throw new UiControlError('no-window', 'no page of the app is open to control')
     if (options.signal?.aborted === true) throw new UiControlError('aborted', 'the call was cancelled')
-    const readOnly = request.op === 'snapshot' || request.op === 'wait'
+    const readOnly = readOnlyCall
+    const tried = new Set<string>()
     for (const target of candidates) {
+      tried.add(target.windowId)
       try {
         return await this.callOne(target, request, options, readOnly)
       } catch (cause) {
         if (!(cause instanceof Silent)) throw cause
       }
     }
-    throw new UiControlError('timeout', `no page of the app answered within ${String(Math.round(this.ackMs / 1000))} s: the app's pages are open but none responded (a tab in the background, or a page that is still loading). Bring the app's tab to the front, or navigate it, then look again`)
+    // Every page was silent. A page that registered meanwhile (the one that was moving) gets the call once.
+    if (readOnly && !retried && this.attachWaitMs > 0 && options.window === undefined) {
+      const fresh = await this.expectNewPage(this.attachWaitMs)
+      if (fresh !== undefined && !tried.has(fresh)) return await this.call(request, options, true)
+    }
+    throw new UiControlError('timeout', `no page of the app answered within ${String(Math.round(this.ackMs / 1000))} s: the app's pages are open but none responded. Likely causes: a tab in the background, a page that is still loading after a navigation (look again), or a page that holds the browser's six connections with event streams of its own (a page should keep to two). Bring the app's tab to the front, or navigate it, then look again`)
   }
 
   private callOne(target: Connection, request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number }, failOver: boolean): Promise<UiResult> {

@@ -107,7 +107,8 @@ describe('the page channel over a WebSocket', () => {
     const looked = await operator(running.root, ['look'])
     expect(looked.code).toBe(1)
     expect(looked.err).toContain('no-window')
-    expect(Date.now() - started).toBeLessThan(2000)
+    // It waits the moment a page needs to register after a navigation (two seconds), and no longer.
+    expect(Date.now() - started).toBeLessThan(5000)
   })
 
   it('replaces a socket that opens again for the same window, and a call in flight on the old one fails as disconnected', async () => {

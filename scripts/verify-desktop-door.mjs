@@ -175,6 +175,14 @@ try {
   const second = /window (\d+)/u.exec(opened.out)?.[1]
   if (opened.code !== 0 || second === undefined)
     fail(`window open failed:\n${opened.out}${opened.err}`)
+  // A window opened while another is open is not exactly on top of it.
+  const places = (windowList() ?? []).map((entry) =>
+    /@(-?\d+),(-?\d+)/u.exec(entry.line)?.slice(1).join(','),
+  )
+  if (places.length < 2 || places.includes(undefined) || new Set(places).size !== places.length)
+    fail(
+      `two windows are at the same place (or window list gives no places): ${JSON.stringify(places)}\n${acryl('window', 'list').out}`,
+    )
   const bothPages = await until(async () => {
     const a = look(first.id)
     const b = look(second)

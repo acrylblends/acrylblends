@@ -136,6 +136,7 @@ if (!app.requestSingleInstanceLock()) {
       isFocused: () => candidate.isFocused(),
       isMinimized: () => candidate.isMinimized(),
       getSize: () => candidate.getSize(),
+      getPosition: () => candidate.getPosition(),
       restore: () => candidate.restore(),
       focus: () => candidate.focus(),
       close: () => candidate.close(),

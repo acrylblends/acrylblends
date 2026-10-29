@@ -115,7 +115,8 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     ctx.logger?.error?.(`acryl-door: failed to ${operation}: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
   const secret = newSecret()
-  const channel = new UiChannel()
+  // A look right after a navigate or reload waits up to two seconds for the page that is moving to register again, and a read-only call that no page acknowledged gives a page that just registered one more try.
+  const channel = new UiChannel({ attachWaitMs: 2000 })
   const shell = new ShellChannel()
   const audit = new AuditLog(auditPath(stateDir(app.root)))
   const door = new Door({

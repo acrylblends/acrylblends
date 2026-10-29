@@ -17,6 +17,7 @@ export interface WindowPort {
   isFocused(): boolean
   isMinimized(): boolean
   getSize(): number[]
+  getPosition(): number[]
   restore(): void
   focus(): void
   close(): void
@@ -68,6 +69,8 @@ export type ShellResult =
         focused: boolean
         width: number
         height: number
+        x?: number
+        y?: number
       }[]
     }
   | { readonly items: readonly { path: string; label: string; enabled: boolean; ends?: boolean }[] }
@@ -133,6 +136,7 @@ export function handleShellCall(request: ShellRequest, desktop: DesktopPort): Sh
       return {
         windows: desktop.windows().map((window) => {
           const [width = 0, height = 0] = window.getSize()
+          const [x = 0, y = 0] = window.getPosition()
           return {
             id: window.id,
             title: window.getTitle(),
@@ -140,6 +144,8 @@ export function handleShellCall(request: ShellRequest, desktop: DesktopPort): Sh
             focused: window.isFocused(),
             width,
             height,
+            x,
+            y,
           }
         }),
       }
