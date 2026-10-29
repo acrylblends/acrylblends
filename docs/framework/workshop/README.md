@@ -71,11 +71,9 @@ Save: the terminal prints `Change detected … Restarting`, and `/hi` answers `{
 
 ## 2. The agent builds the interface (30 minutes)
 
-The `agent` template ships the agent but not its panel; add the panel once, then start the app again:
+Start the app:
 
 ```sh
-npx acrylblends add agent-panel
-npm install
 npm run dev
 ```
 
@@ -95,7 +93,7 @@ page (`/`) open in a second tab, because the panel lives there.
 Then make it yours: open the plugin it wrote, change a colour or a label, save, and watch the app reload. The code is in your folder and belongs to you;
 the agent wrote it, you own it.
 
-**Stuck?** `404` under `/api/agent-panel` means the panel is not mounted: `npx acrylblends add agent-panel`, `npm install`, restart. The panel's tool
+**Stuck?** `404` under `/api/agent-panel` on an app made before 1.0.5 means the panel is not mounted: `npx acrylblends add agent-panel`, `npm install`, restart (or `npx acrylblends@latest upgrade`). The panel's tool
 lines can read as just the driver's name on 1.0.4 (TODO(1.0.5-panel)); read the agent's own messages, not those lines. If the agent describes the plan
 and stops, tell it "do it now, without asking for approval".
 
@@ -121,14 +119,16 @@ Electron window the page works the same way (see block 4).
 
 ## 4. The same app in a desktop window (15 minutes)
 
-Stop the development server first (`Ctrl-C`). The desktop app runs its own server for the same app folder, and the door allows one process per app: with
-the server still running, the window stops with `acryl-door: another process (pid …) serves the door of …; stop it first`.
+With `npm run dev` still running:
 
 ```sh
 npx acrylblends add desktop
 npm install
 npm run desktop
 ```
+
+The window attaches to the running server and prints a line saying so, so the board you were just driving is the one in the window. (On an app made before
+1.0.5 the window instead stops with `acryl-door: another process (pid …) serves the door of …`, and you stop the dev server first.)
 
 A window opens on the same app, from the same server: your board, your sidebar, your panel. First drive the page in the window the way you did in block
 3: open the panel there and ask the agent to open the sidebar and change a filter. Look and act work the same way through the window.
@@ -138,6 +138,8 @@ Then hand the agent the window itself, not only the page inside it. Ask:
 > List the windows that are open, open a second one with the board in it, use the File menu to open its settings, and switch the appearance to dark.
 
 The agent lists the windows, opens a second one, picks a menu item and changes an application setting; each shows in the window as it happens.
+
+Navigate only to paths the app really serves: a path with no page leaves the window on nothing.
 
 TODO(1.0.4-C): the window, menu and application-settings control (target 2026-11-05). Until it ships, the first half of this block - the page inside
 the window - works, and the second prompt is the part that arrives with C.

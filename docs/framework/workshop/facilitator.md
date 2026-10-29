@@ -46,10 +46,11 @@ Still open, and what to say:
   opens a second one, picks a menu item and changes an app setting. If C slips, cut that second prompt and keep the first half - the page inside the
   window is driven today, so the block still lands.
 - **F (the door through a DeepSeek model with no login).** Do not promise it; it is what a workshop without a hosted model login would want.
-- **A plugin an agent writes is an extension.** That is the default and the guide asks for it. On an app made before 1.0.5, an agent that adds its plugin as a row of `blend.yaml` makes the app fail to boot (`Cannot find package 'acrylblends'` imported from the plugin); 1.0.5 makes a row's imports work. If a machine is still on 1.0.4, check the first board: it belongs in `plugins/` and installed with `.acryl/bin/acryl plugin add`.
+- **A plugin an agent writes is an extension.** That is the default, and the template's AGENTS.md now tells the in-app agent the same; 1.0.5 also makes a row's imports of `acrylblends` work, so a row no longer takes an app down. On a machine still on 1.0.4, an agent that adds its plugin as a row makes the app fail to boot (`Cannot find package 'acrylblends'`) - the fix there is `npx acrylblends@latest upgrade`.
+- **1.0.4 apps need one upgrade.** The panel in the template, the dev-install fix, rows importing the framework and the desktop attach all arrive in an app made before 1.0.5 with `npx acrylblends@latest upgrade` (or `npx acrylblends add agent-panel` for the panel alone).
+- **Navigate only to real paths.** In the desktop window `act navigate` to a path the app does not serve leaves the window on nothing; use a path the app answers (the block's own `/board`).
 - **Live installs race `npm run dev`.** The staged copy lives under `.acrylblends/extensions-staged/`, which `node --watch` watches, so an install can restart the app mid-install and the door then reports the app stopped. If a build goes quiet after an install, restart the server and ask the agent to install again. (Reported; 1.0.5 territory.)
-- **The door allows one process per app.** Starting `npm run desktop` while `npm run dev` runs stops the window with `acryl-door: another process (pid …)
-  serves the door of …; stop it first`. The handout now says to stop the server first; say it out loud too, it is the first thing a room hits.
+- **The desktop window attaches to the dev server** from 1.0.5; on 1.0.4 it refuses with `acryl-door: another process (pid …) serves the door of …`, and the server must be stopped first.
 - **Screenshots.** S3 (the board the agent built) and S6 (the registry listing) are taken from the run. S2 (the panel mid-build) needs the panel fix
   first, or it shows the "codex" wall; S1 (the first page), S4 (driving) and S5 (the real window) are pending, and S5 needs screen-recording permission
   on the machine that takes it.
