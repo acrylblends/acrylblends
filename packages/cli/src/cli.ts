@@ -4,6 +4,7 @@ import { checkDeps, parseCheckDepsOptions } from './check-deps'
 import { init, parseInitOptions, UsageError } from './init'
 import { type Io, processIo } from './io'
 import { kvImport, parseKvOptions } from './kv-import'
+import { runPreflight } from './preflight'
 import { TEMPLATE_SUMMARY, TEMPLATES } from './templates'
 import { parseUpgradeOptions, upgrade } from './upgrade'
 import { VERSION } from './version'
@@ -21,6 +22,8 @@ Usage:
                                       Bring the library plugins an app carries (the router, the server, the door, ...) up to this
                                       version: untouched files are replaced, an edited file stops it (diff shown) unless --force
   acrylblends plugins                    List the plugin library
+  acrylblends preflight                  Check this machine for the workshop: Node, npm, git, a coding agent, a free port
+                                      (and on Windows PowerShell and long paths); one line per check, PASS or the fix
   acrylblends build-client [root] [out]  Compile the client modules once for production (src/client to dist/client)
   acrylblends kv import <kv.json> <db>   Move a JSON-file kv store into the kv table of a SQLite database [--overwrite] [--table t] [--migrations dir]
   acrylblends check-deps [dir]           Fail when app code imports a database driver or opener outside the file named in
@@ -62,6 +65,7 @@ export async function runCli(argv: readonly string[], io: Io = processIo()): Pro
     if (command === 'kv') return await kvImport(parseKv(args), io)
     if (command === 'check-deps') return checkDeps(parseCheckDeps(args), io)
     if (command === 'plugins') return listPlugins(io)
+    if (command === 'preflight') return await runPreflight(io)
     throw new UsageError(`unknown command "${command}"`)
   } catch (error) {
     if (error instanceof UsageError) {
