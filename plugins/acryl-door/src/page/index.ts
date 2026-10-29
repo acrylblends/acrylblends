@@ -26,11 +26,18 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
   const reportFocus = (): void => { channel.reportFocus(focused()) }
   view.addEventListener('focus', reportFocus)
   view.addEventListener('blur', reportFocus)
+  // A page that is left may be kept by the browser (back/forward cache) with its stream open, and six open streams hold up every request of the live page: let go on the way out.
+  const leave = (): void => { channel.suspend() }
+  const back = (event: Event): void => { if ((event as PageTransitionEvent).persisted) channel.resume() }
+  view.addEventListener('pagehide', leave)
+  view.addEventListener('pageshow', back)
   document.addEventListener('visibilitychange', reportFocus)
   channel.connect()
   return () => {
     view.removeEventListener('focus', reportFocus)
     view.removeEventListener('blur', reportFocus)
+    view.removeEventListener('pagehide', leave)
+    view.removeEventListener('pageshow', back)
     document.removeEventListener('visibilitychange', reportFocus)
     channel.dispose()
     removeIndicator()

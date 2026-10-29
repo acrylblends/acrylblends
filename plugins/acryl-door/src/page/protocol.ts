@@ -100,6 +100,8 @@ export type ChannelToPage =
   | { readonly t: 'call'; readonly id: number; readonly request: UiRequest }
 export type ChannelToHost =
   | { readonly t: 'focus'; readonly focused: boolean }
+  /** The page received call `id` and is about to run it: proof that it is alive, sent before anything is done. */
+  | { readonly t: 'ack'; readonly id: number }
   | { readonly t: 'result'; readonly id: number; readonly value: UiResult }
   | { readonly t: 'error'; readonly id: number; readonly code: UiErrorCode; readonly message: string }
 
@@ -198,6 +200,7 @@ export const WINDOW_ID = /^[A-Za-z0-9-]{1,80}$/u
 export function parseChannelToHost(value: unknown): ChannelToHost | null {
   if (!isRecord(value)) return null
   if (value.t === 'focus' && typeof value.focused === 'boolean') return { t: 'focus', focused: value.focused }
+  if (value.t === 'ack' && typeof value.id === 'number') return { t: 'ack', id: value.id }
   if (value.t === 'result' && typeof value.id === 'number' && isRecord(value.value)) return { t: 'result', id: value.id, value: value.value as unknown as UiResult }
   if (value.t === 'error' && typeof value.id === 'number' && typeof value.message === 'string' && UI_ERROR_CODES.includes(value.code as UiErrorCode)) {
     return { t: 'error', id: value.id, code: value.code as UiErrorCode, message: value.message.slice(0, 500) }

@@ -55,6 +55,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 0.10.0](release-notes/0.10.0.md) - driver-pty: a coding agent in a real terminal in the app, the panel's drivers as a registry
 - [Release notes 1.0.5](release-notes/1.0.5.md) - the app's own agent drives the page with a real model; the agent template's tests no longer collide with /hello
 - [Release notes 1.0.6](release-notes/1.0.6.md) - the desktop app's windows and menu as door verbs (window, menu, --window), guarded against ending the session; a clean tarball
+- [Release notes 1.0.7](release-notes/1.0.7.md) - production serves the extensions the agent installed (read-only); Git Bash paths, two tabs and the word "card" in the door; the panel docks, renders Markdown and says it is working
 - [Release notes 1.0.4](release-notes/1.0.4.md) - act reload and navigate, the page script on every page, runs that outlive the page
 - [Release notes 1.0.3](release-notes/1.0.3.md) - Node 26, relative paths in manifest rows, a pasted GitHub address as a source
 - [Release notes 1.0.2](release-notes/1.0.2.md) - the chat template closed in production, create-acrylblends --from, the newcomer-path fixes

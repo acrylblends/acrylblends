@@ -52,8 +52,10 @@ describe('PageChannel', () => {
     page.connect()
     expect(sources[0]?.url).toBe('/api/acryl-door/channel?window=w-1&focused=1')
     sources[0]?.emit('call', JSON.stringify({ t: 'call', id: 7, request: { op: 'snapshot' } }))
-    await vi.waitFor(() => { expect(posts).toHaveLength(1) })
-    expect(posts[0]).toMatchObject({ url: '/api/acryl-door/channel/answer', body: { window: 'w-1', message: { t: 'result', id: 7 } } })
+    await vi.waitFor(() => { expect(posts).toHaveLength(2) })
+    // The page says it heard the call before it does anything, then answers it.
+    expect(posts[0]).toMatchObject({ url: '/api/acryl-door/channel/answer', body: { window: 'w-1', message: { t: 'ack', id: 7 } } })
+    expect(posts[1]).toMatchObject({ url: '/api/acryl-door/channel/answer', body: { window: 'w-1', message: { t: 'result', id: 7 } } })
     page.dispose()
   })
 
@@ -110,5 +112,22 @@ describe('PageChannel', () => {
     await vi.waitFor(() => { expect(posts).toHaveLength(1) })
     expect(posts[0]?.body).toEqual({ window: 'w-1', message: { t: 'focus', focused: false } })
     page.dispose()
+  })
+
+  it('lets go of its stream when the page is left (a browser may keep the page, and six kept streams hold up every request of the live page) and opens it again, with the same window id, when the page is restored', () => {
+    const page = channel()
+    page.connect()
+    expect(sources).toHaveLength(1)
+    page.suspend()
+    expect(sources[0]?.closed).toBe(true)
+    // No reconnect on its own: a suspended page stays quiet.
+    vi.advanceTimersByTime(60_000)
+    expect(sources).toHaveLength(1)
+    page.resume()
+    expect(sources).toHaveLength(2)
+    expect(sources[1]?.url).toBe('/api/acryl-door/channel?window=w-1&focused=1')
+    page.dispose()
+    page.resume()
+    expect(sources).toHaveLength(2)
   })
 })

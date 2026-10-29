@@ -85,6 +85,24 @@ export class PageChannel {
     this.send({ t: 'focus', focused })
   }
 
+  /**
+   * Let go of the stream without ending the channel: the page is going away but the browser may keep it (the back/forward cache keeps a page that was left, still holding its
+   * connections). A browser allows six connections per host, so pages kept like that would queue the live page's own answers behind them. `resume` opens the stream again.
+   */
+  suspend(): void {
+    if (this.disposed) return
+    if (this.reconnectTimer !== undefined) clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = undefined
+    this.stop()
+  }
+
+  /** The page is back (restored from the cache): open the stream again with the same window id. */
+  resume(): void {
+    if (this.disposed) return
+    this.backoff = BACKOFF_START_MS
+    this.connect()
+  }
+
   dispose(): void {
     this.disposed = true
     if (this.reconnectTimer !== undefined) clearTimeout(this.reconnectTimer)
@@ -119,6 +137,8 @@ export class PageChannel {
       // A malformed call carries no usable id; there is nothing to answer.
       return
     }
+    // Alive: said before anything is done, so the Host can tell a page that heard the call from one that is frozen or gone.
+    this.send({ t: 'ack', id: call.id })
     this.driver.handle(call.request).then(
       (value) => { this.send({ t: 'result', id: call.id, value }) },
       (cause: unknown) => {

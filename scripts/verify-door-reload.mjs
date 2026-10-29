@@ -239,6 +239,117 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   log(
     'A: a mistyped path gives a 404 page the door can still drive, navigate names the 404, and the window comes back',
   )
+
+  // C, two tabs of the app (the workshop's normal state: the panel's tab and a tab the agent navigates). The door drives one page, deterministically: the one it just sent
+  // somewhere (it comes back as a new page), else the one in front. A look right after a navigate must answer within a few seconds, whichever tab the person last touched, and never wait the whole call timeout on a page in the background.
+  const tabs = () => fetch(`http://127.0.0.1:${devPort}/json`).then((r) => r.json())
+  const appTabs = async () =>
+    (await tabs()).filter((t) => t.type === 'page' && t.url.startsWith(base))
+  const first = (await appTabs())[0]
+  if (first === undefined) fail('C: the first tab is gone')
+  const secondTab = await fetch(`http://127.0.0.1:${devPort}/json/new?${base}/p2`, {
+    method: 'PUT',
+  }).then((r) => r.json())
+  await until(async () => (await appTabs()).length === 2, 15_000)
+  const timed = (...args) => {
+    const started = Date.now()
+    const answer = acryl(...args)
+    return { ...answer, ms: Date.now() - started }
+  }
+  const activate = (tab) => fetch(`http://127.0.0.1:${devPort}/json/activate/${tab.id}`)
+  for (const [front, back, path, heading] of [
+    [first, secondTab, '/p2', 'Second page'],
+    [secondTab, first, '/p1', 'Version'],
+    [first, secondTab, '/p2', 'Second page'],
+  ]) {
+    await activate(front)
+    await sleep(700)
+    const moved = timed('act', 'navigate', '--path', path)
+    if (moved.code !== 0)
+      fail(`C: act navigate ${path} with two tabs failed:\n${moved.out}${moved.err}`)
+    const seen = timed('look')
+    if (seen.code !== 0 || !seen.out.includes(heading) || seen.ms > 2500)
+      fail(
+        `C: the look after navigating ${path} with two tabs took ${seen.ms} ms and ${seen.code === 0 ? 'read' : 'failed with'}:\n${seen.out}${seen.err}`,
+      )
+    void back
+  }
+  log(
+    'C: with two tabs a look right after a navigate answers at once with the page that was navigated',
+  )
+
+  // D, the panel in a real browser: it sits beside the page (the page gets narrower and its fixed elements follow), it renders an answer as Markdown without ever making markup,
+  // and it closes without leaving the page narrower.
+  const panelCdp = await devtools(devPort)
+  const inPage = async (expression) => {
+    const answer = await panelCdp.send('Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    })
+    if (answer.result?.exceptionDetails)
+      fail(`D: the page threw: ${JSON.stringify(answer.result.exceptionDetails).slice(0, 500)}`)
+    return answer.result?.result?.value
+  }
+  await panelCdp.send('Page.enable')
+  await panelCdp.send('Page.navigate', { url: `${base}/p1` })
+  await until(
+    async () => (await inPage("!!document.getElementById('agent-panel')")) === true,
+    20_000,
+  )
+  await inPage(
+    "document.body.insertAdjacentHTML('beforeend', '<div id=pin style=\"position:fixed;top:0;right:0;width:40px;height:40px\">pin</div>'); true",
+  )
+  const before = await inPage(
+    '({ width: document.documentElement.getBoundingClientRect().width, inner: innerWidth, pin: document.getElementById("pin").getBoundingClientRect().right })',
+  )
+  await inPage(
+    "document.getElementById('agent-panel').shadowRoot.querySelector('button.open').click(); true",
+  )
+  const open = await inPage(
+    '({ width: document.documentElement.getBoundingClientRect().width, inner: innerWidth, pin: document.getElementById("pin").getBoundingClientRect().right, panel: document.getElementById("agent-panel").shadowRoot.querySelector("section").getBoundingClientRect().left })',
+  )
+  if (!(open.width <= before.inner - 300))
+    fail(
+      `D: with the panel open the page is ${open.width} px wide in a ${open.inner} px window (it was ${before.width}); the panel covers it`,
+    )
+  if (!(open.panel >= open.width - 1))
+    fail(
+      `D: the page is ${open.width} px wide but the panel starts at ${open.panel} px: they overlap`,
+    )
+  await inPage(
+    "document.getElementById('agent-panel').shadowRoot.querySelector('button.close').click(); true",
+  )
+  const closed = await inPage(
+    '({ width: document.documentElement.getBoundingClientRect().width, inner: innerWidth, style: document.documentElement.getAttribute("style") })',
+  )
+  if (Math.abs(closed.width - before.width) > 1)
+    fail(
+      `D: closing the panel left the page ${closed.width} px wide (it was ${before.width}); style=${closed.style}`,
+    )
+  log(
+    'D: the panel docks beside the page (the page gets narrower) and gives the width back when it closes',
+  )
+  const sample =
+    '## Title\n\nSome **bold** and `code` and <img src=x onerror="window.__owned=1"> and [bad](javascript:window.__owned=2)\n\n- one\n- two'
+  const markup = await inPage(`import('/api/agent-panel/client/markdown.ts').then((m) => {
+    const box = document.createElement('div')
+    box.append(m.renderMarkdown(${JSON.stringify(sample)}, document))
+    document.body.append(box)
+    return { html: box.innerHTML, images: box.querySelectorAll('img, script').length, owned: window.__owned ?? null, links: box.querySelectorAll('a').length }
+  })`)
+  if (markup.images !== 0 || markup.owned !== null || markup.links !== 0)
+    fail(`D: the Markdown renderer made markup from an answer: ${JSON.stringify(markup)}`)
+  if (
+    !/<h4>Title<\/h4>/u.test(markup.html) ||
+    !/<strong>bold<\/strong>/u.test(markup.html) ||
+    !/<ul><li>one<\/li><li>two<\/li><\/ul>/u.test(markup.html)
+  )
+    fail(`D: the answer was not rendered as Markdown: ${markup.html}`)
+  log(
+    'D: an answer is rendered as Markdown, and an <img>, a script and a javascript: link in it stay text',
+  )
+  panelCdp.close()
   log('OK')
 } finally {
   browser?.kill('SIGKILL')

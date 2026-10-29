@@ -97,7 +97,7 @@ const asking = (app: App) =>
     body: JSON.stringify({ question: 'add 2 3' }),
   })
 
-test('in production the agent, the builder and the extensions are left out: no /ask, no live install, no approve route; the page and /health stay', () =>
+test('in production the agent and the builder are left out and the extensions are read-only: no /ask, no live install, no approve route; the page and /health stay', () =>
   inEnvironment({ NODE_ENV: 'production', ACRYL_PRODUCTION_KEEP: undefined }, async (app) => {
     assert.equal((await app.root.router.request('/health')).status, 200)
     assert.equal((await app.root.router.request('/')).status, 200)
@@ -112,7 +112,12 @@ test('in production the agent, the builder and the extensions are left out: no /
       await response.body?.cancel()
     }
     assert.equal((app.root as unknown as { agent?: unknown }).agent, undefined)
-    assert.equal((app.root as unknown as { extensions?: unknown }).extensions, undefined)
+    // The service is there (it starts what plugins/ holds, once) and refuses every change.
+    const service = (
+      app.root as unknown as { extensions?: { install(source: string): Promise<unknown> } }
+    ).extensions
+    assert.ok(service, 'the extensions service starts read-only in production')
+    await assert.rejects(service.install('/anywhere'), /read-only here \(production\)/)
   }))
 
 test('ACRYL_PRODUCTION_KEEP keeps the named rows in production and says so at start; a name it does not know is reported', () =>

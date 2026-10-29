@@ -2,9 +2,25 @@ import { describe, expect, it, vi } from 'vitest'
 import { UiControlError, type ChannelToPage, type UiRequest } from '../../src/page/protocol.ts'
 import { UiChannel, type PageStream } from '../../src/host/channel.ts'
 
-function fakePage(channel: UiChannel, windowId: string, focused = true, shellWindow?: number) {
+/**
+ * A page. By default it only records the calls, and the test answers by hand. `reply` makes it answer by itself, as the page script does: 'ack' says it heard each call and nothing more
+ * (a page whose work never finishes), 'full' acknowledges and then answers, at once.
+ */
+function fakePage(channel: UiChannel, windowId: string, focused = true, shellWindow?: number, reply?: 'ack' | 'full') {
   const sent: ChannelToPage[] = []
-  const stream: PageStream & { closed: boolean } = { closed: false, send: (data) => { sent.push(JSON.parse(data) as ChannelToPage) }, close() { this.closed = true } }
+  const stream: PageStream & { closed: boolean } = {
+    closed: false,
+    send: (data) => {
+      const frame = JSON.parse(data) as ChannelToPage
+      sent.push(frame)
+      if (reply === undefined) return
+      queueMicrotask(() => {
+        channel.receive(windowId, { t: 'ack', id: frame.id })
+        if (reply === 'full') channel.receive(windowId, { t: 'result', id: frame.id, value: { ok: true, detail: windowId } })
+      })
+    },
+    close() { this.closed = true },
+  }
   const end = channel.attach(windowId, focused, stream, shellWindow)
   return { end, sent, stream, answer: (message: Parameters<UiChannel['receive']>[1]) => { channel.receive(windowId, message) } }
 }
@@ -186,5 +202,110 @@ describe('waiting for pages to come back', () => {
     expect(plain.sent).toHaveLength(1)
     plain.answer({ t: 'result', id: 2, value: { ok: true } })
     await last
+  })
+
+  describe('which page answers', () => {
+    const lookOp: UiRequest = { op: 'snapshot' }
+
+    it('goes to the next page when the first does not acknowledge a read-only call, puts the silent one last, and does not send it the calls that follow', async () => {
+      const channel = new UiChannel({ ackMs: 30 })
+      const live = fakePage(channel, 'live', true, undefined, 'full')
+      const ghost = fakePage(channel, 'ghost', true)
+      ghost.answer({ t: 'focus', focused: true })
+      // The ghost is first in line (it is the most recent) and never speaks; the live page answers.
+      expect(await channel.call(lookOp)).toEqual({ ok: true, detail: 'live' })
+      expect(ghost.sent).toHaveLength(1)
+      expect(live.sent).toHaveLength(1)
+      // The ghost is last in line now: a click goes to the live page and is never also sent to the ghost.
+      await channel.call(click)
+      expect(live.sent).toHaveLength(2)
+      expect(ghost.sent).toHaveLength(1)
+      // The ghost speaks again (the tab woke up): it is trusted again, and first, because it is in front.
+      ghost.answer({ t: 'focus', focused: true })
+      const again = channel.call(lookOp)
+      expect(ghost.sent).toHaveLength(2)
+      ghost.answer({ t: 'ack', id: 4 })
+      ghost.answer({ t: 'result', id: 4, value: { ok: true, detail: 'ghost' } })
+      expect(await again).toEqual({ ok: true, detail: 'ghost' })
+    })
+
+    it('waits the whole time for a page that acknowledged, and never takes a call that changes the page to a second page', async () => {
+      const channel = new UiChannel({ ackMs: 20 })
+      const slow = fakePage(channel, 'slow', true, undefined, 'ack')
+      const other = fakePage(channel, 'other', true, undefined, 'full')
+      slow.answer({ t: 'focus', focused: true })
+      // The slow page acknowledges at once and answers late: past the acknowledgement time nothing is re-sent to `other`.
+      const looked = channel.call(lookOp)
+      await new Promise(resolve => setTimeout(resolve, 80))
+      expect(other.sent).toHaveLength(0)
+      slow.answer({ t: 'result', id: 1, value: { ok: true } })
+      await looked
+      // A click to a page that never acknowledges is not re-sent anywhere: it times out on its own.
+      const silent = new UiChannel({ ackMs: 20 })
+      const mute = fakePage(silent, 'mute', true)
+      const spare = fakePage(silent, 'spare', true, undefined, 'full')
+      mute.answer({ t: 'focus', focused: true })
+      const clicked = silent.call(click, { timeoutMs: 100 })
+      expect(await codeOf(clicked)).toBe('timeout')
+      expect(spare.sent).toHaveLength(0)
+    })
+
+    it('drives the page the Host sent somewhere until the person focuses another, then the one in front, then the most recently active', async () => {
+      const channel = new UiChannel()
+      const panel = fakePage(channel, 'panel', true)
+      const board = fakePage(channel, 'board', false)
+      panel.answer({ t: 'focus', focused: true })
+      // Focused beats merely newer.
+      const first = channel.call(click)
+      expect(panel.sent).toHaveLength(1)
+      panel.answer({ t: 'result', id: 1, value: { ok: true } })
+      await first
+      // The Host sent the board somewhere and it came back: it is driven even though the panel is in front.
+      channel.prefer('board')
+      const second = channel.call(click)
+      expect(board.sent).toHaveLength(1)
+      board.answer({ t: 'result', id: 2, value: { ok: true } })
+      await second
+      // The person focuses the panel: the insistence ends.
+      panel.answer({ t: 'focus', focused: true })
+      const third = channel.call(click)
+      expect(panel.sent).toHaveLength(2)
+      panel.answer({ t: 'result', id: 3, value: { ok: true } })
+      await third
+    })
+
+    it('gives up on a read-only call when every page is silent, in the time a page has to acknowledge and not the whole call timeout, and says what to do', async () => {
+      const channel = new UiChannel({ ackMs: 30 })
+      fakePage(channel, 'one', true)
+      fakePage(channel, 'two', true)
+      await expect(channel.call(lookOp)).rejects.toMatchObject({ code: 'timeout', message: expect.stringMatching(/none responded.*front/u) })
+    })
+
+    it('keeps a silent page last in line when its stream reconnects, and trusts it again once it speaks', async () => {
+      const channel = new UiChannel({ ackMs: 30 })
+      const live = fakePage(channel, 'live', true, undefined, 'full')
+      fakePage(channel, 'tab', true)
+      await channel.call(lookOp)
+      // The tab reconnects (a new stream, the same window), as an unreachable tab does: it is the newest page, and still last.
+      const tab = fakePage(channel, 'tab', true)
+      await channel.call(click)
+      expect(live.sent).toHaveLength(2)
+      expect(tab.sent).toHaveLength(0)
+      tab.answer({ t: 'focus', focused: true })
+      const back = channel.call(click)
+      expect(tab.sent).toHaveLength(1)
+      tab.answer({ t: 'result', id: 4, value: { ok: true } })
+      await back
+    })
+
+    it('tells expectNewPage which page came back: a window id that was not connected when it was asked', async () => {
+      const channel = new UiChannel()
+      fakePage(channel, 'old', true)
+      const back = channel.expectNewPage(500)
+      fakePage(channel, 'old', true)
+      fakePage(channel, 'new', true)
+      expect(await back).toBe('new')
+      await expect(channel.expectNewPage(20)).resolves.toBeUndefined()
+    })
   })
 })

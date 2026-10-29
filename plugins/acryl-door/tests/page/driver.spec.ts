@@ -73,9 +73,11 @@ describe('snapshot', () => {
       <input type="text" placeholder="Enter your token">
       <input type="text" autocomplete="one-time-code" aria-label="Code">
       <div data-acryl-sensitive><input type="text" aria-label="Inside marked area"><button>Inside button</button></div>
+      <input type="text" aria-label="Card title" value="Buy oat milk">
       <input type="text" aria-label="Project name" value="acryl">`
     const s = await snap(makeDriver())
-    expect(s.nodes.map(n => n.name)).toEqual(['Project name'])
+    // The title of a card is not a card number: only what says it is a secret, or is one, is left out.
+    expect(s.nodes.map(n => n.name)).toEqual(['Card title', 'Project name'])
     expect(JSON.stringify(s)).not.toMatch(/Pass|Key field|Card number|token|Inside/)
   })
 

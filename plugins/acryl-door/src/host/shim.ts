@@ -60,7 +60,8 @@ function cmdWord(value: string): string {
 
 export function posixShim(root: string, target: ShimTarget): string {
   const words = [target.node, ...target.nodeOptions, target.client, '--dir', root].map(shWord).join(' ')
-  const env = target.electron ? 'export ELECTRON_RUN_AS_NODE=1\n' : ''
+  // Git Bash on Windows rewrites an argument such as /nope into C:/Program Files/Git/nope when it starts a native program; the door's paths must reach it as typed. Harmless elsewhere.
+  const env = `${target.electron ? 'export ELECTRON_RUN_AS_NODE=1\n' : ''}export MSYS_NO_PATHCONV=1\nexport MSYS2_ARG_CONV_EXCL='*'\n`
   return `#!/bin/sh\n# This app's door (acryl-door): reaches only the app running from this folder. Rewritten each time the app starts.\n${env}exec ${words} "$@"\n`
 }
 
