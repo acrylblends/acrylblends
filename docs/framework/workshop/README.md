@@ -54,7 +54,9 @@ npm run dev
 ```
 
 Open the address it prints. You get a small app with a panel in the corner: it is the `agent` template, and the panel is the agent that will build and
-drive this app. For the next two minutes forget the panel: an Acryl app is a function from a request to a response.
+drive this app.
+
+![The app's page in a browser, with the agent panel open on the right](/docs-assets/workshop/s1-first-page.webp) For the next two minutes forget the panel: an Acryl app is a function from a request to a response.
 
 Open `src/routes.ts` and add one line to the chain, just above `.get('/health', …)`, keeping the indentation of the lines around it:
 
@@ -85,8 +87,10 @@ Open the address it prints (`/` is the app's page) and click the panel button in
 > and tell me what you saw.
 
 What happens next is the workshop: the agent reads `AGENTS.md` and `docs/framework` (both are in your app), writes a Cordis plugin under `plugins/`,
-installs it into the running app as an extension (`.acryl/bin/acryl plugin add plugins/board`), and goes to `/board` through the door to look at what it built. It must be an extension, not a row of `blend.yaml`: a row is imported at start-up, where the framework's package name does not resolve, and the app then fails to boot. The page it built is at `/board`; keep the app's own
+installs it into the running app as an extension (`.acryl/bin/acryl plugin add plugins/board`), and goes to `/board` through the door to look at what it built. Installed extensions are the default, and the one to ask for: a row of `blend.yaml` is imported at start-up, which on an app made before 1.0.5 fails with `Cannot find package 'acrylblends'`. The page it built is at `/board`; keep the app's own
 page (`/`) open in a second tab, because the panel lives there.
+
+![The board the agent built: three columns with cards, and a sidebar with filters and counts](/docs-assets/workshop/s3-board.webp)
 
 Then make it yours: open the plugin it wrote, change a colour or a label, save, and watch the app reload. The code is in your folder and belongs to you;
 the agent wrote it, you own it.
@@ -173,6 +177,8 @@ gh pr create --fill --repo acryldev/workshop-2026-11-20
 
 A check runs on the pull request and merges it: your starter is listed in about two minutes, and anyone can start from it with
 `npm create acrylblends@latest another-app -- --from <your-github-login>.my-app --registry github:acryldev/workshop-2026-11-20`.
+
+![The workshop registry's page, listing the starters other people published](/docs-assets/workshop/s6-registry.webp)
 
 As an aside, for an app made before this release: `npx acrylblends@latest upgrade` moves the framework plugins it carries to the installed version,
 leaving your own code alone (an app you made today answers "everything is up to date").
