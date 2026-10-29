@@ -35,7 +35,7 @@ export class SourceError extends Error {
   override name = 'SourceError'
 }
 
-export const SOURCE_FORMS = `github:owner/repo[#ref], @scope/name[@version], a packed .tgz file, or a folder (./path)`
+export const SOURCE_FORMS = `github:owner/repo[#ref] (or the https://github.com/owner/repo address), @scope/name[@version], a packed .tgz file, or a folder (./path)`
 
 const LIMITS = { files: 5000, bytes: 50 * 1024 * 1024 }
 
@@ -43,6 +43,12 @@ const LIMITS = { files: 5000, bytes: 50 * 1024 * 1024 }
 export function parseSource(text: string, cwd: string): Source | undefined {
   const github = /^github:([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:#([A-Za-z0-9_./-]+))?$/.exec(text)
   if (github) return { kind: 'github', owner: github[1]!, repo: github[2]!, ref: github[3] }
+  // A GitHub address as it is pasted from the browser: https://github.com/owner/repo, with .git or /tree/<ref> after it.
+  const pasted =
+    /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?:\/tree\/([A-Za-z0-9_./-]+))?\/?$/.exec(
+      text,
+    )
+  if (pasted) return { kind: 'github', owner: pasted[1]!, repo: pasted[2]!, ref: pasted[3] }
   if (text.startsWith('github:')) throw new SourceError(`"${text}" is not github:owner/repo[#ref]`)
   if (/^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*(@[A-Za-z0-9._-]+)?$/.test(text))
     return { kind: 'npm', spec: text }

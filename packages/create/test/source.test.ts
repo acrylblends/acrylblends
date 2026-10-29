@@ -349,3 +349,16 @@ describe('starters from a registry', () => {
     expect(linked.err()).toContain('symbolic link')
   })
 })
+
+describe('a GitHub address pasted from the browser', () => {
+  it('is the same source as github:owner/repo, with .git or /tree/<ref> after it', () => {
+    const plain = parseSource('github:acme/starter', scratch)
+    expect(parseSource('https://github.com/acme/starter', scratch)).toEqual(plain)
+    expect(parseSource('https://github.com/acme/starter.git', scratch)).toEqual(plain)
+    expect(parseSource('https://github.com/acme/starter/', scratch)).toEqual(plain)
+    expect(parseSource('https://github.com/acme/starter/tree/v2', scratch)).toEqual(
+      parseSource('github:acme/starter#v2', scratch),
+    )
+    expect(parseSource('https://example.com/acme/starter', scratch)).toBeUndefined()
+  })
+})
