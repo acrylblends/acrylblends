@@ -175,6 +175,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
     readonly id: number
     readonly driver: string
     readonly message: string
+    readonly startedAt: number
     readonly events: Array<{ event: string; data: unknown }>
     readonly followers: Set<(item: { event: string; data: unknown }) => void>
     readonly cancel: AbortController
@@ -189,6 +190,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
       id: runs,
       driver: driverName,
       message,
+      startedAt: Date.now(),
       events: [],
       followers: new Set(),
       cancel: new AbortController(),
@@ -241,6 +243,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
           id: run.id,
           driver: run.driver,
           message: run.message,
+          startedAt: run.startedAt,
           ended: run.ended,
           endedAt: run.endedAt ?? null,
         },
