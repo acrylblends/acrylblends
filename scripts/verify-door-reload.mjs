@@ -212,6 +212,33 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   if (!acryl('look').out.includes('Second page')) fail('the refused navigate moved the page')
   log('A: act navigate --path goes to another page of the app, and refuses a path that leaves it')
   cdp.close()
+
+  // A, a mistyped path: the window is not stranded. The app answers 404 with a page that carries the door's script, `navigate` names the status, and the agent looks, clicks the way
+  // back and navigates on, all in the same window.
+  const lost = acryl('act', 'navigate', '--path', '/nope')
+  if (lost.code !== 0 || !lost.out.includes('404 at /nope'))
+    fail(`act navigate to a missing path did not say 404:\n${lost.out}${lost.err}`)
+  const lostLook = acryl('look')
+  if (lostLook.code !== 0 || !lostLook.out.includes('404 Not Found'))
+    fail(`the window cannot be looked at on a missing path:\n${lostLook.out}${lostLook.err}`)
+  const back = /\[ref=([\d.]+)\]/u.exec(
+    lostLook.out.split('\n').find((line) => line.includes('Back to the app')) ?? '',
+  )?.[1]
+  if (back === undefined) fail(`the 404 page has no way back in what look shows:\n${lostLook.out}`)
+  const clicked = acryl('act', 'click', '--ref', back)
+  if (clicked.code !== 0) fail(`clicking the way back failed:\n${clicked.out}${clicked.err}`)
+  const home = await until(async () => {
+    const seen = acryl('look')
+    return seen.code === 0 && !seen.out.includes('404 Not Found') && seen.out
+  }, 15_000)
+  if (!home) fail('the way back did not lead to a page of the app')
+  const again = acryl('act', 'navigate', '--path', '/p1')
+  if (again.code !== 0 || !again.out.includes('200 at /p1'))
+    fail(`act navigate back to /p1 did not say 200:\n${again.out}${again.err}`)
+  if (!acryl('look').out.includes('Version')) fail('the window did not come back to /p1')
+  log(
+    'A: a mistyped path gives a 404 page the door can still drive, navigate names the 404, and the window comes back',
+  )
   log('OK')
 } finally {
   browser?.kill('SIGKILL')

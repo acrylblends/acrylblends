@@ -294,4 +294,26 @@ describe('the page script on every HTML page', () => {
     expect(count(await (await fetch(`${running.origin}/has`)).text())).toBe(1)
     expect(await (await fetch(`${running.origin}/data`)).json()).toEqual({ ok: true })
   })
+
+  it('turns a path the app does not serve, opened as a page, into a 404 page that carries the script (so a window sent there can still be looked at), and touches nothing else', async () => {
+    const running = await app()
+    const { Acryl } = await import('acryl-router')
+    running.ctx.router.route('/', new Acryl().get('/api-missing', c => c.json({ error: 'no such thing' }, 404)))
+    const tag = '<script type="module" src="/api/acryl-door/page.js"></script>'
+    const opened = await fetch(`${running.origin}/nope?x=<b>`, { headers: { accept: 'text/html,application/xhtml+xml' } })
+    const html = await opened.text()
+    expect(opened.status).toBe(404)
+    expect(opened.headers.get('content-type')).toContain('text/html')
+    expect(html).toContain('<h1>404 Not Found</h1>')
+    expect(html).toContain('<code>/nope</code>')
+    expect(html).toContain(tag)
+    expect(html).not.toContain('<b>')
+    // A fetch from a script (no HTML in Accept) and an app's own JSON 404 are left alone.
+    const plain = await fetch(`${running.origin}/nope`)
+    expect(plain.status).toBe(404)
+    expect(await plain.text()).not.toContain('/api/acryl-door/page.js')
+    const json = await fetch(`${running.origin}/api-missing`, { headers: { accept: 'text/html' } })
+    expect(json.status).toBe(404)
+    expect(await json.json()).toEqual({ error: 'no such thing' })
+  })
 })

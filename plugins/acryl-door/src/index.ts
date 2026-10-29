@@ -94,6 +94,13 @@ function loopbackUrl(url: string): string {
   return parsed.origin
 }
 
+const escapeHtml = (text: string): string => text.replace(/[&<>"']/gu, char => `&#${char.charCodeAt(0)};`)
+
+/** The page of a path the app does not serve, development only: what is missing, a way back, and the door's script. */
+export function notFoundPage(path: string, scriptTag: string): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>404 Not Found</title></head><body><main><h1>404 Not Found</h1><p>This app has no page at <code>${escapeHtml(path)}</code>.</p><p><a href="/">Back to the app</a></p></main>${scriptTag}</body></html>`
+}
+
 export function apply(ctx: Context, rawConfig: Config = {}): void {
   const config = Config(rawConfig)
   // Development only: nothing is started, mounted or written in production, or when switched off.
@@ -124,9 +131,15 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   // The page script on every HTML page the app answers, whenever its plugin was mounted (the pages of a plugin that loaded at boot, before this one, included): a page an agent writes
   // can be looked at and driven without anyone adding the tag. A page that already carries it (the templates' own pages) is left as it is. Development only, like the rest of the door.
   const tag = `<script type="module" src="${DOOR_PREFIX}/page.js"></script>`
-  const addScript = async (c: { res: Response }, next: () => Promise<void>): Promise<void> => {
+  const addScript = async (c: { res: Response; req: { path: string; header(name: string): string | undefined } }, next: () => Promise<void>): Promise<void> => {
     await next()
-    if (!(c.res.headers.get('content-type') ?? '').includes('text/html')) return
+    if (!(c.res.headers.get('content-type') ?? '').includes('text/html')) {
+      // A path the app does not serve, opened as a page: the browser would show a bare "404 Not Found" with no script, and the window would be left where nothing can look at it or
+      // act on it (an agent that mistypes a path would need a person to bring the window back). The page says what is missing, carries the script, and keeps the 404.
+      if (c.res.status === 404 && (c.req.header('accept') ?? '').includes('text/html') && !(c.res.headers.get('content-type') ?? '').includes('json'))
+        c.res = new Response(notFoundPage(c.req.path, tag), { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } })
+      return
+    }
     const html = await c.res.text()
     const headers = new Headers(c.res.headers)
     headers.delete('content-length')
