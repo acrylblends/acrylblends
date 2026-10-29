@@ -20,19 +20,33 @@ export interface Rect {
 export const CASCADE_STEP = 32
 
 /**
- * Where a new window goes so that it does not cover another one exactly: down and to the right of `from` by one step, and back at the top left of the work area when that would put
- * it past the edge of the screen (so a row of windows cascades, then starts again).
+ * Where a new window goes so that it does not cover another one exactly. The first free place of: a step down and to the right of `from`, and again, while the window still fits on the
+ * screen; then the same steps from the top left of the work area (a row of windows cascades, then starts again); and, on a screen no bigger than the window, the steps from `from` even
+ * though the window runs past the edge (two windows at one place cannot be told apart). A place is free when no window in `taken` is there.
  */
 export function cascade(
   from: Rect,
   work: Rect,
   size: { width: number; height: number },
+  taken: readonly { x: number; y: number }[] = [],
 ): { x: number; y: number } {
-  const x = from.x + CASCADE_STEP
-  const y = from.y + CASCADE_STEP
-  const fitsRight = x + size.width <= work.x + work.width
-  const fitsBottom = y + size.height <= work.y + work.height
-  return { x: fitsRight ? x : work.x, y: fitsBottom ? y : work.y }
+  const free = (place: { x: number; y: number }): boolean =>
+    !taken.some((other) => other.x === place.x && other.y === place.y)
+  const fits = (place: { x: number; y: number }): boolean =>
+    place.x + size.width <= work.x + work.width && place.y + size.height <= work.y + work.height
+  const steps = (origin: { x: number; y: number }): { x: number; y: number }[] =>
+    Array.from({ length: 40 }, (_, at) => ({
+      x: origin.x + CASCADE_STEP * (at + 1),
+      y: origin.y + CASCADE_STEP * (at + 1),
+    }))
+  const fromHere = steps(from)
+  const fromCorner = [{ x: work.x, y: work.y }, ...steps(work)]
+  return (
+    fromHere.find((place) => fits(place) && free(place)) ??
+    fromCorner.find((place) => fits(place) && free(place)) ??
+    fromHere.find(free) ??
+    fromHere[0] ?? { x: from.x + CASCADE_STEP, y: from.y + CASCADE_STEP }
+  )
 }
 
 /**

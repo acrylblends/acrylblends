@@ -43,3 +43,38 @@ test('two windows are never exactly on top of each other, and a window with no p
   const placed = windowOptions({ title: 'a', x: 5, y: 6 })
   assert.deepEqual([placed.x, placed.y], [5, 6])
 })
+
+test('on a screen no bigger than the window the new window is still offset, not stacked on the first (the window sits at the corner of a 1024x768 screen)', () => {
+  const small = { x: 0, y: 0, width: 1024, height: 768 }
+  const first = { x: 0, y: 0, width: 1024, height: 720 }
+  const size = { width: 1100, height: 760 }
+  const second = cascade(first, small, size, [first])
+  assert.deepEqual(second, { x: CASCADE_STEP, y: CASCADE_STEP })
+  // A third window, opened from the second, is at neither place.
+  const third = cascade({ ...second, width: 1024, height: 720 }, small, size, [first, second])
+  assert.equal(
+    [first, second].some((other) => other.x === third.x && other.y === third.y),
+    false,
+  )
+  // Opened from the first again, it still does not land on a taken place.
+  const again = cascade(first, small, size, [first, second, third])
+  assert.equal(
+    [first, second, third].some((other) => other.x === again.x && other.y === again.y),
+    false,
+  )
+})
+
+test('a row of windows on a big screen starts again at the corner, but never on a window that is still there', () => {
+  const taken: { x: number; y: number }[] = [{ x: 0, y: 25 }]
+  let from = { x: 0, y: 25, width: 1100, height: 760 }
+  for (let count = 0; count < 25; count += 1) {
+    const place = cascade(from, work, size, taken)
+    assert.equal(
+      taken.some((other) => other.x === place.x && other.y === place.y),
+      false,
+      `window ${count + 2} landed on a taken place`,
+    )
+    taken.push(place)
+    from = { ...place, width: 1100, height: 760 }
+  }
+})
