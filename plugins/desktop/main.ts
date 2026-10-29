@@ -9,7 +9,7 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, Menu, type MenuItem, screen, shell } from 'electron'
+import { app, BrowserWindow, Menu, MenuItem, screen, shell } from 'electron'
 import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
 import { selectInstance } from '../instance/index.ts'
@@ -20,6 +20,7 @@ import {
   startDoorShell,
   type WindowPort,
 } from './door-shell.ts'
+import { hasSettings, settingsPlacement } from './menu.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { cascade, windowOptions } from './window.ts'
@@ -158,6 +159,40 @@ if (!app.requestSingleInstanceLock()) {
       windows: () => live().map(port),
       open: (path) => port(createWindow(path ?? startPath())),
       menu: () => (Menu.getApplicationMenu()?.items ?? []).map(menuItem),
+    }
+    // An app that serves a /settings page gets a Settings item in the menu (Electron's own menu otherwise): it opens that page, in the window that already shows it when there is one.
+    const settingsServed = await fetch(new URL('/settings', url), {
+      headers: { accept: 'text/html' },
+      signal: AbortSignal.timeout(2000),
+    }).then(
+      (answer) => answer.ok,
+      () => false,
+    )
+    const menu = Menu.getApplicationMenu()
+    const placement =
+      menu === null || !settingsServed || hasSettings(menu.items)
+        ? undefined
+        : settingsPlacement(menu.items, process.platform)
+    if (menu !== null && placement !== undefined) {
+      const target = menu.items[placement.menu]?.submenu
+      const openSettings = (): void => {
+        const shown = live().find(
+          (candidate) =>
+            new URL(candidate.webContents.getURL() || 'about:blank', url).pathname === '/settings',
+        )
+        if (shown === undefined) createWindow('/settings')
+        else {
+          if (shown.isMinimized()) shown.restore()
+          shown.focus()
+        }
+      }
+      target?.insert(
+        placement.at,
+        new MenuItem({ label: 'Settings...', accelerator: 'CmdOrCtrl+,', click: openSettings }),
+      )
+      if (placement.separatorAfter)
+        target?.insert(placement.at + 1, new MenuItem({ type: 'separator' }))
+      Menu.setApplicationMenu(menu)
     }
     stopDoorShell = startDoorShell(projectRoot, { desktop, log: console.log })
   })

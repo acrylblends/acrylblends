@@ -144,3 +144,21 @@ test('outside production nothing changes: the agent answers and the extensions r
     assert.equal((await app.root.router.request('/extensions')).status, 200)
     assert.deepEqual(warnings, [])
   }))
+
+test('the app has a /settings page with the appearance setting, and the home page applies it', () =>
+  inEnvironment({ NODE_ENV: 'test', ACRYL_PRODUCTION_KEEP: undefined }, async (app) => {
+    const settings = await app.root.router.request('/settings', {
+      headers: { accept: 'text/html' },
+    })
+    assert.equal(settings.status, 200)
+    const page = await settings.text()
+    assert.match(page, /<h1>Settings<\/h1>/)
+    assert.match(page, /<select id="theme"/)
+    for (const option of ['System', 'Light', 'Dark'])
+      assert.match(page, new RegExp(`>(?:Match the )?${option.toLowerCase()}|>${option}<`, 'i'))
+    // The setting is kept in the browser and applied to the home page before it paints.
+    const home = await (
+      await app.root.router.request('/', { headers: { accept: 'text/html' } })
+    ).text()
+    assert.match(home, /localStorage\.getItem\('theme'\)/)
+  }))

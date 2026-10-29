@@ -204,6 +204,64 @@ try {
   if (pressedMenu.code !== 0) fail(`menu click failed:\n${pressedMenu.out}${pressedMenu.err}`)
   log('window resize and menu click work')
 
+  // Settings: the template serves /settings and the desktop menu has a Settings item that opens it (block 4 of the workshop: press a menu item, change a setting).
+  const settingsPath = menu.out
+    .split('\n')
+    .map((line) => line.split('  ')[0])
+    .find((path) => /Settings\.\.\.$/u.test(path))
+  if (settingsPath === undefined) fail(`menu list has no Settings item:\n${menu.out}`)
+  const windowsBefore = windowList()?.length ?? 0
+  const openedSettings = acryl('menu', 'click', '--path', settingsPath)
+  if (openedSettings.code !== 0)
+    fail(`menu click ${settingsPath} failed:\n${openedSettings.out}${openedSettings.err}`)
+  const settingsWindow = await until(async () => {
+    const list = windowList()
+    if (list === undefined || list.length !== windowsBefore + 1) return undefined
+    const added = list.find((entry) => entry.line.includes('/settings'))
+    return added !== undefined && Number.isInteger(added.id) ? added : undefined
+  }, 30_000)
+  if (!settingsWindow)
+    fail(`the Settings item did not open a window on /settings:\n${acryl('window', 'list').out}`)
+  const settingsLook = await until(async () => {
+    const seen = look(settingsWindow.id)
+    return seen.code === 0 && seen.out.includes('Appearance') && seen.out
+  }, 30_000)
+  if (!settingsLook)
+    fail(
+      `look --window ${settingsWindow.id} does not show the settings page:\n${look(settingsWindow.id).out}${look(settingsWindow.id).err}`,
+    )
+  const chooser = /\[ref=([\d.]+)\]/u.exec(
+    settingsLook
+      .split('\n')
+      .find((line) => /combobox|listbox|select|Appearance/iu.test(line) && /\[ref=/u.test(line)) ??
+      '',
+  )?.[1]
+  if (chooser === undefined)
+    fail(`no control for the appearance on the settings page:\n${settingsLook}`)
+  const chose = acryl(
+    'act',
+    'select',
+    '--window',
+    settingsWindow.id,
+    '--ref',
+    chooser,
+    '--option',
+    'Dark',
+  )
+  if (chose.code !== 0) fail(`act select on the settings page failed:\n${chose.out}${chose.err}`)
+  const saved = await until(async () => look(settingsWindow.id).out.includes('Saved: Dark'), 15_000)
+  if (!saved) fail(`the setting was not saved:\n${look(settingsWindow.id).out}`)
+  // The Settings item opens the window that already shows the page, not another.
+  acryl('menu', 'click', '--path', settingsPath)
+  await sleep(800)
+  if ((windowList()?.length ?? 0) !== windowsBefore + 1)
+    fail('a second click on Settings opened a second settings window')
+  if (acryl('window', 'close', '--id', settingsWindow.id).code !== 0)
+    fail('could not close the settings window')
+  log(
+    'the Settings menu item opens /settings in a window, the agent changes the appearance there, and a second click focuses that window',
+  )
+
   // The session cannot be ended by accident.
   const quitPath = menu.out
     .split('\n')
