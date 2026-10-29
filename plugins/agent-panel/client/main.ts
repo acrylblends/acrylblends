@@ -1,6 +1,7 @@
 // The panel in the page: a button at the corner opens a side panel (a shadow root, so the app's CSS cannot touch it and it cannot touch the app's). It asks the app's
 // agent through POST /api/agent-panel/ask, shows the answer as it arrives, and reloads the page after a run that installed or removed a plugin.
 import { describeTool } from './describe.ts'
+import { renderMarkdown } from './markdown.ts'
 
 const PREFIX = '/api/agent-panel'
 
@@ -51,6 +52,17 @@ header strong { flex: 1 }
 .me { background: #dbeafe; align-self: flex-end }
 .tool { font: 12px ui-monospace, monospace; color: #4b5563; background: none; padding: 0 }
 .err { background: #fee2e2 }
+.msg.md { white-space: normal; overflow-wrap: anywhere }
+.md > :first-child { margin-top: 0 } .md > :last-child { margin-bottom: 0 }
+.md p, .md ul, .md ol, .md pre, .md blockquote { margin: 0 0 8px }
+.md h3, .md h4, .md h5, .md h6 { margin: 10px 0 4px; font-weight: 600 } .md h3 { font-size: 16px } .md h4, .md h5, .md h6 { font-size: 14px }
+.md ul, .md ol { padding-left: 20px } .md li { margin: 2px 0 }
+.md code { font: 12px ui-monospace, monospace; background: #e5e7eb; padding: 1px 4px; border-radius: 4px }
+.md pre { overflow: auto; background: #111827; color: #f9fafb; padding: 8px 10px; border-radius: 6px }
+.md pre code { background: none; padding: 0; color: inherit; white-space: pre }
+.md blockquote { border-left: 3px solid #d1d5db; padding-left: 10px; color: #4b5563 }
+.md a { color: #1d4ed8 }
+.working { font: 12px ui-monospace, monospace; color: #6b7280; padding: 0 }
 form { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-top: 1px solid #e5e7eb }
 textarea { width: 100%; min-height: 64px; resize: vertical; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px }
 .row { display: flex; gap: 8px; align-items: center }
@@ -135,8 +147,36 @@ async function start(): Promise<void> {
     }
   }
   driver.addEventListener('change', () => void choose())
+  // The panel sits beside the page, not over it: while it is open the page is narrower by the panel's width, so its header and right-hand columns stay in view. (An element of the page
+  // that is positioned fixed to the window is not part of that layout and can still lie under the panel.)
+  const root = document.documentElement
+  const docked = ['margin-right'] as const
+  const saved = new Map<string, [string, string]>()
+  const dock = (open: boolean): void => {
+    if (open) {
+      for (const property of docked)
+        saved.set(property, [
+          root.style.getPropertyValue(property),
+          root.style.getPropertyPriority(property),
+        ])
+      root.style.setProperty(
+        'margin-right',
+        `${String(Math.min(380, Math.floor(window.innerWidth * 0.9)))}px`,
+        'important',
+      )
+    } else {
+      for (const property of docked) {
+        const [value, priority] = saved.get(property) ?? ['', '']
+        if (value === '') root.style.removeProperty(property)
+        else root.style.setProperty(property, value, priority)
+      }
+      saved.clear()
+    }
+  }
   const show = (open: boolean): void => {
+    const was = panel.classList.contains('shown')
     panel.classList.toggle('shown', open)
+    if (open !== was) dock(open)
     if (open) input.focus()
   }
   $('button.open').addEventListener('click', () => show(true))
@@ -166,6 +206,17 @@ async function start(): Promise<void> {
     stop.disabled = false
     let changed = false
     let answer: HTMLElement | undefined
+    let answered = ''
+    // A coding agent started headless says little until it is done, so the panel says it is working, and for how long.
+    const started = Date.now()
+    const working = line('', 'working')
+    const tick = (): void => {
+      const seconds = Math.floor((Date.now() - started) / 1000)
+      working.textContent = `Working... ${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`
+      log.append(working)
+    }
+    tick()
+    const timer = setInterval(tick, 1000)
     try {
       for await (const { event, data } of events(response)) {
         if (event === 'run') {
@@ -180,8 +231,10 @@ async function start(): Promise<void> {
             if (recent) show(true)
           }
         } else if (event === 'text') {
-          answer ??= line('')
-          answer.textContent += String(data.text ?? '')
+          answer ??= line('', 'md')
+          answered += String(data.text ?? '')
+          answer.replaceChildren(renderMarkdown(answered, document))
+          log.scrollTop = log.scrollHeight
         } else if (event === 'tool') {
           const described = describeTool(data)
           if (described !== undefined) line(described, 'tool')
@@ -197,6 +250,8 @@ async function start(): Promise<void> {
     } catch (error) {
       line(`The request failed: ${error instanceof Error ? error.message : String(error)}`, 'err')
     } finally {
+      clearInterval(timer)
+      working.remove()
       following = false
       send.disabled = false
       stop.disabled = true
