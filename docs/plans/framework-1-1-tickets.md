@@ -34,6 +34,12 @@ From DS_Fork3's macOS walk and Fork3's Linux walk (`docs/plans/workshop-readines
 | 4 | **3.** `acrylblends doctor` (what is installed, which rows are on, which are development-only, whether `NODE_ENV=production` would leave them out) | medium | not started |
 | 5 | **5.** A docs coverage test: every PUBLIC subpath has a page that names it; docs for the tasks recorder and its conformance suite | medium | not started |
 
+## P1, below the workshop capability work
+
+| Item | Priority | Status |
+| --- | --- | --- |
+| **13.** `acrylblends` declares `vitest` as an optional peer (for `acrylblends/testing`). pnpm resolves it wherever the workspace has vitest, so `pnpm deploy --prod` pulls vitest, vite, rolldown, lightningcss and fsevents into production closures (about 30 MB in ACRYL's CLI runtime, and foreign native paths break ACRYL's darwin web archive). Move the vitest-dependent testing helper out of the main package's peer surface: a separate `acrylblends-testing` package, or a subpath with no peer declaration that resolves vitest from the app; with a migration note. ACRYL carries a pnpmfile stopgap until then. (Raised by the coordinator, 2026-10-29.) | P1 | not started; after the workshop capability work |
+
 ## Next release that ships
 
 | Item | Priority | Status |

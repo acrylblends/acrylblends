@@ -369,14 +369,23 @@ test('a real PTY: the program sees its size, a resize, and what is typed', async
   })
   const started = await real.post('/sessions', { driver: 'pty:echo', cols: 90, rows: 20 })
   const { id } = (await started.json()) as { id: string }
+  // Each step waits for the one before it: the resize only after the program has printed its first size (a program that starts slowly, as on a Windows runner, would otherwise
+  // start already at the new size), and the typing only after the new size reached the terminal.
+  let step = 0
   const reading = readEvents(
     await real.app.router.request(`/api/driver-pty/${id}/output`, { headers: real.headers }),
-    (events) => /typed "hi/u.test(text(events)) && resized(text(events)),
+    (events) => {
+      const printed = text(events)
+      if (step === 0 && /size \d+x\d+/u.test(printed)) {
+        step = 1
+        void real.post(`/${id}/resize`, { cols: 110, rows: 35 })
+      } else if (step === 1 && resized(printed)) {
+        step = 2
+        void real.post(`/${id}/input`, { data: 'hi\r' })
+      }
+      return /typed "hi/u.test(printed) && resized(printed)
+    },
   )
-  await sleep(300)
-  await real.post(`/${id}/resize`, { cols: 110, rows: 35 })
-  await sleep(100)
-  await real.post(`/${id}/input`, { data: 'hi\r' })
   const events = await reading
   const shown = JSON.stringify(text(events))
   assert.match(text(events), /size 90x20/u, shown)
