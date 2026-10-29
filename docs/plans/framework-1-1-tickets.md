@@ -40,7 +40,7 @@ From DS_Fork3's macOS walk and Fork3's Linux walk (`docs/plans/workshop-readines
 
 | Item | Priority | Status |
 | --- | --- | --- |
-| **13.** `acrylblends` declares `vitest` as an optional peer (for `acrylblends/testing`). pnpm resolves it wherever the workspace has vitest, so `pnpm deploy --prod` pulls vitest, vite, rolldown, lightningcss and fsevents into production closures (about 30 MB in ACRYL's CLI runtime, and foreign native paths break ACRYL's darwin web archive). Move the vitest-dependent testing helper out of the main package's peer surface: a separate `acrylblends-testing` package, or a subpath with no peer declaration that resolves vitest from the app; with a migration note. ACRYL carries a pnpmfile stopgap until then. (Raised by the coordinator, 2026-10-29.) | P1 | not started; after the workshop capability work |
+| **13.** DONE in 1.0.10: `acrylblends` no longer declares `vitest` as a peer (it was for the two conformance suites, `acrylblends/db/conformance` and `acrylblends/kv/conformance`, not for `acrylblends/testing`, which never imported it). A production install no longer pulls vitest, vite, rolldown or lightningcss; the suites still run in a provider's own project, which has vitest as its dev dependency. `verify:vitest-peer` checks the manifest, the closure of a `pnpm install --prod` with vitest in the workspace beside it, and a provider's suite under pnpm. | P1 | done |
 
 ## Next release that ships
 
