@@ -127,6 +127,20 @@ console.log('ws-check: ok')
   log(
     'agent: agent-panel and driver-pty added by the installed command, installed and type-checked',
   )
+  // A person's own routes must never make the template's tests fail: the common ones (/hello, /hi, /api) are added to the app's routes, and its tests still pass.
+  const routesFile = join(agentApp, 'src', 'routes.ts')
+  const routes = readFileSync(routesFile, 'utf8')
+  const withRoutes = routes.replace(
+    ".get('/health', (c) => c.json({ ok: true }))",
+    ".get('/health', (c) => c.json({ ok: true }))\n      .get('/hello', (c) => c.json({ hello: 'workshop' }))\n      .get('/hi', (c) => c.json({ hi: true }))\n      .get('/api', (c) => c.json({ api: true }))",
+  )
+  if (withRoutes === routes)
+    throw new Error(
+      'the agent template no longer has the /health route where this gate adds its own',
+    )
+  writeFileSync(routesFile, withRoutes)
+  run('npm', ['test'], agentApp, { ACRYL_DOOR: 'off' })
+  log("agent: with routes at /hello, /hi and /api of its own, the template's tests still pass")
   // A starter from a registry, made by the installed command: a local registry folder with one app for acrylblends (made by the installed `acrylblends init`, marked with an
   // acryl.template.json) and one ACRYL starter. `create-acrylblends --from` makes the first, whose tests and type-check pass, and refuses the second in one line.
   const registry = join(scratch, 'registry')

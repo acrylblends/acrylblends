@@ -22,3 +22,17 @@ The agent installed the plugin, went to `/notes` with `act navigate`, looked, ty
 3. In a real page, the same task: the audit showed the whole check, but the panel reported nothing and the run was cancelled when the agent's own navigation reloaded the page, because the run was tied to the page that asked. Fixed: runs belong to the app, a page that loads follows the latest one (`GET /api/agent-panel/run`), and only Stop (`POST /api/agent-panel/stop`) cancels.
 
 Codex needed "Do it now, without asking for approval": with the owner's own global skills it stopped to present a design (see the facilitator notes).
+
+## The app's own agent, with a real model (no login to a coding agent)
+
+`node scripts/verify-inapp-agent.mjs` (a manual gate: it calls DeepSeek; the key is read from the usual place into the server's environment only and is never printed or written into the app). The panel's built-in `agent` driver, not Codex or Claude, with `ACRYLBLENDS_MODEL_URL`, `ACRYLBLENDS_MODEL` (`deepseek-chat`) and `ACRYLBLENDS_MODEL_KEY` set for the server. A plugin loaded at boot serves a counter page with no door tag; headless Chrome opens it; from the panel:
+
+> Use your door tools. Look at the page that is open, press the button "Add one" twice (look again before each press, the refs change), then look once more and tell me the number shown after "Count:".
+
+Result (7 s): the agent called `door_look`, `door_act`, `door_look`, `door_act`, `door_look` (the door audited 5 calls: look, click "Add one", look, click "Add one", look) and answered: *I pressed "Add one" twice, and the page now shows "Count: 2".* This is the path for an attendee with no Codex or Claude login: a DeepSeek key in the environment is enough.
+
+What the first run found, and what changed:
+
+1. The panel did not appear on a plugin's page that loaded at boot, for the same ordering reason as the door's script: its middleware only wrapped routes mounted after it. It now uses `ctx.router.wrap` too.
+2. The model sent one `door_act` with no `op`: the tool was described to it only as "an object". The tools registry now carries each tool's JSON Schema (`parameters`), the door registers its verbs with the schema MCP lists, and the openai plugin sends it; the malformed call went away.
+3. The run stopped "after 6 steps without an answer": looking, pressing and looking again takes six steps before the answer. The agent template's `steps` parameter now defaults to 12.

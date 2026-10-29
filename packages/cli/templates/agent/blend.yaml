@@ -14,7 +14,7 @@ spec:
     # The address the server listens on.
     hostname: { type: string, default: 127.0.0.1 }
     # Steps an agent run may take.
-    steps: { type: number, default: 6 }
+    steps: { type: number, default: 12 }
     # Where task records are kept: jsonl (a text file) or sqlite.
     taskStore: { type: string, default: jsonl }
     # When true, a plugin the agent installs waits for POST /extensions/approve.

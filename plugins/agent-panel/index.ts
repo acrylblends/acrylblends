@@ -73,18 +73,30 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
     ctx.effect(() => registry.register(headlessDriver(program, root)))
 
   const tag = `<script type="module" src="${PREFIX}/panel.js"></script>`
+  const addScript = async (c: { res: Response }, next: () => Promise<void>): Promise<void> => {
+    await next()
+    if (!(c.res.headers.get('content-type') ?? '').includes('text/html')) return
+    const html = await c.res.text()
+    if (html.includes(`${PREFIX}/panel.js`)) {
+      c.res = new Response(html, c.res)
+      return
+    }
+    const headers = new Headers(c.res.headers)
+    headers.delete('content-length')
+    c.res = new Response(
+      html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag,
+      { status: c.res.status, headers },
+    )
+  }
+  // The script tag on every HTML page the app answers, whenever the plugin that serves the page was mounted (a plugin an agent built loads at boot, before this one, after a restart).
+  // An app whose router copy is older has no `wrap`: the tag is then added to the pages of the routes mounted after this plugin only.
+  const router = ctx.router as unknown as { wrap?: (middleware: typeof addScript) => unknown }
+  const wrapped = typeof router.wrap === 'function'
+  if (wrapped) router.wrap?.(addScript)
   const app = new Acryl()
-    // The script tag, on every HTML page the routes mounted after this plugin answer.
     .use('*', async (c, next) => {
-      await next()
-      if (!(c.res.headers.get('content-type') ?? '').includes('text/html')) return
-      const html = await c.res.text()
-      const headers = new Headers(c.res.headers)
-      headers.delete('content-length')
-      c.res = new Response(
-        html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag,
-        { status: c.res.status, headers },
-      )
+      if (wrapped) return next()
+      await addScript(c, next)
     })
     .get(`${PREFIX}/panel.js`, (c) =>
       c.body(`import '${PREFIX}/client/main.ts'\n`, 200, {

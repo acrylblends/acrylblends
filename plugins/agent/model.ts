@@ -21,7 +21,12 @@ export interface ModelInput {
     readonly reasoning?: string
   }>
   /** The tools the model may call. */
-  readonly tools?: ReadonlyArray<{ readonly name: string; readonly description: string }>
+  readonly tools?: ReadonlyArray<{
+    readonly name: string
+    readonly description: string
+    /** The JSON Schema of the tool's input, when it has one. */
+    readonly parameters?: Readonly<Record<string, unknown>>
+  }>
   /** Aborts when the run is cancelled: a provider that can stop its request passes this on. */
   readonly signal?: AbortSignal
 }

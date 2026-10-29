@@ -35,7 +35,7 @@ export interface ExtensionsPort {
 /** The slice of acrylblends' `tools` registry (the `agent` plugin's) the tool verbs use, and where the built-in chat finds the verbs. */
 export interface ToolsPort {
   /** @returns the function that removes the tool. @throws when the name is taken. */
-  register(name: string, tool: { readonly description: string; run(input: unknown): unknown }): () => void
+  register(name: string, tool: { readonly description: string; readonly parameters?: Readonly<Record<string, unknown>>; run(input: unknown): unknown }): () => void
   list(): ReadonlyArray<{ readonly name: string; readonly description: string }>
   call(name: string, input: unknown): Promise<unknown>
 }
