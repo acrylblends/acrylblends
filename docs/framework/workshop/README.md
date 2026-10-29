@@ -116,11 +116,19 @@ npm install
 npm run desktop
 ```
 
-A window opens on the same app, from the same server: your board, your sidebar, your panel. Open the panel in the window and ask the same agent to drive
-it: open the sidebar, open a dialog, change a select. Look and act work the same way through the window. Close the window when you are done.
+A window opens on the same app, from the same server: your board, your sidebar, your panel. First drive the page in the window the way you did in block
+3: open the panel there and ask the agent to open the sidebar and change a filter. Look and act work the same way through the window.
 
-TODO(1.0.4-C): the agent driving the *application* menu and the native settings window; the page in the window is driven today, the app chrome is
-next.
+Then hand the agent the window itself, not only the page inside it. Ask:
+
+> List the windows that are open, open a second one with the board in it, use the File menu to open its settings, and switch the appearance to dark.
+
+The agent lists the windows, opens a second one, picks a menu item and changes an application setting; each shows in the window as it happens.
+
+TODO(1.0.4-C): the window, menu and application-settings control (target 2026-11-05). Until it ships, the first half of this block - the page inside
+the window - works, and the second prompt is the part that arrives with C.
+
+Close the windows when you are done.
 
 **Stuck?** The first `npm run desktop` downloads Electron (about 200 MB). On Ubuntu 23.10+ the launch starts with `--no-sandbox` and says why; the
 AppArmor route is in `docs/framework/getting-started/desktop.md`.
@@ -137,8 +145,9 @@ NODE_ENV=production npm start
 (The command is the app's own `start` script; on Windows, `set NODE_ENV=production&& npm start` in cmd, or `$env:NODE_ENV="production"; npm start` in
 PowerShell.)
 
-TODO(1.0.4-deploy): the exact deploy recipe for a template app on a host (the current production page says what runs and what does not; the step-by-step is being
-written with it).
+That is the same app on any Node host: copy the folder (or clone the repository the app was saved to), run `npm install --omit=dev`, and start it with
+`NODE_ENV=production` as above. Nothing in the app assumes ACRYL's own infrastructure: it is one Node process, one port, and its data in `.acrylblends/`
+next to it.
 
 **Publish it as a starter.** Your app already is one: `blend.yaml` names it, `plugins/` holds its code.
 
@@ -167,7 +176,8 @@ No local install? The same app, and the same agent building and driving it, will
 in the same folders. Nothing to install, nothing to keep on your machine.
 
 The hosted workspace is milestone M9; until it is live this section is a stub. When it is, it says the address, the sign-in it needs, and the two or three
-clicks that replace block 1 here.
+clicks that replace block 1 here - and the one-click WebBoxes.ai deploy of an app from block 5, which is the same app on their infrastructure instead of
+yours.
 
 ## Where next
 

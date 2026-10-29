@@ -43,9 +43,11 @@ The capability report is the source; these are the ones the handout touches.
   "do it now" sentence in the handout is the workaround.
 - **TODO(1.0.4-D), CLI noise.** The `acryl` command's chatter is being trimmed; nothing in the workshop depends on it, but it is the difference between a
   screen that reads well and one that does not.
-- **Later: C (Electron windows, menus and native settings, target 11-05) and F (the door through a DeepSeek model with no login).** Do not promise either
-  in the room. C is the difference between driving the page in the window (works) and driving the app's own menus (not yet); F is what a workshop without
-  a hosted model login would want.
+- **TODO(1.0.4-C), the window, menu and application-settings control (target 11-05).** This is in scope and the handout teaches it: the agent lists the
+  windows, opens a second one, picks a menu item and changes an app setting. If C slips, cut that second prompt and keep the first half of block 4 - the
+  page inside the window is driven today, so the block still lands; say the window control is coming, do not improvise it.
+- **Later: F (the door through a DeepSeek model with no login).** Do not promise it in the room; it is what a workshop without a hosted model login would
+  want.
 
 ## The no-network fallback
 
@@ -75,4 +77,7 @@ nothing is installed globally except the agent, `gh` and Node.
 ## What is still open
 
 - The full text is written against 1.0.4-A and 1.0.4-B as designed; when those ship the TODO lines become normal steps, and the screenshots are taken.
-- The handout's hosted-workspace section (browser-only attendees) stays TODO(M9) until that workspace is live.
+- The handout's hosted-workspace section (browser-only attendees) stays TODO(M9) until that workspace is live; the one-click WebBoxes.ai deploy lives
+  there too.
+- The deploy block targets any Node host until M9: production mode locally plus the generic recipe (copy the folder, `npm install --omit=dev`, start with
+  `NODE_ENV=production`).
