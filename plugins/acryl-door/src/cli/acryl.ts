@@ -30,7 +30,7 @@ export interface Invocation {
 
 const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
   brief
-  look [--cursor <n>] [--max-nodes <n>]
+  look [--cursor <n>] [--max-nodes <n>] [--window <n>]
   act click --ref <r>
   act type --ref <r> --text <t> [--submit] [--no-clear]
   act select --ref <r> --option <o>
@@ -39,6 +39,7 @@ const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
   act reload
   act navigate --path <path of the app, e.g. /demo>
   act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]
+  (look and every act take --window <n>: the desktop window whose page it is for; window list prints the numbers)
   plugin list | plugin add <folder> | plugin remove <name> | plugin reload
   window list | window open [--path <p>] | window focus --id <n> | window close --id <n> [--force]
   window resize --id <n> --width <px> --height <px>
@@ -85,12 +86,14 @@ export function parseInvocation(argv: readonly string[]): Invocation {
     case 'look': {
       const cursor = integer(values, '--cursor')
       const maxNodes = integer(values, '--max-nodes')
-      return make('look', { ...(cursor === undefined ? {} : { cursor }), ...(maxNodes === undefined ? {} : { maxNodes }) })
+      const window = integer(values, '--window')
+      return make('look', { ...(cursor === undefined ? {} : { cursor }), ...(maxNodes === undefined ? {} : { maxNodes }), ...(window === undefined ? {} : { window }) })
     }
     case 'act': {
       if (second === undefined || !ACT_OPS.has(second)) throw new UsageError(`act needs one of ${[...ACT_OPS].join(', ')}\n${USAGE}`)
       const amount = integer(values, '--amount')
       const timeoutMs = integer(values, '--timeout-ms')
+      const window = integer(values, '--window')
       const pick = (flag: string, key: string): Record<string, string> => (values.has(flag) ? { [key]: values.get(flag) as string } : {})
       return make('act', {
         op: second,
@@ -98,6 +101,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
         ...pick('--direction', 'direction'), ...pick('--role', 'role'), ...pick('--name', 'name'), ...pick('--path', 'path'),
         ...(amount === undefined ? {} : { amount }),
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        ...(window === undefined ? {} : { window }),
         ...(set.has('--submit') ? { submit: true } : {}),
         ...(set.has('--no-clear') ? { clear: false } : {}),
         ...(set.has('--gone') ? { gone: true } : {}),

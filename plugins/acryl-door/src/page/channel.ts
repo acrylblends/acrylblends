@@ -26,6 +26,8 @@ const BACKOFF_MAX_MS = 10_000
 
 export interface PageChannelOptions {
   readonly windowId: string
+  /** The desktop window this page is in (`AcrylWindow/<n>` in the user agent, set by the Electron shell), so the Host can drive it by the number `window list` prints. */
+  readonly shellWindow?: number
   readonly focused: () => boolean
   /** Where the door's routes are, e.g. `/api/acryl-door`. */
   readonly base: string
@@ -56,7 +58,7 @@ export class PageChannel {
   connect(): void {
     if (this.disposed || this.source !== undefined) return
     const create = this.options.createSource ?? ((url: string): ChannelSource => new EventSource(url))
-    const query = `window=${encodeURIComponent(this.options.windowId)}&focused=${this.options.focused() ? '1' : '0'}`
+    const query = `window=${encodeURIComponent(this.options.windowId)}&focused=${this.options.focused() ? '1' : '0'}${this.options.shellWindow === undefined ? '' : `&shell=${String(this.options.shellWindow)}`}`
     const source = create(`${this.options.base}/channel?${query}`)
     this.source = source
     this.lastHeard = this.now()

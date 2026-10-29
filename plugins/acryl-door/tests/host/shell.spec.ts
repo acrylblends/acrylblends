@@ -222,3 +222,17 @@ describe('the window and menu verbs', () => {
     fake.stop()
   })
 })
+
+describe('look and act with a window', () => {
+  it('check the window argument, and say which windows have a page when the one asked for has none', async () => {
+    const running = await app()
+    const bad = await operator(running.root, ['look', '--window', '0'])
+    expect(bad.code).toBe(1)
+    expect(bad.err).toMatch(/window must be the number/u)
+    const none = await operator(running.root, ['look', '--window', '3'])
+    expect(none.code).toBe(1)
+    expect(none.err).toMatch(/no page of window 3 is connected/u)
+    const lines = auditLines(running)
+    expect(lines.map(line => [line.tool, line.window, line.outcome, line.detail])).toEqual([['look', 3, 'failed', 'no-window']])
+  })
+})

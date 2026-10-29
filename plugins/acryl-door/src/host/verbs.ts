@@ -35,13 +35,14 @@ export const VERB_SPECS: Readonly<Record<Verb, VerbSpec>> = {
     arguments: none,
   },
   'look': {
-    usage: 'look [--cursor <n>] [--max-nodes <n>]: the page as text, with refs',
+    usage: 'look [--window <n>] [--cursor <n>] [--max-nodes <n>]: the page as text, with refs',
     description: 'The open page as text: its roles, names, values and visible text, each with a ref to act on. A long page comes in parts (cursor).',
     arguments: {
       type: 'object',
       properties: {
         cursor: { type: 'integer', minimum: 0, description: 'where the previous part ended' },
         maxNodes: { type: 'integer', minimum: 1, maximum: MAX_SNAPSHOT_NODES },
+        window: { type: 'integer', minimum: 1, description: 'a desktop window (the id window-list prints); default: the page used last' },
       },
       additionalProperties: false,
     },
@@ -66,6 +67,7 @@ export const VERB_SPECS: Readonly<Record<Verb, VerbSpec>> = {
         name: { type: 'string', description: 'wait: its name' },
         gone: { type: 'boolean', description: 'wait: until it is gone instead' },
         timeoutMs: { type: 'integer', minimum: 0, maximum: MAX_WAIT_MS },
+        window: { type: 'integer', minimum: 1, description: 'a desktop window (the id window-list prints); default: the page used last' },
       },
       required: ['op'],
       additionalProperties: false,

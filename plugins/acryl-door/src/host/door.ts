@@ -147,19 +147,21 @@ export class Door {
   }
 
   look(input: Record<string, unknown>, signal: AbortSignal): Promise<UiSnapshot> {
-    const request = this.parse({ ...input, op: 'snapshot' })
-    return this.callPage('look', request, signal) as Promise<UiSnapshot>
+    const { window, rest } = this.windowOf(input)
+    const request = this.parse({ ...rest, op: 'snapshot' })
+    return this.callPage('look', request, signal, window) as Promise<UiSnapshot>
   }
 
   async act(input: Record<string, unknown>, signal: AbortSignal): Promise<UiActionResult> {
     if (input.op === 'snapshot') throw new DoorError('invalid', 'use look to see the page')
-    const request = this.parse(input)
-    if (request.op !== 'reload' && request.op !== 'navigate') return await this.callPage(`act ${String(input.op)}`, request, signal) as UiActionResult
+    const { window, rest } = this.windowOf(input)
+    const request = this.parse(rest)
+    if (request.op !== 'reload' && request.op !== 'navigate') return await this.callPage(`act ${String(input.op)}`, request, signal, window) as UiActionResult
     // The page is replaced: wait for the new one to connect, so the next look sees it. The page may drop before it has answered; that is the reload working.
     const back = this.deps.channel.expectAttach(this.deps.pageBackMs ?? PAGE_BACK_MS)
     let answer: UiActionResult
     try {
-      answer = await this.callPage(`act ${request.op}`, request, signal) as UiActionResult
+      answer = await this.callPage(`act ${request.op}`, request, signal, window) as UiActionResult
     } catch (cause) {
       if (!(cause instanceof UiControlError && cause.code === 'disconnected')) { void back; throw cause }
       answer = { ok: true, detail: request.op === 'reload' ? 'reloading' : `going to ${request.path}` }
@@ -226,6 +228,14 @@ export class Door {
     }
   }
 
+  /** `window` on look and act: the desktop window (the number `window list` prints) whose page the call is for; without it, the page used last. */
+  private windowOf(input: Record<string, unknown>): { window: number | undefined; rest: Record<string, unknown> } {
+    const { window, ...rest } = input
+    if (window === undefined) return { window: undefined, rest }
+    if (typeof window !== 'number' || !Number.isSafeInteger(window) || window < 1) throw new DoorError('invalid', 'window must be the number `window list` prints for the window')
+    return { window, rest }
+  }
+
   private parse(input: Record<string, unknown>): UiRequest {
     try {
       return parseUiRequest(input)
@@ -235,17 +245,17 @@ export class Door {
   }
 
   /** Run one call on the page and record it. The audit holds which control was touched and how it ended, never what was typed. */
-  private async callPage(verb: string, request: UiRequest, signal: AbortSignal): Promise<UiResult> {
+  private async callPage(verb: string, request: UiRequest, signal: AbortSignal, window?: number): Promise<UiResult> {
     const approval: AuditEntry['approval'] = 'token'
     try {
-      const value = await this.deps.channel.call(request, { signal, ...(request.op === 'wait' ? { timeoutMs: (request.timeoutMs ?? 3000) + 5000 } : {}) })
+      const value = await this.deps.channel.call(request, { signal, ...(window === undefined ? {} : { window }), ...(request.op === 'wait' ? { timeoutMs: (request.timeoutMs ?? 3000) + 5000 } : {}) })
       const target = 'target' in value ? value.target : undefined
-      this.deps.audit.record({ at: new Date().toISOString(), tool: verb, ...(target === undefined ? {} : { target }), outcome: 'ok', approval })
+      this.deps.audit.record({ at: new Date().toISOString(), tool: verb, ...(target === undefined ? {} : { target }), ...(window === undefined ? {} : { window }), outcome: 'ok', approval })
       return value
     } catch (cause) {
       const code = cause instanceof UiControlError ? cause.code : 'failed'
       const refused = cause instanceof UiControlError && ['protected', 'sensitive', 'killed', 'invalid', 'stale-ref', 'unknown-ref', 'not-actionable'].includes(cause.code)
-      this.deps.audit.record({ at: new Date().toISOString(), tool: verb, outcome: refused ? 'refused' : 'failed', detail: code, approval })
+      this.deps.audit.record({ at: new Date().toISOString(), tool: verb, ...(window === undefined ? {} : { window }), outcome: refused ? 'refused' : 'failed', detail: code, approval })
       throw cause
     }
   }

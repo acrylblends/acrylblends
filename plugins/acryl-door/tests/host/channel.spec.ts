@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { UiControlError, type ChannelToPage, type UiRequest } from '../../src/page/protocol.ts'
 import { UiChannel, type PageStream } from '../../src/host/channel.ts'
 
-function fakePage(channel: UiChannel, windowId: string, focused = true) {
+function fakePage(channel: UiChannel, windowId: string, focused = true, shellWindow?: number) {
   const sent: ChannelToPage[] = []
   const stream: PageStream & { closed: boolean } = { closed: false, send: (data) => { sent.push(JSON.parse(data) as ChannelToPage) }, close() { this.closed = true } }
-  const end = channel.attach(windowId, focused, stream)
+  const end = channel.attach(windowId, focused, stream, shellWindow)
   return { end, sent, stream, answer: (message: Parameters<UiChannel['receive']>[1]) => { channel.receive(windowId, message) } }
 }
 
@@ -163,5 +163,28 @@ describe('waiting for pages to come back', () => {
     const started = Date.now()
     expect(await channel.reloadAll(60)).toBe(1)
     expect(Date.now() - started).toBeGreaterThanOrEqual(50)
+  })
+
+  it('drives the page of the desktop window it is told to, not the one used last, and names the windows it has when there is none', async () => {
+    const channel = new UiChannel()
+    const one = fakePage(channel, 'w1', true, 1)
+    const two = fakePage(channel, 'w2', true, 2)
+    const plain = fakePage(channel, 'w3', true)
+    plain.answer({ t: 'focus', focused: true })
+    const pending = channel.call(click, { window: 1 })
+    expect(one.sent).toHaveLength(1)
+    expect(two.sent).toHaveLength(0)
+    expect(plain.sent).toHaveLength(0)
+    one.answer({ t: 'result', id: 1, value: { ok: true } })
+    await pending
+    // A page of another window cannot answer it, and a window with no page names the ones that have one.
+    const missing = channel.call(click, { window: 7 })
+    await expect(missing).rejects.toMatchObject({ code: 'no-window', message: expect.stringMatching(/window 7.*windows with a page: [12], [12]/u) })
+    expect(channel.windows().map(window => window.shellWindow)).toEqual([undefined, 2, 1])
+    // Without a window the page used last is driven, as before.
+    const last = channel.call(click)
+    expect(plain.sent).toHaveLength(1)
+    plain.answer({ t: 'result', id: 2, value: { ok: true } })
+    await last
   })
 })
