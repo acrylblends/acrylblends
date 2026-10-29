@@ -20,6 +20,10 @@ Same-shape check (a template or built-in row that stays mounted in production an
 
 From DS_Fork3's macOS walk and Fork3's Linux walk (`docs/plans/workshop-readiness.md`), ahead of the 1.1 list because they stand between a newcomer and the 2026-11-20 workshop. Built and in `docs/release-notes/1.0.2.md`: B1 `create-acrylblends --from <id | source>` with `--registry`, registry `runtime` field and badge, three acrylblends starters; B2/L3 `npx acrylblends@latest upgrade`; C1 `add agent-panel` mounts or refuses; C2 login documented; C3 pi detection; C4 todo URL; C5 node-pty approval text; cosmetics (one `Next:`, `--desktop` wording); L1 Linux sandbox launcher; L2 Node 22.19 preflight; the chat template closed in production. Not in 1.0.2: Windows findings (DS2's walk is not in yet), the workshop registry repo (designed, not created).
 
+## 1.0.3 and 1.0.4
+
+1.0.3 (built, published with this note): Node 26 in CI and the adapter's body read, relative paths in manifest rows (`add db`, `add kv` mount), a pasted GitHub address as a source, two flakes fixed at the root. 1.0.4: the Windows walk (DS2) when it lands. The original `ECONNRESET` in the node-server websocket test never reproduced (0 failures in about 135 runs under load); the flake found and fixed instead was the shared static fixture.
+
 ## 1.1, in order
 
 | Order | Item | Priority | Status |
