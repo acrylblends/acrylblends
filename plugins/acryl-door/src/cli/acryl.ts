@@ -26,6 +26,8 @@ export interface Invocation {
   readonly args: Record<string, unknown>
   readonly json: boolean
   readonly dir: string | undefined
+  /** Things the client changed or noticed in the command line; printed to stderr before the call. */
+  readonly warnings: readonly string[]
 }
 
 const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
@@ -47,6 +49,31 @@ const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
   tool list | tool call --tool <name> [--args '<json>']
   verbs`
 
+/**
+ * Git for Windows' bash (MSYS) turns an argument that looks like a Unix path into a Windows path before a native program sees it: `--path /nope` arrives as
+ * `C:/Program Files/Git/nope`. The shim stops that (MSYS_NO_PATHCONV), but a command that does not go through the shim, or an MSYS that ignores the variable, would still
+ * send the app a path it can never serve. A path that begins with the Git install folder is turned back into the path the person typed, with a warning. Only `--path` is read this way.
+ */
+export function undoMsysPath(value: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform, warnings: string[]): string {
+  if (platform !== 'win32' || !/^[A-Za-z]:[\\/]/u.test(value)) return value
+  const roots = new Set<string>()
+  if (env.EXEPATH) roots.add(env.EXEPATH)
+  for (const folder of (env.PATH ?? env.Path ?? '').split(';')) {
+    const found = /^(.*[\\/]Git)[\\/](?:usr[\\/]bin|cmd|bin|mingw64[\\/]bin)[\\/]?$/iu.exec(folder.trim())
+    if (found?.[1]) roots.add(found[1])
+  }
+  const flat = value.replaceAll('\\', '/')
+  for (const root of roots) {
+    const prefix = `${root.replaceAll('\\', '/').replace(/\/+$/u, '')}/`
+    if (flat.toLowerCase().startsWith(prefix.toLowerCase())) {
+      const path = `/${flat.slice(prefix.length)}`
+      warnings.push(`warning: Git Bash changed the path you typed into "${value}"; using "${path}". Run the command through .acryl/bin/acryl, or set MSYS_NO_PATHCONV=1, so it stays as typed.`)
+      return path
+    }
+  }
+  return value
+}
+
 function integer(values: Map<string, string>, flag: string): number | undefined {
   const raw = values.get(flag)
   if (raw === undefined) return undefined
@@ -56,7 +83,7 @@ function integer(values: Map<string, string>, flag: string): number | undefined 
 }
 
 /** @throws UsageError. */
-export function parseInvocation(argv: readonly string[]): Invocation {
+export function parseInvocation(argv: readonly string[], env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Invocation {
   const words: string[] = []
   const values = new Map<string, string>()
   const set = new Set<string>()
@@ -79,7 +106,8 @@ export function parseInvocation(argv: readonly string[]): Invocation {
   const [first, second, third] = words
   const json = set.has('--json')
   const dir = values.get('--dir')
-  const make = (verb: string, args: Record<string, unknown> = {}): Invocation => ({ verb, args, json, dir })
+  const warnings: string[] = []
+  const make = (verb: string, args: Record<string, unknown> = {}): Invocation => ({ verb, args, json, dir, warnings })
   switch (first) {
     case 'brief': return make('brief')
     case 'verbs': return make('verbs')
@@ -98,7 +126,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       return make('act', {
         op: second,
         ...pick('--ref', 'ref'), ...pick('--text', 'text'), ...pick('--option', 'option'), ...pick('--key', 'key'),
-        ...pick('--direction', 'direction'), ...pick('--role', 'role'), ...pick('--name', 'name'), ...pick('--path', 'path'),
+        ...pick('--direction', 'direction'), ...pick('--role', 'role'), ...pick('--name', 'name'), ...(values.has('--path') ? { path: undoMsysPath(values.get('--path') as string, env, platform, warnings) } : {}),
         ...(amount === undefined ? {} : { amount }),
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
         ...(window === undefined ? {} : { window }),
@@ -116,7 +144,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
     case 'window': {
       const id = integer(values, '--id')
       if (second === 'list') return make('window-list')
-      if (second === 'open') return make('window-open', values.has('--path') ? { path: values.get('--path') } : {})
+      if (second === 'open') return make('window-open', values.has('--path') ? { path: undoMsysPath(values.get('--path') as string, env, platform, warnings) } : {})
       if (second === 'focus' || second === 'close' || second === 'resize') {
         if (id === undefined) throw new UsageError(`window ${second} needs --id <n> (window list prints the ids)`)
         if (second === 'focus') return make('window-focus', { id })
@@ -182,6 +210,7 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
     if (cause instanceof UsageError) { io.err(`${cause.message}\n`); return 2 }
     throw cause
   }
+  for (const warning of invocation.warnings) io.err(`${warning}\n`)
   const app = findApp(io.cwd, invocation.dir)
   const file = app === undefined ? undefined : readDoorFile(app)
   if (app === undefined || file === undefined) {

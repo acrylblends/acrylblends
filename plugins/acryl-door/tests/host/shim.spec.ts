@@ -6,6 +6,8 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { undoMsysPath, parseInvocation } from '../../src/cli/acryl.ts'
 import { posixShim, type ShimFs, windowsShim, writeAtomically } from '../../src/host/shim.ts'
 import { UiDriver } from '../../src/page/driver/driver.ts'
 import { appFolder, connectPage, domPage, removeFolders, runCommand, startApp, type Running } from '../harness.ts'
@@ -171,5 +173,53 @@ describe('writing a shim while the app restarts', () => {
     expect(() => writeAtomically(file, 'text', 0o700, fs)).toThrow(/ENOSPC/u)
     expect(fs.renames).toBe(1)
     expect(existsSync(file)).toBe(false)
+  })
+})
+
+describe('a slash path typed in Git Bash on Windows', () => {
+  const git = { EXEPATH: 'C:\\Program Files\\Git' }
+  const undo = (value: string, env: NodeJS.ProcessEnv = git, platform: NodeJS.Platform = 'win32') => {
+    const warnings: string[] = []
+    return { path: undoMsysPath(value, env, platform, warnings), warnings }
+  }
+
+  it('is turned back from the Git install folder, with a warning, and anything else is left as it is', () => {
+    const converted = undo('C:/Program Files/Git/nope')
+    expect(converted.path).toBe('/nope')
+    expect(converted.warnings[0]).toMatch(/Git Bash changed the path you typed into "C:\/Program Files\/Git\/nope"; using "\/nope"/u)
+    expect(undo('C:\\Program Files\\Git\\board\\two').path).toBe('/board/two')
+    expect(undo('c:/program files/git/settings?tab=a').path).toBe('/settings?tab=a')
+    // The Git folder found on the PATH when EXEPATH is not set, and another drive's path is not Git's.
+    expect(undo('D:/tools/Git/nope', { PATH: 'C:\\Windows;D:\\tools\\Git\\usr\\bin' }).path).toBe('/nope')
+    expect(undo('C:/Users/a/project/nope').path).toBe('C:/Users/a/project/nope')
+    expect(undo('/nope').warnings).toEqual([])
+    // Off Windows nothing is rewritten, whatever the value looks like.
+    expect(undo('C:/Program Files/Git/nope', git, 'linux').path).toBe('C:/Program Files/Git/nope')
+  })
+
+  it('is read back for --path of navigate and window open, and for nothing typed into a page', () => {
+    const env = { ...git }
+    const navigate = parseInvocation(['act', 'navigate', '--path', 'C:/Program Files/Git/nope'], env, 'win32')
+    expect(navigate.args).toMatchObject({ op: 'navigate', path: '/nope' })
+    expect(navigate.warnings).toHaveLength(1)
+    expect(parseInvocation(['window', 'open', '--path', 'C:/Program Files/Git/settings'], env, 'win32').args).toEqual({ path: '/settings' })
+    expect(parseInvocation(['act', 'type', '--ref', '1.1', '--text', 'C:/Program Files/Git/x'], env, 'win32').args).toMatchObject({ text: 'C:/Program Files/Git/x' })
+  })
+
+  it('stays as typed through the shim: the shim exports what stops the conversion, and a real sh keeps /nope all the way to a native node', () => {
+    const target = { node: process.execPath, nodeOptions: [], client: join(appFolder(), 'argv.mjs'), electron: false }
+    expect(posixShim('/apps/a', target)).toMatch(/export MSYS_NO_PATHCONV=1\nexport MSYS2_ARG_CONV_EXCL='\*'\n/u)
+    writeFileSync(target.client, 'console.log(JSON.stringify(process.argv.slice(2)))\n')
+    const shim = join(appFolder(), 'acryl')
+    writeFileSync(shim, posixShim('/apps/a', target), { mode: 0o700 })
+    const sh = spawnSync('sh', ['-c', 'echo ok'], { encoding: 'utf8' })
+    if (sh.status !== 0) return // no sh here (a Windows machine without Git): the CI job that runs on one covers it
+    const through = spawnSync('sh', [shim, 'act', 'navigate', '--path', '/nope'], { encoding: 'utf8' })
+    expect(JSON.parse(through.stdout.trim().split('\n').at(-1) ?? '[]')).toEqual(['--dir', '/apps/a', 'act', 'navigate', '--path', '/nope'])
+    if (process.platform === 'win32') {
+      // The control: without the exports, MSYS rewrites the same argument. If it does not, this machine's sh is not MSYS and the check above proves nothing, so say so.
+      const without = spawnSync('sh', ['-c', `"${process.execPath.replaceAll('\\', '/')}" "${target.client.replaceAll('\\', '/')}" --path /nope`], { encoding: 'utf8' })
+      expect(JSON.parse(without.stdout.trim().split('\n').at(-1) ?? '[]')[1], 'MSYS did not rewrite the control argument').not.toBe('/nope')
+    }
   })
 })
