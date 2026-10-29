@@ -71,6 +71,8 @@ jobs:
       - run: pnpm run test:packages
       # The real terminal (node-pty) on every OS, Windows included: a load failure fails here with its reason, it is not skipped.
       - run: pnpm run test:driver-pty
+      # `npm create acrylblends my-app agent` from the packed tarballs on every OS: 1.0.4 and 1.0.5 failed on every Windows machine and nothing ran the command there.
+      - run: pnpm run verify:create
 
   # The desktop door in a real Electron (windows and menu as door verbs, a window attached to a dev server, the guards on Quit and the last window). Its own job, not in `check`:
   # it downloads Electron and opens windows. Linux runs it under a virtual display; a failure here fails the build, it is not skipped.

@@ -20,6 +20,18 @@ describe('the install step starts the package manager without a shell', () => {
     })
   })
 
+  it('runs a program given by its path as it is on Windows: Node is not a package manager and has no .cmd shim', () => {
+    for (const node of [
+      'C:\\Users\\a b\\node22\\node.exe',
+      'C:/node/node.exe',
+      '\\\\server\\share\\node.exe',
+    ]) {
+      expect(win(node)).toEqual({ file: node, args: ['install'] })
+    }
+    // A bare name is still a package manager.
+    expect(win('pnpm').args.slice(0, 4)).toEqual(['/d', '/s', '/c', 'pnpm.cmd'])
+  })
+
   it('runs npm through node and npm-cli.js on Windows', () => {
     expect(win('npm', { npm_execpath: 'C:\\npm\\bin\\npm-cli.js' })).toEqual({
       file: 'C:\\node\\node.exe',
