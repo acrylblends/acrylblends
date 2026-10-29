@@ -26,7 +26,15 @@ const fail = (message) => {
 }
 const isWindows = process.platform === 'win32'
 const scratch = mkdtempSync(join(tmpdir(), 'vitest-peer-'))
-const env = { ...process.env, npm_config_loglevel: 'error', CI: '1' }
+// No colour: CI runners colour vitest's summary, and the gate reads it.
+const env = {
+  ...process.env,
+  npm_config_loglevel: 'error',
+  CI: '1',
+  NO_COLOR: '1',
+  FORCE_COLOR: '0',
+}
+const plain = (text) => text.replace(/\u001b\[[0-9;]*m/gu, '')
 function run(command, args, cwd, allowFailure = false) {
   const r = spawnSync(command, args, {
     cwd,
@@ -170,10 +178,12 @@ it('says what to pass when the suite is not given vitest', () => {
   )
   run('pnpm', ['install', '--no-frozen-lockfile', '--ignore-scripts'], provider)
   // The project's own vitest, by its path: under `pnpm run` the repository's node_modules/.bin comes first on the PATH, and `pnpm exec vitest` would start that one.
-  const ran = run(
-    process.execPath,
-    [join(provider, 'node_modules', 'vitest', 'vitest.mjs'), 'run'],
-    provider,
+  const ran = plain(
+    run(
+      process.execPath,
+      [join(provider, 'node_modules', 'vitest', 'vitest.mjs'), 'run'],
+      provider,
+    ),
   )
   if (!/Tests\s+\d+ passed/u.test(ran))
     fail(`the conformance suite did not run under pnpm:\n${ran}`)
