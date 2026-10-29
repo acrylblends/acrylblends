@@ -9,6 +9,7 @@
 
 import { UiControlError, parseChannelToPage, type ChannelToHost } from './protocol.ts'
 import type { UiDriver } from './driver/driver.ts'
+import { type SocketLike, type SocketSource, socketSource } from './socket-source.ts'
 
 /** The slice of an `EventSource` the channel uses, so tests can supply their own. */
 export interface ChannelSource {
@@ -32,6 +33,11 @@ export interface PageChannelOptions {
   /** Where the door's routes are, e.g. `/api/acryl-door`. */
   readonly base: string
   readonly createSource?: (url: string) => ChannelSource
+  /** Opens the WebSocket form of the channel (`<base>/channel/ws`); the browser's own by default. Pass `transport: 'stream'` to keep to the event stream. */
+  readonly createSocket?: (url: string) => SocketSource
+  readonly transport?: 'auto' | 'stream'
+  /** Where the page says it fell back to the event stream (the console by default). */
+  readonly warn?: (message: string) => void
   readonly post?: (url: string, body: string) => Promise<unknown>
   readonly silenceMs?: number
   readonly now?: () => number
@@ -42,6 +48,9 @@ export class PageChannel {
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined
   private watchdog: ReturnType<typeof setInterval> | undefined
   private backoff = BACKOFF_START_MS
+  /** The WebSocket form is tried first; once it fails to open (a proxy that cannot upgrade, no `ws` on the server) the page keeps to the event stream. */
+  private socketAllowed: boolean
+  private socketReady = false
   private lastHeard = 0
   private disposed = false
   private readonly now: () => number
@@ -53,31 +62,54 @@ export class PageChannel {
     this.driver = driver
     this.options = options
     this.now = options.now ?? (() => Date.now())
+    // A test that supplies only a stream keeps to it; the browser's own WebSocket is tried when the page supplies neither.
+    this.socketAllowed = options.transport !== 'stream' && (options.createSocket !== undefined || (options.createSource === undefined && typeof WebSocket !== 'undefined'))
   }
 
   connect(): void {
     if (this.disposed || this.source !== undefined) return
-    const create = this.options.createSource ?? ((url: string): ChannelSource => new EventSource(url))
     const query = `window=${encodeURIComponent(this.options.windowId)}&focused=${this.options.focused() ? '1' : '0'}${this.options.shellWindow === undefined ? '' : `&shell=${String(this.options.shellWindow)}`}`
-    const source = create(`${this.options.base}/channel?${query}`)
+    const viaSocket = this.socketAllowed
+    this.socketReady = false
+    const source: ChannelSource = viaSocket
+      ? (this.options.createSocket ?? ((url: string): SocketSource => socketSource(new WebSocket(url) as unknown as SocketLike)))(`${socketBase(this.options.base)}/channel/ws?${query}`)
+      : (this.options.createSource ?? ((url: string): ChannelSource => new EventSource(url) as unknown as ChannelSource))(`${this.options.base}/channel?${query}`)
     this.source = source
     this.lastHeard = this.now()
     const heard = (): void => {
       this.lastHeard = this.now()
       this.backoff = BACKOFF_START_MS
     }
-    source.addEventListener('ready', heard)
+    source.addEventListener('ready', () => {
+      this.socketReady = true
+      heard()
+    })
     source.addEventListener('ping', heard)
     source.addEventListener('call', (event) => {
       heard()
       if (typeof event.data === 'string') this.answer(event.data)
     })
-    // An EventSource retries by itself after a network error; once it gives up (CLOSED), the channel starts over.
-    source.onerror = () => { if (source.readyState === CLOSED) this.restart(source) }
+    // An EventSource retries by itself after a network error; once it gives up (CLOSED), the channel starts over. A WebSocket that never became ready is not retried: the page
+    // falls back to the event stream, and says so once.
+    source.onerror = () => {
+      if (source.readyState !== CLOSED) return
+      if (viaSocket && !this.socketReady) this.fallBack(source)
+      else this.restart(source)
+    }
     const silence = this.options.silenceMs ?? SILENCE_MS
     this.watchdog = setInterval(() => {
       if (this.now() - this.lastHeard > silence) this.restart(source)
     }, Math.max(50, Math.floor(silence / 3)))
+  }
+
+  /** The WebSocket did not open: use the event stream from now on, and say why once. */
+  private fallBack(source: ChannelSource): void {
+    if (this.source !== source) return
+    this.socketAllowed = false
+    const warn = this.options.warn ?? ((message: string) => { console.warn(message) })
+    warn('acryl-door: the page channel could not open a WebSocket (the server has no upgrade route, or a proxy refused it); using server-sent events, which count against the browser\'s six connections per host')
+    this.stop()
+    this.connect()
   }
 
   /** Tell the Host whether this window is the one in front. */
@@ -149,9 +181,19 @@ export class PageChannel {
   }
 
   private send(message: ChannelToHost): void {
+    // On a WebSocket the answer goes up the socket: a request would queue behind the browser's six connections per host.
+    const source = this.source as Partial<SocketSource> | undefined
+    if (source?.send?.(JSON.stringify(message)) === true) return
     const post = this.options.post ?? ((url: string, body: string) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body }))
     post(`${this.options.base}/channel/answer`, JSON.stringify({ window: this.options.windowId, message })).catch(() => {
       // The Host is gone or restarting; the call it made settles on its side.
     })
   }
+}
+
+/** The WebSocket address of the door's routes: this page's own origin, `ws:` or `wss:`, then the base path. */
+function socketBase(base: string): string {
+  const here = (globalThis as { location?: { protocol: string; host: string } }).location
+  if (here === undefined) return base
+  return `${here.protocol === 'https:' ? 'wss' : 'ws'}://${here.host}${base}`
 }

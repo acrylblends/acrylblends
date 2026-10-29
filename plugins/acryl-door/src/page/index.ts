@@ -22,7 +22,15 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
   const detachInput = clock.attach(document)
   const removeIndicator = mountIndicator(driver, document)
   const shellWindow = Number(/\bAcrylWindow\/(\d{1,9})\b/u.exec(view.navigator?.userAgent ?? '')?.[1])
-  const channel = new PageChannel(driver, { windowId, focused, base, ...(Number.isSafeInteger(shellWindow) && shellWindow > 0 ? { shellWindow } : {}) })
+  // `localStorage.setItem('acryl-door-transport', 'stream')` keeps this browser to the event stream (to compare, or behind a proxy that cannot upgrade).
+  const transport = ((): 'auto' | 'stream' => {
+    try {
+      return view.localStorage.getItem('acryl-door-transport') === 'stream' ? 'stream' : 'auto'
+    } catch {
+      return 'auto'
+    }
+  })()
+  const channel = new PageChannel(driver, { windowId, focused, base, transport, ...(Number.isSafeInteger(shellWindow) && shellWindow > 0 ? { shellWindow } : {}) })
   const reportFocus = (): void => { channel.reportFocus(focused()) }
   view.addEventListener('focus', reportFocus)
   view.addEventListener('blur', reportFocus)

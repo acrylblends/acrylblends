@@ -8,6 +8,9 @@
     "@deepseek-ai/cordis": "4.0.4",
     "@deepseek-ai/schemastery": "3.18.4"
   },
+  "devDependencies": {
+    "ws": "8.21.3"
+  },
   "mount": "mount it after acryl-node-server and extensions in development builds: root.plugin(door); add <script type=\"module\" src=\"/api/acryl-door/page.js\"></script> to the pages; the command is .acryl/bin/acryl",
   "gitignore": [".acryl/"],
   "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"],

@@ -19,7 +19,13 @@ import { Acryl } from '../acryl-router/src/index.ts'
 import type {} from '../agent/index.ts'
 import type {} from '../extensions/index.ts'
 import type { ChatDriver } from './drivers.ts'
-import { agentDriver, availableHeadless, type HeadlessName, headlessDriver } from './headless.ts'
+import {
+  agentDriver,
+  availableHeadless,
+  type HeadlessName,
+  headlessDriver,
+  whyNotChat,
+} from './headless.ts'
 import { provideDrivers } from './registry.ts'
 
 export type {
@@ -122,17 +128,20 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
       if (message === '' || message.length > 8000)
         return c.json({ error: 'write a message of at most 8000 characters' }, 400)
       const driver = registry.get(driverName)
-      if (driver?.kind !== 'chat')
+      if (driver?.kind !== 'chat') {
+        const chat = registry
+          .list()
+          .filter((d) => d.kind === 'chat')
+          .map((d) => d.name)
+          .join(', ')
+        const why = whyNotChat(driverName, driver?.kind)
         return c.json(
           {
-            error: `the driver "${driverName}" is not available here (${registry
-              .list()
-              .filter((d) => d.kind === 'chat')
-              .map((d) => d.name)
-              .join(', ')})`,
+            error: `the driver "${driverName}" is not available here${why === undefined ? '' : `: ${why}`} (chat drivers: ${chat})`,
           },
           400,
         )
+      }
       if (current !== undefined && !current.ended)
         return c.json({ error: 'a run is already going; wait for it to end' }, 409)
       const run = startRun(driverName, message, driver)

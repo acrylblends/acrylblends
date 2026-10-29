@@ -195,3 +195,23 @@ export function headlessDriver(name: HeadlessName, root: string): ChatDriver {
     },
   }
 }
+
+/**
+ * Why a driver name cannot be used to ask a question, in a sentence: it is a terminal (picked in the panel, not asked over `/ask`), it is a coding agent that is not installed or not
+ * able to start, or pi without a key to reach its model. Nothing when the name is not one of the headless agents.
+ */
+export function whyNotChat(
+  name: string,
+  kind: 'chat' | 'terminal' | undefined,
+): string | undefined {
+  if (kind === 'terminal')
+    return `"${name}" is a terminal driver: pick it in the panel to open its terminal; /ask runs the chat drivers`
+  if (name !== 'claude' && name !== 'codex' && name !== 'pi') return undefined
+  if (!onPath(name))
+    return `${name} was not found on the PATH of the app, so the panel cannot start it`
+  const launch = resolveLaunch(name, [])
+  if ('error' in launch) return launch.error
+  if (name === 'pi' && !piHasDeepseekKey())
+    return 'pi needs a DeepSeek key: set DEEPSEEK_API_KEY in the environment of the app, or log in with pi once (it keeps the key in ~/.pi/agent/auth.json)'
+  return undefined
+}
