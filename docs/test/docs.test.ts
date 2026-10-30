@@ -47,10 +47,11 @@ describe('docs', () => {
     for (const { name, text } of linked) {
       for (const [, target] of text.matchAll(/\]\(([^)#\s]+)(?:#[^)]*)?\)/g)) {
         if (/^[a-z]+:/.test(target as string)) continue
-        expect(
-          () => readFileSync(resolve(docs, dirname(name), target as string)),
-          `${name} -> ${target}`,
-        ).not.toThrow()
+        // A picture is written as the site serves it (/docs-assets/<folder>/<file>); the file is docs/plans/site-assets/<folder>/<file>.
+        const file = (target as string).startsWith('/docs-assets/')
+          ? resolve(docs, 'plans', 'site-assets', (target as string).slice('/docs-assets/'.length))
+          : resolve(docs, dirname(name), target as string)
+        expect(() => readFileSync(file), `${name} -> ${target}`).not.toThrow()
       }
     }
   })
