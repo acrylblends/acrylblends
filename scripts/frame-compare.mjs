@@ -83,7 +83,7 @@ async function runSteps(cdp, steps) {
     if (target !== undefined) {
       const clicked = await evaluate(
         cdp,
-        `(() => { const want = ${JSON.stringify(target)}; const el = [...document.querySelectorAll('button,a,[role=button],[role=link],[role=tab],[role=menuitem]')].find((e) => e.textContent.trim() === want || e.getAttribute('aria-label') === want || e.getAttribute('title') === want); if (!el) return false; el.click(); return true })()`,
+        `(() => { const want = ${JSON.stringify(target)}; const el = [...document.querySelectorAll('button,a,[role=button],[role=link],[role=tab],[role=menuitem],[role=treeitem]')].find((e) => e.textContent.trim() === want || e.getAttribute('aria-label') === want || e.getAttribute('title') === want); if (!el) return false; el.click(); return true })()`,
       )
       if (!clicked && step.click !== undefined) throw new Error(`no control named "${step.click}"`)
     } else if (step.wait !== undefined) await sleep(step.wait)

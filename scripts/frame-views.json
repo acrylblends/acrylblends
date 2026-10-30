@@ -104,6 +104,112 @@
         { "click": "New tab: Terminal" },
         { "wait": 3000 }
       ]
+    },
+    {
+      "name": "right-panel-files",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "clickIfPresent": "Not now" },
+        {
+          "eval": "(() => { const row = [...document.querySelectorAll('.dshWorkspaceWorktree')].find(candidate => candidate.querySelector('.dshWorkspaceWorktreeLabel')?.textContent.trim() === 'main'); if (row === undefined) return false; row.click(); return true })()"
+        },
+        { "wait": 700 },
+        { "click": "Show right panel" },
+        { "wait": 500 },
+        { "click": "Files" },
+        { "wait": 1500 },
+        {
+          "eval": "(() => { window.scrollTo(0, 0); for (const element of document.querySelectorAll('*')) { if (element.scrollTop !== 0) element.scrollTop = 0; if (element.scrollLeft !== 0) element.scrollLeft = 0 } })()"
+        },
+        { "wait": 300 }
+      ]
+    },
+    {
+      "name": "file-editor",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "clickIfPresent": "Not now" },
+        {
+          "eval": "(() => { const row = [...document.querySelectorAll('.dshWorkspaceWorktree')].find(candidate => candidate.querySelector('.dshWorkspaceWorktreeLabel')?.textContent.trim() === 'main'); if (row === undefined) return false; row.click(); return true })()"
+        },
+        { "wait": 700 },
+        { "click": "Show right panel" },
+        { "wait": 500 },
+        { "click": "Files" },
+        { "wait": 1500 },
+        { "click": "README.md" },
+        { "wait": 1500 },
+        {
+          "eval": "(() => { window.scrollTo(0, 0); for (const element of document.querySelectorAll('*')) { if (element.scrollTop !== 0) element.scrollTop = 0; if (element.scrollLeft !== 0) element.scrollLeft = 0 } })()"
+        },
+        { "wait": 300 }
+      ]
+    },
+    {
+      "name": "changes",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "clickIfPresent": "Not now" },
+        {
+          "eval": "(() => { const row = [...document.querySelectorAll('.dshWorkspaceWorktree')].find(candidate => candidate.querySelector('.dshWorkspaceWorktreeLabel')?.textContent.trim() === 'main'); if (row === undefined) return false; row.click(); return true })()"
+        },
+        { "wait": 700 },
+        { "click": "Show right panel" },
+        { "wait": 500 },
+        { "click": "Changes" },
+        { "wait": 1500 },
+        {
+          "eval": "(() => { window.scrollTo(0, 0); for (const element of document.querySelectorAll('*')) { if (element.scrollTop !== 0) element.scrollTop = 0; if (element.scrollLeft !== 0) element.scrollLeft = 0 } })()"
+        },
+        { "wait": 300 }
+      ]
+    },
+    {
+      "name": "review",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "clickIfPresent": "Not now" },
+        {
+          "eval": "(() => { const row = [...document.querySelectorAll('.dshWorkspaceWorktree')].find(candidate => candidate.querySelector('.dshWorkspaceWorktreeLabel')?.textContent.trim() === 'main'); if (row === undefined) return false; row.click(); return true })()"
+        },
+        { "wait": 700 },
+        { "click": "Show right panel" },
+        { "wait": 500 },
+        { "click": "Changes" },
+        { "wait": 1500 },
+        { "click": "tracked.txt" },
+        { "wait": 1500 },
+        { "click": "Comment on new line 2" },
+        { "wait": 400 },
+        {
+          "eval": "(() => { const box = document.querySelector('textarea[aria-label=\"Comment for the agent\"]'); if (box === null) return false; const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; setValue.call(box, 'Please explain this change.'); box.dispatchEvent(new Event('input', { bubbles: true })); return true })()"
+        },
+        { "wait": 300 },
+        { "click": "Send to agent" },
+        { "wait": 2500 },
+        {
+          "eval": "(() => { const tab = [...document.querySelectorAll('.dshWorkspaceTab')].find(candidate => candidate.textContent.includes('tracked.txt')); if (tab === undefined) return false; const button = tab.querySelector('.dshWorkspaceTabButton'); (button ?? tab).click(); return true })()"
+        },
+        { "wait": 700 },
+        {
+          "eval": "(() => { const button = document.querySelector('.dshDesktopDetailsSurface button[aria-label=\"New tab\"]'); if (button === null) return false; button.click(); return true })()"
+        },
+        { "wait": 700 },
+        { "click": "Review" },
+        { "wait": 1200 },
+        {
+          "eval": "(() => { window.scrollTo(0, 0); for (const element of document.querySelectorAll('*')) { if (element.scrollTop !== 0) element.scrollTop = 0; if (element.scrollLeft !== 0) element.scrollLeft = 0 } })()"
+        },
+        { "wait": 300 }
+      ]
     }
   ]
 }
