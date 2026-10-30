@@ -59,6 +59,30 @@ test('answers health checks and 404 for unknown paths', () =>
     await missing.body?.cancel()
   }))
 
+test('the frame row mounts the same routes under /app; the app on its own server keeps its old URLs', () =>
+  withApp(async (app) => {
+    // Standalone (production, `npm start`): the public URLs do not move.
+    for (const path of ['/', '/about', '/health']) {
+      const response = await app.root.router.request(path)
+      assert.equal(response.status, 200, path)
+      await response.body?.cancel()
+    }
+    // The frame row: the same routes under the one prefix the app names.
+    const frame = await import('../src/frame.ts')
+    const { FRAME_MOUNT_PREFIX } = await import('../src/routes.ts')
+    const fiber = app.root.plugin(frame)
+    await fiber.await()
+    for (const path of ['/', '/about', '/health']) {
+      const response = await app.root.router.request(`${FRAME_MOUNT_PREFIX}${path}`)
+      assert.equal(response.status, 200, path)
+      await response.body?.cancel()
+    }
+    const missing = await app.root.router.request(`${FRAME_MOUNT_PREFIX}/nope`)
+    assert.equal(missing.status, 404)
+    await missing.body?.cancel()
+    await fiber.dispose()
+  }))
+
 /** A sandbox may forbid listening on a port (Codex's workspace-write does); the one test that starts the real server is skipped there, and says so. */
 const canListen = await new Promise<boolean>((done) => {
   const probe = createServer()

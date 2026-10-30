@@ -1,5 +1,7 @@
-import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+import { applyIdeProfile } from './ide-profile'
 import type { Io } from './io'
 import { closure, copyPlugin, readLibrary } from './library'
 import {
@@ -113,6 +115,22 @@ async function askTemplate(ask: (question: string) => Promise<string>): Promise<
   throw new UsageError(`unknown template "${answer}" (${TEMPLATES.join(', ')})`)
 }
 
+/** The frame packages' specs for a scaffolded app while the ide packages are unpublished (see the note in `init`). Unset or malformed: undefined. */
+function frameProfileFromEnv(): { dshVersion: string; frameworkVersion: string; packages: Record<string, string> } | undefined {
+  const raw = process.env.ACRYLBLENDS_FRAME_PACKAGES
+  if (raw === undefined || raw.trim() === '') return undefined
+  try {
+    const parsed = JSON.parse(raw) as { dshVersion?: unknown; frameworkVersion?: unknown; packages?: unknown }
+    if (typeof parsed.dshVersion !== 'string' || typeof parsed.frameworkVersion !== 'string') return undefined
+    const packages: Record<string, string> = {}
+    for (const [key, value] of Object.entries((parsed.packages ?? {}) as Record<string, unknown>))
+      if (typeof value === 'string') packages[key] = value
+    return { dshVersion: parsed.dshVersion, frameworkVersion: parsed.frameworkVersion, packages }
+  } catch {
+    return undefined
+  }
+}
+
 /** Scaffold a Cordis app. Returns the exit code: 0 done, 1 refused or failed. Never overwrites anything. */
 export async function init(options: InitOptions, io: Io): Promise<number> {
   const relative = options.directory ?? '.'
@@ -154,6 +172,29 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
     mergeTooling(directory, plugin)
   }
   addNodePreflight(directory)
+  // The ACRYL frame (docs/plans/ide-port.md, slice 6): a template with a frame row (`src/frame.ts`) gets the app's own DSH profile and overlay, so
+  // `npm run dev` opens it inside the frame with its page at /app. The frame's client packages are not published yet, so the specs come from
+  // ACRYLBLENDS_FRAME_PACKAGES (JSON: {dshVersion, frameworkVersion, packages: {name: spec}}); without it the app keeps the framework-only script
+  // and says so, instead of writing a profile that cannot install.
+  const frameRow = existsSync(join(directory, 'src', 'frame.ts')) ? [{ id: 'app-routes', name: './src/frame.ts' }] : []
+  if (frameRow.length > 0) {
+    const frame = frameProfileFromEnv()
+    if (frame === undefined) {
+      io.stdout.write(
+        'note: the ACRYL frame is not published yet; this app runs on the framework alone (docs/plans/ide-port-status.md)\n',
+      )
+    } else {
+      const wrote = applyIdeProfile(directory, {
+        appName: name,
+        dshVersion: frame.dshVersion,
+        frameworkVersion: frame.frameworkVersion,
+        spec: (packageName) => frame.packages[packageName],
+        dependencies: frame.packages,
+        rows: frameRow,
+      })
+      io.stdout.write(`frame: wrote ${wrote.written.join(', ') || 'nothing (already right)'}\n`)
+    }
+  }
   const desktopPath = options.desktop ? readTemplateDesktopPath(templateDir(template)) : undefined
   if (desktopPath !== undefined) writeDesktopPath(directory, desktopPath)
   io.stdout.write(

@@ -27,7 +27,9 @@ Uncommitted work from the previous worker, adopted:
 - `packages/cli/templates/blank/src/frame.ts` (new): the row the overlay mounts, which mounts the app's routes at the prefix.
 - `packages/cli/templates/blank/test/app.test.ts`: asserts the old URLs standalone and `/app/*` through the frame row.
 
-Not yet done: the scaffolder does not call `ideProfilePlan` (only the boot gate and tests do), so no generated app gets a profile yet; no per-template gate; the frame's tile at `/app` unproven (open question below); `acrylblends upgrade`; Windows gate.
+Done: the scaffolder (`acrylblends init`) now calls the generator for a template with `src/frame.ts`: it writes the profile, the overlay (app row `app-routes` -> `./src/frame.ts` plus the frame rows and the door row) and the `dev`/`profile` scripts; the frame package specs come from `ACRYLBLENDS_FRAME_PACKAGES` (JSON) while the ide packages are unpublished, and without it the app stays framework-only with a printed note. Two tests cover both paths (packages/cli/test/init-frame.test.ts).
+
+Not yet done: no per-template boot gate yet (scaffold, install, profile, boot, app page at /app inside the frame); publishing the ide packages (owner decision: npm names) is the blocker for a real attendee app; `acrylblends upgrade`; Windows gate; the frame's tile at `/app` is proven reachable (ACRYL's canvas has a browser tile kind, `BrowserPane`, and the tab strip offers it) but not yet asserted in a gate.
 
 **Open question to settle first:** the browser tile is DSH's `ui-sidebar-browser`, enabled only in the desktop profile (the documented `right-panel-open@1024` difference). Whether a web-hosted frame can show the app's page at `/app` in a tile, or needs its own tab kind, decides how a template's page reaches the main surface. Do not assume; check `packages/bundle/web-app/cordis.patch.yml` and ACRYL's canvas tab kinds.
 

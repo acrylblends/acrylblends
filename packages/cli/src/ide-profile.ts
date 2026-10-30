@@ -78,6 +78,8 @@ export interface IdeProfileInput {
   readonly spec?: (name: string) => string | undefined
   /** Further packages the app installs (an unpublished frame package's own dependencies, in a checkout). */
   readonly dependencies?: Readonly<Record<string, string>>
+  /** The app's own rows in the overlay (the file that mounts its routes at the frame prefix), in order; none for an app without one. */
+  readonly rows?: readonly { readonly id: string; readonly name: string }[]
   /** Whether the app carries the door at `plugins/acryl-door/src/index.ts`: a row then mounts it, and an app without one simply has no door. */
   readonly door?: boolean
 }
@@ -182,7 +184,11 @@ export function profileNameFor(appName: string): string {
   return `acrylblends-${slug === '' ? 'app' : slug}`
 }
 
-function overlayOf(packages: readonly IdeProfilePackage[], door = false): string {
+function overlayOf(
+  packages: readonly IdeProfilePackage[],
+  door = false,
+  appRows: readonly { readonly id: string; readonly name: string }[] = [],
+): string {
   const rows = packages
   const disabled = new Set(packages.flatMap((entry) => entry.disables ?? []))
   const lines = [
@@ -191,6 +197,7 @@ function overlayOf(packages: readonly IdeProfilePackage[], door = false): string
     '    - id: app-instance',
     '      name: ./app/runtime.mjs',
     ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts'] : []),
+    ...appRows.flatMap((row) => [`    - id: ${row.id}`, `      name: ${row.name}`]),
   ]
   for (const entry of rows) {
     lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${entry.name}`)
@@ -241,7 +248,7 @@ export function ideProfilePlan(input: IdeProfileInput, existing?: string): IdePr
       : JSON.parse(existing)
   return {
     profile,
-    overlay: overlayOf(packages, input.door === true),
+    overlay: overlayOf(packages, input.door === true, input.rows ?? []),
     packageJson: `${JSON.stringify(mergeManifest(manifest, dependencies, profile), null, 2)}\n`,
     profileScript: profileScriptOf(profile, packages, input.dshVersion, input.frameworkVersion),
   }
