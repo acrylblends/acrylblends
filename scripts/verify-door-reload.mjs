@@ -722,7 +722,30 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
         `K: before the restart, the state key did not reach the page: ${await inPage('JSON.stringify(window.__restartTicks)')}`,
       )
   }
+  // A run going when the app stops ends with it: the panel says so instead of just going quiet.
+  await ask('take your time')
+  if (
+    !(await until(
+      async () => (await inPage(panelLog)).some((entry) => entry.startsWith('msg working|')),
+      10_000,
+      100,
+    ))
+  )
+    fail(`K: the slow run did not start before the restart: ${JSON.stringify(await inPage(panelLog))}`)
   await stopGroup(server)
+  if (
+    !(await until(
+      async () =>
+        (await inPage(panelLog)).some((entry) =>
+          entry.startsWith('msg err|The app stopped while the agent was working'),
+        ),
+      10_000,
+      100,
+    ))
+  )
+    fail(
+      `K: a run cut short by the restart was not reported in the panel: ${JSON.stringify(await inPage(panelLog))}`,
+    )
   output = ''
   server = startGroup('npm', ['start'], {
     cwd: app,
