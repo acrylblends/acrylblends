@@ -189,6 +189,26 @@ async function checkFrameInBrowser(origin, jar, output) {
       log(
         'the page renders the ACRYL frame (canvas and Projects panel), and the door page script runs',
       )
+      // Settings > Models must mount the account sign-in card (the ported client half), not only activate its host row.
+      const click = async (label) =>
+        await evaluate(`(() => {
+          const wanted = ${JSON.stringify(label)}
+          const element = [...document.querySelectorAll('button,[role=button],a')]
+            .find(candidate => candidate.getAttribute('aria-label') === wanted || candidate.textContent.trim() === wanted)
+          if (element === undefined) return false
+          element.click()
+          return true
+        })()`)
+      await click('Settings')
+      await sleep(900)
+      await click('Models')
+      await sleep(1200)
+      const signInCard = await until(
+        async () => await evaluate(`document.querySelector('.acrylSignIn') !== null`),
+        10_000,
+      )
+      if (signInCard !== true) fail('the account sign-in card is not mounted in Settings > Models')
+      log('Settings > Models mounts the account sign-in card')
     } finally {
       cdp.close()
     }
