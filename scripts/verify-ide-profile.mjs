@@ -406,6 +406,37 @@ async function checkChatInBrowser(origin, jar, { app, home, mock }) {
     )
     await page.evaluate(clickExpression('Continue'))
     await sleep(800)
+    // A boot sometimes lands on the canvas with no chat tab open (the workspace opens on the project tree); a person opens the chat, so the
+    // check does the same before looking for the first-run card. Sidebar session first (its own chat), then the New tab menu.
+    const chatOpen = async () =>
+      await page.evaluate(`document.querySelector('.dshWorkspaceChat') !== null`)
+    if (!(await chatOpen())) {
+      await page.evaluate(`(() => {
+        const leaf = [...document.querySelectorAll('.dshWorkspaceSide *')].find(element =>
+          element.closest('.dshWorkspaceUpstreamHost') === null
+          && element.children.length === 0
+          && element.textContent.trim() !== ''
+          && element.closest('button,[role="button"],[role="treeitem"]') !== null)
+        const target = leaf?.closest('button,[role="button"],[role="treeitem"]')
+        if (target) target.click()
+      })()`)
+      await until(chatOpen, 10_000)
+    }
+    if (!(await chatOpen())) {
+      await page.evaluate(`(() => {
+        const button = [...document.querySelectorAll('button')].find(element =>
+          (element.getAttribute('aria-label') ?? '').trim() === 'New tab' || element.textContent.trim() === 'New tab')
+        if (button) button.click()
+      })()`)
+      await sleep(400)
+      await page.evaluate(`(() => {
+        const item = [...document.querySelectorAll('button,[role="menuitem"],[role="option"]')].find(element =>
+          /^(chat|conversation)$/iu.test(element.textContent.trim())
+          || /chat|conversation/iu.test(element.getAttribute('aria-label') ?? ''))
+        if (item) item.click()
+      })()`)
+      await until(chatOpen, 15_000)
+    }
     const card = await until(
       async () =>
         await page.evaluate(`(() => {
@@ -419,6 +450,7 @@ async function checkChatInBrowser(origin, jar, { app, home, mock }) {
         url: location.href,
         side: document.querySelector('.dshWorkspaceSide')?.innerText.slice(0, 300) ?? null,
         chat: document.querySelector('.dshWorkspaceChat')?.innerText.slice(0, 200) ?? null,
+        tabs: [...document.querySelectorAll('[role="tab"], .dshWorkspaceTabs button')].map(tab => tab.textContent.trim()).slice(0, 12),
         buttons: [...document.querySelectorAll('button')].map(button => button.getAttribute('aria-label') ?? button.textContent.trim()).slice(0, 30),
       })`)
       fail(`the first-run connect card did not appear in the chat: ${JSON.stringify(snapshot)}`)
