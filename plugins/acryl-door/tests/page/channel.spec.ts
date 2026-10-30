@@ -26,8 +26,9 @@ let now = 0
 let sources: FakeSource[] = []
 let posts: Array<{ url: string; body: unknown }> = []
 
-function channel(driver = new UiDriver({ document: () => document })): PageChannel {
+function channel(driver = new UiDriver({ document: () => document }), onRun?: (running: boolean) => void): PageChannel {
   return new PageChannel(driver, {
+    ...(onRun === undefined ? {} : { onRun }),
     windowId: 'w-1',
     focused: () => true,
     base: '/api/acryl-door',
@@ -48,6 +49,20 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers() })
 
 describe('PageChannel', () => {
+  it('tells the page when a run asked for from its panel starts and ends, and that it stopped hearing when the stream is lost', () => {
+    const told: boolean[] = []
+    const page = channel(undefined, running => told.push(running))
+    page.connect()
+    sources[0]?.emit('run', '1')
+    sources[0]?.emit('run', '0')
+    sources[0]?.emit('run', '1')
+    expect(told).toEqual([true, false, true])
+    // The stream goes (the page is hidden for good): a run that ends meanwhile cannot be heard, so the bar does not stay up on its own.
+    page.suspend()
+    expect(told.at(-1)).toBe(false)
+    page.dispose()
+  })
+
   it('opens the stream with its window id and focus, and posts each call\'s answer naming the window', async () => {
     const page = channel()
     page.connect()

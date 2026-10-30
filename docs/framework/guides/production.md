@@ -48,6 +48,26 @@ Installing a plugin (`ctx.extensions.install`, the door's `plugin add`, the buil
 - It **stops**: reading any file outside the tool's own folder; writing files; starting child processes or workers; loading native addons; using the inspector. It gets an empty environment (no keys, no paths). It is killed after a time limit and capped in memory and output size. Calls are independent: nothing survives into the next one.
 - It **does not stop**: network access (Node 24 has no network permission: restrict egress outside the process where that matters), and it does not apply to plugins installed live (those are not run in the sandbox).
 
+## The address and the port
+
+A server made from a template listens on `127.0.0.1` and starts looking for a free port at a number of its own (3100 and up, chosen from the app's folder). A hosting platform tells the process where to listen with `PORT`, and a container needs `0.0.0.0` to be reached from outside. The app reads four variables, in this order:
+
+| What | First | Then | Otherwise |
+| --- | --- | --- | --- |
+| The port to start from (`0` for any free port) | `ACRYLBLENDS_PORT` | `PORT` | a number of its own, from the app's folder |
+| The interface | `ACRYLBLENDS_HOST` | `HOST` | `127.0.0.1` (this machine only) |
+
+`PORT` and `HOST` have been read since 1.1.0; before it, the `agent` and `blank` templates ignored `PORT` (`PORT=3299` still listened on the app's own number). If the port is taken the server tries the next ones, and the line it prints at start (`app listening on http://0.0.0.0:3299`) says which it got; a platform that routes to a fixed port should be given one that is free. For example, on a plain server:
+
+```sh
+npm ci --omit=dev
+NODE_ENV=production HOST=0.0.0.0 PORT=3299 npm start
+# app listening on http://0.0.0.0:3299 (data in /srv/app/.acrylblends; ...)
+curl http://127.0.0.1:3299/health
+```
+
+Putting the app on `0.0.0.0` makes it reachable by anyone who can reach the machine: put the login or the proxy in front first (see the checklist below).
+
 ## Checklist for a deployment
 
 1. `NODE_ENV=production` (the process manager or the Dockerfile sets it; the templates' Dockerfile does).

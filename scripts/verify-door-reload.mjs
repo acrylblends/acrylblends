@@ -111,18 +111,21 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   if (!withEntry.includes('  rowpage,\n') || !withEntry.includes('import * as rowpage'))
     fail('the agent template no longer has the registry where this gate registers its own plugin')
   writeFileSync(source, withEntry)
-  // A plugin that owns a state cell and changes it on POST /tick: section G follows it from a page whose connections are all held.
+  // A plugin that owns a state cell and changes it on POST /tick (section G follows it from a page whose connections are all held), and teaches the scripted model one command: "look here"
+  // makes the app's own agent call the door's look, as an agent in the panel does (section H asks it from one of two tabs).
   mkdirSync(join(app, 'plugins', 'ticker'))
   writeFileSync(
     join(app, 'plugins', 'ticker', 'index.ts'),
     `import { Acryl } from 'acryl-router'
 
 export const name = 'ticker'
-export const inject = ['router', 'state']
+export const inject = ['router', 'state', 'model', 'tools']
 
-export function apply(ctx: { router: { route(path: string, app: unknown): void }; state: { cell(key: string, initial: number): { update(change: (n: number) => number): void } } }) {
+export function apply(ctx: { router: { route(path: string, app: unknown): void }; state: { cell(key: string, initial: number): { update(change: (n: number) => number): void } }; model: { teach?(rule: (input: { question: string; step: number }) => unknown): () => void }; tools: { register(name: string, tool: { description: string; parameters: object; run(input: unknown): Promise<string> }): () => void } }) {
   const count = ctx.state.cell('ticker.count', 0)
   ctx.router.route('/', new Acryl().post('/tick', (c) => { count.update((n) => n + 1); return c.json({ ok: true }) }))
+  ctx.tools.register('slow', { description: 'takes three seconds', parameters: {}, run: async () => { await new Promise((resolve) => setTimeout(resolve, 3000)); return 'slept' } })
+  ctx.model.teach?.(({ question, step }) => (step !== 0 ? undefined : question.trim() === 'look here' ? { tool: 'door_look', input: {} } : question.trim() === 'take your time' ? { tool: 'slow', input: {} } : undefined))
 }
 `,
   )
@@ -545,6 +548,148 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   await inPage('window.__stopTicks(); window.__hogs.forEach((source) => source.close()); true')
   log(
     'G: with six streams held open in the page, watch of a state key still shows every change (one WebSocket, not a seventh connection)',
+  )
+  // H, the page whose panel asked is the page the agent drives (found on macOS: a browser tab left open from an earlier block took the calls of a question asked in a window). Two tabs of
+  // the app: the panel's, behind, and another in front that the agent navigated earlier (so the Host insists on it). A question asked in the panel's tab makes the app's agent look, and the
+  // look must be of the panel's own page, not of the tab in front.
+  const hOtherTab = await fetch(`http://127.0.0.1:${devPort}/json/new?${base}/p2`, {
+    method: 'PUT',
+  }).then((r) => r.json())
+  await until(async () => (await appTabs()).length === 2, 15_000)
+  await activate(hOtherTab)
+  await sleep(700)
+  const hMoved = timed('act', 'navigate', '--path', '/p2')
+  if (hMoved.code !== 0) fail(`H: act navigate with two tabs failed:\n${hMoved.out}${hMoved.err}`)
+  await panelCdp.send('Page.navigate', { url: `${base}/p1` })
+  await until(
+    async () =>
+      (await inPage(
+        "!!document.getElementById('agent-panel')?.shadowRoot?.querySelector('button.open')",
+      )) === true,
+    20_000,
+  )
+  await activate(hOtherTab)
+  await sleep(700)
+  const hOtherFirst = timed('look')
+  if (hOtherFirst.code !== 0 || !hOtherFirst.out.includes('Second page'))
+    fail(
+      `H: the tab in front is not the page a plain look reads, so this section proves nothing:\n${hOtherFirst.out}${hOtherFirst.err}`,
+    )
+  await inPage(
+    "(() => { const root = document.getElementById('agent-panel').shadowRoot; root.querySelector('button.open').click(); const box = root.querySelector('textarea'); box.value = 'look here'; root.querySelector('form').requestSubmit(); return true })()",
+  )
+  // The log still shows the earlier run the page found on load: read what follows this question.
+  const afterQuestion = (lines) => lines.slice(lines.lastIndexOf('msg me|look here') + 1)
+  const hReading = await until(async () => {
+    const lines = await inPage(panelLog)
+    return (
+      Array.isArray(lines) &&
+      lines.includes('msg me|look here') &&
+      afterQuestion(lines).find(
+        (entry) => entry.startsWith('msg md|') && entry.includes('The answer is'),
+      )
+    )
+  }, 20_000)
+  if (!hReading)
+    fail(
+      `H: the question asked in the panel was not answered: ${JSON.stringify(await inPage(panelLog))}`,
+    )
+  if (!hReading.includes('Version') || hReading.includes('Second page'))
+    fail(
+      `H: the agent's look from the panel's page read the other tab, not the page that asked: ${hReading.slice(0, 300)}`,
+    )
+  await fetch(`http://127.0.0.1:${devPort}/json/close/${hOtherTab.id}`)
+  log("H: with another tab in front, the agent asked from a page's panel looks at that page")
+  // I, the "Agent is driving" bar stays up for the whole of a run asked for from this page's panel, between the calls too, with a Stop that ends the run. The app's agent is taught a
+  // tool that takes three seconds and makes no door call: the bar must be there all that time, and gone when the run ends.
+  const bar = () =>
+    inPage(
+      "(() => { const el = document.querySelector('.acrylDoorBar'); return el === null ? null : el.textContent })()",
+    )
+  const ask = (text) =>
+    inPage(
+      `(() => { const root = document.getElementById('agent-panel').shadowRoot; const box = root.querySelector('textarea'); box.value = ${JSON.stringify(text)}; root.querySelector('form').requestSubmit(); return true })()`,
+    )
+  await panelCdp.send('Page.navigate', { url: `${base}/p1` })
+  await until(
+    async () =>
+      (await inPage(
+        "!!document.getElementById('agent-panel')?.shadowRoot?.querySelector('button.open')",
+      )) === true,
+    20_000,
+  )
+  await inPage(
+    "document.getElementById('agent-panel').shadowRoot.querySelector('button.open').click(); true",
+  )
+  if ((await bar()) !== null) fail('I: the bar is up with no run going')
+  await ask('take your time')
+  if (!(await until(async () => (await bar()) !== null, 5_000, 50)))
+    fail('I: the bar did not come up when the run started')
+  const seenWhile = []
+  const started = Date.now()
+  while (Date.now() - started < 2000) {
+    seenWhile.push(await bar())
+    await sleep(250)
+  }
+  if (seenWhile.some((text) => text === null || !text.includes('Agent is driving')))
+    fail(
+      `I: the bar was not up for the whole of a run with no call in flight: ${JSON.stringify(seenWhile)}`,
+    )
+  if (!(await until(async () => (await bar()) === null, 10_000)))
+    fail(`I: the bar is still up after the run ended: ${await bar()}`)
+  // Stop on the bar ends a run that is going.
+  await ask('take your time')
+  await until(async () => (await bar()) !== null, 5_000)
+  await inPage("document.querySelector('.acrylDoorBar button').click(); true")
+  const cancelled = await until(async () => {
+    const lines = await inPage(panelLog)
+    return Array.isArray(lines) && lines.some((entry) => entry.includes('The run was cancelled'))
+  }, 15_000)
+  if (!cancelled)
+    fail(`I: Stop on the bar did not end the run: ${JSON.stringify(await inPage(panelLog))}`)
+  if (!((await bar()) ?? '').includes('Agent stopped'))
+    fail(`I: after Stop the bar does not say the agent stopped: ${await bar()}`)
+  await inPage("document.querySelector('.acrylDoorBar button').click(); true")
+  if ((await bar()) !== null) fail('I: Allow again did not take the bar down')
+  log(
+    'I: the Agent is driving bar stays up for the whole of a run, between the calls, and its Stop ends the run',
+  )
+
+  // J, the appearance chosen in one window reaches the others at once (the storage event), and the page's colours follow it.
+  const homeTab = await fetch(`http://127.0.0.1:${devPort}/json/new?${base}/`, {
+    method: 'PUT',
+  }).then((r) => r.json())
+  const homeCdp = await devtools(devPort, homeTab)
+  const inHome = async (expression) =>
+    (await homeCdp.send('Runtime.evaluate', { expression, returnByValue: true })).result?.result
+      ?.value
+  await until(async () => (await inHome('document.readyState')) === 'complete', 15_000)
+  const look = () =>
+    inHome(
+      'JSON.stringify({ theme: document.documentElement.dataset.theme ?? null, background: getComputedStyle(document.documentElement).backgroundColor })',
+    )
+  for (const [value, theme, background] of [
+    ['dark', 'dark', 'rgb(17, 24, 39)'],
+    ['light', 'light', 'rgb(255, 255, 255)'],
+    [null, null, undefined],
+  ]) {
+    await inPage(
+      value === null
+        ? "localStorage.removeItem('theme'); true"
+        : `localStorage.setItem('theme', '${value}'); true`,
+    )
+    const reached = await until(async () => JSON.parse(await look()).theme === theme, 5_000, 100)
+    if (!reached)
+      fail(
+        `J: the appearance set to ${value} in one window did not reach the other: ${await look()}`,
+      )
+    if (background !== undefined && JSON.parse(await look()).background !== background)
+      fail(`J: the page's colours did not follow the appearance ${value}: ${await look()}`)
+  }
+  homeCdp.close()
+  await fetch(`http://127.0.0.1:${devPort}/json/close/${homeTab.id}`)
+  log(
+    'J: the appearance chosen in one window reaches an open page of another at once, with its colours',
   )
   panelCdp.close()
   log('OK')

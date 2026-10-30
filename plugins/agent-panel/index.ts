@@ -42,6 +42,11 @@ export const name = 'agent-panel'
 export const inject = ['router', 'agent', 'extensions', 'appInstance']
 
 const PREFIX = '/api/agent-panel'
+
+/** The slice of the door the panel uses; the door is optional (it is a development plugin, and a different row). */
+interface DoorPort {
+  driveFor(windowId: string): () => void
+}
 const CLIENT_DIR = join(import.meta.dirname, 'client')
 
 export interface PanelConfig {
@@ -123,10 +128,14 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
     .post(`${PREFIX}/ask`, async (c) => {
       if (!fromOwnPage(c.req.raw.headers) || c.req.header('x-agent-panel-token') !== token)
         return c.json({ error: "only the app's own page may ask" }, 403)
-      const body = (await c.req.json().catch(() => ({}))) as { message?: unknown; driver?: unknown }
+      const body = (await c.req.json().catch(() => ({}))) as {
+        message?: unknown
+        driver?: unknown
+        page?: unknown
+      }
       const checked = checkAsk(body.message, body.driver)
       if ('error' in checked) return c.json({ error: checked.error }, checked.status)
-      const run = startRun(checked.driverName, checked.message, checked.driver)
+      const run = startRun(checked.driverName, checked.message, checked.driver, pageOf(body.page))
       return follow(c, run, false)
     })
     // Stop: the only thing that cancels a run. A page that goes away (a reload, a move to another page, a closed tab) does not: the agent goes on, and the page picks it up again.
@@ -184,7 +193,15 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
   }
   let current: Run | undefined
   let runs = 0
-  const startRun = (driverName: string, message: string, driver: ChatDriver): Run => {
+  /** The door's id of the page that asked, when it sent one that looks like it. */
+  const pageOf = (raw: unknown): string | undefined =>
+    typeof raw === 'string' && /^[A-Za-z0-9-]{1,80}$/u.test(raw) ? raw : undefined
+  const startRun = (
+    driverName: string,
+    message: string,
+    driver: ChatDriver,
+    page?: string,
+  ): Run => {
     runs += 1
     const run: Run = {
       id: runs,
@@ -209,6 +226,9 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
     })
     ctx.effect(() => () => run.cancel.abort(), `agent-panel: run ${runs}`)
     audit({ ask: 'start', driver: driverName, characters: message.length })
+    // The agent's door calls name no window: while this run goes, they are for the page whose panel asked, not for another tab or window that happens to be open.
+    const door = page === undefined ? undefined : (ctx.get('door') as DoorPort | undefined)
+    const releasePage = door?.driveFor(page as string)
     void (async () => {
       try {
         for await (const { event, data } of driver.start({ message, signal: run.cancel.signal }))
@@ -218,6 +238,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
         emit('error', { message: error instanceof Error ? error.message : String(error) })
       } finally {
         off()
+        releasePage?.()
         run.ended = true
         run.endedAt = Date.now()
         audit({ ask: 'end', driver: driverName, changed })
@@ -339,7 +360,13 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
             },
             onMessage(event, ws) {
               if (typeof event.data !== 'string') return
-              let message: { t?: unknown; token?: unknown; message?: unknown; driver?: unknown }
+              let message: {
+                t?: unknown
+                token?: unknown
+                message?: unknown
+                driver?: unknown
+                page?: unknown
+              }
               try {
                 message = JSON.parse(event.data) as typeof message
               } catch {
@@ -374,7 +401,15 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
                   ws.close(1000, 'refused')
                   return
                 }
-                watch(startRun(checked.driverName, checked.message, checked.driver), false)
+                watch(
+                  startRun(
+                    checked.driverName,
+                    checked.message,
+                    checked.driver,
+                    pageOf(message.page),
+                  ),
+                  false,
+                )
               } else if (message.t === 'follow') {
                 if (current === undefined) {
                   send('idle', {})

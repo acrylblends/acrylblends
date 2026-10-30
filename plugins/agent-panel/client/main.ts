@@ -42,6 +42,14 @@ interface RunSource {
   readonly events: AsyncIterable<PanelEvent>
 }
 
+/** The door's id for this page, when the door is in it: sent with a question so the agent's calls (which name no window) drive this page and not another open one. */
+function doorPage(): { page?: string } {
+  const published = (window as unknown as Record<symbol, { windowId?: unknown } | undefined>)[
+    Symbol.for('acryl.door.page')
+  ]
+  return typeof published?.windowId === 'string' ? { page: published.windowId } : {}
+}
+
 /** A WebSocket is not one of the browser's six connections per host, so the panel's Stop and a run still work when two windows stream their own state. */
 let socketBroken = false
 let activeSocket: WebSocket | undefined
@@ -266,15 +274,18 @@ async function start(): Promise<void> {
   // loads next follows it again. Only Stop cancels it.
   const headers = { 'content-type': 'application/json', 'x-agent-panel-token': session.token }
   let following = false
-  stop.addEventListener('click', () => {
+  const stopRun = (): void => {
     // On the run's socket when there is one: a request would wait behind the browser's six connections per host.
     if (activeSocket?.readyState === WebSocket.OPEN)
       activeSocket.send(JSON.stringify({ t: 'stop' }))
     else void fetch(`${PREFIX}/stop`, { method: 'POST', headers })
-  })
+  }
+  stop.addEventListener('click', stopRun)
+  // The door's "Agent is driving" bar has a Stop too (the same page): it ends this run.
+  window.addEventListener('acryl:stop-run', stopRun)
   /** A run over the socket when the server upgrades, else over the stream, with one console warning saying why. */
   const openRun = async (
-    action: { t: 'ask'; message: string; driver: string } | { t: 'follow' },
+    action: { t: 'ask'; message: string; driver: string; page?: string } | { t: 'follow' },
   ): Promise<RunSource | { error: string } | undefined> => {
     if (!socketBroken && typeof WebSocket !== 'undefined') {
       try {
@@ -295,7 +306,7 @@ async function start(): Promise<void> {
       const response = await fetch(`${PREFIX}/ask`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ message: action.message, driver: action.driver }),
+        body: JSON.stringify({ message: action.message, driver: action.driver, page: action.page }),
       })
       if (!response.ok)
         return {
@@ -400,7 +411,7 @@ async function start(): Promise<void> {
     input.value = ''
     line(message, 'me')
     try {
-      const run = await openRun({ t: 'ask', message, driver: driver.value })
+      const run = await openRun({ t: 'ask', message, driver: driver.value, ...doorPage() })
       if (run === undefined) return
       if ('error' in run) {
         line(run.error, 'err')

@@ -1,12 +1,16 @@
 /**
- * "The agent is driving" bar with its kill switch, in plain DOM (the React one in `acryl-agent-control` shows the same states). Shown while
- * a call runs and after the person stopped the agent. It is marked as driver UI (so snapshots skip it) and as off limits to the agent (so
+ * "The agent is driving" bar with its kill switch, in plain DOM (the React one in `acryl-agent-control` shows the same states). Shown for the whole of a run asked for from
+ * this page's panel (between the calls too), while a call runs, and after the person stopped the agent. Stop kills the page's control and asks the panel to stop the run (the
+ * `acryl:stop-run` event on the window, which the panel listens for). It is marked as driver UI (so snapshots skip it) and as off limits to the agent (so
  * it can never press its own Stop or Allow buttons). Escape stops the agent too, while it is working.
  */
 
 import type { DriverActivity, UiDriver } from './driver/driver.ts'
 
 const LABELS: Record<string, string> = { snapshot: 'looking at the page', click: 'clicking', type: 'typing', select: 'choosing an option', press: 'pressing a key', scroll: 'scrolling', wait: 'waiting' }
+
+/** Dispatched on the page's window by the Stop button: the agent panel in the same page cancels its run. */
+export const STOP_RUN_EVENT = 'acryl:stop-run'
 
 const STYLE_ID = 'acryl-door-indicator-style'
 const STYLES = `
@@ -32,13 +36,17 @@ export function mountIndicator(driver: UiDriver, document: Document): () => void
   bar.setAttribute('role', 'status')
   bar.setAttribute('aria-live', 'polite')
 
+  const stopAgent = (): void => {
+    driver.kill()
+    document.defaultView?.dispatchEvent(new CustomEvent(STOP_RUN_EVENT))
+  }
   const onKey = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && event.isTrusted && driver.activity.busy) driver.kill()
+    if (event.key === 'Escape' && event.isTrusted && (driver.activity.busy || driver.activity.running)) stopAgent()
   }
   document.addEventListener('keydown', onKey, true)
 
   const render = (activity: DriverActivity): void => {
-    if (!activity.busy && !activity.killed) { bar.remove(); return }
+    if (!activity.busy && !activity.running && !activity.killed) { bar.remove(); return }
     const button = document.createElement('button')
     button.type = 'button'
     const text = document.createElement('span')
@@ -53,9 +61,9 @@ export function mountIndicator(driver: UiDriver, document: Document): () => void
       const dot = document.createElement('span')
       dot.className = 'acrylDoorDot'
       dot.setAttribute('aria-hidden', 'true')
-      text.textContent = `Agent is driving: ${LABELS[activity.doing] ?? activity.doing}`
+      text.textContent = `Agent is driving: ${activity.busy ? (LABELS[activity.doing] ?? activity.doing) : 'working on your request'}`
       button.textContent = 'Stop'
-      button.addEventListener('click', () => { driver.kill() })
+      button.addEventListener('click', stopAgent)
       bar.replaceChildren(dot, text, button)
     }
     if (!bar.isConnected) document.body.append(bar)

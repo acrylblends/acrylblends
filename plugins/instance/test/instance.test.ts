@@ -46,6 +46,27 @@ test('the interface is loopback unless the environment names one (a container se
   assert.equal(chosen.host, '0.0.0.0')
 })
 
+test('PORT and HOST, the names hosting platforms set, are read when the ACRYLBLENDS_ ones are not, and lose to them', () => {
+  const platform = selectInstance({
+    projectRoot: '/work/shop',
+    env: { PORT: '3299', HOST: '0.0.0.0' },
+  })
+  assert.deepEqual(platform.port, { start: 3299, scan: true })
+  assert.equal(platform.host, '0.0.0.0')
+  const both = selectInstance({
+    projectRoot: '/work/shop',
+    env: { PORT: '3299', HOST: '0.0.0.0', ACRYLBLENDS_PORT: '3400', ACRYLBLENDS_HOST: '127.0.0.1' },
+  })
+  assert.equal(both.port.start, 3400)
+  assert.equal(both.host, '127.0.0.1')
+  // An empty ACRYLBLENDS_PORT is not a choice: the platform's PORT is.
+  assert.equal(
+    selectInstance({ projectRoot: '/work/shop', env: { ACRYLBLENDS_PORT: ' ', PORT: '3299' } }).port
+      .start,
+    3299,
+  )
+})
+
 test('an invalid port is refused', () => {
   assert.throws(() => withPort(projectInstance('/x'), 70_000), /port must be/)
 })

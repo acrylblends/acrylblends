@@ -66,7 +66,7 @@ async function boot() {
       headers: { 'sec-fetch-site': 'same-origin' },
     })
   ).json()) as { token: string }
-  return { origin, token: session.token }
+  return { origin, token: session.token, app }
 }
 
 const wsUrl = (origin: string): string => `${origin.replace('http', 'ws')}/api/agent-panel/run/ws`
@@ -176,4 +176,23 @@ test('a refused ask says why in an error frame; with nothing to follow it says i
     (await idleDone).frames.map((frame) => frame.e),
     ['idle'],
   )
+})
+
+test('an ask that names the page it came from has the door drive that page while the run goes, and let go when it ends; a page name that is not an id is ignored', async () => {
+  const { origin, token, app } = await boot()
+  const seen: string[] = []
+  app.provide('door', {
+    driveFor(page: string) {
+      seen.push(`for ${page}`)
+      return () => seen.push(`end ${page}`)
+    },
+  })
+  for (const page of ['4f1c-window', 'not an id!', undefined]) {
+    const socket = await open(origin)
+    const done = drain(socket)
+    socket.send(JSON.stringify({ t: 'hello', token }))
+    socket.send(JSON.stringify({ t: 'ask', message: 'add 2 3', page }))
+    assert.equal((await done).frames.at(-1)?.e, 'done')
+  }
+  assert.deepEqual(seen, ['for 4f1c-window', 'end 4f1c-window'])
 })

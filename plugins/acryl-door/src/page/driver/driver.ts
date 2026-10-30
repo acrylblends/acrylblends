@@ -19,6 +19,8 @@ export const LEAVE_DELAY_MS = 150
 export interface DriverActivity {
   /** True from the moment a call starts until it ends. */
   readonly busy: boolean
+  /** True from the moment a run asked for from this page's panel starts until it ends, between the calls too. */
+  readonly running: boolean
   /** What the agent is doing, for the indicator ("click", "type", ...). */
   readonly doing: string
   /** True after the user pressed the kill switch. */
@@ -53,7 +55,8 @@ export class UiDriver {
   private disposed = false
   private busyCount = 0
   private doing = ''
-  private current: DriverActivity = { busy: false, doing: '', killed: false }
+  private current: DriverActivity = { busy: false, running: false, doing: '', killed: false }
+  private runningFlag = false
 
   private readonly options: UiDriverOptions
 
@@ -79,6 +82,17 @@ export class UiDriver {
     for (const controller of [...this.stopAll]) controller.abort(new UiControlError('killed', 'the user stopped the agent'))
     this.refs.clear()
     this.snapshots.clear()
+    this.emit()
+  }
+
+  /**
+   * A run asked for from this page's panel starts (`true`) or ends (`false`). The indicator stays up for the whole run, not only while a call is in flight. A new run is a new
+   * question from the person, so it also allows the agent to drive again after an earlier Stop.
+   */
+  setRunning(running: boolean): void {
+    if (running === this.runningFlag) return
+    this.runningFlag = running
+    if (running) this.killedFlag = false
     this.emit()
   }
 
@@ -165,8 +179,8 @@ export class UiDriver {
   }
 
   private emit(): void {
-    const next: DriverActivity = { busy: this.busyCount > 0, doing: this.doing, killed: this.killedFlag }
-    if (next.busy === this.current.busy && next.doing === this.current.doing && next.killed === this.current.killed) return
+    const next: DriverActivity = { busy: this.busyCount > 0, running: this.runningFlag, doing: this.doing, killed: this.killedFlag }
+    if (next.busy === this.current.busy && next.running === this.current.running && next.doing === this.current.doing && next.killed === this.current.killed) return
     this.current = next
     const activity = next
     for (const listener of [...this.listeners]) listener(activity)

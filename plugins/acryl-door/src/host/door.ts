@@ -90,6 +90,11 @@ export class Door {
     this.deps = deps
   }
 
+  /** A run asked for from the panel of this page is going: its verbs that name no window are for that page. @returns the function to call when the run ends. */
+  driveFor(windowId: string): () => void {
+    return this.deps.channel.driveFor(windowId)
+  }
+
   /** Run one verb. @throws DoorError or UiControlError. */
   async run(verb: string, args: unknown, signal: AbortSignal): Promise<VerbAnswer> {
     const input = (typeof args === 'object' && args !== null && !Array.isArray(args) ? args : {}) as Record<string, unknown>

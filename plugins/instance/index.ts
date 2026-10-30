@@ -44,6 +44,9 @@ export const PORT_SPAN = 900
 export const HOME_ENV = 'ACRYLBLENDS_HOME'
 export const PORT_ENV = 'ACRYLBLENDS_PORT'
 export const HOST_ENV = 'ACRYLBLENDS_HOST'
+/** The names hosting platforms set: used when `ACRYLBLENDS_PORT` and `ACRYLBLENDS_HOST` are not. */
+export const PLATFORM_PORT_ENV = 'PORT'
+export const PLATFORM_HOST_ENV = 'HOST'
 
 export class AppInstanceError extends Error {
   override name = 'AppInstanceError'
@@ -134,7 +137,7 @@ export function withPort(instance: AppInstance, start: number): AppInstance {
 
 /**
  * Choose the instance. The only place that reads the environment: `ACRYLBLENDS_HOME` pins the home, `ACRYLBLENDS_PORT` sets the start port, `ACRYLBLENDS_HOST` the interface;
- * otherwise the project folder decides.
+ * hosting platforms set `PORT` and `HOST` instead, and those are read when the `ACRYLBLENDS_` ones are not; otherwise the project folder decides.
  */
 export function selectInstance(options: {
   projectRoot: string
@@ -145,9 +148,9 @@ export function selectInstance(options: {
   let instance = pinned
     ? pinnedInstance(pinned, { name: plainName(options.projectRoot), root: options.projectRoot })
     : projectInstance(options.projectRoot)
-  const port = env[PORT_ENV]?.trim()
+  const port = env[PORT_ENV]?.trim() || env[PLATFORM_PORT_ENV]?.trim()
   if (port) instance = withPort(instance, Number(port))
-  const host = env[HOST_ENV]?.trim()
+  const host = env[HOST_ENV]?.trim() || env[PLATFORM_HOST_ENV]?.trim()
   if (host) instance = Object.freeze({ ...instance, host })
   return instance
 }

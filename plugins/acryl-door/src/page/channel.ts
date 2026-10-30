@@ -41,6 +41,8 @@ export interface PageChannelOptions {
   readonly post?: (url: string, body: string) => Promise<unknown>
   readonly silenceMs?: number
   readonly now?: () => number
+  /** The Host says a run asked for from this page's panel started (`true`) or ended (`false`); false too when the stream is lost, until the Host says again. */
+  readonly onRun?: (running: boolean) => void
 }
 
 export class PageChannel {
@@ -85,6 +87,10 @@ export class PageChannel {
       heard()
     })
     source.addEventListener('ping', heard)
+    source.addEventListener('run', (event) => {
+      heard()
+      this.options.onRun?.(event.data === '1')
+    })
     source.addEventListener('call', (event) => {
       heard()
       if (typeof event.data === 'string') this.answer(event.data)
@@ -158,6 +164,8 @@ export class PageChannel {
     if (source !== undefined) {
       source.onerror = null
       source.close()
+      // Without the stream the page cannot hear the run end: the Host says again if it is still going, once the stream is back.
+      this.options.onRun?.(false)
     }
   }
 

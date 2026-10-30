@@ -8,8 +8,10 @@ import { UiChannel, type PageStream } from '../../src/host/channel.ts'
  */
 function fakePage(channel: UiChannel, windowId: string, focused = true, shellWindow?: number, reply?: 'ack' | 'full') {
   const sent: ChannelToPage[] = []
+  const notes: string[] = []
   const stream: PageStream & { closed: boolean } = {
     closed: false,
+    notify: (event, data) => { notes.push(`${event}=${data}`) },
     send: (data) => {
       const frame = JSON.parse(data) as ChannelToPage
       sent.push(frame)
@@ -22,7 +24,7 @@ function fakePage(channel: UiChannel, windowId: string, focused = true, shellWin
     close() { this.closed = true },
   }
   const end = channel.attach(windowId, focused, stream, shellWindow)
-  return { end, sent, stream, answer: (message: Parameters<UiChannel['receive']>[1]) => { channel.receive(windowId, message) } }
+  return { end, sent, notes, stream, answer: (message: Parameters<UiChannel['receive']>[1]) => { channel.receive(windowId, message) } }
 }
 
 const click: UiRequest = { op: 'click', ref: '1.1' }
@@ -272,6 +274,90 @@ describe('waiting for pages to come back', () => {
       expect(panel.sent).toHaveLength(2)
       panel.answer({ t: 'result', id: 3, value: { ok: true } })
       await third
+    })
+
+    it('drives the page whose panel asked for the run, over a tab the Host sent somewhere and over the page in front, until the run ends', async () => {
+      const channel = new UiChannel()
+      const tab = fakePage(channel, 'tab', true, undefined, 'full')
+      const window = fakePage(channel, 'window', false, 3, 'full')
+      // The agent navigated the tab earlier in the day, so the Host insists on it, and the tab is the page in front.
+      channel.prefer('tab')
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'tab' })
+      // A run asked for from the window's panel: its calls (no `window` named) go to the window.
+      const end = channel.driveFor('window')
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'window' })
+      expect(await channel.call(lookOp)).toEqual({ ok: true, detail: 'window' })
+      // An explicit desktop window still picks its page.
+      const other = fakePage(channel, 'other', false, 9, 'full')
+      expect(await channel.call(click, { window: 9 })).toEqual({ ok: true, detail: 'other' })
+      expect(other.sent).toHaveLength(1)
+      // The person focusing the tab does not take the run away from the page that asked.
+      tab.answer({ t: 'focus', focused: true })
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'window' })
+      end()
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'tab' })
+      expect(window.sent).toHaveLength(3)
+    })
+
+    it('goes on with the other pages when the asking page goes away, and follows it to the page it comes back as', async () => {
+      const channel = new UiChannel()
+      const tab = fakePage(channel, 'tab', true, undefined, 'full')
+      const asking = fakePage(channel, 'asking', false, undefined, 'full')
+      channel.driveFor('asking')
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'asking' })
+      // The asking page reloads: while it is gone the tab answers, and the page that comes back is the one the run drives.
+      asking.end()
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'tab' })
+      fakePage(channel, 'asking-again', false, undefined, 'full')
+      channel.prefer('asking-again')
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'asking-again' })
+      tab.answer({ t: 'focus', focused: true })
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'asking-again' })
+    })
+
+    it('tells the asking page when its run starts and ends, again when it comes back as a new page, and not while another run of the page goes on', async () => {
+      const channel = new UiChannel()
+      const asking = fakePage(channel, 'asking', false, undefined, 'full')
+      const bystander = fakePage(channel, 'bystander', true, undefined, 'full')
+      const endFirst = channel.driveFor('asking')
+      const endSecond = channel.driveFor('asking')
+      expect(asking.notes).toEqual(['run=1', 'run=1'])
+      endFirst()
+      expect(asking.notes).toEqual(['run=1', 'run=1'])
+      endSecond()
+      expect(asking.notes.at(-1)).toBe('run=0')
+      expect(bystander.notes).toEqual([])
+      // A page that reloads during its run is told on reconnecting; the run ending later is told to the page that is there.
+      const end = channel.driveFor('asking')
+      asking.end()
+      const back = fakePage(channel, 'asking-again', false, undefined, 'full')
+      channel.prefer('asking-again')
+      expect(back.notes).toEqual(['run=1'])
+      end()
+      expect(back.notes).toEqual(['run=1', 'run=0'])
+    })
+
+    it('does not put a page that did not answer first because it asked', async () => {
+      const channel = new UiChannel({ ackMs: 30 })
+      const live = fakePage(channel, 'live', true, undefined, 'full')
+      fakePage(channel, 'ghost', true)
+      channel.driveFor('ghost')
+      // The ghost is asked first (it asked), is silent, and the live page answers; from then on the ghost is last.
+      expect(await channel.call(lookOp)).toEqual({ ok: true, detail: 'live' })
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'live' })
+      expect(live.sent).toHaveLength(2)
+    })
+
+    it('answers the latest of two runs that are going', async () => {
+      const channel = new UiChannel()
+      fakePage(channel, 'one', false, undefined, 'full')
+      fakePage(channel, 'two', false, undefined, 'full')
+      const endOne = channel.driveFor('one')
+      const endTwo = channel.driveFor('two')
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'two' })
+      endTwo()
+      expect(await channel.call(click)).toEqual({ ok: true, detail: 'one' })
+      endOne()
     })
 
     it('gives up on a read-only call when every page is silent, in the time a page has to acknowledge and not the whole call timeout, and says what to do', async () => {

@@ -43,7 +43,7 @@ export function pageChannelRoutes(channel: UiChannel, options: PageRoutesOptions
         const write = (event: string, data: string): void => {
           stream.writeSSE({ event, data }).catch(end)
         }
-        const detach = channel.attach(windowId, focused, { send: (data) => { write('call', data) }, close: end }, shellWindow)
+        const detach = channel.attach(windowId, focused, { send: (data) => { write('call', data) }, notify: write, close: end }, shellWindow)
         const beat = setInterval(() => { write('ping', '') }, heartbeatMs)
         try {
           write('ready', '')

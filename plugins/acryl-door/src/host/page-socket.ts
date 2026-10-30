@@ -55,7 +55,7 @@ export function pageSocketRoutes(channel: UiChannel, options: PageSocketOptions)
             ws.send(JSON.stringify(frame))
           }
           // A call that cannot be written fails at once (`disconnected`), and a socket that is gone is dropped by its close: the door never holds a call for it.
-          detach = channel.attach(windowId, focused, { send: data => { write({ e: 'call', d: data }) }, close: () => { ws.close(1000, 'replaced') } }, shellWindow)
+          detach = channel.attach(windowId, focused, { send: data => { write({ e: 'call', d: data }) }, notify: (event, data) => { write({ e: event, d: data }) }, close: () => { ws.close(1000, 'replaced') } }, shellWindow)
           write({ e: 'ready' })
           beat = setInterval(() => {
             try { write({ e: 'ping' }) } catch { /* the close event follows */ }
