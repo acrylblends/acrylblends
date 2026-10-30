@@ -50,9 +50,17 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-// DSH hosts the app (slice 1 of the IDE port): the door reads the carrier's address from `acrylWeb`, mounts its routes on the framework's router, and adds its
-// page script to DSH's own index through the web server's index-inject hook (the framework's router.wrap never sees that page). `nodeServer` is gone.
-export const inject = ['router', 'routerHttp', 'acrylWeb', 'appInstance', 'webServer']
+// Two hosts serve the same door. On DSH (slice 1 of the IDE port) the carrier's address comes from `acrylWeb`, upgrades from `routerHttp`, and the page script
+// goes into DSH's own index through the web server's index-inject hook (the framework's router.wrap never sees that page). On the plain node-server host the
+// address and upgrades come from `nodeServer`, and `router.wrap` adds the script. Only `router` and `appInstance` are required; a host without the optional
+// services simply takes the other path, so the door never stays PENDING beside a server that does not provide them.
+export const inject = ['router', 'appInstance']
+
+/** The services a host may provide in place of `acrylWeb`/`routerHttp` (the plain node-server host). */
+interface NodeServerLike {
+  readonly url?: string
+  upgrades?: () => UpgradeWebSocket
+}
 
 export interface Config {
   tools?: { expose?: string[] }
@@ -113,7 +121,19 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   // Development only: nothing is started, mounted or written in production, or when switched off.
   if (process.env.ACRYL_DOOR === 'off' || (process.env.NODE_ENV === 'production' && config.allowInProduction !== true)) return
   const app = ctx.get('appInstance') as unknown as AppFolder
-  const server = ctx.get('acrylWeb') as unknown as Listening
+  // The carrier, as the host provides it: DSH's `acrylWeb`, or the plain node server's own url. Read when used, never captured at apply time.
+  const carrier = (): Listening | undefined => {
+    const web = ctx.get('acrylWeb') as unknown as Listening | undefined
+    if (web !== undefined) return web
+    const node = ctx.get('nodeServer') as unknown as NodeServerLike | undefined
+    if (typeof node?.url !== 'string') return undefined
+    try {
+      const parsed = new URL(node.url)
+      return { host: parsed.hostname, port: Number(parsed.port) }
+    } catch {
+      return undefined
+    }
+  }
   if (typeof app?.root !== 'string') throw new Error('acryl-door: the appInstance service has no app folder (root)')
   const reportError = (operation: string, cause: unknown): void => {
     ctx.logger?.error?.(`acryl-door: failed to ${operation}: ${cause instanceof Error ? cause.message : String(cause)}`)
@@ -167,28 +187,46 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   else ctx.router.route('/', new Acryl().use('*', addScript as never))
   // DSH's own index.html is not a framework route, so `router.wrap` never sees it: the tag goes in through the web server's index-inject hook instead. The
   // tap is owned by this plugin's fiber, so unloading the door takes the tag with it, and the new activation's page routes answer under the new secret.
-  ctx.effect(() => {
-    const taps = ctx.webServer as unknown as { tapIndex?: (transform: (html: string) => string) => () => void }
-    if (typeof taps.tapIndex !== 'function') return () => {}
-    return taps.tapIndex(html => {
-      if (html.includes(`${DOOR_PREFIX}/page.js`)) return html
-      return html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag
-    })
-  }, 'acryl-door: the page script in DSH\'s index')
+  ctx.inject(['webServer'], inner => {
+    inner.effect(() => {
+      const taps = inner.get('webServer') as unknown as { tapIndex?: (transform: (html: string) => string) => () => void } | undefined
+      if (typeof taps?.tapIndex !== 'function') return () => {}
+      return taps.tapIndex(html => {
+        if (html.includes(`${DOOR_PREFIX}/page.js`)) return html
+        return html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag
+      })
+    }, 'acryl-door: the page script in the host index')
+  })
   // The page channel also runs over a WebSocket, which is not one of the browser's six connections per host. Without the `ws` package or an adapter that upgrades, the pages use the stream.
-  let upgrade: UpgradeWebSocket | undefined
-  try {
-    upgrade = (ctx.routerHttp as unknown as { upgrades?: () => UpgradeWebSocket }).upgrades?.()
-  } catch (cause) {
-    reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
+  // The socket upgrade is attached when a host provides one: DSH's `routerHttp` claims the path on its mount (spec 048 T007's shape), the plain node-server
+  // host's `nodeServer.upgrades()` sees every upgrade itself. Whichever arrives first wins, once; without either the pages use the event stream.
+  let socketRoutesAdded = false
+  const attachSocket = (allow: UpgradeWebSocket | undefined): void => {
+    if (socketRoutesAdded || allow === undefined) return
+    socketRoutesAdded = true
+    ctx.router.route('/', pageSocketRoutes(channel, { prefix: DOOR_PREFIX, upgrade: allow }))
   }
-  // The upgrade path is claimed on the router's HTTP mount for the door's prefix (spec 048 T007's shape); without it the pages use the event stream.
-  if (upgrade !== undefined) ctx.routerHttp.mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
+  ctx.inject(['routerHttp'], inner => {
+    const http = inner.get('routerHttp') as unknown as { upgrades?: () => UpgradeWebSocket; mount?: (prefix: string, options: { upgrade: string[] }) => unknown } | undefined
+    try {
+      const allow = http?.upgrades?.()
+      if (allow !== undefined && typeof http?.mount === 'function') http.mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
+      attachSocket(allow)
+    } catch (cause) {
+      reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
+    }
+  })
+  ctx.inject(['nodeServer'], inner => {
+    try {
+      attachSocket((inner.get('nodeServer') as unknown as NodeServerLike | undefined)?.upgrades?.())
+    } catch (cause) {
+      reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
+    }
+  })
   ctx.router.route('/', privateApi(
     DOOR_PREFIX,
     pageModule,
     pageChannelRoutes(channel, { prefix: DOOR_PREFIX }),
-    ...(upgrade === undefined ? [] : [pageSocketRoutes(channel, { prefix: DOOR_PREFIX, upgrade })]),
     shellRoutes(DOOR_PREFIX, secret, shell),
     operatorRoutes(DOOR_PREFIX, secret, door, reportError),
     mcpRoutes(DOOR_PREFIX, secret, door, reportError),
@@ -202,8 +240,13 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   }, 'acryl-door: the door service')
   // The carrier binds asynchronously (DSH's webServer, the node server before it): the address and the file are written once it reports a real port.
   ctx.effect(async () => {
-    for (let at = 0; at < 500 && server.port === 0; at += 1) await new Promise((done) => setTimeout(done, 10))
-    address.url = loopbackUrl(`http://${server.host}:${String(server.port)}`)
+    let bound = carrier()
+    for (let at = 0; at < 500 && (bound === undefined || !(bound.port > 0)); at += 1) {
+      await new Promise((done) => setTimeout(done, 10))
+      bound = carrier()
+    }
+    if (bound === undefined) throw new Error('acryl-door: no carrier bound the app (neither acrylWeb nor nodeServer answered)')
+    address.url = loopbackUrl(`http://${bound.host}:${String(bound.port)}`)
     writeDoorFile(app.root, address.url, secret)
     // A shim that cannot be replaced (Windows, held open by a running `acryl`) leaves the old one in place; it must not stop the app from starting.
     try { writeShims(app.root, shimTarget()) } catch (cause) { reportError('write .acryl/bin', cause) }

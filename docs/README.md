@@ -50,6 +50,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [The ACRYL frame and IDE in the framework](plans/ide-port.md) - a plan: the ACRYL frame under every app, what ports from ACRYL, DSH as the host, the slices in order, Electron, risks and estimates
 - [IDE port: the packages and their exact dependencies](plans/ide-port-packages.md) - generated from ACRYL's checkout: what ports, what is replaced, the one peer-dependency change
 - [IDE port, slice 0: the decision record](plans/ide-slice0.md) - the spike: DSH hosts, the framework as profile rows, measured cost, the DSH pin and its upgrade routine
+- [IDE port, slice 1 against ACRYL's desktop](plans/ide-slice1-frame-comparison.md) - the first frame comparison: the numbers, what matches, and what each difference belongs to
 - [Workshop outline v2](plans/workshop-outline-v2.md) - the refocused workshop: a visual app built and driven by the agent inside it, with the capability each block depends on
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
