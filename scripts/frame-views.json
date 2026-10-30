@@ -1,0 +1,100 @@
+{
+  "comment": "The views the ACRYL frame is compared in, with the viewports each is taken at. A view is a path plus steps to reach the state (text of a button or its aria-label); 'mask' lists regions that change on every run (a clock, a token) and are left out of the comparison. The ACRYL reference set must use the same names: <view>@<width>x<height>.png.",
+  "viewports": [{ "width": 1440, "height": 900 }, { "width": 1024, "height": 768 }],
+  "views": [
+    {
+      "name": "frame",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "wait": 500 }
+      ]
+    },
+    {
+      "name": "frame-dark",
+      "path": "/",
+      "theme": "dark",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "wait": 500 }
+      ]
+    },
+    {
+      "name": "frame-light",
+      "path": "/",
+      "theme": "light",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "wait": 500 }
+      ]
+    },
+    {
+      "name": "left-panel-collapsed",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "click": "Toggle sidebar" },
+        { "wait": 500 }
+      ]
+    },
+    {
+      "name": "right-panel-open",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "click": "Toggle right panel" },
+        { "wait": 500 }
+      ]
+    },
+    {
+      "name": "settings-general",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "click": "Settings" },
+        { "wait": 800 }
+      ]
+    },
+    {
+      "name": "settings-models",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "click": "Settings" },
+        { "wait": 500 },
+        { "click": "Models" },
+        { "wait": 800 }
+      ]
+    },
+    {
+      "name": "settings-shortcuts",
+      "path": "/",
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "click": "Settings" },
+        { "wait": 500 },
+        { "click": "Edit shortcuts" },
+        { "wait": 800 }
+      ]
+    },
+    {
+      "name": "terminal-tab",
+      "path": "/",
+      "mask": [{ "x": 280, "y": 60, "width": 700, "height": 120 }],
+      "steps": [
+        { "clickIfPresent": "Continue" },
+        { "clickIfPresent": "Configure later" },
+        { "click": "New tab: Terminal" },
+        { "wait": 3000 }
+      ]
+    }
+  ]
+}
