@@ -203,6 +203,14 @@ function overlayOf(packages: readonly IdeProfilePackage[], door = false): string
   lines.push('- id: ui-conversation', '  disabled: false')
   // ACRYL's frame owns the first run: DSH's API-key dialog must not cover it. `ui-settings-models` carries the switch (DSH's own onboarding config).
   lines.push('- id: ui-settings-models', '  config:', '    credentialOnboarding: false')
+  // The chat's first workspace lives in the app's own data home, not the user's Documents: the workspace controller creates the
+  // default workspace under this directory, so a first chat is inside the app folder (which the workspace registers as its first
+  // project) and a test run never writes into a real home.
+  lines.push(
+    '- id: workspace-controller',
+    '  config:',
+    "    documentsDirectory: !!js process.env.ACRYLBLENDS_HOME ?? process.cwd() + '/.acrylblends'",
+  )
   for (const id of [...disabled].sort()) {
     lines.push('- id: ' + id, '  disabled: true')
   }

@@ -25,6 +25,8 @@ import { PtyPane } from '../terminal/PtyPane.tsx'
 import type { TerminalRegistry } from '../terminal/terminal-session.ts'
 import { shouldRaiseSystemNotice, type SystemNoticePort } from '../notifications/system-notice.ts'
 import { Toasts } from '../notifications/Toasts.tsx'
+import { ModelConnect } from '../models/ModelConnect.tsx'
+import type { ModelConnectControl } from '../models/model-connect.ts'
 import { describeFinish, type ToastState, type ToastTarget } from '../notifications/toast-state.ts'
 import { StatusLine } from '../chrome/StatusLine.tsx'
 import { buildStatusLine } from '../chrome/status-line.ts'
@@ -94,6 +96,8 @@ export type WorkspaceCanvasProps = Omit<PropsRuntime<'root'>, 'useSessions'> & {
   readonly agentStatus: AgentStatusState
   /** Starts a brand new AcrylDSH Chat session in this worktree, for the "+" menu's own chat entry. */
   readonly projects: ProjectsControl
+  /** First-run setup: shown inside the chat surface while no model can serve a request. */
+  readonly connectModel?: ModelConnectControl
 }
 
 /**
@@ -102,7 +106,7 @@ export type WorkspaceCanvasProps = Omit<PropsRuntime<'root'>, 'useSessions'> & {
  * Diff/Kanban/Doc (new, spec 040).
  * @param props.renderConversation - upstream Chat slot, rendered by the Chat tile.
  */
-export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, agentStatus, agents: agentsState, tabTypes, tabRegistry, paletteConfig, toasts, notices, useSessions, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects }: WorkspaceCanvasProps) {
+export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, agentStatus, agents: agentsState, tabTypes, tabRegistry, paletteConfig, toasts, notices, useSessions, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel }: WorkspaceCanvasProps) {
   // One tab workspace per selected worktree: picking a branch swaps the whole set of tabs, and the
   // tabs of the branch you left (terminals, agents) keep running until they are closed.
   // Subscribe to primitives, not the whole shell snapshot: git polling updates that snapshot often,
@@ -150,7 +154,12 @@ export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, a
 
   /** The pane for one tile, used for both the primary pane and the split pane. */
   const renderTile = (tile: WorkspaceTile): ReactNode => {
-    if (tile.kind === 'chat') return <div className="dshWorkspaceChat">{renderConversation()}</div>
+    if (tile.kind === 'chat') return (
+      <div className="dshWorkspaceChat">
+        {connectModel !== undefined && tile.id === snapshot.activeId && <ModelConnect control={connectModel} />}
+        {renderConversation()}
+      </div>
+    )
     if (tile.kind === 'pty') return <PtyPane tile={tile} terminals={terminals} />
     if (tile.kind === 'doc' && tile.docRel !== undefined) return <DocFilePane tile={tile} shell={shell} filesApi={filesApi} />
     if (tile.kind === 'file' && tile.fileRel !== undefined) return <FileEditorPane tile={tile} workspace={workspace} filesApi={filesApi} comments={comments} />

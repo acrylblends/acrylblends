@@ -52,6 +52,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [IDE port, slice 0: the decision record](plans/ide-slice0.md) - the spike: DSH hosts, the framework as profile rows, measured cost, the DSH pin and its upgrade routine
 - [IDE port, slice 1 against ACRYL's desktop](plans/ide-slice1-frame-comparison.md) - the first frame comparison: the numbers, what matches, and what each difference belongs to
 - [IDE port, slice 2: the frame comparison](plans/ide-slice2-frame-comparison.md) - 18 views, 13 within 2%: the frame, both themes, the collapsed sidebar and the terminal pass; the one desktop-only right-panel row and the remaining Settings diffs
+- [IDE port, slice 3: chat, models and sessions](plans/ide-slice3-chat.md) - the connect-a-model card, where the key goes, the gate that proves the chat uses it and that a session survives a restart, and the frame numbers
 - [Workshop outline v2](plans/workshop-outline-v2.md) - the refocused workshop: a visual app built and driven by the agent inside it, with the capability each block depends on
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock

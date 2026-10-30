@@ -111,6 +111,11 @@ export function apply(ctx: Context): void {
     try {
       // The project list is ACRYL's own: one section of the ACRYL home's settings, released with this plugin so a reloaded plugin registers it again.
       const projects = new ProjectRegistry(ctx.acrylSettings.register(PROJECTS_NAMESPACE, ProjectsSchema))
+      // The app itself is the first project: its own folder, so the left pane has a place for the first chats and the agent works where
+      // the app lives. Added once, only while the list is empty; removing it later stays the person's choice and is not undone here.
+      const appRoot = (ctx.appInstance as { readonly root?: unknown }).root
+      if (typeof appRoot === 'string' && projects.view().paths.length === 0)
+        void projects.add(appRoot).catch(cause => { reportHostError('add the app folder as the first project', cause) })
       // Shared context (spec 043 T009): the generated WORKSPACE.md of every Shared Context workspace stays current, and other plugins can read it.
       const shared = new SharedContext({ registry: projects, home: ctx.appInstance.home })
       sharedContext = shared
