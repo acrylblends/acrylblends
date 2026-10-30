@@ -34,6 +34,24 @@ export interface ModelLlmPort {
   }>
 }
 
+/**
+ * The share of `remote.session` the account check uses: the same catalog the Models page joins for
+ * `ProviderRow.accountAvailable` (a `deepseek-account` group with at least one live model means the signed-in account can
+ * serve requests, so the API-key card has nothing to ask for).
+ */
+export interface ModelSessionPort {
+  modelCatalog(): Promise<{
+    readonly ok: boolean
+    readonly value?: {
+      readonly groups: readonly { readonly id: string; readonly models: readonly unknown[] }[]
+    }
+    readonly error?: { readonly message: string }
+  }>
+}
+
+/** The group id the Models page checks for an available account route (`ProviderRow.accountAvailable`). */
+export const ACCOUNT_MODEL_GROUP = 'deepseek-account'
+
 /** What the chat surface shows for the step. */
 export type ModelConnectState =
   /** The Host has not answered yet; nothing is shown. */
@@ -63,6 +81,8 @@ export interface ModelConnectDeps {
   readonly getCredentials: () => ModelCredentialsPort | undefined
   /** Resolves `remote.llm` when it is needed; undefined when the Host does not offer it. */
   readonly getLlm: () => ModelLlmPort | undefined
+  /** Resolves `remote.session` for the account-availability join; absent in a composition without the session remote. */
+  readonly getSession?: (() => ModelSessionPort | undefined) | undefined
   /** Where the dismissal is kept; absent when browser storage is blocked. */
   readonly storage?: Pick<Storage, 'getItem' | 'setItem'> | undefined
   /** Open Settings on its Models section (the step's secondary action). */
@@ -120,9 +140,22 @@ export class ModelConnectControl {
       this.retryLater()
       return
     }
-    // An account route (`deepseek-account`) can serve without an API key, but whether it is usable is the Models page's own
-    // join (`ProviderRow.accountAvailable`); this narrow step does not rebuild that. Slice 5's account sign-in extends the check;
-    // until then a signed-in account may still see this card, and its Settings path is one click away.
+    // The Models page's own account join (`ProviderRow.accountAvailable`): a signed-in account shows a live
+    // `deepseek-account` model group, and then the API-key card has nothing to ask for. A route merely being registered is
+    // not enough; the catalog is what says the account can serve requests.
+    const session = this.deps.getSession?.()
+    if (session !== undefined) {
+      const catalog = await Promise.resolve(session.modelCatalog()).catch(() => undefined)
+      if (generation !== this.generation) return
+      const accountAvailable = catalog?.ok === true
+        && catalog.value !== undefined
+        && catalog.value.groups.some(group => group.id === ACCOUNT_MODEL_GROUP && group.models.length > 0)
+      if (accountAvailable) {
+        this.retries = 0
+        this.set({ status: 'ready' })
+        return
+      }
+    }
     const refs = new Set<string>([DEFAULT_MODEL_KEY_REF])
     const directory = await Promise.resolve(llm.listConfigurableProviders()).catch(() => undefined)
     if (directory?.ok === true && directory.value !== undefined)

@@ -19,7 +19,7 @@
     "src/client/projects/sidebar-model.ts": "slice 3: a chat restored from the Host's list without a cwd yet is listed under the worktree whose tab set holds its open tab",
     "tests/projects/sidebar-model.spec.ts": "slice 3: one test for that restored-session placement",
     "src/client/styles.ts": "slice 3: the connect card's styles",
-    "src/client/models/model-connect.ts": "new in slice 3: readiness for the first-run step and the one key write, through DSH's own credentials Remote; no ACRYL counterpart",
+    "src/client/models/model-connect.ts": "new in slice 3: readiness for the first-run step and the one key write, through DSH's own credentials Remote; no ACRYL counterpart. Slice 5 extends readiness with the Models page's account join: a live deepseek-account model group (remote.session.modelCatalog, the same fact ProviderRow.accountAvailable reads) keeps the API-key card away",
     "src/client/models/ModelConnect.tsx": "new in slice 3: the non-modal connect card; no ACRYL counterpart",
     "tests/models/model-connect.spec.ts": "new in slice 3: the control's readiness, retry, write, dismissal and error paths",
     "tests/models/ModelConnect.spec.tsx": "new in slice 3: the card takes a key, leaves once stored and can be dismissed"
