@@ -12,7 +12,7 @@ On a clean folder, from npm only: `@deepseek-ai/dsh` 0.2.0-rc.2 (DSH, the DeepSe
 - A terminal tab opens a real PTY (xterm in the page, `node-pty` on the host, the WebSocket through `acrylWeb`); a typed `echo spike-pty-$((6*7))` came back as `spike-pty-42`.
 - Every row activated (no "did not activate" line).
 
-Screenshots are written by `run.sh` (`shot-frame.png`, `shot-settings.png`, `shot-terminal.png`).
+Screenshots from the run (`run.sh` writes them): [the frame](ide-slice0-evidence/frame.webp), [its Settings screen](ide-slice0-evidence/settings.webp), [a terminal tab that answered a typed command](ide-slice0-evidence/terminal.webp).
 
 ## The decision: DSH hosts, and the framework is rows of its profile
 
