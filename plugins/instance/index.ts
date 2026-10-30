@@ -30,6 +30,11 @@ export interface AppInstance {
   readonly root: string
   /** The app's own data: settings, installed extensions, the extension ledger. Never shared with another app. */
   readonly home: string
+  /**
+   * The host's engine home: where the engine keeps its own files, the logs included. ACRYL's plugins read it (the support download serves `dshHome/logs`);
+   * in this host the engine and the app share one home, so it equals `home`.
+   */
+  readonly dshHome: string
   readonly port: PortPreference
   /** The interface to listen on. Absent means loopback only; a container sets `0.0.0.0` so its published port reaches the app. */
   readonly host?: string
@@ -84,6 +89,7 @@ function family(input: {
     name: input.name,
     root: input.root,
     home: input.home,
+    dshHome: input.home,
     port: Object.freeze({ ...input.port }),
     runLockFile: join(input.home, RUN_LOCK_FILE),
   })

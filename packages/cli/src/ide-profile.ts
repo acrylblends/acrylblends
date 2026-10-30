@@ -31,9 +31,12 @@ export const name = 'app-instance'
 
 export function apply(ctx) {
   ctx.effect(() => {
+    const home = process.env.ACRYLBLENDS_HOME ?? join(process.cwd(), '.acrylblends')
     const instance = ctx.reflect.provide('appInstance', {
       root: process.cwd(),
-      home: process.env.ACRYLBLENDS_HOME ?? join(process.cwd(), '.acrylblends'),
+      home,
+      // The engine home ACRYL's plugins read (support serves \`dshHome/logs\`); in this host the engine and the app share one home.
+      dshHome: home,
     })
     return () => {
       void instance()
@@ -51,6 +54,8 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
   { name: 'acryl-shortcuts', spec: '' },
   { name: 'acryl-app-shell', spec: '' },
   { name: 'acryl-workspace', spec: '' },
+  { name: 'acryl-plugin-admin', spec: '' },
+  { name: 'acryl-support', spec: '' },
   {
     name: 'dsh-client-ui-brand-acryl',
     spec: '',
