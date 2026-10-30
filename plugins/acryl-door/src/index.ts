@@ -11,6 +11,7 @@
 
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-host-webserver'
 import z from '@deepseek-ai/schemastery'
 import { Acryl } from 'acryl-router'
 import type { UpgradeWebSocket } from 'acryl-router/helpers'
@@ -37,9 +38,10 @@ interface AppFolder {
   readonly name: string
 }
 
-/** The part of `acryl-node-server` the door reads: where the app listens. */
+/** The address the carrier listens on, as the `acrylWeb` service gives it (host and port; DSH's webServer serves it today). */
 interface Listening {
-  readonly url: string
+  readonly host: string
+  readonly port: number
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -48,7 +50,9 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-export const inject = ['router', 'appInstance', 'nodeServer']
+// DSH hosts the app (slice 1 of the IDE port): the door reads the carrier's address from `acrylWeb`, mounts its routes on the framework's router, and adds its
+// page script to DSH's own index through the web server's index-inject hook (the framework's router.wrap never sees that page). `nodeServer` is gone.
+export const inject = ['router', 'routerHttp', 'acrylWeb', 'appInstance', 'webServer']
 
 export interface Config {
   tools?: { expose?: string[] }
@@ -109,11 +113,12 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   // Development only: nothing is started, mounted or written in production, or when switched off.
   if (process.env.ACRYL_DOOR === 'off' || (process.env.NODE_ENV === 'production' && config.allowInProduction !== true)) return
   const app = ctx.get('appInstance') as unknown as AppFolder
-  const server = ctx.get('nodeServer') as unknown as Listening
+  const server = ctx.get('acrylWeb') as unknown as Listening
   if (typeof app?.root !== 'string') throw new Error('acryl-door: the appInstance service has no app folder (root)')
   const reportError = (operation: string, cause: unknown): void => {
     ctx.logger?.error?.(`acryl-door: failed to ${operation}: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
+  const address: { url: string } = { url: '' }
   const secret = newSecret()
   // A look right after a navigate or reload waits up to two seconds for the page that is moving to register again, and a read-only call that no page acknowledged gives a page that just registered one more try.
   const channel = new UiChannel({ attachWaitMs: 2000 })
@@ -123,7 +128,8 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     channel,
     shell,
     audit,
-    app: { name: app.name, root: app.root, url: loopbackUrl(server.url) },
+    // The address is read when it is used, not when the plugin applies: the carrier binds after the fiber starts (DSH's webServer reports its listening port only then).
+    app: { name: app.name, root: app.root, get url() { return address.url } },
     extensions: () => ctx.get('extensions') as unknown as ExtensionsPort | undefined,
     tools: () => ctx.get('tools') as unknown as ToolsPort | undefined,
     expose: config.tools?.expose ?? [],
@@ -157,13 +163,25 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   // An app whose router copy is older than this plugin has no `wrap`: the middleware then covers the routes mounted after the door, as the agent panel's does.
   if (typeof router.wrap === 'function') router.wrap(addScript)
   else ctx.router.route('/', new Acryl().use('*', addScript as never))
+  // DSH's own index.html is not a framework route, so `router.wrap` never sees it: the tag goes in through the web server's index-inject hook instead. The
+  // tap is owned by this plugin's fiber, so unloading the door takes the tag with it, and the new activation's page routes answer under the new secret.
+  ctx.effect(() => {
+    const taps = ctx.webServer as unknown as { tapIndex?: (transform: (html: string) => string) => () => void }
+    if (typeof taps.tapIndex !== 'function') return () => {}
+    return taps.tapIndex(html => {
+      if (html.includes(`${DOOR_PREFIX}/page.js`)) return html
+      return html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag
+    })
+  }, 'acryl-door: the page script in DSH\'s index')
   // The page channel also runs over a WebSocket, which is not one of the browser's six connections per host. Without the `ws` package or an adapter that upgrades, the pages use the stream.
   let upgrade: UpgradeWebSocket | undefined
   try {
-    upgrade = (ctx as unknown as { nodeServer?: { upgrades?: () => UpgradeWebSocket } }).nodeServer?.upgrades?.()
+    upgrade = (ctx.routerHttp as unknown as { upgrades?: () => UpgradeWebSocket }).upgrades?.()
   } catch (cause) {
     reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
   }
+  // The upgrade path is claimed on the router's HTTP mount for the door's prefix (spec 048 T007's shape); without it the pages use the event stream.
+  if (upgrade !== undefined) ctx.routerHttp.mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
   ctx.router.route('/', privateApi(
     DOOR_PREFIX,
     pageModule,
@@ -179,11 +197,16 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   })
   ctx.effect(function* () {
     yield ctx.reflect.provide('door', door)
-    writeDoorFile(app.root, loopbackUrl(server.url), secret)
+  }, 'acryl-door: the door service')
+  // The carrier binds asynchronously (DSH's webServer, the node server before it): the address and the file are written once it reports a real port.
+  ctx.effect(async () => {
+    for (let at = 0; at < 500 && server.port === 0; at += 1) await new Promise((done) => setTimeout(done, 10))
+    address.url = loopbackUrl(`http://${server.host}:${String(server.port)}`)
+    writeDoorFile(app.root, address.url, secret)
     // A shim that cannot be replaced (Windows, held open by a running `acryl`) leaves the old one in place; it must not stop the app from starting.
     try { writeShims(app.root, shimTarget()) } catch (cause) { reportError('write .acryl/bin', cause) }
-    yield () => { removeDoorFile(app.root, secret) }
-  }, 'acryl-door: the door service, .acryl/door.json and .acryl/bin/acryl')
+    return () => { removeDoorFile(app.root, secret) }
+  }, 'acryl-door: .acryl/door.json and .acryl/bin/acryl')
 }
 
 export { Door, DoorError, type VerbAnswer } from './host/door.ts'
