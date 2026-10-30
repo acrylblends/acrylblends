@@ -24,7 +24,7 @@ or `model = "..."` in `~/.codex/config.toml`). pi with DeepSeek needs `DEEPSEEK_
 (the panel starts pi from the app); the preflight reports `PASS agent pi (DeepSeek key found)` when it is there. The package is
 `@earendil-works/pi-coding-agent` (1.4.0 on npm on 2026-10-30), installed with `npm i -g @earendil-works/pi-coding-agent`.
 
-## Timings, from the 1.0.10 walk (macOS, pi on DeepSeek)
+## Timings, from the 1.0.10 walks (macOS and Windows, pi on DeepSeek)
 
 | Minutes | Block | Measured | If late |
 | --- | --- | --- | --- |
@@ -33,6 +33,11 @@ or `model = "..."` in `~/.codex/config.toml`). pi with DeepSeek needs `DEEPSEEK_
 | 40-60 | the agent drives the app | 1:41 for the tick-and-filter prompt (six door calls, most of the time the model thinking), 2:07 for the New-card prompt | the drive is the point; cut the second "check its own work" prompt |
 | 60-75 | the same app in a window | add + install 5 s; first `npm run desktop` 10 s including the Electron download on a fast line; the drive in the window 22 s; the windows, menu and settings prompt 1:11 | pre-warm Electron or demo it |
 | 75-90 | deploy and publish | production start in seconds; the registry check merges in about 2 minutes | keep the publish; the deploy talk can be 3 minutes |
+
+The Windows walk on 1.0.10 (2026-10-30, Windows 10, Node 22, pi on DeepSeek) matched: preflight 13 s; `npm create` 8 s and install 4 s; pi built the
+board from the panel in 5:56; the agent opened Settings through `File > Settings...`, set the appearance and saw `Saved: Dark`, and window 1 showed it
+after a reload; with two windows open during a live run, `look` answered in 317-353 ms in each and the panel's Stop ended the run in 3 s; production served
+the board read-only with the agent routes gone.
 
 Checkpoints in the handout: 10 minutes a route answers; 40 minutes the agent's board is on screen; 60 minutes the agent has clicked through it; 75 minutes
 the window is open. Walk the room at those minutes and help the machine that is behind, rather than the one that is ahead.
@@ -124,4 +129,3 @@ nothing is installed globally except the agent, `gh` and Node.
 - `PORT` for production: if Blends ships it, the handout's server line switches from `ACRYLBLENDS_PORT` to `PORT`.
 - The handout's hosted-workspace section (browser-only attendees) stays TODO(M9) until that workspace is live; the one-click WebBoxes.ai deploy lives
   there too.
-- Windows findings from the 1.0.10 Windows walk are added when that walk reports.
