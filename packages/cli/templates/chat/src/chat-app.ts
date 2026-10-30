@@ -7,7 +7,7 @@ import {
 import { Acryl } from '../plugins/acryl-router/src/index.ts'
 import { type Access, accessGate } from './access.ts'
 import { chatStore } from './db.ts'
-import { type Llm, openAiCompatible } from './llm.ts'
+import { type Llm, MissingKey, openAiCompatible } from './llm.ts'
 import { chatPage } from './page.tsx'
 
 interface ChatInput {
@@ -90,10 +90,12 @@ export function createApp(db: Db, llm: Llm = openAiCompatible, access: Access = 
       } catch (error) {
         if (!signal.aborted) {
           console.error(error)
-          // The reason stays in the log; the page gets a plain message.
+          // The reason stays in the log; the page gets a plain message, or how to set the missing key.
           await stream.writeSSE({
             event: 'error',
-            data: JSON.stringify('The model could not answer. Try again.'),
+            data: JSON.stringify(
+              error instanceof MissingKey ? error.message : 'The model could not answer. Try again.',
+            ),
           })
         }
       } finally {
