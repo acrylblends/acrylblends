@@ -11,7 +11,7 @@ tour are asides now, and `/hello` is only the introduction to the framework core
 | The preflight passing | it checks Node, npm, git, an agent with its login or key, a free port, and on Windows PowerShell and long paths | `npx acrylblends@latest preflight` ends with `Ready for the workshop.` |
 | Node.js 22.19 or newer (24 and 26 tested) | the app runs TypeScript directly | `node -v`; the app's own `scripts/check-node.cjs` refuses an older Node with a clear line |
 | git, and a GitHub account with `gh auth login` | the last block forks the workshop registry and opens a pull request | `git --version`, `gh auth status` |
-| One coding agent, logged in | the panel drives it; `codex`, `claude` and `pi` all worked | `codex login` once (and a model the account supports), or run `claude` once, or pi with `DEEPSEEK_API_KEY` set in the terminal that starts the app |
+| One coding agent, logged in | the panel drives it; `codex`, `claude` and `pi` all worked | the handout's Step 0b: a subscription login or an API key, and its `say ok` check answering (`claude -p "say ok"`, `codex exec --skip-git-repo-check "say ok"`, `pi -p "say ok"`) |
 | A prepared app with Electron already downloaded | the desktop block is 15 minutes and the download is the slowest part | run the handout's blocks 1 and 4 once per machine, then keep the folder as `~/acryl-workshop/prepared/` |
 | A warm npm cache | the first `npm create` and the Electron download dominate the first ten minutes | the prepared app does it |
 

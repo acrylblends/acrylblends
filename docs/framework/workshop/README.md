@@ -12,6 +12,8 @@ This guide is for **acrylblends 1.0.10 or newer**; `npm create acrylblends@lates
 
 ## 0. Before you start (10 minutes)
 
+### Step 0a - Check the machine
+
 Run this first. It checks everything below and prints one line per check, with the exact command for anything missing:
 
 ```sh
@@ -25,21 +27,11 @@ first blocks do without (`gh` is only needed in block 5).
 | --- | --- | --- | --- |
 | Node.js 22.19 or newer (24 and 26 work) | `node -v` | `node -v` | `node -v` |
 | git | `git --version` | `git --version` | `git --version` |
-| one coding agent, logged in | `codex login status` or `claude --version` or `pi --version` | same | same |
+| one coding agent, connected to a model | Step 0b below | same | same |
 | GitHub account and `gh`, for the last block | `gh auth status` | same | same |
 
-Install what is missing: Node from <https://nodejs.org> (the LTS), git from <https://git-scm.com>, the GitHub CLI from <https://cli.github.com> (`gh auth
-login` once), and one agent:
-
-- **Codex**: `npm i -g @openai/codex`, then `codex login`. If a run answers `model_not_found`, your account does not have the default model: pick one
-  your account supports (`/model` inside codex, or `model = "..."` in `~/.codex/config.toml`).
-- **Claude Code**: <https://claude.com/claude-code>, then run `claude` once to log in.
-- **pi with DeepSeek**: `npm i -g @earendil-works/pi-coding-agent`, and set your DeepSeek key in the terminal you will start the app from (the panel
-  starts pi from the app, so pi sees that terminal's environment). The preflight checks the key: `PASS agent pi (DeepSeek key found)`.
-
-  | macOS and Linux | Windows PowerShell | Windows cmd.exe |
-  | --- | --- | --- |
-  | `export DEEPSEEK_API_KEY=sk-...` | `$env:DEEPSEEK_API_KEY="sk-..."` | `set DEEPSEEK_API_KEY=sk-...` |
+Install what is missing: Node from <https://nodejs.org> (the LTS), git from <https://git-scm.com>, and the GitHub CLI from <https://cli.github.com>
+(`gh auth login` once). The agent comes next, in its own step.
 
 No prior knowledge of ACRYL, Cordis or Blends is needed; every new word is explained where it appears.
 
@@ -51,6 +43,74 @@ Make the workshop folder:
 
 **On Windows.** Windows PowerShell 5.1 (the one Windows ships) has no `&&`: where this guide joins two commands with `&&`, type them as two lines, or join
 them with `;`. PowerShell 7 (`pwsh`) accepts `&&`. In cmd.exe, `Ctrl-C` asks `Terminate batch job (Y/N)?`: answer `Y`.
+
+### Step 0b - Connect your agent and model
+
+The app's panel does its work through a coding agent on your machine: Claude Code, Codex or pi. Pick one, install it, and connect it to a model in
+one of two ways:
+
+- **(a) Sign in with a subscription (OAuth).** You log in once in a browser with an account you already pay for; there is no key to copy, and the
+  plan's usage limits apply.
+- **(b) An API key.** You create a key in the provider's console and pay for what you use, per token; the limits are your account's rate limits
+  and any spending cap you set there.
+
+Either way works for the whole workshop. If you have neither, pi with a DeepSeek API key is the cheapest start.
+
+| | Claude Code | Codex | pi |
+| --- | --- | --- | --- |
+| Install | `npm i -g @anthropic-ai/claude-code` (or the installer at <https://claude.com/claude-code>) | `npm i -g @openai/codex` | `npm i -g @earendil-works/pi-coding-agent` |
+| (a) Subscription | a Claude Pro or Max plan: `claude auth login` (or `/login` inside `claude`) opens the browser | a ChatGPT plan (Plus, Pro, Business, Edu, Enterprise): `codex login` opens the browser; `codex login --device-auth` on a machine without one | `/login` inside `pi`, then a subscription provider (see below); **the panel does not use it in 1.0.10** |
+| (b) API key | a key from <https://console.anthropic.com> in `ANTHROPIC_API_KEY`, or `claude auth login --console` | a key from <https://platform.openai.com> handed to `codex login --with-api-key` (it reads the key from standard input, see below) | a DeepSeek key from <https://platform.deepseek.com> in `DEEPSEEK_API_KEY`, or `/login` inside `pi`, then DeepSeek |
+| Where the login is kept | macOS: the Keychain; Windows and Linux: `~/.claude/.credentials.json` | `~/.codex/auth.json` | `~/.pi/agent/auth.json` (a key in an environment variable is not stored anywhere) |
+| Which one is active | `claude auth status --text` (or `/status` inside `claude`) | `codex login status` | `pi auth check --provider deepseek` answers `ready` |
+| Choose a model | `/model` inside `claude`, or `claude --model sonnet`; the panel uses your default: `ANTHROPIC_MODEL`, or `"model"` in `~/.claude/settings.json` | `/model` inside `codex`, or `codex exec -m <model>`; the panel uses `model = "..."` in `~/.codex/config.toml` | the panel always uses DeepSeek's `deepseek-v4-pro`; on its own, `pi --list-models` lists what your logins allow and `pi --model deepseek/deepseek-flash` picks one |
+| Check it with one prompt, outside the app | `claude -p "say ok"` | `codex exec --skip-git-repo-check "say ok"` | `pi -p "say ok"` |
+
+Each check answers `ok` in a few seconds when the agent is connected. When it is not, it says so: Claude Code prints `Not logged in · Please run
+/login` (or `Invalid API key · Fix external API key` for a wrong key), Codex retries and ends with `401 Unauthorized` (press `Ctrl-C` instead of
+waiting), and pi prints `No models available. Use /login ...`.
+
+**Codex with an API key.** The key goes in through standard input, so it never sits on a command line:
+
+| macOS and Linux | Windows PowerShell |
+| --- | --- |
+| `printenv OPENAI_API_KEY \| codex login --with-api-key` | `$env:OPENAI_API_KEY \| codex login --with-api-key` |
+
+`codex login status` then says `API key configured - sk-proj-***...`. For a single run, `codex exec` also reads a key from `CODEX_API_KEY`.
+
+**pi's other providers.** On its own, pi can sign in to Anthropic (Claude Pro/Max), OpenAI (ChatGPT Plus/Pro), GitHub Copilot, xAI, Kimi Code, Meta
+and OpenRouter through `/login`, and takes a key from `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY` and others
+(`pi --help` lists every one). The panel in acrylblends 1.0.10 starts pi with DeepSeek only, so for the workshop pi needs a DeepSeek key, set in the
+environment or stored with `/login`. When several are set, pi uses a stored login before an environment variable.
+
+**Set a key in the environment.** The app starts the agent, and the agent sees the environment of the terminal that started the app. Set the key,
+then run `npm run dev` (and later `npm run desktop`) **in that same terminal**; a key set in another window does not reach it.
+
+| macOS and Linux | Windows PowerShell | Windows cmd.exe |
+| --- | --- | --- |
+| `export DEEPSEEK_API_KEY=sk-...` | `$env:DEEPSEEK_API_KEY="sk-..."` | `set DEEPSEEK_API_KEY=sk-...` |
+
+The same form works for `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and the others. It lasts until the terminal closes. To keep it, add the `export` line to
+`~/.zshrc` (macOS) or `~/.bashrc` (Linux), or run `setx DEEPSEEK_API_KEY "sk-..."` once on Windows (it reaches new terminals, not the open one). Never
+paste a key into the panel, into a file in the app folder, or into a commit.
+
+**What it costs, and the limits.**
+
+- A subscription costs nothing extra while you stay within the plan's usage limits. When you reach them, runs stop until the limit resets, or move to
+  paid extra usage where your plan allows it.
+- Logging in to pi with a Claude subscription is a third-party app: one tester saw `Third-party apps now draw from your extra usage`, so that use is
+  billed on top of the plan. For the workshop, use Claude through Claude Code itself.
+- An API key bills every token. Set a spending limit in the provider's console before the workshop. Building the board is the largest single run of the
+  day (a few minutes of agent work).
+- With an API key and a subscription both present, Claude Code's docs say that `claude -p`, which the panel uses, takes `ANTHROPIC_API_KEY`. If you
+  mean to use your plan, unset the key; `claude auth status --text` tells you which one is in use.
+
+**The preflight shows the result.** Run it again: `npx acrylblends@latest preflight` lists every agent it found on the line `PASS agent ...`, with
+`pi (DeepSeek key found)` when pi has its key. For Claude Code and Codex it finds the program but cannot see the login, so the `say ok` check above is
+the one that proves the connection.
+
+The sign-in flows above follow each agent's own documentation: we did not sign in with real subscription accounts while writing this. Every other
+command was run on 2026-10-30 on macOS in a fresh home folder, with Claude Code 2.1.314, Codex 0.166.0 and pi 1.4.0.
 
 **The agent setting that matters all day.** The app's agent is configured to act rather than to describe: when you ask for something, it writes the
 files, installs the plugin and clicks through the result itself. If your agent stops to ask "shall I proceed?", answer "do it now" and it continues; that
@@ -275,7 +335,9 @@ yours.
 | The preflight prints `FIX` lines | run each one, then `npx acrylblends@latest preflight` again |
 | `npm create` fails or hangs | check the network; the facilitator has prepared apps |
 | A port is taken | use the address the app printed |
-| The agent cannot log in | `codex login` / `claude` / `pi` in a terminal, then retry in the panel |
+| The agent cannot log in | Step 0b: connect it, check it with its `say ok` line, then retry in the panel |
+| The panel says `the panel was not accepted (reload the page and try again)` | the dev server restarted (you or the agent saved a file): reload the page and send again. A known 1.0.10 bug, fixed in 1.1.0 |
+| Claude Code says `Invalid API key` | `ANTHROPIC_API_KEY` is set to a wrong key: fix it, or unset it to use your subscription |
 | Codex answers `model_not_found` | pick a model your account supports: `/model` in codex, or `model = "..."` in `~/.codex/config.toml` |
 | pi does not start or has no key | set `DEEPSEEK_API_KEY` in the terminal that runs `npm run dev`, restart it, and run the preflight |
 | The agent plans and stops | reply "do it now"; the config asks it to act, but a model sometimes waits |
