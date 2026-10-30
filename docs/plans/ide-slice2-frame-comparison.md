@@ -31,21 +31,14 @@ All 18 views were captured. 13 of 18 are within 2%.
 Two of the three target views pass at both viewports: `left-panel-collapsed` (0.34%, 0.50%) and `terminal-tab`
 (0.30%, 0.52%). `right-panel-open` passes at 1440 (1.80%) and misses at 1024 by 0.28 points.
 
-## The one remaining target miss
+`right-panel-open@1024x768` is expected to miss by about 0.3 points: DSH's right Sidebar Browser tab exists only in
+the desktop profile (`ui-sidebar-browser` is disabled unless `profileContext.name === 'desktop'`, in
+`@deepseek-ai/dsh-web-app`'s `cordis.patch.yml`), so the reference has a Browser row where a web profile has the
+next row, and every row below shifts. The fix, when it matters, is a web-profile reference set for the web
+comparison, which is slice 5/6 work, not this branch. The threshold and the masks are unchanged.
 
-`right-panel-open@1024x768` differs because the reference is a desktop profile and this app is a web profile: DSH's
-web bundle inserts the right sidebar's Browser tab and disables it unless `profileContext.name === 'desktop'`
-(`@deepseek-ai/dsh-web-app`'s patch, `ui-sidebar-browser`). The reference's right panel therefore lists a Browser row
-where this app's lists the next row (Comments); every row below shifts by one. The row is about 1.1% of a 1024x768
-view, and at 1440 the remaining differences stay under 2% anyway.
-
-This is a surface rule of the Host, not the frame: the ported sources are byte-identical to ACRYL 37f4dd9c, and on
-the same profile the right panel matches. The choices are a reference captured from ACRYL's web profile for this
-view, or accepting the desktop-only row as out of scope for the web comparison. The threshold stays at 2%.
-
-The four settings views that miss do so by 0.2-1.95 points; they are DSH's own Settings dialog over the frame and
-are not slice 2 targets. `settings-general` is the furthest (2.99/3.95) and is dominated by the dialog's text
-rendering and scroll state.
+The four settings views miss by 0.2-1.95 points: they capture DSH's own Settings dialog over the frame and are not
+slice 2 targets.
 
 ## What the numbers show
 
