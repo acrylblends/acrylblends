@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2024",
-    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
@@ -11,8 +15,19 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "jsx": "react-jsx"
   },
-  "include": ["*/src/**/*.ts", "*/src/**/*.tsx", "*/tests/**/*.ts"],
-  "exclude": ["**/node_modules/**", "**/lib/**"]
+  "include": [
+    "*/src/**/*.ts",
+    "*/src/**/*.tsx",
+    "*/tests/**/*.ts"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/lib/**",
+    "**/tests/fixtures/**"
+  ]
 }
