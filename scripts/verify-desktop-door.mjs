@@ -66,13 +66,18 @@ const run = (command, args, cwd) => {
 /** Two pages with nothing else between them: /one and /two (a button that changes its heading). */
 const pages = `import { Acryl } from 'acryl-router'
 export const name = 'pages'
-export const inject = ['router']
-export function apply(ctx: { router: { route(path: string, app: unknown): void } }) {
+export const inject = ['router', 'state']
+export function apply(ctx: { router: { route(path: string, app: unknown): void }; state: { cell(key: string, initial: number): { update(change: (n: number) => number): void } } }) {
   const app = new Acryl()
+  // A cell that POST /tick counts up, followed by the board pages below.
+  const ticks = ctx.state.cell('ticker.count', 0)
+  app.post('/tick', (c) => { ticks.update((n) => n + 1); return c.json({ ok: true }) })
   app.get('/one', (c) => c.html('<!doctype html><html><head><title>One</title></head><body><main><h1>Page one</h1></main></body></html>'))
   app.get('/two', (c) => c.html('<!doctype html><html><head><title>Two</title></head><body><main><h1>Page two</h1><button type="button" id="b">Press me</button></main><script>document.getElementById("b").onclick=()=>{document.querySelector("h1").textContent="Pressed"}</script></body></html>'))
   // A page like a board that streams its own state: three event streams of its own, opened once the page has loaded and held for as long as it is open.
   app.get('/hog', (c) => c.html('<!doctype html><html><head><title>Hog</title></head><body><main><h1>Hog page</h1><button type="button" id="b">Press</button></main><script>addEventListener("load",()=>{window.hogs=[1,2,3].map(()=>new EventSource("/api/state/extensions/events"))});document.getElementById("b").onclick=()=>{document.querySelector("h1").textContent="Hog pressed"}</script></body></html>'))
+  // A board that follows three state keys with watch (1.1.0): one WebSocket for the page, however many keys, so eight windows of it are not twenty-four event streams.
+  app.get('/board', (c) => c.html('<!doctype html><html><head><title>Board</title></head><body><main><h1>Board</h1><p id="n">count waiting</p></main><script type="module">import { watch } from "/api/state/client.js"; watch("ticker.count", (n) => { document.getElementById("n").textContent = "count " + n }); watch("extensions", () => {}); watch("tasks", () => {})</script></body></html>'))
   ctx.router.route('/', app)
 }
 `
@@ -152,6 +157,9 @@ try {
   const dev = start('dev', { PORT: String(await freePort()) })
   const base = await until(async () => /listening on (http:\/\/\S+)/u.exec(dev.output)?.[1], 40_000)
   if (!base) fail(`the dev server did not start:\n${dev.output}`)
+  // The server listens before the door (a later row) has written .acryl/door.json, and `npm run desktop` attaches to what that file names: started in between, it would start a server of its own.
+  if (!(await until(async () => existsSync(join(app, '.acryl', 'door.json')), 30_000, 100)))
+    fail(`the dev server listens but its door file was not written:\n${dev.output}`)
   const desktop = start('desktop')
   const first = await until(async () => {
     const list = windowList()
@@ -309,18 +317,52 @@ try {
   const press = /button "Press" \[ref=([\d.]+)\]/u.exec(look(hogIds[0]).out)?.[1]
   if (press === undefined) fail(`no button on the first hog window:\n${look(hogIds[0]).out}`)
   const pressedHog = acryl('act', 'click', '--window', hogIds[0], '--ref', press)
+  const afterFirst = look(hogIds[0])
+  const afterSecond = look(hogIds[1])
   if (
     pressedHog.code !== 0 ||
-    !look(hogIds[0]).out.includes('Hog pressed') ||
-    look(hogIds[1]).out.includes('Hog pressed')
+    !afterFirst.out.includes('Hog pressed') ||
+    afterSecond.out.includes('Hog pressed')
   )
     fail(
-      `act click --window ${hogIds[0]} did not reach only that window:\n${pressedHog.out}${pressedHog.err}`,
+      `act click --window ${hogIds[0]} did not reach only that window:\n${pressedHog.out}${pressedHog.err}\nwindow ${hogIds[0]} after the click:\n${afterFirst.out}${afterFirst.err}\nwindow ${hogIds[1]}:\n${afterSecond.out}${afterSecond.err}`,
     )
   for (const id of hogIds)
     if (acryl('window', 'close', '--id', id).code !== 0) fail(`could not close window ${id}`)
   log(
     'two windows that hold six event streams between them are both looked at and clicked at once (the door is a WebSocket)',
+  )
+
+  // Eight windows of a board that follows three state keys each, as the workshop's board does (found on macOS: windows past the sixth loaded only partly). The board follows its keys with
+  // watch, one WebSocket a window, so none of the eight holds a connection: every window loads, shows the count, and shows the next one when the server changes it.
+  const boardIds = []
+  for (let n = 0; n < 8; n += 1) {
+    const board = acryl('window', 'open', '--path', '/board')
+    const id = /window (\d+)/u.exec(board.out)?.[1]
+    if (board.code !== 0 || id === undefined)
+      fail(`window open /board (${n + 1} of 8) failed:\n${board.out}${board.err}`)
+    boardIds.push(id)
+  }
+  const counts = (text) => boardIds.every((id) => look(id).out.includes(text))
+  if (!(await until(async () => counts('count 0'), 40_000, 500)))
+    fail(
+      `with eight board windows open, not every one shows its count:\n${boardIds.map((id) => `${id}: ${look(id).out.split('\n').slice(0, 6).join(' | ')}`).join('\n')}`,
+    )
+  for (let tick = 1; tick <= 2; tick += 1) {
+    const posted = await fetch(`${base}/tick`, {
+      method: 'POST',
+      headers: { origin: base.replace(/\/$/u, '') },
+    })
+    if (!posted.ok) fail(`POST /tick answered ${posted.status}`)
+    if (!(await until(async () => counts(`count ${tick}`), 15_000, 500)))
+      fail(
+        `a change of ticker.count did not reach all eight board windows (count ${tick}):\n${boardIds.map((id) => `${id}: ${look(id).out.split('\n').slice(0, 6).join(' | ')}`).join('\n')}`,
+      )
+  }
+  for (const id of boardIds)
+    if (acryl('window', 'close', '--id', id).code !== 0) fail(`could not close board window ${id}`)
+  log(
+    'eight windows that each follow three state keys with watch all load, show the count and follow its changes (one WebSocket a window, no event streams)',
   )
 
   // The session cannot be ended by accident.

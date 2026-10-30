@@ -179,6 +179,8 @@ try {
       'typescript',
       '@webboxes/app-persistence',
       '@webboxes/blends-core',
+      // The state plugin follows keys in a page over a WebSocket (1.1.0); a production app has it.
+      'ws',
       'yaml',
     ])
     if (!deps.includes('@deepseek-ai/cordis') || deps.some((name) => !allowed.has(name)))

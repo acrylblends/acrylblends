@@ -112,7 +112,7 @@ next start through the same checks.
 
 - `GET /extensions`: what is installed, its state, and folders not installed yet.
 - `<home>/extensions-ledger.jsonl`: every install, update, refusal, restore and removal, with the version's digest.
-- `GET /api/state/extensions/events` and `GET /api/state/tasks/events`: the same changes as live streams (server-sent events), as they happen; `GET /api/state/<key>` reads the current value.
+- `GET /api/state/extensions/events` and `GET /api/state/tasks/events`: the same changes as live streams (server-sent events), as they happen; `GET /api/state/<key>` reads the current value. In a page, follow a key with `import { watch } from '/api/state/client.js'` and `watch('tasks', (tasks) => ...)` (1.1.0): one WebSocket carries every key of the page, where an event stream per key would use up the browser's six connections per host.
 - `GET /tasks`: every agent run as a durable task, owning one task per tool call; `POST /tasks/cancel { id }`.
 
 Node keeps every module version it has loaded, so memory grows a little with each update until the app restarts.

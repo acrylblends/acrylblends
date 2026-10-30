@@ -111,6 +111,21 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   if (!withEntry.includes('  rowpage,\n') || !withEntry.includes('import * as rowpage'))
     fail('the agent template no longer has the registry where this gate registers its own plugin')
   writeFileSync(source, withEntry)
+  // A plugin that owns a state cell and changes it on POST /tick: section G follows it from a page whose connections are all held.
+  mkdirSync(join(app, 'plugins', 'ticker'))
+  writeFileSync(
+    join(app, 'plugins', 'ticker', 'index.ts'),
+    `import { Acryl } from 'acryl-router'
+
+export const name = 'ticker'
+export const inject = ['router', 'state']
+
+export function apply(ctx: { router: { route(path: string, app: unknown): void }; state: { cell(key: string, initial: number): { update(change: (n: number) => number): void } } }) {
+  const count = ctx.state.cell('ticker.count', 0)
+  ctx.router.route('/', new Acryl().post('/tick', (c) => { count.update((n) => n + 1); return c.json({ ok: true }) }))
+}
+`,
+  )
   mkdirSync(join(app, 'plugins', 'pages'))
   writeFileSync(join(app, 'plugins', 'pages', 'index.ts'), plugin('one'))
   writeFileSync(join(app, 'page.txt'), 'first text')
@@ -494,6 +509,43 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
     identifier: slow.result.identifier,
   })
   log('F: a message typed while the panel is still asking for the latest run is asked and answered')
+  // G, state followed from a page whose six connections are all held: ticket 14. `watch` of /api/state/client.js carries every key over one WebSocket, so a seventh connection is not
+  // needed; an EventSource per key would queue behind the six and the page would never see a change. The server changes the cell (POST /tick) and the page must show each value.
+  await panelCdp.send('Page.navigate', { url: `${base}/p1` })
+  await until(
+    async () => (await inPage("!!document.getElementById('agent-panel')")) === true,
+    20_000,
+  )
+  await inPage(
+    `window.__ticks = []; import('/api/state/client.js').then((m) => { window.__stopTicks = m.watch('ticker.count', (value) => window.__ticks.push(value), (error) => window.__ticks.push('error: ' + error.message)); window.__watchLoaded = true }); true`,
+  )
+  if (!(await until(async () => (await inPage('window.__ticks.join(",")')) === '0', 10_000)))
+    fail(
+      `G: watch did not deliver the first value: ${await inPage('JSON.stringify(window.__ticks)')}`,
+    )
+  await inPage(hogs)
+  await sleep(1000)
+  if ((await saturated()) !== 'queued')
+    fail('G: six open streams did not saturate the page, so this section proves nothing')
+  for (let tick = 1; tick <= 3; tick += 1) {
+    const posted = await fetch(`${base}/tick`, { method: 'POST', headers: { origin: base } })
+    if (!posted.ok) fail(`G: POST /tick answered ${posted.status}`)
+    const shown = await until(
+      async () =>
+        (await inPage('window.__ticks.join(",")')) ===
+        ['0', '1', '2', '3'].slice(0, tick + 1).join(','),
+      5_000,
+      100,
+    )
+    if (!shown)
+      fail(
+        `G: with the page's six connections held, a change of ticker.count never reached watch (it saw ${await inPage('JSON.stringify(window.__ticks)')})`,
+      )
+  }
+  await inPage('window.__stopTicks(); window.__hogs.forEach((source) => source.close()); true')
+  log(
+    'G: with six streams held open in the page, watch of a state key still shows every change (one WebSocket, not a seventh connection)',
+  )
   panelCdp.close()
   log('OK')
 } finally {

@@ -168,6 +168,7 @@ describe('library', () => {
       '@webboxes/app-persistence',
       '@webboxes/blends-core',
       'node-pty',
+      'ws',
       'yaml',
     ])
     for (const plugin of readLibrary().values()) {
