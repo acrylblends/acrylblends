@@ -1,6 +1,7 @@
 /**
  * The door mounted the way an app mounts it: a real `@deepseek-ai/cordis-plugin-loader` row pointing at the built `lib/index.js`, next to
- * the real router and node server. It waits PENDING for the server, survives ten disable and enable cycles without leaving its file,
+ * the real router and node server. It activates on the router alone (the door requires only `router` and `appInstance`; a host provides the
+ * carrier, and both hosts do), writes its file once a server listens, survives ten disable and enable cycles without leaving the file,
  * replaces a stale connection file and refuses a folder another live process serves.
  * @throws if the package has not been built: run `pnpm run build` first.
  */
@@ -17,7 +18,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { doorFilePath, readDoorFile } from '../../src/host/door-file.ts'
 import { appFolder, removeFolders, runCommand } from '../harness.ts'
 
-const PENDING = 0 as FiberState.PENDING
 const ACTIVE = 2 as FiberState.ACTIVE
 const FAILED = 3 as FiberState.FAILED
 const DISPOSED = 4 as FiberState.DISPOSED
@@ -71,11 +71,12 @@ function deadPid(): number {
 }
 
 describe('acryl-door through a real Loader', () => {
-  it('stays PENDING without a node server, writes .acryl/door.json once one listens, and removes it when the row is disabled', async () => {
+  it('activates without a server, writes .acryl/door.json once one listens, and removes it when the row is disabled', async () => {
     const { ctx, root } = await loader()
     const entryId = await ctx.loader.create({ name: './row.mjs' })
     await ctx.loader.await()
-    expect(entryOf(ctx, entryId).fiber?.state).toBe(PENDING)
+    // The door needs the router, not a particular server: the row is active, and its file waits for a carrier to bind.
+    expect(entryOf(ctx, entryId).fiber?.state).toBe(ACTIVE)
     expect(existsSync(doorFilePath(root))).toBe(false)
 
     ctx.plugin(nodeServer, { port: 0 })
