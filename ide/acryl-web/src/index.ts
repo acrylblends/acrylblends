@@ -8,20 +8,11 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type { AcrylWeb } from 'acryl-control'
 
-/** The address the carrier is bound to. ACRYL's plugins refuse anything but loopback. */
-export interface AcrylWeb {
-  /** The interface the carrier listens on. */
-  readonly host: string
-  /** The listening port (the OS-assigned one when it was configured as zero). */
-  readonly port: number
-}
-
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    acrylWeb: AcrylWeb
-  }
-}
+// The service's contract is declared once, by the ported acryl-control (`src/platform/web.ts`), so this package only provides it. ACRYL's own source at
+// 37f4dd9c carries the same type without the two registration methods (spec 048 T008 took them out); the port carries the earlier shape, reported to the
+// port owner, and what this adapter provides is the address those plugins actually read.
 
 export const name = 'acryl-web'
 export const inject = ['webServer']
@@ -35,6 +26,10 @@ export function apply(ctx: Context): void {
       get port() {
         return ctx.webServer.port
       },
+      // The ported contract (acryl-control's platform/web.ts) still declares these two; ACRYL's plugins no longer call them after spec 048 T008, and they
+      // are thin delegates to DSH's server for the rows that do while the port owner reconciles the shape (reported).
+      register: (route) => ctx.webServer.register(route),
+      registerUpgrade: (route) => ctx.webServer.registerUpgrade(route),
     }
     const dispose = ctx.reflect.provide('acrylWeb', port)
     return () => {

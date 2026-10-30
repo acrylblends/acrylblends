@@ -8,6 +8,7 @@ import { apply, inject, name } from '../src/index.ts'
 
 function fakeWebServer(ctx: Context) {
   let address = { host: '127.0.0.1', port: 3100 }
+  const calls: unknown[] = []
   ;(ctx as unknown as { provide(name: string, value: unknown): unknown }).provide('webServer', {
     get host() {
       return address.host
@@ -15,8 +16,17 @@ function fakeWebServer(ctx: Context) {
     get port() {
       return address.port
     },
+    register: (route: unknown) => {
+      calls.push(route)
+      return () => {}
+    },
+    registerUpgrade: (route: unknown) => {
+      calls.push(route)
+      return () => {}
+    },
   })
   return {
+    calls,
     listen(host: string, port: number) {
       address = { host, port }
     },
@@ -31,7 +41,10 @@ describe('the acrylWeb service', () => {
     const server = fakeWebServer(ctx)
     const fiber = ctx.plugin({ name, inject, apply })
     await expect(fiber).resolves.toBeDefined()
-    expect((ctx as unknown as { acrylWeb?: { host: string; port: number } }).acrylWeb).toEqual({ host: '127.0.0.1', port: 3100 })
+    expect((ctx as unknown as { acrylWeb?: { host: string; port: number } }).acrylWeb).toMatchObject({ host: '127.0.0.1', port: 3100 })
+    // The ported contract's two delegates go to the same server (ACRYL's plugins stop calling them after spec 048 T008).
+    const registered = (ctx as unknown as { acrylWeb?: { register(route: unknown): unknown } }).acrylWeb?.register({ kind: 'exact', path: '/x', handler: () => {} })
+    expect(typeof registered).toBe('function')
     server.listen('127.0.0.1', 4321)
     expect((ctx as unknown as { acrylWeb?: { host: string; port: number } }).acrylWeb?.port).toBe(4321)
     await (fiber as unknown as { dispose(): Promise<void> }).dispose()

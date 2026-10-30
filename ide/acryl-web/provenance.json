@@ -11,6 +11,8 @@
   "unchanged": "the two reads (host, port) and the AcrylWeb type",
   "changes": {
     "package": "the adapter is its own plugin here (ACRYL keeps it in the engine seam), with the service provided inside an effect",
-    "tests": "ACRYL has no test for the adapter (its body is the two reads); tests/web.spec.ts pins the seam here"
-  }
+    "tests": "ACRYL has no test for the adapter (its body is the two reads); tests/web.spec.ts pins the seam here",
+    "contract": "the service type comes from the ported acryl-control (its platform/web.ts), so the two registration delegates exist here even though ACRYL 37f4dd9c removed them from its own type in spec 048 T008; reported to the port owner"
+  },
+  "notes": "ACRYL main (37f4dd9c) declares AcrylWeb as host and port only; the port of acryl-control on branch 101-ide-slice1-ui carries the earlier shape with register and registerUpgrade, so this adapter satisfies that declared type with thin delegates to DSH webServer until the port is reconciled."
 }
