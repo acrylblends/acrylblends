@@ -38,6 +38,12 @@ const DEFAULT_CACHE_BYTES = 16 * 1024 * 1024
 export interface ClientModulesOptions {
   /** The folder of client modules, absolute or relative to the working directory. */
   readonly root: string
+  /**
+   * The URL prefix the app is mounted at, when the caller knows it. A host can compose app plugins under its own router, and under a
+   * Host whose router is a different copy of this package the request's match result is not visible here, so `basePath(c)` throws; the
+   * explicit prefix is then the only reliable way to know where the mount starts. Omitted, the router's `basePath(c)` is used.
+   */
+  readonly mount?: string | undefined
   /** The folder {@link buildClientModules} wrote; with `NODE_ENV=production` it is served instead of compiling, which needs no `typescript`. */
   readonly compiled?: string | undefined
   /** At most this many bytes of compiled modules are kept in memory (least recently served first out); 16 MiB when not given. */
@@ -204,7 +210,7 @@ export function clientModules(options: ClientModulesOptions): Acryl {
 
   const app = new Acryl()
   app.get('/*', (c) => {
-    const requestPath = c.req.path.slice(basePath(c).length)
+    const requestPath = c.req.path.slice(options.mount === undefined ? basePath(c).length : options.mount.length)
     const runtime = /^\/@acrylblends\/([a-z-]+\.js)$/u.exec(requestPath)?.[1]
     const send = (code: string, etag: string): Response => {
       if (c.req.header('if-none-match') === etag) return c.body(null, 304, { etag, 'cache-control': 'no-cache' })

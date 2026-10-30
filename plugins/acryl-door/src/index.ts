@@ -161,7 +161,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   // One script tag for the page (`page.js`): it imports the module tree served below it.
   const pageModule = new Acryl()
     .get(`${DOOR_PREFIX}/page.js`, c => c.body(`import '${DOOR_PREFIX}/page/main.ts'\n`, 200, { 'content-type': 'text/javascript; charset=utf-8' }))
-    .route(`${DOOR_PREFIX}/page`, clientModules({ root: PAGE_DIR }))
+    .route(`${DOOR_PREFIX}/page`, clientModules({ root: PAGE_DIR, mount: `${DOOR_PREFIX}/page` }))
   // The page script on every HTML page the app answers, whenever its plugin was mounted (the pages of a plugin that loaded at boot, before this one, included): a page an agent writes
   // can be looked at and driven without anyone adding the tag. A page that already carries it (the templates' own pages) is left as it is. Development only, like the rest of the door.
   const tag = `<script type="module" src="${DOOR_PREFIX}/page.js"></script>`
