@@ -41,6 +41,23 @@ async function loader(): Promise<{ ctx: Context; root: string }> {
   return { ctx, root }
 }
 
+/** DSH's side of the host as the door reads it: the carrier's address, the router's HTTP mount and upgrades, and the index-inject hook. */
+function hostShims(ctx: Context): void {
+  const server = () => ctx.get('nodeServer') as unknown as { host: string, port: number, upgrades(): unknown } | undefined
+  ctx.plugin({ name: 'host-shims', inject: ['nodeServer'], apply: (inner: Context) => { inner.effect(function* () {
+    yield inner.reflect.provide('acrylWeb', {
+      get host() { return server()?.host ?? '127.0.0.1' },
+      get port() { return server()?.port ?? 0 },
+    })
+    yield inner.reflect.provide('routerHttp', { mount: () => () => {}, upgrades: () => server()?.upgrades() })
+    yield inner.reflect.provide('webServer', {
+      get host() { return server()?.host ?? '127.0.0.1' },
+      get port() { return server()?.port ?? 0 },
+      tapIndex: () => () => {},
+    })
+  }) } })
+}
+
 function entryOf(ctx: Context, entryId: string) {
   const found = [...ctx.loader.entries()].find(candidate => candidate.id === entryId)
   if (found === undefined) throw new Error('entry not found')
@@ -62,6 +79,7 @@ describe('acryl-door through a real Loader', () => {
     expect(existsSync(doorFilePath(root))).toBe(false)
 
     ctx.plugin(nodeServer, { port: 0 })
+    hostShims(ctx)
     await ctx.loader.await()
     await expect.poll(() => entryOf(ctx, entryId).fiber?.state).toBe(ACTIVE)
     await expect.poll(() => existsSync(doorFilePath(root))).toBe(true)
@@ -81,6 +99,7 @@ describe('acryl-door through a real Loader', () => {
   it('leaves no connection file and no temporary file after ten disable and enable cycles, with a new secret each run', async () => {
     const { ctx, root } = await loader()
     ctx.plugin(nodeServer, { port: 0 })
+    hostShims(ctx)
     const entryId = await ctx.loader.create({ name: './row.mjs' })
     await ctx.loader.await()
     const secrets = new Set<string>()
@@ -108,6 +127,7 @@ describe('acryl-door through a real Loader', () => {
     mkdirSync(join(root, '.acryl'))
     writeFileSync(doorFilePath(root), JSON.stringify({ version: 1, url: 'http://127.0.0.1:1', secret: 'stale', pid: deadPid() }))
     ctx.plugin(nodeServer, { port: 0 })
+    hostShims(ctx)
     const entryId = await ctx.loader.create({ name: './row.mjs' })
     await ctx.loader.await()
     await expect.poll(() => entryOf(ctx, entryId).fiber?.state).toBe(ACTIVE)
@@ -121,6 +141,7 @@ describe('acryl-door through a real Loader', () => {
     const theirs = JSON.stringify({ version: 1, url: 'http://127.0.0.1:1', secret: 'theirs', pid: process.ppid })
     writeFileSync(doorFilePath(root), theirs)
     ctx.plugin(nodeServer, { port: 0 })
+    hostShims(ctx)
     const entryId = await ctx.loader.create({ name: './row.mjs' })
     await ctx.loader.await()
     await expect.poll(() => entryOf(ctx, entryId).fiber?.state).toBe(FAILED)

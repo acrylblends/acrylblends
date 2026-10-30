@@ -20,7 +20,7 @@ import { auditPath, AuditLog } from './host/audit.ts'
 import { UiChannel } from './host/channel.ts'
 import { registerChatTools } from './host/chat-tools.ts'
 import { Door, type ExtensionsPort, type ToolsPort } from './host/door.ts'
-import { newSecret, removeDoorFile, stateDir, writeDoorFile } from './host/door-file.ts'
+import { assertDoorIsFree, newSecret, removeDoorFile, stateDir, writeDoorFile } from './host/door-file.ts'
 import { DOOR_PREFIX, privateApi } from './host/http.ts'
 import { mcpRoutes } from './host/mcp-routes.ts'
 import { operatorRoutes } from './host/operator-routes.ts'
@@ -119,6 +119,8 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     ctx.logger?.error?.(`acryl-door: failed to ${operation}: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
   const address: { url: string } = { url: '' }
+  // The rival check runs at activation, not in the deferred write: a folder another live process serves fails the row at once (the write waits for a bound port).
+  assertDoorIsFree(app.root)
   const secret = newSecret()
   // A look right after a navigate or reload waits up to two seconds for the page that is moving to register again, and a read-only call that no page acknowledged gives a page that just registered one more try.
   const channel = new UiChannel({ attachWaitMs: 2000 })
@@ -213,5 +215,5 @@ export { Door, DoorError, type VerbAnswer } from './host/door.ts'
 export { chatToolName, VERB_SPECS, VERBS, type Verb, type VerbSpec } from './host/verbs.ts'
 export { mcpTools } from './host/mcp-routes.ts'
 export { DOOR_PREFIX } from './host/http.ts'
-export { doorFilePath, readDoorFile, STATE_DIR, type DoorFile } from './host/door-file.ts'
+export { assertDoorIsFree, doorFilePath, readDoorFile, STATE_DIR, type DoorFile } from './host/door-file.ts'
 export type { CallResponse } from './host/operator-routes.ts'
