@@ -41,7 +41,15 @@ describe('scaffolding a template into the frame', () => {
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { io } = fakeIo(scratch)
     const code = await init(
-      { directory: 'framed', template: 'blank', yes: true, name: 'framed', install: false, desktop: false, quietNext: true },
+      {
+        directory: 'framed',
+        template: 'blank',
+        yes: true,
+        name: 'framed',
+        install: false,
+        desktop: false,
+        quietNext: true,
+      },
       io,
     )
     expect(code).toBe(0)
@@ -63,7 +71,18 @@ describe('scaffolding a template into the frame', () => {
 
   it('without frame package specs it writes no profile and says why, leaving the framework-only app runnable', async () => {
     const { io, out } = fakeIo(scratch)
-    const code = await init({ directory: 'plain', template: 'blank', yes: true, name: 'plain', install: false, desktop: false, quietNext: true }, io)
+    const code = await init(
+      {
+        directory: 'plain',
+        template: 'blank',
+        yes: true,
+        name: 'plain',
+        install: false,
+        desktop: false,
+        quietNext: true,
+      },
+      io,
+    )
     expect(code).toBe(0)
     const root = join(scratch, 'plain')
     expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
