@@ -1,6 +1,6 @@
 # IDE port: where it stands (2026-10-31)
 
-Live status for a fresh session. The plan is [ide-port.md](ide-port.md); each slice's evidence is [ide-sliceN-*.md](.) beside it.
+Live status for a fresh session. The plan is [ide-port.md](ide-port.md); each slice's evidence document (`ide-sliceN-*.md`) sits beside it.
 
 ## Landed on `main` (all with the full repository check green)
 
