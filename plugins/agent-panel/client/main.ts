@@ -54,66 +54,78 @@ function doorPage(): { page?: string } {
 let socketBroken = false
 let activeSocket: WebSocket | undefined
 
-/** Open the run socket and send the token and the first action. Rejects when the page cannot upgrade (a proxy, a server without `ws`): the caller falls back to the stream. */
-function openSocket(token: string, action: Record<string, unknown>): Promise<WebSocket> {
+/** The server did not accept the token: it is not the one this page was given (the app restarted since, which `node --watch` does at every change of a file). */
+class Refused extends Error {}
+
+/**
+ * Open the run socket and send the token and the first action. Resolves once the server has accepted the token (its `accepted` frame), with the socket and its events: the
+ * frames of the run as panel events, until the socket closes. One set of handlers serves the socket for its whole life, so a frame is never handed to a handler that was
+ * replaced. Rejects with `Refused` when the token is not accepted, and with another error when the page cannot upgrade (a proxy, a server without `ws`): the caller falls back
+ * to the stream.
+ */
+function openSocket(
+  token: string,
+  action: Record<string, unknown>,
+): Promise<{ socket: WebSocket; events: AsyncGenerator<PanelEvent> }> {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(
       `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${PREFIX}/run/ws`,
     )
+    const queue: PanelEvent[] = []
+    let wake: (() => void) | undefined
+    let closed = false
+    let accepted = false
     const timer = setTimeout(() => {
       socket.close()
-      reject(new Error('the socket did not open in time'))
+      reject(new Error('the socket was not accepted in time'))
     }, 4000)
     socket.onopen = () => {
-      clearTimeout(timer)
       socket.send(JSON.stringify({ t: 'hello', token }))
       socket.send(JSON.stringify(action))
-      resolve(socket)
+    }
+    socket.onmessage = (message) => {
+      try {
+        const frame = JSON.parse(String(message.data)) as { e?: unknown; d?: unknown }
+        if (frame.e === 'accepted' && !accepted) {
+          accepted = true
+          clearTimeout(timer)
+          resolve({ socket, events: read() })
+        } else if (typeof frame.e === 'string')
+          queue.push({ event: frame.e, data: (frame.d ?? {}) as Record<string, unknown> })
+      } catch {
+        // Not a frame of ours.
+      }
+      wake?.()
+    }
+    socket.onclose = (event) => {
+      clearTimeout(timer)
+      closed = true
+      if (!accepted)
+        reject(
+          event.code === 4401
+            ? new Refused('the token was not accepted')
+            : new Error('the socket closed before it was accepted'),
+        )
+      wake?.()
     }
     socket.onerror = () => {
       clearTimeout(timer)
-      reject(new Error('the server refused the upgrade'))
+      if (!accepted) reject(new Error('the server refused the upgrade'))
+    }
+    async function* read(): AsyncGenerator<PanelEvent> {
+      for (;;) {
+        const next = queue.shift()
+        if (next !== undefined) {
+          yield next
+          continue
+        }
+        if (closed) return
+        await new Promise<void>((done) => {
+          wake = done
+        })
+      }
     }
   })
-}
-
-/** The frames of an open run socket as panel events, until it closes. */
-async function* socketEvents(socket: WebSocket): AsyncGenerator<PanelEvent> {
-  const queue: PanelEvent[] = []
-  let wake: (() => void) | undefined
-  let closed: CloseEvent | undefined
-  socket.onmessage = (message) => {
-    try {
-      const frame = JSON.parse(String(message.data)) as { e?: unknown; d?: unknown }
-      if (typeof frame.e === 'string')
-        queue.push({ event: frame.e, data: (frame.d ?? {}) as Record<string, unknown> })
-    } catch {
-      // Not a frame of ours.
-    }
-    wake?.()
-  }
-  socket.onclose = (event) => {
-    closed = event
-    wake?.()
-  }
-  for (;;) {
-    const next = queue.shift()
-    if (next !== undefined) {
-      yield next
-      continue
-    }
-    if (closed !== undefined) {
-      if (closed.code === 4401)
-        yield {
-          event: 'error',
-          data: { message: 'the panel was not accepted (reload the page and try again)' },
-        }
-      return
-    }
-    await new Promise<void>((resolve) => {
-      wake = resolve
-    })
-  }
 }
 
 const css = `
@@ -153,7 +165,7 @@ textarea { width: 100%; min-height: 64px; resize: vertical; padding: 8px; border
 async function start(): Promise<void> {
   const reply = await fetch(`${PREFIX}/session`)
   if (!reply.ok) return
-  const session = (await reply.json()) as Session
+  let session = (await reply.json()) as Session
 
   const host = document.createElement('div')
   host.id = 'agent-panel'
@@ -207,6 +219,7 @@ async function start(): Promise<void> {
           onChange(change: { extension: string; action: string }): void
         }): Promise<{ detach(): void; stop(): Promise<void> }>
       }
+      await refreshSession()
       terminal = await openTerminal({
         container: term,
         token: session.token,
@@ -273,6 +286,16 @@ async function start(): Promise<void> {
   // A run belongs to the app, not to this page: it goes on when the page reloads (the door reloads it after a plugin change, an agent may move it to another page) and the page that
   // loads next follows it again. Only Stop cancels it.
   const headers = { 'content-type': 'application/json', 'x-agent-panel-token': session.token }
+  /**
+   * The token belongs to one start of the app: `node --watch` restarts it at every change of a file, and a page left open across that restart holds a token the new server
+   * does not know. Ask for the session again; the caller tries once more with what it gets.
+   */
+  const refreshSession = async (): Promise<void> => {
+    const reply = await fetch(`${PREFIX}/session`)
+    if (!reply.ok) return
+    session = (await reply.json()) as Session
+    headers['x-agent-panel-token'] = session.token
+  }
   let following = false
   const stopRun = (): void => {
     // On the run's socket when there is one: a request would wait behind the browser's six connections per host.
@@ -283,19 +306,21 @@ async function start(): Promise<void> {
   stop.addEventListener('click', stopRun)
   // The door's "Agent is driving" bar has a Stop too (the same page): it ends this run.
   window.addEventListener('acryl:stop-run', stopRun)
-  /** A run over the socket when the server upgrades, else over the stream, with one console warning saying why. */
-  const openRun = async (
+  const REFUSED = Symbol('refused')
+  /** A run over the socket when the server upgrades, else over the stream, with one console warning saying why. `REFUSED` when the server does not know the token. */
+  const tryOpenRun = async (
     action: { t: 'ask'; message: string; driver: string; page?: string } | { t: 'follow' },
-  ): Promise<RunSource | { error: string } | undefined> => {
+  ): Promise<RunSource | { error: string } | undefined | typeof REFUSED> => {
     if (!socketBroken && typeof WebSocket !== 'undefined') {
       try {
-        const socket = await openSocket(session.token, action)
+        const { socket, events: frames } = await openSocket(session.token, action)
         activeSocket = socket
         socket.addEventListener('close', () => {
           if (activeSocket === socket) activeSocket = undefined
         })
-        return { events: socketEvents(socket) }
+        return { events: frames }
       } catch (cause) {
+        if (cause instanceof Refused) return REFUSED
         socketBroken = true
         console.warn(
           `agent-panel: the run could not open a WebSocket (${cause instanceof Error ? cause.message : String(cause)}); using server-sent events, which count against the browser's six connections per host`,
@@ -308,6 +333,7 @@ async function start(): Promise<void> {
         headers,
         body: JSON.stringify({ message: action.message, driver: action.driver, page: action.page }),
       })
+      if (response.status === 403) return REFUSED
       if (!response.ok)
         return {
           error:
@@ -317,9 +343,22 @@ async function start(): Promise<void> {
       return { events: events(response) }
     }
     const latest = await fetch(`${PREFIX}/run`, { headers })
+    if (latest.status === 403) return REFUSED
     return latest.ok && (latest.headers.get('content-type') ?? '').includes('text/event-stream')
       ? { events: events(latest) }
       : undefined
+  }
+  /** `tryOpenRun`, and when the token was refused, a new session and one more try without the person seeing anything; a second refusal is shown. */
+  const openRun = async (
+    action: { t: 'ask'; message: string; driver: string; page?: string } | { t: 'follow' },
+  ): Promise<RunSource | { error: string } | undefined> => {
+    const first = await tryOpenRun(action)
+    if (first !== REFUSED) return first
+    await refreshSession()
+    const second = await tryOpenRun(action)
+    return second === REFUSED
+      ? { error: 'the panel was not accepted (reload the page and try again)' }
+      : second
   }
   /**
    * Show one run, as its events come, until it ends. `own` is true for a run this page just started (its question is on screen); a run found on load is shown from its question, and

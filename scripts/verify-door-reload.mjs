@@ -691,6 +691,79 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
   log(
     'J: the appearance chosen in one window reaches an open page of another at once, with its colours',
   )
+  // K, the app restarts while a page stays open (`node --watch` does it at every change of a file, so a page left open while the attendee edits meets it all the time): the panel's token
+  // belongs to one start of the app, the door's channel and the state socket must reconnect by themselves. The same document, never reloaded, must still ask the agent (the panel
+  // fetches a new session and tries once more, unseen), be looked at through the door, and keep following a state key.
+  await panelCdp.send('Page.navigate', { url: `${base}/p1` })
+  await until(
+    async () =>
+      (await inPage(
+        "!!document.getElementById('agent-panel')?.shadowRoot?.querySelector('button.open')",
+      )) === true,
+    20_000,
+  )
+  await inPage(
+    `window.__sameDocument = true; window.__restartTicks = []; import('/api/state/client.js').then((m) => m.watch('ticker.count', (value) => window.__restartTicks.push(value))); document.getElementById('agent-panel').shadowRoot.querySelector('button.open').click(); true`,
+  )
+  // The key has counted the ticks of section G already: it is followed from there.
+  if (!(await until(async () => (await inPage('window.__restartTicks.length')) >= 1, 5_000, 100)))
+    fail('K: before the restart, the page was not given the state key')
+  const counted = await inPage('window.__restartTicks.at(-1)')
+  for (const wanted of [counted + 1, counted + 2]) {
+    await fetch(`${base}/tick`, { method: 'POST', headers: { origin: base } })
+    if (
+      !(await until(
+        async () => (await inPage('window.__restartTicks.at(-1)')) === wanted,
+        5_000,
+        100,
+      ))
+    )
+      fail(
+        `K: before the restart, the state key did not reach the page: ${await inPage('JSON.stringify(window.__restartTicks)')}`,
+      )
+  }
+  await stopGroup(server)
+  output = ''
+  server = startGroup('npm', ['start'], {
+    cwd: app,
+    env: { ...env, PORT: String(port) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  server.stdout.on('data', (c) => (output += c))
+  server.stderr.on('data', (c) => (output += c))
+  if (!(await until(async () => /listening on (http:\/\/\S+)/u.exec(output)?.[1] === base, 40_000)))
+    fail(`K: the app did not start again on ${base}:\n${output}`)
+  if (!(await until(async () => acryl('look').code === 0, 30_000)))
+    fail('K: the open page did not reconnect to the door after the app restarted')
+  await ask('add 2 3')
+  const afterRestart = await until(async () => {
+    const lines = await inPage(panelLog)
+    return (
+      Array.isArray(lines) &&
+      lines.includes('msg me|add 2 3') &&
+      lines
+        .slice(lines.lastIndexOf('msg me|add 2 3') + 1)
+        .find((entry) => entry.startsWith('msg md|') && entry.includes('The answer is 5'))
+    )
+  }, 20_000)
+  if (!afterRestart)
+    fail(
+      `K: after the app restarted, a question asked in the same page was not answered: ${JSON.stringify(await inPage(panelLog))}`,
+    )
+  if (!(await until(async () => (await inPage('window.__restartTicks.at(-1)')) === 0, 20_000)))
+    fail(
+      `K: the state key was not followed again after the restart: ${await inPage('JSON.stringify(window.__restartTicks)')}`,
+    )
+  await fetch(`${base}/tick`, { method: 'POST', headers: { origin: base } })
+  if (!(await until(async () => (await inPage('window.__restartTicks.at(-1)')) === 1, 10_000, 100)))
+    fail(
+      `K: a change after the restart did not reach the page: ${await inPage('JSON.stringify(window.__restartTicks)')}`,
+    )
+  if ((await inPage('window.__sameDocument')) !== true)
+    fail('K: the page was reloaded, so this section proves nothing')
+  log(
+    'K: after the app restarted, the page that stayed open asks the agent, is looked at through the door and follows state again, with no reload',
+  )
   panelCdp.close()
   log('OK')
 } finally {

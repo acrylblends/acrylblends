@@ -379,6 +379,8 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
                 }
                 authed = true
                 if (hello !== undefined) clearTimeout(hello)
+                // The page waits for this before it counts the socket as open: a token it was given by an earlier start of the app is refused (4401) and it asks for a new one.
+                ws.send(JSON.stringify({ e: 'accepted', d: {} }))
                 return
               }
               const send = (e: string, d: unknown): void => {
