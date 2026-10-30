@@ -108,7 +108,8 @@ Start the app (on pi, in the terminal where `DEEPSEEK_API_KEY` is set):
 npm run dev
 ```
 
-Open the address it prints and click "Ask the agent". Ask it, in one message:
+Open the address it prints and click "Ask the agent". In the list at the top of the panel, pick your coding agent (`codex`, `claude` or `pi`): `agent`
+is the app's own agent, and without a model key it runs offline and only repeats what you say. Ask it, in one message:
 
 > Do it now, without asking for approval. Build a board page at /board: three columns (backlog, doing, done) with cards that have a checkbox to mark
 > them done, a sidebar with filters (all, mine, done) and a count on each filter, a button that opens and closes the sidebar, and a header button
@@ -215,7 +216,7 @@ PowerShell.) It prints `extensions (read-only): board`: the board the agent inst
 
 That is the same app on any Node host: copy the folder (or clone the repository the app was saved to), run `npm install --omit=dev`, and start it with
 `NODE_ENV=production`. On its own the app listens on `127.0.0.1` at a port chosen from its folder; a server must say where to listen. The app reads
-`ACRYLBLENDS_HOST` and `ACRYLBLENDS_PORT` (not `PORT`):
+`ACRYLBLENDS_HOST` and `ACRYLBLENDS_PORT` (from 1.1.0 also `HOST` and `PORT`, the names hosting platforms set, when those two are not set):
 
 | macOS and Linux | Windows PowerShell | Windows cmd.exe |
 | --- | --- | --- |

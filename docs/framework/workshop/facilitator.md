@@ -56,7 +56,7 @@ the window is open. Walk the room at those minutes and help the machine that is 
   panel's `Working... m:ss` line and its Stop button are what people see during a run.
 - **Every agent builds a different board.** pi's board needed a title typed before "New card" added a card, and kept its sidebar always open when the
   prompt did not ask for a toggle. The handout's block 2 prompt now asks for a button that opens and closes the sidebar, so block 3 has something to open.
-- **Production listens where it is told.** The app reads `ACRYLBLENDS_HOST` and `ACRYLBLENDS_PORT`, not `PORT`; without them it listens on `127.0.0.1` at a
+- **Production listens where it is told.** The app reads `ACRYLBLENDS_HOST` and `ACRYLBLENDS_PORT` (from 1.1.0 also `HOST` and `PORT` when those two are not set); without them it listens on `127.0.0.1` at a
   port chosen from its folder. A server needs `ACRYLBLENDS_HOST=0.0.0.0 ACRYLBLENDS_PORT=8080 NODE_ENV=production npm start` (verified: it answered on the
   LAN). If Blends ships `PORT`, the handout switches to it.
 - **Windows.** Windows PowerShell 5.1 has no `&&` (two lines, or `;`); PowerShell sets variables with `$env:NAME="value"`; cmd.exe's `Ctrl-C` asks
