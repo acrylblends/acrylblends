@@ -50,6 +50,7 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
   { name: 'acryl-settings', spec: '' },
   { name: 'acryl-shortcuts', spec: '' },
   { name: 'acryl-app-shell', spec: '' },
+  { name: 'acryl-workspace', spec: '' },
   {
     name: 'dsh-client-ui-brand-acryl',
     spec: '',
@@ -147,8 +148,10 @@ function profileScriptOf(
     'const specs = [',
     "  '@deepseek-ai/dsh-web-app@" + dshVersion + "',",
     "  'acrylblends@" + frameworkVersion + "',",
-    "  ...order.map((name) => 'file:' + join(stage, safe(name))),",
+    "  ...wanted.map((name) => 'file:' + join(stage, safe(name))),",
     ']',
+    '// Only the frame packages are added as DSH plugins (their bundle patch becomes a row). A workspace library they depend on is installed as their',
+    '// dependency from the staged copies, not added as a plugin: adding it would make DSH load a module that has no plugin to apply.',
     "// The profile's own pnpm needs its build allow-list before it installs anything (DSH's dependencies build native bindings).",
     "const dshHome = process.env.DSH_HOME ?? join(process.cwd(), '.dsh')",
     "const profileDir = join(dshHome, 'profiles', " + JSON.stringify(profile) + ')',
@@ -218,7 +221,7 @@ export function ideProfilePlan(input: IdeProfileInput, existing?: string): IdePr
   return {
     profile,
     overlay: overlayOf(packages, input.door === true),
-    packageJson: `${JSON.stringify(mergeManifest(manifest, dependencies, profile, input.frameworkVersion), null, 2)}\n`,
+    packageJson: `${JSON.stringify(mergeManifest(manifest, dependencies, profile), null, 2)}\n`,
     profileScript: profileScriptOf(profile, packages, input.dshVersion, input.frameworkVersion),
   }
 }
@@ -228,7 +231,6 @@ function mergeManifest(
   manifest: Record<string, unknown>,
   dependencies: Record<string, string>,
   profile: string,
-  frameworkVersion: string,
 ): Record<string, unknown> {
   const sorted = Object.fromEntries(
     Object.entries(dependencies).sort(([a], [b]) => a.localeCompare(b)),
