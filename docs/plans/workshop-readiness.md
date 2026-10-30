@@ -258,3 +258,24 @@ one-shot `/IT` task, with the real `~/.pi` linked into the scratch home by a dir
 - **Codex files written into the real profile during the first pass** (names and sizes only; nothing was changed or reverted): `logs_2.sqlite` 16,523,264;
   `state_5.sqlite-wal` 510,912; `models_cache.json` 177,492; `thread_history_1.sqlite-wal` 193,672; `cache/codex_apps_tools/71a3cb5f….json` 3,213,439;
   six `plugins/cache/openai-curated-remote/*/.codex-remote-plugin-install.json` files of 100-104 bytes each; and five `*.sqlite-shm` files of 32,768.
+
+## The walk on Windows, rerun on 1.0.10 (2026-10-30)
+
+Same machine, same isolation (scratch HOME/APPDATA/npm cache, portable Node 22.23.4, one-shot `/IT` tasks for the app, Edge and the windows); the
+DeepSeek key is the box's own `~/.secure-storage/llmproviders/deepseek/deepseek.json`, read by the launcher script into `DEEPSEEK_API_KEY` in its process
+environment only - never printed, written to a file, put on a command line or into the scratch `~/.pi`. Codex stayed out.
+
+| # | Item | Result | Evidence (exact) |
+| --- | --- | --- | --- |
+| 1 | preflight + create `@1.0.10` | **PASS** | preflight exit 0 in 13 s: `PASS agent claude ..., codex ..., pi (DeepSeek key found)`; `npm create acrylblends@1.0.10` 8 s (115 files); install 4 s, 0 vulnerabilities |
+| 2 | pi builds the board from the panel | **PASS** | run started from the page's panel with driver `pi`; `/board` answered 200 after **356 s**; `{"board":true,"cards":[{"id":"card-…","title":"New card 1","column":"backlog",...}]}`; the agent's own report lists the door actions it took (New card, Mark done, move, filters All/Mine/Done, delete, `npm run check`, `npm test 14/14`) |
+| 3 | desktop: sidebar, second window at `/settings`, change + Save, shows in window 1, Settings menu | **PASS, one caveat** | door audit in order: `act navigate window 1 -> /board`, `window-open window 3` (title `Settings - my-app`, path `/settings`), `act select` on the `Appearance` combobox in window 3, `act reload window 1`, `menu-click File>Settings...` (it focused the open `/settings` window, not a duplicate); `look --window 3` shows `role=status name="Saved: Dark"`, and the agent reported that `localStorage.theme` is shared by every window of the origin and that it reloaded the board window so the dark theme re-ran. Caveat: the door reports page structure and text, not computed colours, so "shows in window 1" rests on the saved value plus the reload, not on pixel comparison; no separate sidebar-toggle click was logged in this run (the board's own filter sidebar was exercised with clicks in item 2). 1.0.10 does have the `File>Settings...` menu item that 1.0.7 lacked. |
+| 4 | two windows open during the live run; look in both; Stop | **PASS** | during a live `pi` run with windows 1 (`/board`) and 2 (`/settings`): `look --window 1` 338 ms then 353 ms, `look --window 2` 317 ms then 328 ms; the panel's **Stop** clicked in the live tab: `button.stop` went disabled and the audit logged `ask end` 3 s later (`02:34:13`), no queueing |
+| 5 | production | **PASS** | start line `extensions (read-only): board`; `/` 200, `/board` 200 (`{"board":true,"cards":[]}`), `/health` 200; `/api/agent-panel/session` 404, `/ask` 404, `/extensions` 404 |
+
+What this rerun confirms on Windows: the 1.0.7 blockers were credentials (pi's key and codex's model), not the framework; with the box's own DeepSeek key the
+panel builds and installs the board, the window and menu verbs work, the Settings menu opens `/settings`, Save reports `Saved: Dark`, two windows with live
+streams answer `look` in about 300 ms and Stop ends the run, and production serves the installed board read-only with the agent routes gone.
+
+Cleanup: `w110-*` tasks deleted, no `node.exe`/`electron.exe` left, scratch `C:\Users\alexa\scratch-acryl\w110` removed; real `~/.acryl` (2026-10-09) and
+`~/.dsh` (2026-10-08) untouched. Codex was not run in this pass.
