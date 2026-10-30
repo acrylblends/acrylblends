@@ -57,6 +57,13 @@ test("the overlay mounts the frame rows and leaves DSH's own brand row out", () 
   assert.match(overlay, /- id: ui-brand-official\n {2}disabled: true/u)
 })
 
+test("the overlay turns DSH's API-key first-run dialog off, so it cannot cover the frame", () => {
+  assert.match(
+    ideProfilePlan(input).overlay,
+    /- id: ui-settings-models\n {2}config:\n {4}credentialOnboarding: false/u,
+  )
+})
+
 test("the manifest carries the DSH pin, the framework, the frame packages, and keeps the app's own keys", () => {
   const existing = JSON.stringify({
     name: 'my-app',

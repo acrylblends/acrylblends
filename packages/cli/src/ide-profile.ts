@@ -183,6 +183,8 @@ function overlayOf(packages: readonly IdeProfilePackage[]): string {
   for (const entry of rows) {
     lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${entry.name}`)
   }
+  // ACRYL's frame owns the first run: DSH's API-key dialog must not cover it. `ui-settings-models` carries the switch (DSH's own onboarding config).
+  lines.push('- id: ui-settings-models', '  config:', '    credentialOnboarding: false')
   for (const id of [...disabled].sort()) {
     lines.push('- id: ' + id, '  disabled: true')
   }
