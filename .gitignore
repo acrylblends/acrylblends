@@ -180,3 +180,6 @@ ide/*/lib/
 # acryl-brand ships lib/identity.js as source, not build output
 !ide/acryl-brand/lib/
 ide/acryl-ui/registry-seed/
+
+# The materialized frame fixture (scripts/frame-fixtures/review-fixture/setup.mjs recreates it byte-identically)
+.frame-fixture/
