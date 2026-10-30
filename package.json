@@ -10,8 +10,8 @@
   "scripts": {
     "build": "pnpm -r run build && node scripts/stage-framework.mjs",
     "test:driver-pty": "node --import ./scripts/workspace-source.mjs --test --test-timeout=60000 \"plugins/driver-pty/test/*.test.ts\"",
-    "test:packages": "pnpm -r --filter './plugins/acryl-*' --filter acrylblends-framework run test",
-    "typecheck": "tsc -p tsconfig.json && tsc -p plugins/tsconfig.json",
+    "test:packages": "pnpm -r --filter './plugins/acryl-*' --filter acrylblends-framework --filter './ide/*' run test",
+    "typecheck": "tsc -p tsconfig.json && tsc -p plugins/tsconfig.json && tsc -p ide/tsconfig.json",
     "test": "vitest run && pnpm run test:packages && node --import ./scripts/workspace-source.mjs --test \"plugins/*/test/*.test.ts\" && node --test scripts/lib/*.test.mjs workshop-registry/test/*.test.mjs",
     "lint": "biome check .",
     "format": "biome check --write .",
