@@ -15,6 +15,8 @@ import { dockShellHooks } from './dock/dock-hooks.tsx'
 import { createAgentBridge } from './sessions/agent-bridge.ts'
 import { ChatSelection } from './chat/chat-selection.ts'
 import type { MainViewNavigation } from './sessions/main-session.ts'
+import { ModelConnectControl, type ModelCredentialsPort, type ModelLlmPort } from './models/model-connect.ts'
+import { openSettingsSection } from './settings/open-settings.ts'
 import { createWorkspaceFilesApi } from './files/files-api.ts'
 import { filesTabPlugin } from './files/files-tab.ts'
 import { changesTabPlugin } from './changes/changes-tab.ts'
@@ -109,6 +111,24 @@ export function apply(ctx: ClientContext): void {
   // The one owner of which chat is shown and which tab and worktree show it; follows DSH's sessions service as it comes and goes.
   const chats = new ChatSelection({ groups, shell, getSessions: () => ctx.get('sessions'), getNavigation, showTabs: () => { upstreamPanels.close() } })
   ctx.inject(['sessions'], child => { child.effect(() => chats.watch(child.sessions), 'acryl-workspace: tabs follow the shown chat') })
+  // First-run model setup. The faces are DSH's own Remote namespaces; they are read inside a child fiber that declares them,
+  // because a Cordis context refuses an undeclared service property. A composition without them simply never shows the card.
+  // The key is written through the Host's credentials Remote, so DeepSeek Harness stores it under its home (the same store
+  // Settings > Models uses).
+  let remoteFaces: { credentials?: ModelCredentialsPort; llm?: ModelLlmPort } | undefined
+  const connectModel = new ModelConnectControl({
+    getCredentials: () => remoteFaces?.credentials,
+    getLlm: () => remoteFaces?.llm,
+    storage,
+    openSettings: () => { openSettingsSection('models') },
+  })
+  // The readiness check waits for the Host's Remote faces: reading them at apply time (very early in the page) found them absent
+  // and left the card hidden for good. A composition without them simply never shows the card.
+  ctx.inject(['remote', 'remote.credentials', 'remote.llm'], child => {
+    remoteFaces = (child as unknown as { remote: { credentials: ModelCredentialsPort; llm: ModelLlmPort } }).remote
+    child.effect(() => connectModel.start(), 'acryl-workspace: model connection')
+    child.effect(() => () => { remoteFaces = undefined }, 'acryl-workspace: model connection cleanup')
+  })
   const rightPanel = {
     toggle(): void {
       try {
@@ -209,7 +229,7 @@ export function apply(ctx: ClientContext): void {
           removeSlot = ctx.slots.register({
             name: 'desktop.main',
             priority: WORKSPACE_MAIN_PRIORITY,
-            inject: () => ({ ptyApi: ptyClient, terminals, dock, agentStatus, agents, tabTypes, tabRegistry, paletteConfig, toasts, notices, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects }),
+            inject: () => ({ ptyApi: ptyClient, terminals, dock, agentStatus, agents, tabTypes, tabRegistry, paletteConfig, toasts, notices, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel }),
           }, WorkspaceCanvas)
         } catch (cause) {
           // A registration conflict must not take the left pane and the Changes tab down with it.
