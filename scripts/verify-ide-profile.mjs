@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyIdeProfile, FRAME_PACKAGES } from '../packages/cli/src/ide-profile.ts'
+import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const log = (message) => console.log(`verify-ide-profile: ${message}`)
@@ -86,6 +87,111 @@ function doorSpecsOf() {
   return specs
 }
 
+/** The cookies curl was given by the token URL, in the shape the DevTools protocol sets on a browser. */
+function cookiesOf(jar) {
+  const cookies = []
+  for (const line of readFileSync(jar, 'utf8').split('\n')) {
+    if (line.trim() === '') continue
+    const httpOnly = line.startsWith('#HttpOnly_')
+    const body = httpOnly ? line.slice('#HttpOnly_'.length) : line
+    if (body.startsWith('#')) continue
+    const [domain, , path, secure, , name, value] = body.split('\t')
+    if (name === undefined || value === undefined) continue
+    cookies.push({ name, value, domain, path, secure: secure === 'TRUE', httpOnly })
+  }
+  return cookies
+}
+
+/**
+ * The page as a person sees it: the ACRYL frame must actually render (the rows being active and the bundle being in the module table
+ * is not enough; a second `root` registration or a client error leaves DSH's stock frame up), the left panel must be the workspace's
+ * Projects tree, and the door's page script must have run. This is the assertion that catches the failure the module-table check cannot.
+ */
+async function checkFrameInBrowser(origin, jar, output) {
+  const chrome = findChrome()
+  if (chrome === undefined)
+    fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the frame check')
+  const profile = mkdtempSync(join(tmpdir(), 'ide-profile-frame-'))
+  const port = 9500 + Math.floor(Math.random() * 400)
+  const child = spawn(chrome, [...chromeFlags(profile, port), '--hide-scrollbars'], {
+    stdio: 'ignore',
+  })
+  try {
+    for (let i = 0; i < 200; i += 1) {
+      if (
+        await fetch(`http://127.0.0.1:${port}/json/version`).then(
+          (r) => r.ok,
+          () => false,
+        )
+      )
+        break
+      await sleep(50)
+    }
+    const cdp = await devtools(port)
+    try {
+      await cdp.send('Page.enable')
+      await cdp.send('Runtime.enable')
+      await cdp.send('Network.enable')
+      for (const cookie of cookiesOf(jar))
+        await cdp.send('Network.setCookie', { ...cookie, url: `${origin}/` })
+      // The full-width layout, where the workspace's own Projects panel replaces the upstream sidebar.
+      await cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: 1440,
+        height: 900,
+        deviceScaleFactor: 1,
+        mobile: false,
+      })
+      await cdp.send('Page.navigate', { url: `${origin}/` })
+      const evaluate = async (expression) =>
+        (
+          await cdp.send('Runtime.evaluate', {
+            expression,
+            returnByValue: true,
+            awaitPromise: true,
+          })
+        ).result?.result?.value
+      const frame = await until(
+        async () =>
+          await evaluate(`(() => {
+            const canvas = document.querySelector('.dshWorkspace')
+            const side = document.querySelector('.dshWorkspaceSide')
+            if (canvas === null || side === null || typeof window.__acrylDoor !== 'function') return undefined
+            return {
+              mode: document.body.dataset.dshDesktopMode,
+              frames: document.querySelectorAll('.dshDesktopFrame').length,
+              canvas: true,
+              head: side.querySelector('.dshWorkspaceSideProjectsHead') !== null,
+              side: side.innerText.slice(0, 400),
+              door: typeof window.__acrylDoor,
+            }
+          })()`),
+        30_000,
+      )
+      if (frame === undefined)
+        fail(`the ACRYL frame did not render in the page; server said:\n${output.slice(-2500)}`)
+      if (frame.mode !== 'advanced' || frame.frames !== 1)
+        fail(`the page is not the frame's advanced layout: ${JSON.stringify(frame)}`)
+      if (frame.head !== true)
+        fail(`the left panel is not the workspace's Projects tree: ${JSON.stringify(frame.side)}`)
+      if (frame.door !== 'function')
+        fail(`the door's page script did not run: ${JSON.stringify(frame)}`)
+      log(
+        'the page renders the ACRYL frame (canvas and Projects panel), and the door page script runs',
+      )
+    } finally {
+      cdp.close()
+    }
+  } finally {
+    child.kill('SIGKILL')
+    await new Promise((done) => {
+      if (child.exitCode !== null) return done()
+      child.once('exit', done)
+      setTimeout(done, 5_000)
+    })
+    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+}
+
 const scratch = mkdtempSync(join(tmpdir(), 'ide-profile-boot-'))
 let server
 try {
@@ -97,7 +203,9 @@ try {
     filter: (path) => !/node_modules|\/lib(\/|$)/u.test(path),
   })
   const doorSpecs = doorSpecsOf()
-  const specs = { ...frameSpecs(), ...doorSpecs }
+  // The templates ship `typescript`: the door serves its page modules through the app's own compiler, so a scratch app without it is
+  // not the app a person gets.
+  const specs = { ...frameSpecs(), ...doorSpecs, typescript: '6.0.3' }
   const byRow = Object.fromEntries(
     FRAME_PACKAGES.filter((entry) => entry.spec !== '' || entry.installed !== true).map((entry) => [
       entry.row ?? entry.name,
@@ -181,6 +289,7 @@ ${output.slice(-2000)}`)
   if (!page.includes('acryl-workspace/client.js'))
     fail(`the page does not load the workspace client; server said:\n${output.slice(-2500)}`)
   log('the page loads the workspace client bundle')
+  await checkFrameInBrowser(new URL(url).origin, jar, output)
   const tags = page.split('/api/acryl-door/page.js').length - 1
   if (tags !== 1)
     fail(
