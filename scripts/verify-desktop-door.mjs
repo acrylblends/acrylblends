@@ -287,48 +287,52 @@ try {
 
   // Two live windows that each hold three event streams of their own (a board that streams its state): six connections to the host, all a browser allows. A look at either window and
   // a click in it must still answer at once, because the door's channel is a WebSocket and its answers travel on it. (With the event stream they queued forever.)
-  const hogIds = []
-  for (const _ of [1, 2]) {
-    const hog = acryl('window', 'open', '--path', '/hog')
-    const id = /window (\d+)/u.exec(hog.out)?.[1]
-    if (hog.code !== 0 || id === undefined) fail(`window open /hog failed:\n${hog.out}${hog.err}`)
-    hogIds.push(id)
-  }
-  for (const id of hogIds) {
-    const seen = await until(async () => {
+  // ACRYL_GATE_HOG_REPEAT=<n> repeats this case n times in the one run (a flake hunt: the release runs it 20 times); by default it runs once.
+  const hogRounds = Number(process.env.ACRYL_GATE_HOG_REPEAT ?? 1)
+  for (let round = 1; round <= hogRounds; round += 1) {
+    const hogIds = []
+    for (const _ of [1, 2]) {
+      const hog = acryl('window', 'open', '--path', '/hog')
+      const id = /window (\d+)/u.exec(hog.out)?.[1]
+      if (hog.code !== 0 || id === undefined) fail(`window open /hog failed:\n${hog.out}${hog.err}`)
+      hogIds.push(id)
+    }
+    for (const id of hogIds) {
+      const seen = await until(async () => {
+        const looked = look(id)
+        return looked.code === 0 && looked.out.includes('Hog page') && looked.out
+      }, 30_000)
+      if (!seen)
+        fail(
+          `look --window ${id} does not reach a window with streams of its own:\n${look(id).out}${look(id).err}`,
+        )
+    }
+    await sleep(1500) // the streams open on load
+    for (const id of hogIds) {
+      const started = Date.now()
       const looked = look(id)
-      return looked.code === 0 && looked.out.includes('Hog page') && looked.out
-    }, 30_000)
-    if (!seen)
-      fail(
-        `look --window ${id} does not reach a window with streams of its own:\n${look(id).out}${look(id).err}`,
-      )
-  }
-  await sleep(1500) // the streams open on load
-  for (const id of hogIds) {
-    const started = Date.now()
-    const looked = look(id)
-    const took = Date.now() - started
-    if (looked.code !== 0 || took > 2500)
-      fail(
-        `with six streams held by two windows, look --window ${id} took ${took} ms and ${looked.code === 0 ? 'read' : 'failed with'}:\n${looked.out}${looked.err}`,
-      )
-  }
-  const press = /button "Press" \[ref=([\d.]+)\]/u.exec(look(hogIds[0]).out)?.[1]
-  if (press === undefined) fail(`no button on the first hog window:\n${look(hogIds[0]).out}`)
-  const pressedHog = acryl('act', 'click', '--window', hogIds[0], '--ref', press)
-  const afterFirst = look(hogIds[0])
-  const afterSecond = look(hogIds[1])
-  if (
-    pressedHog.code !== 0 ||
-    !afterFirst.out.includes('Hog pressed') ||
-    afterSecond.out.includes('Hog pressed')
-  )
-    fail(
-      `act click --window ${hogIds[0]} did not reach only that window:\n${pressedHog.out}${pressedHog.err}\nwindow ${hogIds[0]} after the click:\n${afterFirst.out}${afterFirst.err}\nwindow ${hogIds[1]}:\n${afterSecond.out}${afterSecond.err}`,
+      const took = Date.now() - started
+      if (looked.code !== 0 || took > 2500)
+        fail(
+          `with six streams held by two windows, look --window ${id} took ${took} ms and ${looked.code === 0 ? 'read' : 'failed with'}:\n${looked.out}${looked.err}`,
+        )
+    }
+    const press = /button "Press" \[ref=([\d.]+)\]/u.exec(look(hogIds[0]).out)?.[1]
+    if (press === undefined) fail(`no button on the first hog window:\n${look(hogIds[0]).out}`)
+    const pressedHog = acryl('act', 'click', '--window', hogIds[0], '--ref', press)
+    const afterFirst = look(hogIds[0])
+    const afterSecond = look(hogIds[1])
+    if (
+      pressedHog.code !== 0 ||
+      !afterFirst.out.includes('Hog pressed') ||
+      afterSecond.out.includes('Hog pressed')
     )
-  for (const id of hogIds)
-    if (acryl('window', 'close', '--id', id).code !== 0) fail(`could not close window ${id}`)
+      fail(
+        `act click --window ${hogIds[0]} did not reach only that window:\n${pressedHog.out}${pressedHog.err}\nwindow ${hogIds[0]} after the click:\n${afterFirst.out}${afterFirst.err}\nwindow ${hogIds[1]}:\n${afterSecond.out}${afterSecond.err}`,
+      )
+    for (const id of hogIds)
+      if (acryl('window', 'close', '--id', id).code !== 0) fail(`could not close window ${id}`)
+  }
   log(
     'two windows that hold six event streams between them are both looked at and clicked at once (the door is a WebSocket)',
   )

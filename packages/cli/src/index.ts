@@ -15,6 +15,7 @@ export {
   copyTemplate,
   isValidName,
   mergeDependencies,
+  mergeTooling,
   nameFrom,
   readTemplatePlugins,
   TargetNotEmptyError,

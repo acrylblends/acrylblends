@@ -115,7 +115,10 @@ export function readTemplatePlugins(templateDir: string): string[] {
   return plugins ?? []
 }
 
-/** Add run-time dependencies to an app's package.json, keeping what is there and sorting the keys. Returns the names added. */
+/**
+ * Add run-time dependencies to an app's package.json, keeping what is there and sorting the keys. Returns the names added. A package the app lists as a development
+ * dependency too is taken out of that list: npm lets the development entry win, so `npm install --omit=dev` would leave a run-time dependency out.
+ */
 export function mergeDependencies(
   appDir: string,
   dependencies: Readonly<Record<string, string>>,
@@ -123,6 +126,7 @@ export function mergeDependencies(
   const file = join(appDir, 'package.json')
   const manifest = JSON.parse(readFileSync(file, 'utf8')) as {
     dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
   }
   const current = manifest.dependencies ?? {}
   const added = Object.keys(dependencies).filter((name) => !(name in current))
@@ -130,6 +134,10 @@ export function mergeDependencies(
   manifest.dependencies = Object.fromEntries(
     Object.entries(merged).sort(([a], [b]) => a.localeCompare(b)),
   )
+  if (manifest.devDependencies !== undefined)
+    manifest.devDependencies = Object.fromEntries(
+      Object.entries(manifest.devDependencies).filter(([name]) => !(name in merged)),
+    )
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)
   return added
 }
@@ -168,8 +176,8 @@ export function mergeOpener(appDir: string, opener: string): void {
 }
 
 /**
- * Add a plugin's development dependencies and scripts to an app's package.json: nothing the app already has is replaced. Returns the names of the development dependencies
- * and scripts added.
+ * Add a plugin's development dependencies and scripts to an app's package.json: nothing the app already has is replaced, and a package the app already needs at run time
+ * (`dependencies`) is not listed again as a development one. Returns the names of the development dependencies and scripts added.
  */
 export function mergeTooling(
   appDir: string,
@@ -180,15 +188,22 @@ export function mergeTooling(
 ): { devDependencies: string[]; scripts: string[] } {
   const file = join(appDir, 'package.json')
   const manifest = JSON.parse(readFileSync(file, 'utf8')) as {
+    dependencies?: Record<string, string>
     devDependencies?: Record<string, string>
     scripts?: Record<string, string>
   }
   const dev = manifest.devDependencies ?? {}
+  const runtime = manifest.dependencies ?? {}
   const scripts = manifest.scripts ?? {}
-  const addedDev = Object.keys(tooling.devDependencies ?? {}).filter((name) => !(name in dev))
+  const wanted = Object.entries(tooling.devDependencies ?? {}).filter(
+    ([name]) => !(name in runtime),
+  )
+  const addedDev = wanted.map(([name]) => name).filter((name) => !(name in dev))
   const addedScripts = Object.keys(tooling.scripts ?? {}).filter((name) => !(name in scripts))
   manifest.devDependencies = Object.fromEntries(
-    Object.entries({ ...tooling.devDependencies, ...dev }).sort(([a], [b]) => a.localeCompare(b)),
+    Object.entries({ ...Object.fromEntries(wanted), ...dev })
+      .filter(([name]) => !(name in runtime))
+      .sort(([a], [b]) => a.localeCompare(b)),
   )
   manifest.scripts = { ...tooling.scripts, ...scripts }
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)

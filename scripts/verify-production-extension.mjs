@@ -5,7 +5,7 @@
 // it, must warn by name.
 //   node scripts/verify-production-extension.mjs [--npm <version>]
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -115,6 +115,12 @@ try {
   )
 
   // Production.
+  // A deploy installs without the development dependencies (`npm ci --omit=dev`): what production needs at run time has to be in dependencies, not only in devDependencies.
+  run('npm', ['prune', '--omit=dev', '--no-audit', '--no-fund'], app)
+  if (!existsSync(join(app, 'node_modules', 'ws', 'package.json')))
+    fail(
+      'ws is not installed without the development dependencies: the state plugin follows keys over a WebSocket in production',
+    )
   const production = await serve(app, 'start', {
     NODE_ENV: 'production',
     PORT: String(await freePort()),
@@ -127,6 +133,26 @@ try {
     )
   if ((await status(production.base, '/health')) !== 200)
     fail('/health is not served in production')
+  // State is followed over a WebSocket in production too (`watch` of /api/state/client.js): a program with no Origin and a loopback Host is let in.
+  const followed = await new Promise((resolve) => {
+    const socket = new WebSocket(`${production.base.replace('http', 'ws')}/api/state/ws`)
+    const timer = setTimeout(() => resolve('no answer in 5 s'), 5000)
+    socket.addEventListener('open', () =>
+      socket.send(JSON.stringify({ t: 'sub', key: 'extensions' })),
+    )
+    socket.addEventListener('message', (event) => {
+      const frame = JSON.parse(String(event.data))
+      if (frame.t === 'ping') return
+      clearTimeout(timer)
+      socket.close()
+      resolve(frame.key === 'extensions' && 'value' in frame ? 'ok' : JSON.stringify(frame))
+    })
+    socket.addEventListener('error', () => {
+      clearTimeout(timer)
+      resolve('the upgrade was refused')
+    })
+  })
+  if (followed !== 'ok') fail(`production does not serve state over a WebSocket: ${followed}`)
   for (const [path, method] of [
     ['/ask', 'POST'],
     ['/extensions', 'GET'],
@@ -141,7 +167,7 @@ try {
   if (/\.acryl[\\/]|acryl-door/u.test(production.output))
     fail(`production mentions the door:\n${production.output}`)
   log(
-    'production serves /board from plugins/, says so at start, and /ask, /extensions*, /tasks* are 404',
+    'production, installed without the development dependencies, serves /board from plugins/, says so at start, follows state over a WebSocket, and /ask, /extensions*, /tasks* are 404',
   )
   await stopTree(production.child)
   await until(
