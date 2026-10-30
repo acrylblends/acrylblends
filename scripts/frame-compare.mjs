@@ -36,9 +36,17 @@ async function withChrome(work) {
   if (!chrome)
     throw new Error('frame-compare: no Chrome or Chromium on this machine (set CHROME_BIN)')
   const port = 9300 + Math.floor(Math.random() * 500)
+  // `--disable-notifications`: a browser whose notification permission is still `default` puts "Enable notifications" in the
+  // workspace status line, which adds a 24px bar and shifts the centred conversation up by half of it. The ACRYL desktop has no
+  // such prompt (the window owns notifications), so the reference set does not have it; the flag makes the two surfaces
+  // comparable. It is not a product change: a person's browser still asks.
   const child = spawn(
     chrome,
-    [...chromeFlags(mkdtempSync(join(tmpdir(), 'frame-compare-')), port), '--hide-scrollbars'],
+    [
+      ...chromeFlags(mkdtempSync(join(tmpdir(), 'frame-compare-')), port),
+      '--hide-scrollbars',
+      '--disable-notifications',
+    ],
     { stdio: 'ignore' },
   )
   try {
