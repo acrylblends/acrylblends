@@ -194,6 +194,13 @@ function overlayOf(packages: readonly IdeProfilePackage[], door = false): string
   for (const entry of rows) {
     lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${entry.name}`)
   }
+  // The frame's own switch: DSH's `ui-layout` registers the `root` slot too, and two registrations at one priority throw, so the
+  // frame's `root` never lands and the page falls back to the stock frame with DSH's session list. `acryl-app-shell` provides
+  // `ctx.layout` itself, so DSH's sidebars, conversation, settings and right panel keep working on it. These are the three rows
+  // ACRYL's own `advanced-shell` capability composes (runtime/acryl-harness-runtime/src/coding-capabilities.ts).
+  lines.push('- id: ui-layout', '  disabled: true')
+  lines.push('- id: ui-sidebar', '  disabled: false')
+  lines.push('- id: ui-conversation', '  disabled: false')
   // ACRYL's frame owns the first run: DSH's API-key dialog must not cover it. `ui-settings-models` carries the switch (DSH's own onboarding config).
   lines.push('- id: ui-settings-models', '  config:', '    credentialOnboarding: false')
   for (const id of [...disabled].sort()) {
