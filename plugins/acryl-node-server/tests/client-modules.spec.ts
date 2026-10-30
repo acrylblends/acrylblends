@@ -103,6 +103,18 @@ describe('clientModules', () => {
     expect((await site.request('/client/counter.tsx')).status).toBe(404)
   })
 
+  it('serves from an explicit mount prefix when the router match result is not visible (a host router from another copy)', async () => {
+    const { root, runtimeDir } = app({ 'counter.tsx': COUNTER })
+    // Requested directly, this app's own basePath is ''; the mount is the only thing that can say where its routes begin. That is
+    // the position an app plugin is in under a Host whose framework carries its own router copy: the request was matched there,
+    // and a module-level match-result symbol in this copy never sees it.
+    const site = clientModules({ root, runtimeDir, mount: '/client' })
+    const res = await site.request('/client/counter.tsx')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('const Counter')
+    expect(await (await site.request('/client/@acrylblends/jsx-dom.js')).text()).toBe('/* jsx-dom */\n')
+  })
+
   it('compiles JSX for the DOM renderer whatever the server tsconfig.json says, and a file pragma still wins', async () => {
     const { dir, root, runtimeDir } = app({
       'a.tsx': 'export const a = <i />\n',

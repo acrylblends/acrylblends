@@ -57,6 +57,13 @@ test("the overlay mounts the frame rows and leaves DSH's own brand row out", () 
   assert.match(overlay, /- id: ui-brand-official\n {2}disabled: true/u)
 })
 
+test("the overlay turns DSH's own frame off, so the ACRYL frame's root registration can land", () => {
+  const overlay = ideProfilePlan(input).overlay
+  assert.match(overlay, /- id: ui-layout\n {2}disabled: true/u)
+  assert.match(overlay, /- id: ui-sidebar\n {2}disabled: false/u)
+  assert.match(overlay, /- id: ui-conversation\n {2}disabled: false/u)
+})
+
 test("the overlay turns DSH's API-key first-run dialog off, so it cannot cover the frame", () => {
   assert.match(
     ideProfilePlan(input).overlay,
