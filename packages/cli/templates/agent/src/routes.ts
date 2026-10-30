@@ -16,14 +16,41 @@ const DOOR_TAG =
 /**
  * The app's own routes on the router. Always: the page and `GET /health`. While the agent, the extensions and the task recorder run: `POST /ask` for the agent; `GET /extensions`
  * (and `POST /extensions/approve` and `/deny`) and `GET /tasks` to observe and steer what it did (every run is a durable task owning one task per tool call); `POST /tasks/cancel`.
- * What changes is also streamed: `GET /api/state/tasks/events` and `GET /api/state/extensions/events`. In production `src/app.ts` leaves the agent and builder rows out
+ * What changes is also streamed: `GET /api/state/tasks/events` and `GET /api/state/extensions/events` (a page follows them with `watch` of `/api/state/client.js`, over one WebSocket). In production `src/app.ts` leaves the agent and builder rows out
  * and starts the extensions read-only (unless `ACRYL_PRODUCTION_KEEP` names them), and then those routes are not mounted at all. The mounts are removed when the plugin is disposed.
  */
-/** The page's look: the person's choice from /settings (kept in this browser), applied before the page paints. */
+/**
+ * The app's look: the person's choice from /settings (kept in this browser), as `GET /appearance.js`. One script tag in a page's head (`<script src="/appearance.js"></script>`) applies it
+ * before the page paints, again whenever another window of the app changes it (the `storage` event), and defines the colours as custom properties for the page to use:
+ * `--bg`, `--fg`, `--muted`, `--surface`, `--border`, `--accent` (`html[data-theme=dark|light]` is set when the person chose one, and the system's choice decides otherwise). A page the agent builds
+ * carries the tag and colours itself with `var(--bg)` and the rest, and so follows Dark and Light.
+ */
+const APPEARANCE_JS = `(function () {
+  var root = document.documentElement
+  function apply() {
+    var saved
+    try { saved = localStorage.getItem('theme') } catch (e) { /* storage blocked: follow the system */ }
+    if (saved === 'dark' || saved === 'light') root.dataset.theme = saved
+    else delete root.dataset.theme
+  }
+  apply()
+  addEventListener('storage', function (event) { if (event.key === null || event.key === 'theme') apply() })
+  var light = '--bg:#ffffff;--fg:#111827;--muted:#6b7280;--surface:#f3f4f6;--border:#d1d5db;--accent:#2563eb'
+  var dark = '--bg:#111827;--fg:#f9fafb;--muted:#9ca3af;--surface:#1f2937;--border:#374151;--accent:#60a5fa'
+  var style = document.createElement('style')
+  style.id = 'appearance'
+  style.textContent = ':root{color-scheme:light dark;' + light + '}'
+    + '@media (prefers-color-scheme:dark){html:not([data-theme]){' + dark + '}}'
+    + 'html[data-theme=dark]{color-scheme:dark;' + dark + '}'
+    + 'html[data-theme=light]{color-scheme:light;' + light + '}'
+    + 'html{background:var(--bg);color:var(--fg)}'
+  ;(document.head || root).appendChild(style)
+})()
+`
+/** The home and settings pages' own layout; their colours come from /appearance.js. */
 const APPEARANCE_STYLE =
-  '<style>:root{color-scheme:light dark}html[data-theme=dark]{color-scheme:dark;background:#111827;color:#f9fafb}html[data-theme=light]{color-scheme:light;background:#fff;color:#111827}body{font:16px system-ui,sans-serif;margin:2rem auto;max-width:42rem;padding:0 1rem}a{color:inherit}</style>'
-const APPEARANCE_SCRIPT =
-  "<script>(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}})()</script>"
+  '<style>body{font:16px system-ui,sans-serif;margin:2rem auto;max-width:42rem;padding:0 1rem}a{color:inherit}</style>'
+const APPEARANCE_SCRIPT = '<script src="/appearance.js"></script>'
 
 /** `/settings`: the one setting the template has, the appearance. The desktop app's Settings menu item opens this page. */
 const settingsPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Settings - ${APP_NAME}</title>${APPEARANCE_STYLE}${APPEARANCE_SCRIPT}</head><body><h1>Settings</h1><p><label for="theme">Appearance</label> <select id="theme" name="theme"><option value="system">Match the system</option><option value="light">Light</option><option value="dark">Dark</option></select></p><p id="saved" role="status"></p><p><a href="/">Back to ${APP_NAME}</a></p><script>(function(){var select=document.getElementById('theme'),saved=document.getElementById('saved');try{select.value=localStorage.getItem('theme')||'system'}catch(e){}select.addEventListener('change',function(){var value=select.value;try{if(value==='system'){localStorage.removeItem('theme');delete document.documentElement.dataset.theme}else{localStorage.setItem('theme',value);document.documentElement.dataset.theme=value}saved.textContent='Saved: '+select.options[select.selectedIndex].text}catch(e){saved.textContent='This browser would not keep the setting.'}})})()</script></body></html>`
@@ -52,6 +79,12 @@ export const routes = {
       )
       .get('/health', (c) => c.json({ ok: true }))
       .get('/settings', (c) => c.html(settingsPage))
+      .get('/appearance.js', (c) =>
+        c.body(APPEARANCE_JS, 200, {
+          'content-type': 'text/javascript; charset=utf-8',
+          'cache-control': 'no-cache',
+        }),
+      )
     ctx.router.route('/', base)
     // The routes that give a visitor the agent: mounted only while the agent, the extensions and the tasks run (see the header).
     ctx.inject(['agent', 'extensions', 'tasks'], (inner) => {

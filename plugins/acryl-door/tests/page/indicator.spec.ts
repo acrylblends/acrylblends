@@ -47,6 +47,31 @@ describe('the door indicator', () => {
     remove()
   })
 
+  it('stays up for the whole of a run, between the calls, and its Stop ends the run as well as the page\'s control', async () => {
+    document.body.innerHTML = '<p>Ready</p>'
+    const driver = new UiDriver({ document: () => document })
+    const remove = mountIndicator(driver, document)
+    const stops: string[] = []
+    window.addEventListener('acryl:stop-run', () => stops.push('stop'))
+    driver.setRunning(true)
+    // No call is in flight, and the bar is there with Stop.
+    expect(bar()?.textContent).toContain('Agent is driving: working on your request')
+    await driver.handle({ op: 'snapshot' })
+    expect(bar()?.textContent).toContain('Agent is driving: working on your request')
+    button('Stop').click()
+    expect(stops).toEqual(['stop'])
+    expect(bar()?.hasAttribute('data-killed')).toBe(true)
+    // The run ends: the bar stays as the person's stop, until they allow the agent again; a new run is a new question and allows it.
+    driver.setRunning(false)
+    expect(bar()?.hasAttribute('data-killed')).toBe(true)
+    driver.setRunning(true)
+    expect(bar()?.hasAttribute('data-killed')).toBe(false)
+    await expect(driver.handle({ op: 'snapshot' })).resolves.toMatchObject({ title: expect.any(String) })
+    driver.setRunning(false)
+    expect(bar()).toBeNull()
+    remove()
+  })
+
   it('cannot be operated by the agent: its own controls are left out of a snapshot', async () => {
     document.body.innerHTML = '<button type="button">Save</button>'
     const driver = new UiDriver({ document: () => document })

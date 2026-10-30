@@ -1,3 +1,6 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve, sep } from 'node:path'
+
 // The pure parts of scripts/sync-sites.mjs: turn a release-notes file into the entry the framework site renders, and find which releases the site lacks.
 
 /** Markdown inline syntax as the site's plain text: links keep their text, bold, italics and code lose their marks. */
@@ -119,4 +122,43 @@ export function addReleases(docContent, content, notes) {
   if (firstItem === -1) throw new Error('content.ts has no "Release notes" item to insert before')
   const newContent = `${content.slice(0, firstItem)}${missing.map((version) => `"Release notes ${version}", `).join('')}${content.slice(firstItem)}`
   return { docContent: newDoc, content: newContent, added: missing, gaps }
+}
+
+/**
+ * Every picture a synced page shows that the site does not have. `docsDir` is the site's `src/docs/framework`, `publicDir` its `public` folder: an image written root-absolute
+ * (`/docs-assets/workshop/s1.webp`) must be a file below `publicDir`, a relative one a file next to its page. A web address is not checked. Returns `[{ page, image }]`, `page` relative to `docsDir`.
+ */
+export function missingImages(docsDir, publicDir) {
+  const missing = []
+  const pages = (folder) =>
+    readdirSync(folder, { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory()
+        ? pages(join(folder, entry.name))
+        : entry.name.endsWith('.md')
+          ? [join(folder, entry.name)]
+          : [],
+    )
+  for (const page of pages(docsDir)) {
+    // Fenced code shows image syntax as text: only prose is read.
+    const prose = readFileSync(page, 'utf8').replace(/^(```|~~~)[\s\S]*?^\1/gmu, '')
+    for (const match of prose.matchAll(/!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/gu)) {
+      const image = match[1].split(/[?#]/u)[0]
+      if (/^[a-z][a-z0-9+.-]*:|^\/\//iu.test(image)) continue
+      const file = image.startsWith('/')
+        ? resolve(publicDir, `.${image}`)
+        : resolve(dirname(page), image)
+      if (
+        !file.startsWith(resolve(image.startsWith('/') ? publicDir : docsDir) + sep) ||
+        !existsSync(file)
+      )
+        missing.push({
+          page: page
+            .slice(docsDir.length + 1)
+            .split(sep)
+            .join('/'),
+          image: match[1],
+        })
+    }
+  }
+  return missing
 }

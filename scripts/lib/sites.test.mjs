@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
-import { addReleases, entryOf, plain, presentVersions } from './sites.mjs'
+import { addReleases, entryOf, missingImages, plain, presentVersions } from './sites.mjs'
 
 const NOTES = `# 1.2.3
 
@@ -72,4 +75,37 @@ test('a site whose layout changed is reported, not guessed at', () => {
     () => addReleases('nothing here', '{}', { '1.0.0': '# 1.0.0\n' }),
     /no release-notes entry/u,
   )
+})
+
+test('missingImages finds a picture a synced page shows and the site does not have', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sites-images-'))
+  try {
+    const docs = join(dir, 'src', 'docs', 'framework')
+    const publicDir = join(dir, 'public')
+    mkdirSync(join(docs, 'workshop'), { recursive: true })
+    mkdirSync(join(publicDir, 'docs-assets', 'workshop'), { recursive: true })
+    writeFileSync(join(publicDir, 'docs-assets', 'workshop', 'there.webp'), 'x')
+    writeFileSync(join(docs, 'workshop', 'local.png'), 'x')
+    writeFileSync(
+      join(docs, 'workshop', 'README.md'),
+      [
+        '![ok](/docs-assets/workshop/there.webp)',
+        '![also ok](local.png "a title")',
+        '![absent](/docs-assets/workshop/gone.webp)',
+        '![absent too](./nope.png)',
+        '![out of the site](/../../etc/passwd)',
+        '![elsewhere](https://example.test/a.png)',
+        '```md',
+        '![code](/docs-assets/in-a-fence.webp)',
+        '```',
+      ].join('\n'),
+    )
+    assert.deepEqual(missingImages(docs, publicDir), [
+      { page: 'workshop/README.md', image: '/docs-assets/workshop/gone.webp' },
+      { page: 'workshop/README.md', image: './nope.png' },
+      { page: 'workshop/README.md', image: '/../../etc/passwd' },
+    ])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

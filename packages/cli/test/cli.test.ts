@@ -17,6 +17,8 @@ import {
   HELP,
   type Io,
   isOmitted,
+  mergeDependencies,
+  mergeTooling,
   nameFrom,
   parseInitOptions,
   readLibrary,
@@ -82,6 +84,43 @@ describe('templates', () => {
       })
     },
   )
+})
+
+describe('what an app needs at run time is not also a development dependency', () => {
+  const manifestIn = (dir: string) =>
+    JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+  const appWith = (name: string, manifest: object): string => {
+    const dir = join(scratch, name)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name, ...manifest }))
+    return dir
+  }
+
+  it('a run-time dependency added after a development one of the same name takes its place (npm lets the development entry win, and --omit=dev would leave it out)', () => {
+    const dir = appWith('dev-first', { devDependencies: { ws: '8.21.3', vitest: '4' } })
+    mergeDependencies(dir, { ws: '8.21.3' })
+    expect(manifestIn(dir).dependencies).toEqual({ ws: '8.21.3' })
+    expect(manifestIn(dir).devDependencies).toEqual({ vitest: '4' })
+  })
+
+  it('a development dependency of a package the app already needs at run time is not added', () => {
+    const dir = appWith('runtime-first', { dependencies: { ws: '8.21.3' } })
+    expect(
+      mergeTooling(dir, { devDependencies: { ws: '8.21.3', tsx: '4' } }).devDependencies,
+    ).toEqual(['tsx'])
+    expect(manifestIn(dir).devDependencies).toEqual({ tsx: '4' })
+  })
+
+  it('an agent app made by init lists ws once, as a run-time dependency (the state plugin follows keys over a WebSocket in production)', async () => {
+    const session = fakeIo()
+    expect(await runCli(['init', 'ws-once', '--template', 'agent', '-y'], session.io)).toBe(0)
+    const manifest = manifestIn(join(scratch, 'ws-once'))
+    expect(manifest.dependencies?.ws).toBeDefined()
+    expect(manifest.devDependencies?.ws).toBeUndefined()
+  })
 })
 
 describe('a coding agent in a generated app', () => {
@@ -168,6 +207,7 @@ describe('library', () => {
       '@webboxes/app-persistence',
       '@webboxes/blends-core',
       'node-pty',
+      'ws',
       'yaml',
     ])
     for (const plugin of readLibrary().values()) {

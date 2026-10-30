@@ -17,6 +17,8 @@ import {
 /** The slice of a page's stream the channel needs, so tests can supply their own. */
 export interface PageStream {
   send(data: string): void
+  /** Tell the page something that is not a call (`run`: `1` while a run asked for from its panel goes, `0` when it ends). A stream that cannot (a test's) leaves it out. */
+  notify?(event: string, data: string): void
   close(): void
 }
 
@@ -65,14 +67,16 @@ export interface ChannelOptions {
 }
 
 /**
- * The pages and who drives which. One page answers a call, chosen the same way every time: the page the Host just sent somewhere (it comes back as a new page, `prefer`), else the
- * one in front (it reports `focused`), else the most recently active; a page that did not acknowledge a call in time goes to the end of the line. An explicit desktop `window` picks its page.
+ * The pages and who drives which. One page answers a call, chosen the same way every time: the page whose panel asked for the run that is making the call (`driveFor`), else the page the
+ * Host just sent somewhere (it comes back as a new page, `prefer`), else the one in front (it reports `focused`), else the most recently active; a page that did not acknowledge a call in time goes to the end of the line. An explicit desktop `window` picks its page.
  */
 export class UiChannel {
   private readonly ackMs: number
   private readonly attachWaitMs: number
   /** The page the Host sent to a new place and that came back: it keeps being driven until the person focuses another page. */
   private preferred: string | undefined
+  /** The pages whose panels have a run going, the latest last: a call with no `window` goes to the latest of them that is still connected. */
+  private readonly askers: Array<{ windowId: string }> = []
 
   constructor(options: ChannelOptions = {}) {
     this.ackMs = options.ackMs ?? DEFAULT_ACK_MS
@@ -97,6 +101,8 @@ export class UiChannel {
     // A page that did not answer stays last in line when its stream reconnects: a tab that cannot answer reconnects just as readily, and would otherwise be first again.
     const connection: Connection = { stream, windowId, shellWindow, focused, lastActive: ++this.clock, suspect: previous?.suspect === true }
     this.connections.set(windowId, connection)
+    // A page that reloaded or came back during its own run is told the run is still going.
+    if (this.askers.some(asker => asker.windowId === windowId)) this.tell(connection, '1')
     for (const waiter of [...this.attachWaiters]) waiter(windowId)
     return () => { if (this.connections.get(windowId) === connection) this.drop(connection, false) }
   }
@@ -137,12 +143,42 @@ export class UiChannel {
     return this.ordered().map(({ windowId, focused, shellWindow }) => ({ windowId, focused, ...(shellWindow === undefined ? {} : { shellWindow }) }))
   }
 
+  /**
+   * A run asked for from this page's panel is going: its calls (which name no window) are for this page, whatever else is open and whichever was driven last, until the run ends.
+   * An explicit desktop `window` still picks its own page.
+   * @returns the function to call when the run ends.
+   */
+  driveFor(windowId: string): () => void {
+    const asker = { windowId }
+    this.askers.push(asker)
+    this.tellPage(windowId, '1')
+    return () => {
+      const at = this.askers.indexOf(asker)
+      if (at === -1) return
+      this.askers.splice(at, 1)
+      // The page keeps the bar if another run of its own is still going.
+      if (!this.askers.some(other => other.windowId === asker.windowId)) this.tellPage(asker.windowId, '0')
+    }
+  }
+
+  private tellPage(windowId: string, running: '0' | '1'): void {
+    const connection = this.connections.get(windowId)
+    if (connection !== undefined) this.tell(connection, running)
+  }
+
+  private tell(connection: Connection, running: '0' | '1'): void {
+    try { connection.stream.notify?.('run', running) } catch { /* a stream that is going away says so by closing */ }
+  }
+
   /** Drive this page from now on (it is the one the Host just sent to a new place), until the person focuses another. */
   prefer(windowId: string): void {
     const connection = this.connections.get(windowId)
     if (connection === undefined) return
     this.preferred = windowId
     connection.lastActive = ++this.clock
+    // A run's own page that reloaded or navigated comes back as a new page: the run goes on with that one.
+    for (const asker of this.askers) if (!this.connections.has(asker.windowId)) asker.windowId = windowId
+    if (this.askers.some(asker => asker.windowId === windowId)) this.tellPage(windowId, '1')
   }
 
   /**
@@ -263,9 +299,11 @@ export class UiChannel {
     this.connections.clear()
   }
 
-  /** The order pages are driven in: the one the Host sent somewhere, suspect ones last, the one in front, then the most recently active. */
+  /** The order pages are driven in: the one whose panel asked, the one the Host sent somewhere, suspect ones last, the one in front, then the most recently active. */
   private ordered(): Connection[] {
-    const rank = (connection: Connection): number => (connection.suspect ? 0 : 4) + (connection.windowId === this.preferred ? 2 : 0) + (connection.focused ? 1 : 0)
+    // The latest asker that is still connected; a page that went away is skipped, and the run goes on with whatever is open.
+    const asker = [...this.askers].reverse().find(entry => this.connections.has(entry.windowId))?.windowId
+    const rank = (connection: Connection): number => (connection.suspect ? 0 : 4) + (connection.windowId === this.preferred ? 2 : 0) + (connection.focused ? 1 : 0) + (connection.windowId === asker && !connection.suspect ? 8 : 0)
     return [...this.connections.values()].sort((a, b) => rank(b) - rank(a) || b.lastActive - a.lastActive)
   }
 

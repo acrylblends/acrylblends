@@ -11,6 +11,9 @@ import { UserInputClock } from './user-input.ts'
 
 export const DOOR_BASE = '/api/acryl-door'
 
+/** The key on the page's `window` under which the door publishes `{ windowId }`: the agent panel in the same page sends it with a question, and the door drives that page for the run. */
+export const PAGE_KEY = Symbol.for('acryl.door.page')
+
 /** Start the door on `document`. @returns the disposer. */
 export function startDoor(document: Document, base: string = DOOR_BASE): () => void {
   const view = document.defaultView
@@ -18,6 +21,7 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
   const clock = new UserInputClock()
   const driver = new UiDriver({ document: () => document, msSinceUserInput: clock.msSince })
   const windowId = typeof view.crypto?.randomUUID === 'function' ? view.crypto.randomUUID() : `w-${String(Date.now())}-${String(Math.random()).slice(2, 8)}`
+  Object.defineProperty(view, PAGE_KEY, { value: Object.freeze({ windowId }), configurable: true })
   const focused = (): boolean => document.visibilityState === 'visible' && document.hasFocus()
   const detachInput = clock.attach(document)
   const removeIndicator = mountIndicator(driver, document)
@@ -30,7 +34,7 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
       return 'auto'
     }
   })()
-  const channel = new PageChannel(driver, { windowId, focused, base, transport, ...(Number.isSafeInteger(shellWindow) && shellWindow > 0 ? { shellWindow } : {}) })
+  const channel = new PageChannel(driver, { windowId, focused, base, transport, onRun: running => { driver.setRunning(running) }, ...(Number.isSafeInteger(shellWindow) && shellWindow > 0 ? { shellWindow } : {}) })
   const reportFocus = (): void => { channel.reportFocus(focused()) }
   view.addEventListener('focus', reportFocus)
   view.addEventListener('blur', reportFocus)
@@ -47,6 +51,7 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
     view.removeEventListener('pagehide', leave)
     view.removeEventListener('pageshow', back)
     document.removeEventListener('visibilitychange', reportFocus)
+    Reflect.deleteProperty(view, PAGE_KEY)
     channel.dispose()
     removeIndicator()
     detachInput()

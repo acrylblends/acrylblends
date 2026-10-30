@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { addReleases } from './lib/sites.mjs'
+import { addReleases, missingImages } from './lib/sites.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const { values } = parseArgs({
@@ -160,6 +160,13 @@ try {
       cpSync(assets, join(dir, 'public', 'docs-assets'), { recursive: true })
       log(`${site.id}: pictures copied to public/docs-assets`)
     }
+    // A page that shows a picture the site does not have would publish a broken image: stop here, before anything is built or pushed.
+    const absent = missingImages(target, join(dir, 'public'))
+    if (absent.length > 0)
+      throw new Error(
+        `sync-sites: ${absent.length} picture(s) the docs show are not on the ${site.id} site (docs/plans/site-assets/<folder>/ is served as /docs-assets/<folder>/):\n${absent.map((one) => `  ${one.page}: ${one.image}`).join('\n')}`,
+      )
+    log(`${site.id}: every picture the docs show is on the site`)
     if (site.releaseNotes) {
       const docFile = join(dir, 'src', 'lib', 'doc-content.ts')
       const contentFile = join(dir, 'src', 'lib', 'content.ts')

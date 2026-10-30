@@ -66,7 +66,7 @@ async function boot() {
       headers: { 'sec-fetch-site': 'same-origin' },
     })
   ).json()) as { token: string }
-  return { origin, token: session.token }
+  return { origin, token: session.token, app }
 }
 
 const wsUrl = (origin: string): string => `${origin.replace('http', 'ws')}/api/agent-panel/run/ws`
@@ -91,13 +91,21 @@ const open = (origin: string): Promise<Socket> =>
 /** Every frame until the socket closes, and the close code. */
 const drain = (
   socket: Socket,
-): Promise<{ frames: Array<{ e: string; d: Record<string, unknown> }>; code: number }> =>
+): Promise<{
+  frames: Array<{ e: string; d: Record<string, unknown> }>
+  code: number
+  accepted: boolean
+}> =>
   new Promise((resolve) => {
     const frames: Array<{ e: string; d: Record<string, unknown> }> = []
     socket.on('message', (data) =>
       frames.push(JSON.parse(data.toString()) as { e: string; d: Record<string, unknown> }),
     )
-    socket.once('close', (code) => resolve({ frames, code }))
+    socket.once('close', (code) => {
+      // The first frame of an accepted socket says so, before anything the run sends; it is not an event of the run.
+      const accepted = frames[0]?.e === 'accepted'
+      resolve({ frames: accepted ? frames.slice(1) : frames, code, accepted })
+    })
   })
 
 test("only this app's own Origin may open it: another port, a web site, no Origin, a cross-site request", async () => {
@@ -126,9 +134,11 @@ test('the first frame must carry the token: a wrong one, a missing one and a fra
     const socket = await open(origin)
     const done = drain(socket)
     socket.send(JSON.stringify(first))
-    const { frames, code } = await done
+    const { frames, code, accepted } = await done
     assert.equal(code, 4401)
     assert.deepEqual(frames, [])
+    // A token this start of the app does not know is told apart from a socket that opened: the page asks for a new session and tries again.
+    assert.equal(accepted, false)
   }
 })
 
@@ -138,7 +148,8 @@ test('an ask over the socket runs the agent and sends the events the stream send
   const done = drain(socket)
   socket.send(JSON.stringify({ t: 'hello', token }))
   socket.send(JSON.stringify({ t: 'ask', message: 'create route hello /hello Hello' }))
-  const { frames, code } = await done
+  const { frames, code, accepted } = await done
+  assert.equal(accepted, true)
   const names = frames.map((frame) => frame.e)
   assert.ok(names.includes('tool'), names.join())
   assert.deepEqual(frames.find((frame) => frame.e === 'change')?.d, {
@@ -176,4 +187,23 @@ test('a refused ask says why in an error frame; with nothing to follow it says i
     (await idleDone).frames.map((frame) => frame.e),
     ['idle'],
   )
+})
+
+test('an ask that names the page it came from has the door drive that page while the run goes, and let go when it ends; a page name that is not an id is ignored', async () => {
+  const { origin, token, app } = await boot()
+  const seen: string[] = []
+  app.provide('door', {
+    driveFor(page: string) {
+      seen.push(`for ${page}`)
+      return () => seen.push(`end ${page}`)
+    },
+  })
+  for (const page of ['4f1c-window', 'not an id!', undefined]) {
+    const socket = await open(origin)
+    const done = drain(socket)
+    socket.send(JSON.stringify({ t: 'hello', token }))
+    socket.send(JSON.stringify({ t: 'ask', message: 'add 2 3', page }))
+    assert.equal((await done).frames.at(-1)?.e, 'done')
+  }
+  assert.deepEqual(seen, ['for 4f1c-window', 'end 4f1c-window'])
 })

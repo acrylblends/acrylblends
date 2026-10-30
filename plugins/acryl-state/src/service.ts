@@ -6,10 +6,12 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import { Acryl, type Context as RequestContext } from 'acryl-router'
-import { streamSSE } from 'acryl-router/helpers'
+import { Acryl, type Context as RequestContext, type MiddlewareHandler } from 'acryl-router'
+import { streamSSE, type UpgradeWebSocket } from 'acryl-router/helpers'
 import { loopbackOnly, methodNotAllowed } from 'acryl-router/middleware'
 import { createCell, createDerived, type Cell, type ReadonlyCell } from './cell.ts'
+import { CLIENT_SOURCE } from './client-source.ts'
+import { refuseStranger, stateSocket } from './socket.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -24,6 +26,9 @@ export const name = 'acryl-state'
 
 const KEY_PATTERN = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$/
 
+/** Names under `/api/state` that are routes, not keys: a cell cannot be called by one. */
+const RESERVED_KEYS = new Set(['ws', 'client.js'])
+
 export class State extends Service {
   private readonly cells = new Map<string, ReadonlyCell<unknown>>()
 
@@ -33,6 +38,7 @@ export class State extends Service {
 
   private claim(key: string): void {
     if (!KEY_PATTERN.test(key)) throw new TypeError(`acryl-state: key "${key}" must be dotted lowercase words, like "market.sources"`)
+    if (RESERVED_KEYS.has(key)) throw new TypeError(`acryl-state: "${key}" is the name of a route under /api/state, choose another key`)
     if (this.cells.has(key)) throw new Error(`acryl-state: key "${key}" is already in use`)
   }
 
@@ -73,9 +79,10 @@ export class State extends Service {
 
   /**
    * The current value of `key` as a server-sent event stream: the value now, then one event per change, until the client cancels or the router
-   * is disposed (both abort the stream). A comment line goes out every 15 seconds so proxies and browsers keep an idle stream open.
+   * is disposed (both abort the stream). A comment line goes out every 15 seconds so proxies and browsers keep an idle stream open. A string value travels as it is; with `json`
+   * (the `?json=1` of the browser client) every value is JSON, so `"12"` and `12` can be told apart.
    */
-  stream(key: string, c: RequestContext): Response | undefined {
+  stream(key: string, c: RequestContext, json = false): Response | undefined {
     const cell = this.find(key)
     if (cell === undefined) return undefined
     return streamSSE(c, async stream => {
@@ -83,7 +90,7 @@ export class State extends Service {
       // Writes are asynchronous; chaining them keeps events in the order the cell changed.
       let queue: Promise<unknown> = Promise.resolve()
       const send = (value: unknown): void => {
-        queue = queue.then(() => stream.writeSSE({ event: 'value', data: typeof value === 'string' ? value : JSON.stringify(value) })).catch(() => {})
+        queue = queue.then(() => stream.writeSSE({ event: 'value', data: typeof value === 'string' && !json ? value : JSON.stringify(value) })).catch(() => {})
       }
       send(cell.get())
       const unsubscribe = cell.subscribe(send)
@@ -105,14 +112,34 @@ export function apply(ctx: Context): void {
   // app; the terminal calls the router in process and is the host's own code.
   ctx.inject(['router'], inner => {
     const api = new Acryl()
+    // The WebSocket form is mounted when a server that upgrades appears (the server row comes after this one in a blend); until then, and without the `ws` package, `/ws` answers 404 and the
+    // browser client follows the event streams. The route is registered before `/:key`, which would otherwise take `ws` for a key.
+    let socket: MiddlewareHandler | undefined
     api.use(loopbackOnly({ inProcess: 'allow' }), methodNotAllowed({ app: api }))
       .get('/', c => c.json({ keys: state.keys() }))
+      .get('/client.js', c => c.body(CLIENT_SOURCE, 200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' }))
+      .get('/ws', async (c, next) => {
+        const upgrade = socket
+        if (upgrade === undefined) return c.json({ error: 'this server does not upgrade to a WebSocket' }, 404)
+        const refusal = refuseStranger(c)
+        if (refusal !== undefined) return refusal
+        return await upgrade(c, next)
+      })
       .get('/:key', c => {
         const cell = state.find(c.req.param('key'))
         return cell === undefined ? c.json({ error: 'no such state' }, 404) : c.json({ key: cell.key, value: cell.get() })
       })
-      .get('/:key/events', c => state.stream(c.req.param('key'), c) ?? c.json({ error: 'no such state' }, 404))
+      .get('/:key/events', c => state.stream(c.req.param('key'), c, c.req.query('json') === '1') ?? c.json({ error: 'no such state' }, 404))
     inner.router.route('/api/state', api)
+    inner.inject(['nodeServer'], withServer => {
+      try {
+        const upgrade = (withServer as unknown as { nodeServer: { upgrades(): UpgradeWebSocket } }).nodeServer.upgrades()
+        socket = stateSocket(state, { upgrade })
+        withServer.effect(() => () => { socket = undefined }, 'acryl-state: the WebSocket route')
+      } catch (cause) {
+        ctx.logger.warn(`acryl-state: state is followed by event streams only (${cause instanceof Error ? cause.message : String(cause)})`)
+      }
+    })
     // Over HTTP only where an adapter exists (Web and Desktop); the terminal needs none.
     inner.inject(['routerHttp'], http => { http.routerHttp.mount('/api/state') })
   })

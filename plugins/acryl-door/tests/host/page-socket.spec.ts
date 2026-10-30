@@ -50,6 +50,18 @@ describe('the page channel over a WebSocket', () => {
     socket.close()
   })
 
+  it('tells the page, as a frame, when a run asked for from its panel starts and ends', async () => {
+    const running = await app()
+    const { socket, seen } = await connect(running)
+    const door = running.ctx.get('door') as unknown as { driveFor(windowId: string): () => void }
+    const end = door.driveFor('w-1')
+    await until(() => seen.some(frame => frame.e === 'run'), 'the run frame')
+    end()
+    await until(() => seen.filter(frame => frame.e === 'run').length === 2, 'the run frame when it ends')
+    expect(seen.filter(frame => frame.e === 'run')).toEqual([{ e: 'run', d: '1' }, { e: 'run', d: '0' }])
+    socket.close()
+  })
+
   it('refuses a page of another loopback port, a web site, a program that sends no Origin, and a request that says it is cross-site: the Origin must be this app\'s own, exactly', async () => {
     const running = await app()
     const port = Number(new URL(running.origin).port)

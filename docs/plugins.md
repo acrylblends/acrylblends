@@ -32,7 +32,7 @@ environment; it returns a frozen `AppInstance` with `root` (the project folder),
 
 `acryl-router` (`ctx.router`: mounts an `App` with `route(prefix, app)`, with the ported core's routing, middleware and validators, and an in-process `request()`), `acryl-node-server` (one `node:http` listener that sends every
 request to the router; config `{ port, hostname, scan, websocket }`, provides `ctx.nodeServer.url` and `ctx.nodeServer.upgrades()` for WebSocket routes, see [node-server](framework/cordis/node-server.md#websocket-upgrades)), `acryl-state` (observable cells, read as JSON and streamed as server-sent
-events at `/api/state/<key>` and `/api/state/<key>/events`), `acryl-inspect` (what every plugin requires, provides and registers) and `acryl-router-http` (mounts router prefixes on the ACRYL Host's web server, with `mount(prefix, { upgrade: [paths] })` for WebSocket upgrades owned by the mounting plugin) are ACRYL's framework, vendored here as they are. Their text is in [framework/](framework/README.md); their source is
+events at `/api/state/<key>` and `/api/state/<key>/events`, and followed in a page over one WebSocket with `watch` of `/api/state/client.js`), `acryl-inspect` (what every plugin requires, provides and registers) and `acryl-router-http` (mounts router prefixes on the ACRYL Host's web server, with `mount(prefix, { upgrade: [paths] })` for WebSocket upgrades owned by the mounting plugin) are ACRYL's framework, vendored here as they are. Their text is in [framework/](framework/README.md); their source is
 `plugins/acryl-*`, whose source lives in this repository (with the history it had in ACRYL); `acrylblends init` and `add` copy their `src/` into an app.
 
 `acryl-db` (the `db` port: types, numbered migrations) and `acryl-db-sqlite` (the SQLite provider; one `node:sqlite` file, `data.sqlite` in the app home unless `path` is set,
@@ -95,7 +95,7 @@ an abort `signal`. Every change is appended to `<home>/tasks.jsonl` before the c
 tasks it owns too. After a crash, a task that was running is marked `interrupted` and is never run again on its own,
 because a side effect may already have happened. When `tasks` is mounted, every agent run is a task owning one task per
 tool call. With `acryl-state` mounted, the latest tasks are also the state cell `tasks`, and the installed extensions the cell `extensions`: read them at
-`/api/state/tasks` and stream them at `/api/state/tasks/events`.
+`/api/state/tasks` and stream them at `/api/state/tasks/events` (or follow them in a page with `watch('tasks', fn)` from `/api/state/client.js`).
 
 ## manifest
 

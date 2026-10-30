@@ -156,11 +156,47 @@ test('the app has a /settings page with the appearance setting, and the home pag
     assert.match(page, /<select id="theme"/)
     for (const option of ['System', 'Light', 'Dark'])
       assert.match(page, new RegExp(`>(?:Match the )?${option.toLowerCase()}|>${option}<`, 'i'))
-    // The setting is kept in the browser and applied to the home page before it paints.
+    // The setting is kept in the browser and applied to the home page before it paints, by the one script every page of the app can carry.
     const home = await (
       await app.root.router.request('/', { headers: { accept: 'text/html' } })
     ).text()
-    assert.match(home, /localStorage\.getItem\('theme'\)/)
+    assert.match(home, /<script src="\/appearance\.js"><\/script>/)
+    assert.match(page, /<script src="\/appearance\.js"><\/script>/)
     // ... without leaving a global behind for the page's own code to collide with.
     assert.doesNotMatch(home, /<script>\s*(?:var|let|const) /)
+    const script = await app.root.router.request('/appearance.js')
+    assert.equal(script.status, 200)
+    assert.match(script.headers.get('content-type') ?? '', /javascript/)
+    const code = await script.text()
+    assert.match(code, /localStorage\.getItem\('theme'\)/)
+    // A change made in another window of the app is applied here at once, and the colours are custom properties for a page to use.
+    assert.match(code, /addEventListener\('storage'/)
+    for (const token of ['--bg', '--fg', '--muted', '--surface', '--border', '--accent'])
+      assert.ok(code.includes(token), token)
+    assert.match(code, /prefers-color-scheme:dark/)
+    // Run against a stand-in page: it applies the saved choice, follows a change made in another window, and goes back to the system's choice when the setting is removed.
+    const storage = new Map<string, string>([['theme', 'dark']])
+    const dataset: Record<string, string> = {}
+    const appended: Array<{ id: string; textContent: string }> = []
+    const listeners: Array<(event: { key: string | null }) => void> = []
+    new Function('document', 'localStorage', 'addEventListener', code)(
+      {
+        documentElement: { dataset },
+        head: { appendChild: (style: { id: string; textContent: string }) => appended.push(style) },
+        createElement: () => ({ id: '', textContent: '' }),
+      },
+      { getItem: (key: string) => storage.get(key) ?? null },
+      (_type: string, listener: (event: { key: string | null }) => void) =>
+        listeners.push(listener),
+    )
+    assert.equal(dataset.theme, 'dark')
+    assert.equal(appended[0]?.id, 'appearance')
+    storage.set('theme', 'light')
+    for (const listener of listeners) listener({ key: 'theme' })
+    assert.equal(dataset.theme, 'light')
+    storage.delete('theme')
+    for (const listener of listeners) listener({ key: 'something-else' })
+    assert.equal(dataset.theme, 'light')
+    for (const listener of listeners) listener({ key: null })
+    assert.equal(dataset.theme, undefined)
   }))

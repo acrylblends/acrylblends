@@ -131,7 +131,7 @@ Do not start timers inside a handler for keep-alives; let the plugin own one tim
 | `ctx.nodeServer.url`, `ctx.nodeServer.port` | `nodeServer` (`acryl-node-server`) | without the Host: one Node server for the whole router; options `hostname` (`127.0.0.1`), `port` (`0`), `scan` (`20`). See [Node server](../cordis/node-server.md) |
 | `ctx.state.cell(key, initial)` | `state` (`acryl-state`) | a writable cell owned by the plugin: `get()`, `set(value)`, `update(fn)`, `subscribe(fn)` returning an unsubscribe |
 | `ctx.state.derive(key, [cells], fn)` | `state` | a read-only cell computed from others |
-| `GET /api/state/:key`, `GET /api/state/:key/events` | `state` | each cell over the router, read-only; `useCell(cell)` from `acryl-state/react` in a React page |
+| `GET /api/state/:key`, `GET /api/state/:key/events`, `GET /api/state/ws`, `GET /api/state/client.js` | `state` | each cell over the router, read-only; `watch(key, fn)` of `/api/state/client.js` follows keys in a page over one WebSocket (event streams as the fallback); `useCell(cell)` from `acryl-state/react` in a React page |
 
 Everything a plugin registers this way (mounts, cells, handlers) goes away when the plugin unloads, and comes back once when it reloads:
 see [Plugin lifecycle and disposal](../cordis/plugin-lifecycle.md).

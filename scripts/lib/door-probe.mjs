@@ -30,11 +30,14 @@ export function findChrome() {
   ].find((path) => path && existsSync(path))
 }
 
-/** Evaluate calls over the DevTools protocol of the one page of `port`. */
-export async function devtools(port) {
+/** Evaluate calls over the DevTools protocol of the one page of `port`, or of `tab` (an entry of the browser's `/json` list) when one is given. */
+export async function devtools(port, tab) {
   const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
   // The tab, not one of the browser's own pages (headless Chrome lists its omnibox popup and built-in extension pages as `page` targets too).
-  const page = targets.find((t) => t.type === 'page' && /^(about:blank|https?:)/u.test(t.url))
+  const page =
+    tab === undefined
+      ? targets.find((t) => t.type === 'page' && /^(about:blank|https?:)/u.test(t.url))
+      : targets.find((t) => t.id === tab.id)
   if (page === undefined) throw new Error('the browser has no page yet')
   const ws = new WebSocket(page.webSocketDebuggerUrl)
   await new Promise((resolve, reject) => {
