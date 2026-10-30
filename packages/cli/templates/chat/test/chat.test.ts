@@ -156,7 +156,9 @@ test('a model without its key tells the page which variable to set', async () =>
   delete process.env.DEEPSEEK_API_KEY
   try {
     const app = createApp(await memoryDb(), openAiCompatible)
-    const last = events(await (await app.request('/api/chat', post({ message: 'hi' }))).text()).at(-1)
+    const last = events(await (await app.request('/api/chat', post({ message: 'hi' }))).text()).at(
+      -1,
+    )
     assert.equal(last?.[0], 'error')
     assert.match(last?.[1] ?? '', /DEEPSEEK_API_KEY is not set/)
   } finally {

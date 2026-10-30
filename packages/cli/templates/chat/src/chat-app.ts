@@ -94,7 +94,9 @@ export function createApp(db: Db, llm: Llm = openAiCompatible, access: Access = 
           await stream.writeSSE({
             event: 'error',
             data: JSON.stringify(
-              error instanceof MissingKey ? error.message : 'The model could not answer. Try again.',
+              error instanceof MissingKey
+                ? error.message
+                : 'The model could not answer. Try again.',
             ),
           })
         }

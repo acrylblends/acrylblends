@@ -731,14 +731,16 @@ export function apply(ctx: { router: { route(path: string, app: unknown): void }
       100,
     ))
   )
-    fail(`K: the slow run did not start before the restart: ${JSON.stringify(await inPage(panelLog))}`)
+    fail(
+      `K: the slow run did not start before the restart: ${JSON.stringify(await inPage(panelLog))}`,
+    )
   await stopGroup(server)
   if (
     !(await until(
       async () =>
-        (await inPage(panelLog)).some((entry) =>
-          entry.startsWith('msg err|The app stopped while the agent was working'),
-        ),
+        (
+          await inPage(panelLog)
+        ).some((entry) => entry.startsWith('msg err|The app stopped while the agent was working')),
       10_000,
       100,
     ))
