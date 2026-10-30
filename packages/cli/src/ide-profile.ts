@@ -71,6 +71,8 @@ export interface IdeProfileInput {
   readonly spec?: (name: string) => string | undefined
   /** Further packages the app installs (an unpublished frame package's own dependencies, in a checkout). */
   readonly dependencies?: Readonly<Record<string, string>>
+  /** Whether the app carries the door at `plugins/acryl-door/src/index.ts`: a row then mounts it, and an app without one simply has no door. */
+  readonly door?: boolean
 }
 
 /** What generation writes, as text, so the same plan can be compared before writing. */
@@ -171,7 +173,7 @@ export function profileNameFor(appName: string): string {
   return `acrylblends-${slug === '' ? 'app' : slug}`
 }
 
-function overlayOf(packages: readonly IdeProfilePackage[]): string {
+function overlayOf(packages: readonly IdeProfilePackage[], door = false): string {
   const rows = packages
   const disabled = new Set(packages.flatMap((entry) => entry.disables ?? []))
   const lines = [
@@ -179,6 +181,7 @@ function overlayOf(packages: readonly IdeProfilePackage[]): string {
     '- insert:',
     '    - id: app-instance',
     '      name: ./app/runtime.mjs',
+    ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts'] : []),
   ]
   for (const entry of rows) {
     lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${entry.name}`)
@@ -214,7 +217,7 @@ export function ideProfilePlan(input: IdeProfileInput, existing?: string): IdePr
       : JSON.parse(existing)
   return {
     profile,
-    overlay: overlayOf(packages),
+    overlay: overlayOf(packages, input.door === true),
     packageJson: `${JSON.stringify(mergeManifest(manifest, dependencies, profile, input.frameworkVersion), null, 2)}\n`,
     profileScript: profileScriptOf(profile, packages, input.dshVersion, input.frameworkVersion),
   }
@@ -257,6 +260,8 @@ export interface IdeProfileWrite {
  */
 export function applyIdeProfile(root: string, input: IdeProfileInput): IdeProfileWrite {
   mkdirSync(root, { recursive: true })
+  // The door is app source, not a registry package: the row exists when the app carries it, and nothing fails when it does not.
+  input = { ...input, door: existsSync(join(root, 'plugins', 'acryl-door', 'src', 'index.ts')) }
   const manifestFile = join(root, 'package.json')
   const existing = existsSync(manifestFile) ? readFileSync(manifestFile, 'utf8') : undefined
   const plan = ideProfilePlan(input, existing)

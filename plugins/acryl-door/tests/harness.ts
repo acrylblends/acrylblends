@@ -32,6 +32,8 @@ export interface Running {
   /** The app's origin, e.g. `http://127.0.0.1:51234`. */
   readonly origin: string
   readonly doorFiber: ReturnType<Context['plugin']>
+  /** Every index transform the door registered on the web server (DSH's index-inject hook); the last one is live while the door is up. */
+  readonly indexTaps: Array<(html: string) => string>
   close(): Promise<void>
 }
 
@@ -61,12 +63,33 @@ export async function startApp(options: { root?: string; config?: door.Config; s
     ctx.plugin({ name: `service-${name}`, apply: (inner: Context) => { inner.effect(function* () { yield inner.reflect.provide(name, value) }) } })
   }
   if (options.withServer !== false) ctx.plugin(nodeServer, { port: 0 })
+  // DSH's side of the host, as much of it as the door reads: the carrier's address (`acrylWeb`), the router's HTTP mount and upgrade port (`routerHttp`), and the web
+  // server's index-inject hook (`webServer.tapIndex`). The real node server above keeps serving the socket, as it did before the adaptation.
+  const indexTaps: Array<(html: string) => string> = []
+  if (options.withServer !== false) {
+    const serverNow = () => ctx.get('nodeServer') as { port: number, host: string, url: string, upgrades(): unknown } | undefined
+    ctx.plugin({ name: 'host-shims', inject: ['nodeServer'], apply: (inner: Context) => { inner.effect(function* () {
+      yield inner.reflect.provide('acrylWeb', {
+        get host() { return serverNow()?.host ?? '127.0.0.1' },
+        get port() { return serverNow()?.port ?? 0 },
+      })
+      yield inner.reflect.provide('routerHttp', { mount: () => () => {}, upgrades: () => serverNow()?.upgrades() })
+      yield inner.reflect.provide('webServer', {
+        get host() { return serverNow()?.host ?? '127.0.0.1' },
+        get port() { return serverNow()?.port ?? 0 },
+        tapIndex(transform: (html: string) => string) {
+          indexTaps.push(transform)
+          return () => { const at = indexTaps.indexOf(transform); if (at !== -1) indexTaps.splice(at, 1) }
+        },
+      })
+    }) } })
+  }
   const doorFiber = ctx.plugin(door, options.config ?? {})
   // The door is up once it has written its connection file (after the server listens).
   if (options.withServer !== false) await until(() => existsSync(doorFilePath(root)))
   const server = ctx.get('nodeServer') as { port: number } | undefined
   const origin = server === undefined ? '' : `http://127.0.0.1:${String(server.port)}`
-  return { ctx, root, origin, doorFiber, close: async () => { await ctx.fiber.dispose() } }
+  return { ctx, root, origin, doorFiber, indexTaps, close: async () => { await ctx.fiber.dispose() } }
 }
 
 /** The headers a browser sends with the app's own page's requests. */

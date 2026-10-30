@@ -73,12 +73,17 @@ function alive(pid: number): boolean {
  * Write this run's connection file, replacing a stale one.
  * @throws when another live process already serves this folder's door: two apps from one folder would race for one file.
  */
-export function writeDoorFile(appRoot: string, url: string, secret: string): string {
-  const dir = ensureStateDir(appRoot)
+/** @throws when another live process already serves this folder's door: two apps from one folder would race for one file. */
+export function assertDoorIsFree(appRoot: string): void {
   const existing = readDoorFile(appRoot)
   if (existing !== undefined && existing.pid !== process.pid && alive(existing.pid)) {
     throw new Error(`acryl-door: another process (pid ${String(existing.pid)}) serves the door of ${appRoot}; stop it first`)
   }
+}
+
+export function writeDoorFile(appRoot: string, url: string, secret: string): string {
+  const dir = ensureStateDir(appRoot)
+  assertDoorIsFree(appRoot)
   const file = doorFilePath(appRoot)
   const temporary = join(dir, `${DOOR_FILE}.${String(process.pid)}.tmp`)
   const content: DoorFile = { version: 1, url, secret, pid: process.pid }
