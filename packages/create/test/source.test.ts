@@ -277,6 +277,9 @@ describe('starters from a registry', () => {
     expect(manifestText).not.toContain('visibility: public')
     expect(manifestText).not.toContain('license:')
     expect(s.out()).toContain('Next:')
+    // The starter has no README, so the Next block does not send the reader to one.
+    expect(s.out()).toContain('see the package.json scripts')
+    expect(s.out()).not.toContain('README')
     expect(s.runs).toHaveLength(0)
   })
 
