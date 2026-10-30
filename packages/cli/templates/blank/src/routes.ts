@@ -12,16 +12,20 @@ export const APP_NAME = '__APP_NAME__'
  */
 export const FRAME_MOUNT_PREFIX = '/app'
 
+/** The app's own pages and routes, mountable at any prefix: the standalone server mounts it at the root, the frame row at {@link FRAME_MOUNT_PREFIX}. */
+export function makeApp(): Acryl {
+  return new Acryl()
+    .get('/', (c) => c.json({ app: APP_NAME, ok: true }))
+    .get('/health', (c) => c.json({ ok: true }))
+    .get('/about', (c) => c.html(aboutPage()))
+}
+
 /** The app's own routes: an `App` mounted on the router at `options.prefix` (empty or absent: the root). The mount is removed when this plugin is disposed. */
 export const routes = {
   name: 'routes',
   inject: ['router'],
   apply(ctx: Context, options: { readonly prefix?: string } = {}) {
     const prefix = options.prefix ?? ''
-    const app = new Acryl()
-      .get('/', (c) => c.json({ app: APP_NAME, ok: true }))
-      .get('/health', (c) => c.json({ ok: true }))
-      .get('/about', (c) => c.html(aboutPage()))
-    ctx.router.route(prefix === '' ? '/' : prefix, app)
+    ctx.router.route(prefix === '' ? '/' : prefix, makeApp())
   },
 }
