@@ -26,10 +26,6 @@ export function apply(ctx: Context): void {
       get port() {
         return ctx.webServer.port
       },
-      // The ported contract (acryl-control's platform/web.ts) still declares these two; ACRYL's plugins no longer call them after spec 048 T008, and they
-      // are thin delegates to DSH's server for the rows that do while the port owner reconciles the shape (reported).
-      register: (route) => ctx.webServer.register(route),
-      registerUpgrade: (route) => ctx.webServer.registerUpgrade(route),
     }
     const dispose = ctx.reflect.provide('acrylWeb', port)
     return () => {
