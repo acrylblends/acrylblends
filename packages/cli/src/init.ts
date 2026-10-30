@@ -116,12 +116,19 @@ async function askTemplate(ask: (question: string) => Promise<string>): Promise<
 }
 
 /** The frame packages' specs for a scaffolded app while the ide packages are unpublished (see the note in `init`). Unset or malformed: undefined. */
-function frameProfileFromEnv(): { dshVersion: string; frameworkVersion: string; packages: Record<string, string> } | undefined {
+function frameProfileFromEnv():
+  | { dshVersion: string; frameworkVersion: string; packages: Record<string, string> }
+  | undefined {
   const raw = process.env.ACRYLBLENDS_FRAME_PACKAGES
   if (raw === undefined || raw.trim() === '') return undefined
   try {
-    const parsed = JSON.parse(raw) as { dshVersion?: unknown; frameworkVersion?: unknown; packages?: unknown }
-    if (typeof parsed.dshVersion !== 'string' || typeof parsed.frameworkVersion !== 'string') return undefined
+    const parsed = JSON.parse(raw) as {
+      dshVersion?: unknown
+      frameworkVersion?: unknown
+      packages?: unknown
+    }
+    if (typeof parsed.dshVersion !== 'string' || typeof parsed.frameworkVersion !== 'string')
+      return undefined
     const packages: Record<string, string> = {}
     for (const [key, value] of Object.entries((parsed.packages ?? {}) as Record<string, unknown>))
       if (typeof value === 'string') packages[key] = value
@@ -176,7 +183,9 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
   // `npm run dev` opens it inside the frame with its page at /app. The frame's client packages are not published yet, so the specs come from
   // ACRYLBLENDS_FRAME_PACKAGES (JSON: {dshVersion, frameworkVersion, packages: {name: spec}}); without it the app keeps the framework-only script
   // and says so, instead of writing a profile that cannot install.
-  const frameRow = existsSync(join(directory, 'src', 'frame.ts')) ? [{ id: 'app-routes', name: './src/frame.ts' }] : []
+  const frameRow = existsSync(join(directory, 'src', 'frame.ts'))
+    ? [{ id: 'app-routes', name: './src/frame.ts' }]
+    : []
   if (frameRow.length > 0) {
     const frame = frameProfileFromEnv()
     if (frame === undefined) {

@@ -40,7 +40,10 @@ describe('scaffolding a template into the frame', () => {
   it('writes the profile and overlay with the app row and the frame rows, and points dev at the profile', async () => {
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { io } = fakeIo(scratch)
-    const code = await init({ directory: 'framed', template: 'blank', yes: true, name: 'framed' }, io)
+    const code = await init(
+      { directory: 'framed', template: 'blank', yes: true, name: 'framed' },
+      io,
+    )
     expect(code).toBe(0)
     const root = join(scratch, 'framed')
     const overlay = readFileSync(join(root, 'cordis.patch.yml'), 'utf8')
@@ -50,7 +53,9 @@ describe('scaffolding a template into the frame', () => {
     // The frame's rows are there too.
     expect(overlay).toContain('name: acryl-app-shell')
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-    expect(String(manifest.scripts.dev)).toMatch(/^dsh --profile acrylblends-framed --patch cordis\.patch\.yml/u)
+    expect(String(manifest.scripts.dev)).toMatch(
+      /^dsh --profile acrylblends-framed --patch cordis\.patch\.yml/u,
+    )
     expect(manifest.scripts.profile).toBe('node scripts/ide-profile.mjs')
     expect(manifest.dependencies['acryl-app-shell']).toBe('file:/checkout/ide/acryl-app-shell')
     expect(existsSync(join(root, 'app', 'runtime.mjs'))).toBe(true)

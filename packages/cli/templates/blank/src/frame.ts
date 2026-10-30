@@ -11,6 +11,8 @@ export const name = 'app-routes'
 export function apply(ctx: Context): void {
   ctx.plugin({
     ...routes,
-    apply: (child: Context) => { routes.apply(child, { prefix: FRAME_MOUNT_PREFIX }) },
+    apply: (child: Context) => {
+      routes.apply(child, { prefix: FRAME_MOUNT_PREFIX })
+    },
   })
 }
