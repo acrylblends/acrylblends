@@ -1,0 +1,16 @@
+{
+  "source": {
+    "repository": "https://github.com/acryldev/acryl",
+    "commit": "37f4dd9c",
+    "files": [
+      "runtime/acryl-harness-runtime/src/engine-web.ts",
+      "runtime/acryl-control/src/platform/web.ts"
+    ]
+  },
+  "ported": "2026-10-30, slice 1 of docs/plans/ide-port.md",
+  "unchanged": "the two reads (host, port) and the AcrylWeb type",
+  "changes": {
+    "package": "the adapter is its own plugin here (ACRYL keeps it in the engine seam), with the service provided inside an effect",
+    "tests": "ACRYL has no test for the adapter (its body is the two reads); tests/web.spec.ts pins the seam here"
+  }
+}
