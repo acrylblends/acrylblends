@@ -1,0 +1,20 @@
+{
+  "source": {
+    "repository": "https://github.com/acryldev/acryl",
+    "commit": "37f4dd9c",
+    "directory": "plugins/acryl-workspace"
+  },
+  "ported": "2026-10-30, slice 2 of docs/plans/ide-port.md",
+  "unchanged": "every file under src/, tests/, scripts/ and the build configs (tsconfig.json, tsconfig.client.json, tsdown.config.ts, cordis.patch.yml, tsconfig.tests.json except its added fixture exclude) is byte-identical to the git archive of the source commit, except the one line in tests/shell/tab-kinds.spec.ts named under changes; only package.json, vitest.config.ts, tsconfig.tests.json, README.md (a port note above the original text), that test line, the vendored DSH fixture and this file differ",
+  "changes": {
+    "package.json": "repository points here, @acryl/ui / acryl-control / acryl-settings are this repository's workspace packages, acrylblends is a peer dependency and not a dependency (the app's one framework), ws and @types/ws match this repository's pins, build tool versions match this repository, and generate:logo is kept as a script but not in build (the generated data file is committed, as in the brand port)",
+    "vitest.config.ts": "runs on this repository's vitest; the ACRYL repository's HOME isolation setup is not present here, so only the package's own tests/setup.ts remains",
+    "tsconfig.tests.json": "excludes tests/fixtures/**: the vendored DSH source is data the tab-kind guard reads, not part of this package's program",
+    "tests/shell/tab-kinds.spec.ts": "one line: the upstream DSH source it scans is the vendored fixture under tests/fixtures/dsh instead of ACRYL's deepseek-harness submodule (this repository has no submodule). The fixture is byte-identical source at DSH commit 639ed01539, MIT, and holds the under-src files the scan's own filter selects; see tests/fixtures/dsh/README.md",
+    "README.md": "a port note above the original text; the rest is unchanged"
+  },
+  "supportPackages": {
+    "acryl-loopback-http": "The plan marks ACRYL's runtime/acryl-loopback-http as replaced by acrylblends/loopback-only. The framework's loopback-only provides the guard (loopbackOnly, loopbackAuthority) but not the private-route composition the workspace's routes are built with (privateApi, ownPage, ownPageSocket, jsonBody, readJson, INVALID_JSON, ReportError). To keep this package's source and tests byte-identical, the same source commit's runtime package is ported beside it under ide/acryl-loopback-http and declared as a workspace dependency. It is not a row of the frame."
+  },
+  "notes": "The original suite runs unchanged: 96 spec files (100 files under tests/, including its fixtures and helpers)."
+}

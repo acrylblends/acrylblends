@@ -168,16 +168,19 @@ try {
     fail(`the page did not answer at ${url} (${lastError}); server said:
 ${output.slice(-2000)}`)
   for (const gone of [/did not activate/u, /\bpending\b/u, /\bfailed\b/u])
-    if (gone.test(output))
-      fail(
-        `a row did not activate:\n${output
-          .split('\n')
-          .filter((line) => gone.test(line))
-          .slice(0, 10)
-          .join('\n')}`,
+    if (gone.test(output)) {
+      const lines = output.split('\n')
+      const around = lines.flatMap((line, index) =>
+        gone.test(line) ? lines.slice(Math.max(0, index - 4), index + 5) : [],
       )
+      fail(`a row did not activate:\n${[...new Set(around)].join('\n')}`)
+    }
   const rows = FRAME_PACKAGES.map((entry) => entry.row ?? entry.name)
   log(`the frame's rows are in the overlay: ${rows.join(', ')}`)
+  // Slice 2's workspace has a client half: its bundle must be in the page's module table, not only its host row active.
+  if (!page.includes('acryl-workspace/client.js'))
+    fail(`the page does not load the workspace client; server said:\n${output.slice(-2500)}`)
+  log('the page loads the workspace client bundle')
   const tags = page.split('/api/acryl-door/page.js').length - 1
   if (tags !== 1)
     fail(
