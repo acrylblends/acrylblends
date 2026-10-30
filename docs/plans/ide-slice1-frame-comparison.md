@@ -43,6 +43,11 @@ Settings > Shortcuts at 3-4% (image beside the reference: [frame-compare-setting
 3. **The main surface.** The reference's conversation area is ACRYL's, the candidate's is DSH's conversation UI: that is the intended composition (the chat is DSH's), so those pixels will never match by design. A strict whole-page comparison of `frame*` is the wrong gate; the gate should compare the frame chrome (panels, Settings) and accept the chat surface as the design.
 4. **Right panel and terminals** do not exist yet (slice 2), so two views have no candidate.
 
+## The reference set's own two defects (found on the slice 2 candidate)
+
+- **A transparent reference pixel is not a black one.** ACRYL's Desktop page is transparent over the native window material, and its sidebar is alpha 0 in every non-Settings view; `frame-compare` drew the reference over black, so an opaque browser page differed by the whole sidebar (about 19-21% of a 1440x900 view). The harness now skips reference pixels with alpha 0, exactly as it skips masked ones, and marks them in the difference image.
+- **`left-panel-collapsed`'s reference still carries DSH's "Add an API key to get started" dialog**, which slice 1 deliberately switched off; it alone adds about 9-11% to that view. The set is recaptured from ACRYL with an opaque background.
+
 ## What would make the gate meaningful at slice 1
 
 - Suppress DSH's first-run dialogs in the profile the generator writes (a settings-models row config, not a page hack), then re-run the `frame` views.

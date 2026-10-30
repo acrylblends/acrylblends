@@ -151,14 +151,17 @@ window.result = (async () => {
   const [a, b] = await Promise.all([load(${JSON.stringify(reference)}), load(${JSON.stringify(candidate)})])
   const w = Math.max(a.width, b.width), h = Math.max(a.height, b.height)
   const draw = (img) => { const c = new OffscreenCanvas(w, h), x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0); return x.getImageData(0, 0, w, h) }
-  const A = draw(a), B = draw(b), D = new ImageData(w, h)
+  // The reference keeps its own alpha: a transparent pixel has no colour to compare (ACRYL's Desktop page is transparent over the native window material), so the
+  // black it would be drawn over is an invention, not a difference. Those pixels are skipped like masked ones.
+  const bare = (img) => { const c = new OffscreenCanvas(w, h), x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, w, h) }
+  const A = draw(a), B = draw(b), D = new ImageData(w, h), R = bare(a)
   const masks = ${JSON.stringify(mask)}
   const masked = (x, y) => masks.some((m) => x >= m.x && x < m.x + m.width && y >= m.y && y < m.y + m.height)
   let differing = 0, counted = 0
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = (y * w + x) * 4
     const gray = (A.data[i] + A.data[i + 1] + A.data[i + 2]) / 3
-    if (masked(x, y)) { D.data.set([60, 60, 120, 255], i); continue }
+    if (masked(x, y) || R.data[i + 3] < 8) { D.data.set([60, 60, 120, 255], i); continue }
     counted++
     const off = Math.abs(A.data[i] - B.data[i]) > ${tolerance} || Math.abs(A.data[i + 1] - B.data[i + 1]) > ${tolerance} || Math.abs(A.data[i + 2] - B.data[i + 2]) > ${tolerance}
     if (off) { differing++; D.data.set([255, 40, 40, 255], i) } else D.data.set([gray, gray, gray, 255], i)
