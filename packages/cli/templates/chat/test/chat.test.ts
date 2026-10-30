@@ -10,7 +10,7 @@ import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { chatAccess } from '../src/access.ts'
 import { createApp as boot } from '../src/app.ts'
 import { createApp } from '../src/chat-app.ts'
-import type { Llm } from '../src/llm.ts'
+import { type Llm, openAiCompatible } from '../src/llm.ts'
 
 /** Throwaway homes and databases live inside the project (`.acrylblends/` is ignored by git), because a sandboxed agent may not write to the system temp folder. */
 const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
@@ -149,6 +149,21 @@ test('a failing model sends an error event with a plain message and no detail', 
   const last = events(text).at(-1)
   assert.equal(last?.[0], 'error')
   assert.match(last?.[1] ?? '', /could not answer/)
+})
+
+test('a model without its key tells the page which variable to set', async () => {
+  const saved = process.env.DEEPSEEK_API_KEY
+  delete process.env.DEEPSEEK_API_KEY
+  try {
+    const app = createApp(await memoryDb(), openAiCompatible)
+    const last = events(await (await app.request('/api/chat', post({ message: 'hi' }))).text()).at(
+      -1,
+    )
+    assert.equal(last?.[0], 'error')
+    assert.match(last?.[1] ?? '', /DEEPSEEK_API_KEY is not set/)
+  } finally {
+    if (saved !== undefined) process.env.DEEPSEEK_API_KEY = saved
+  }
 })
 
 test('when the client goes away the model call is aborted and what arrived is kept', async () => {
