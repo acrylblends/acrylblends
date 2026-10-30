@@ -37,7 +37,7 @@
       "steps": [
         { "clickIfPresent": "Continue" },
         { "clickIfPresent": "Configure later" },
-        { "click": "Toggle sidebar" },
+        { "click": "Collapse sidebar" },
         { "wait": 500 }
       ]
     },
@@ -47,7 +47,7 @@
       "steps": [
         { "clickIfPresent": "Continue" },
         { "clickIfPresent": "Configure later" },
-        { "click": "Toggle right panel" },
+        { "click": "Show right panel" },
         { "wait": 500 }
       ]
     },
