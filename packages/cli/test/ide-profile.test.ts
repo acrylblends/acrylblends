@@ -64,6 +64,13 @@ test("the overlay turns DSH's own frame off, so the ACRYL frame's root registrat
   assert.match(overlay, /- id: ui-conversation\n {2}disabled: false/u)
 })
 
+test("the overlay keeps the first chat's workspace in the app's own data home", () => {
+  assert.match(
+    ideProfilePlan(input).overlay,
+    /- id: workspace-controller\n {2}config:\n {4}documentsDirectory: !!js process\.env\.ACRYLBLENDS_HOME \?\? process\.cwd\(\) \+ '\/\.acrylblends'/u,
+  )
+})
+
 test("the overlay turns DSH's API-key first-run dialog off, so it cannot cover the frame", () => {
   assert.match(
     ideProfilePlan(input).overlay,
