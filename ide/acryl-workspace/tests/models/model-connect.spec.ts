@@ -6,6 +6,7 @@ import {
   deriveModelKeyRef,
   type ModelCredentialsPort,
   type ModelLlmPort,
+  type ModelSessionPort,
 } from '../../src/client/models/model-connect.ts'
 
 interface FakeCredentials {
@@ -36,6 +37,12 @@ function llm(providers: { id: string; name: string }[] = [{ id: 'deepseek-offici
   }
 }
 
+function session(groups: { id: string; models: unknown[] }[] = []) {
+  return {
+    modelCatalog: vi.fn<ModelSessionPort['modelCatalog']>(async () => ({ ok: true, value: { groups } })),
+  }
+}
+
 function storage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial))
   return {
@@ -47,14 +54,17 @@ function storage(initial: Record<string, string> = {}) {
 function control(options: {
   credentials?: FakeCredentials
   llm?: ReturnType<typeof llm>
+  session?: ReturnType<typeof session>
   store?: ReturnType<typeof storage>
   openSettings?: () => void
 } = {}) {
   const credentialFace = options.credentials
   const llmFace = options.llm
+  const sessionFace = options.session
   return new ModelConnectControl({
     getCredentials: () => credentialFace,
     getLlm: () => llmFace,
+    getSession: () => sessionFace,
     storage: options.store,
     openSettings: options.openSettings,
   })
@@ -76,9 +86,23 @@ describe('ModelConnectControl', () => {
     expect(subject.getSnapshot()).toEqual({ status: 'ready' })
   })
 
-  it('still asks for a key when only the account route is registered (its availability join is slice 5)', async () => {
+  it('stays out of the way when the Models page account join says the signed-in account is usable', async () => {
     const face = credentials()
-    const subject = control({ credentials: face, llm: llm([{ id: 'deepseek-account', name: 'DeepSeek account' }]) })
+    const catalog = session([{ id: 'deepseek-account', models: [{ id: 'deepseek-v4' }] }])
+    const subject = control({ credentials: face, llm: llm([{ id: 'deepseek-account', name: 'DeepSeek account' }]), session: catalog })
+    await subject.refresh()
+    expect(subject.getSnapshot()).toEqual({ status: 'ready' })
+    expect(catalog.modelCatalog).toHaveBeenCalledTimes(1)
+    expect(face.describe).not.toHaveBeenCalled()
+  })
+
+  it('still asks for a key when the account route is registered but its catalog group has no live model', async () => {
+    const face = credentials()
+    const subject = control({
+      credentials: face,
+      llm: llm([{ id: 'deepseek-account', name: 'DeepSeek account' }]),
+      session: session([]),
+    })
     await subject.refresh()
     expect(subject.getSnapshot()).toEqual({ status: 'needs-key', busy: false, error: null })
     expect(face.describe).toHaveBeenCalled()
