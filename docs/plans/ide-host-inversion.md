@@ -253,3 +253,16 @@ So the next decision is not mechanical: either the app's whole plugin set mounts
 supports but which needs the list derived from the app's registry, not hand-kept), or the host stops mounting the DSH driver rows whose names the app replaces
 (`tools`, `agent`, `settings`, `workspace`) when the app brings its own - which changes what the chat driver rows see. That is a design call for the
 coordinator, with the two exact errors above as the evidence.
+
+### 13c. Scope isolation, tried: the derived list works, the app's own composition collides under it
+
+Per the coordinator's decision (a), the mount was tried with the isolate list DERIVED from the app's own plugins (read from their sources: a Service's
+`super(ctx, 'name')` and a `provide('name')`, restricted to the blend.yaml rows the host does not provide). For the agent template the derived list is exactly
+`agent, extensions, memory, model, sandbox, tasks, tools`, and the row is generated with it. Booting then collides INSIDE the app's own composition, not with
+the host: `Error: service "model" has been registered at <tasks>` although the app's own server mounts the same rows without isolating them. So the per-name
+`isolate()` chain (one label, built by extending the context name by name) does not reproduce what the app's server does for the app's rows; the next probe is
+how Cordis expects one bounded context to be isolated as a whole (one extension with the full map, or a forked context whose group keeps the app's rows in one
+scope), with the app's own suite as the oracle: the app's rows must activate exactly as they do standalone, and only then can the host's driver rows keep their
+own copies of the same names.
+
+The row generation code is written and reverted (not landed); the derived-list scan itself is sound (it found exactly the seven services the app provides).
