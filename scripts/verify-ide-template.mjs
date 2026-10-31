@@ -28,7 +28,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
-import { batchCommand, doorShimCommand, npmCommand } from './lib/platform.mjs'
+import { doorSpawn, npmSpawn } from './lib/platform.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
@@ -240,7 +240,7 @@ try {
     log('the panel and the PTY driver are added, with node as the terminal program')
   }
 
-  const npm = batchCommand(npmCommand())
+  const npm = npmSpawn()
   const install = spawnSync(npm.command, ['install', '--no-audit', '--no-fund'], {
     cwd: app,
     encoding: 'utf8',
@@ -351,7 +351,7 @@ ${composition.stdout}`)
   }
 
   const brief = await until(async () => {
-    const shim = batchCommand(doorShimCommand(app))
+    const shim = doorSpawn(app)
     const door = spawnSync(shim.command, ['brief', '--json'], {
       cwd: app,
       encoding: 'utf8',

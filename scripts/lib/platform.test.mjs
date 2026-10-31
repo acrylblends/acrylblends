@@ -1,26 +1,27 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { batchCommand, chromeCandidates, doorShimCommand, npmCommand } from './platform.mjs'
+import { chromeCandidates, doorSpawn, npmSpawn } from './platform.mjs'
 
-test('npm is spawned as npm.cmd on Windows and as npm elsewhere', () => {
-  assert.equal(npmCommand('win32'), 'npm.cmd')
-  assert.equal(npmCommand('darwin'), 'npm')
-  assert.equal(npmCommand('linux'), 'npm')
+test('npm runs as npm.cmd through the shell on Windows, and as npm elsewhere', () => {
+  assert.deepEqual(npmSpawn('win32'), { command: 'npm.cmd', options: { shell: true } })
+  assert.deepEqual(npmSpawn('darwin'), { command: 'npm', options: {} })
+  assert.deepEqual(npmSpawn('linux'), { command: 'npm', options: {} })
 })
 
-test('a batch file is spawned through the shell on Windows, and as it is elsewhere', () => {
-  assert.deepEqual(batchCommand('npm.cmd', 'win32'), {
-    command: '"npm.cmd"',
+test('the door runs its .cmd wrapper through the shell, quoted so spaces in the folder survive', () => {
+  assert.deepEqual(doorSpawn('/app', 'linux'), {
+    command: join('/app', '.acryl', 'bin', 'acryl'),
+    options: {},
+  })
+  assert.deepEqual(doorSpawn('/app', 'darwin'), {
+    command: join('/app', '.acryl', 'bin', 'acryl'),
+    options: {},
+  })
+  assert.deepEqual(doorSpawn('C:\\app with spaces', 'win32'), {
+    command: `"${join('C:\\app with spaces', '.acryl', 'bin', 'acryl.cmd')}"`,
     options: { shell: true },
   })
-  assert.deepEqual(batchCommand('npm', 'linux'), { command: 'npm', options: {} })
-})
-
-test('the door command is the .cmd wrapper the door writes on Windows', () => {
-  assert.equal(doorShimCommand('/app', 'linux'), join('/app', '.acryl', 'bin', 'acryl'))
-  assert.equal(doorShimCommand('/app', 'darwin'), join('/app', '.acryl', 'bin', 'acryl'))
-  assert.equal(doorShimCommand('C:\\app', 'win32'), join('C:\\app', '.acryl', 'bin', 'acryl.cmd'))
 })
 
 test('Chrome is found where each platform installs it, and CHROME_BIN wins', () => {

@@ -1,26 +1,27 @@
 /**
- * What a child process must be spawned as, per platform. Windows refuses two names a POSIX host accepts: a bare `npm` (the executable is `npm.cmd`, and
- * CreateProcess does not run batch files by bare name) and the door's extensionless command (the door writes `acryl.cmd` beside it for exactly this).
- * The browser's install locations differ too. Every answer here is pure, so the differences are tested on any machine.
+ * How a child process runs Windows-only launchers, and where each platform keeps Chrome. Windows cannot start a .cmd without cmd.exe, and npm's own shim
+ * resolves its files against the working directory when its name is quoted, so npm is named bare and the door's path is quoted (it may contain spaces).
+ * Every answer here is pure, so the differences are tested on any machine.
  */
 import { join } from 'node:path'
 
-/** The npm a child process spawns: `npm.cmd` on Windows. */
-export const npmCommand = (platform = process.platform) =>
-  platform === 'win32' ? 'npm.cmd' : 'npm'
-
-/** The door's command in an app folder: the `.cmd` wrapper the door writes beside the POSIX script on Windows. */
-export const doorShimCommand = (app, platform = process.platform) =>
-  join(app, '.acryl', 'bin', platform === 'win32' ? 'acryl.cmd' : 'acryl')
+/**
+ * The npm a child process spawns. On Windows: `npm.cmd` through the shell, unquoted (quoting makes the shim look for its files under the working
+ * directory). Everywhere else: `npm`, no shell.
+ */
+export const npmSpawn = (platform = process.platform) =>
+  platform === 'win32'
+    ? { command: 'npm.cmd', options: { shell: true } }
+    : { command: 'npm', options: {} }
 
 /**
- * How to spawn a batch file (npm.cmd, the door's .cmd): Windows cannot run it without cmd.exe, and the path is quoted for that shell. On every other
- * platform the command is spawned as it is.
+ * The door's command in an app folder and how to run it: `acryl.cmd` on Windows, through the shell and quoted so a folder with spaces still runs; the
+ * POSIX script elsewhere.
  */
-export const batchCommand = (command, platform = process.platform) =>
+export const doorSpawn = (app, platform = process.platform) =>
   platform === 'win32'
-    ? { command: `"${command}"`, options: { shell: true } }
-    : { command, options: {} }
+    ? { command: `"${join(app, '.acryl', 'bin', 'acryl.cmd')}"`, options: { shell: true } }
+    : { command: join(app, '.acryl', 'bin', 'acryl'), options: {} }
 
 /**
  * Where a Chrome or Chromium may be, in the order to try: `CHROME_BIN` wins; Windows names Chrome's two Program Files locations and the per-user
