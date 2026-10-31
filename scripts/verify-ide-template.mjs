@@ -722,7 +722,8 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         if (settings === undefined) fail('Settings did not open')
         const settingsText = `${settings.text}\n${settings.labels.join('\n')}`
         const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
-        const missing = sections.filter((section) => !settingsText.includes(section))
+        // DSH 0.2 labels the plugins section "Built-in plugins"; the section names match case-insensitively.
+        const missing = sections.filter((section) => !new RegExp(section, 'iu').test(settingsText))
         if (missing.length > 0)
           fail(
             `Settings is missing ${missing.join(', ')}: ${JSON.stringify(settings).slice(0, 3000)}`,

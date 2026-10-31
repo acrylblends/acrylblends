@@ -102,7 +102,9 @@ describe('the page socket owner', () => {
   })
 
   // Open: after a provider is removed and re-provided, an upgrade in the transition window is answered twice (write after end) and then never opens.
-  // The three scenarios above pass; serializing the choice (one disposal at a time) removed the earlier overlapping-owner race but not this one.
+  // The three scenarios above pass; the choice is serialized and the prefix claim is released by identity (an older release cannot undo a newer
+  // claim), which removed the overlapping-owner and stale-release races but not this one. Tying a claim to the service instance's identity churned
+  // (the service proxy is not stable across resolutions), so the next attempt must key on the hub, not the service object.
   it.skip('moves to the node server hub when routerHttp goes away and back when it returns', async () => {
     const ctx = await start()
     const fiber = ctx.plugin(routerHttp)
