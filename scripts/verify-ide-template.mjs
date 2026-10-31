@@ -14,6 +14,7 @@
 // The template's page and the text it must show come from PAGES below; a template without an entry fails rather than skipping the tile check.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -48,6 +49,80 @@ if (page === undefined) fail(`no page known for template "${template}"`)
 if (!existsSync(join(root, 'packages', 'cli', 'dist', 'index.js')))
   fail('the CLI is not built (run pnpm run build)')
 
+/** The key the chat check enters through the frame, and what the local model answers. */
+const GATE_KEY = 'sk-acryl-gate-1234567890'
+const GATE_MESSAGE = 'Hello from the gate'
+
+/**
+ * A local Anthropic-Messages endpoint: it records every request (headers and body) and streams a fixed reply, so the gate proves the key entered
+ * through the card is the one the model request carries, without a real provider.
+ */
+function startMockLlm() {
+  const requests = []
+  const mock = createServer((request, response) => {
+    let body = ''
+    request.on('data', (chunk) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      requests.push({ url: request.url, headers: request.headers, body })
+      response.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+        connection: 'keep-alive',
+      })
+      const send = (event, data) => {
+        response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      }
+      send('message_start', {
+        type: 'message_start',
+        message: {
+          id: 'msg_gate',
+          type: 'message',
+          role: 'assistant',
+          model: 'deepseek-chat',
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 0 },
+        },
+      })
+      send('content_block_start', {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'text', text: '' },
+      })
+      send('content_block_delta', {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'text_delta', text: 'pong from the mock' },
+      })
+      send('content_block_stop', { type: 'content_block_stop', index: 0 })
+      send('message_delta', {
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn', stop_sequence: null },
+        usage: { output_tokens: 4 },
+      })
+      send('message_stop', { type: 'message_stop' })
+      response.end()
+    })
+  })
+  return new Promise((done) => {
+    mock.listen(0, '127.0.0.1', () => {
+      done({
+        url: `http://127.0.0.1:${String(mock.address().port)}`,
+        requests,
+        close: () =>
+          new Promise((closed) => {
+            mock.close(() => {
+              closed()
+            })
+          }),
+      })
+    })
+  })
+}
+
 const DSH_VERSION = process.env.IDE_PROFILE_DSH_VERSION ?? '0.2.0-rc.2'
 /** The framework release this CLI scaffolds an app for (`copyTemplate` writes the same range into the app's package.json). */
 const cliVersion = JSON.parse(
@@ -59,6 +134,7 @@ const scratch = mkdtempSync(join(tmpdir(), `ide-template-${template}-`))
 const app = join(scratch, `${template}-app`)
 const home = join(scratch, 'home')
 let server
+let mock
 try {
   const env = {
     ...process.env,
@@ -110,6 +186,9 @@ ${install.stdout}${install.stderr}`)
     // Any free port: the gate may share the machine with a person's frame or another worker's run.
     ACRYLBLENDS_PORT: '0',
   }
+  // The chat's model is a local Anthropic-Messages mock: the gate proves the key entered through the card is used, without a real provider.
+  mock = await startMockLlm()
+  bootEnv.DEEPSEEK_BASE_URL = mock.url
   // The composition gate first: every row active, none pending, no DSH web row, a provider removed/restored and two reloads clean.
   const composition = spawnSync(
     process.execPath,
@@ -215,9 +294,10 @@ ${composition.stdout}`)
     )
   log(`the app's page answers at ${page.path}`)
 
-  await checkTileInBrowser(url, origin, jar, page, output)
+  await checkTileInBrowser(url, origin, jar, page, output, mock)
   log('OK')
 } finally {
+  if (mock !== undefined) await mock.close()
   if (server) {
     server.kill('SIGTERM')
     await until(async () => (server.exitCode !== null ? true : undefined), 15_000)
@@ -259,7 +339,7 @@ function setInputValue(selector, value) {
  * iframe's document (same origin, so the gate sees what a person sees). This is ACRYL's canvas browser tile, not DSH's right-sidebar browser row:
  * that package registers a tab type for DSH's right sidebar, while the owner's requirement is the main surface, which is the workspace canvas.
  */
-async function checkTileInBrowser(url, origin, jar, page, output) {
+async function checkTileInBrowser(url, origin, jar, page, output, mock) {
   const chrome = findChrome()
   if (chrome === undefined)
     fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the tile check')
@@ -501,6 +581,68 @@ async function checkTileInBrowser(url, origin, jar, page, output) {
           `the app's page did not load in the frame's browser tile; server said:\n${output.slice(-2500)}`,
         )
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
+
+      // (i) The chat, with the local model mock: the first-run card takes the key, the composer sends a message, and the model request carries
+      // the key that was entered (the proof of use, not how fast a reply paints).
+      await evaluate(
+        `(() => { const tab = [...document.querySelectorAll('[role=tab]')].find(candidate => candidate.textContent.includes('AcrylDSH Chat')); tab?.click(); return true })()`,
+      )
+      await sleep(500)
+      const card = await until(
+        async () =>
+          await evaluate(
+            `document.querySelector('section[aria-label="Connect a model"]') !== null`,
+          ),
+        20_000,
+      )
+      if (card !== true) {
+        const snapshot = await evaluate(
+          `({ chat: document.querySelector('.dshWorkspaceChat')?.innerText.slice(0, 300) ?? null, body: document.body.innerText.slice(0, 400) })`,
+        )
+        fail(`the connect card did not appear in the chat: ${JSON.stringify(snapshot)}`)
+      }
+      await evaluate(
+        `document.querySelector('section[aria-label="Connect a model"] input[aria-label="API key"]')?.focus()`,
+      )
+      await cdp.send('Input.insertText', { text: GATE_KEY })
+      await sleep(250)
+      const enabled = await evaluate(
+        `(() => { const button = [...document.querySelectorAll('section[aria-label="Connect a model"] button')].find(candidate => candidate.textContent.trim() === 'Connect'); return button !== undefined && !button.disabled })()`,
+      )
+      if (enabled !== true) fail('the connect action did not enable after a key was typed')
+      await evaluate(
+        `(() => { const button = [...document.querySelectorAll('section[aria-label="Connect a model"] button')].find(candidate => candidate.textContent.trim() === 'Connect'); button?.click(); return true })()`,
+      )
+      const connected = await until(
+        async () =>
+          await evaluate(
+            `document.querySelector('section[aria-label="Connect a model"]') === null`,
+          ),
+        20_000,
+      )
+      if (connected !== true) fail('the connect card stayed after the key was entered')
+      log('the frame takes an API key in its first-run card and the card leaves once it is stored')
+      await evaluate(
+        `document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.focus()`,
+      )
+      await cdp.send('Input.insertText', { text: GATE_MESSAGE })
+      await sleep(250)
+      if (
+        (await evaluate(
+          `(() => { const button = document.querySelector('button[aria-label="Send message"]'); if (button === null) return false; button.click(); return true })()`,
+        )) !== true
+      )
+        fail('the chat has no send control')
+      const used = await until(
+        async () =>
+          mock.requests.some((request) => request.headers['x-api-key'] === GATE_KEY) || undefined,
+        30_000,
+      )
+      if (!used)
+        fail(
+          `the model request did not carry the entered key; requests: ${JSON.stringify(mock.requests.map((request) => ({ url: request.url, key: request.headers['x-api-key'] ?? null })))}`,
+        )
+      log('the chat sent a message with the key entered in the card, and the local model answered')
 
       // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
       // (c) Settings: General, Models, Plugins, Support, Shortcuts.
