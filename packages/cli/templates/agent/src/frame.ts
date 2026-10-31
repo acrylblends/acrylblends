@@ -13,6 +13,6 @@ export const name = 'app-routes'
 export const inject = ['router', 'routerHttp']
 
 export function apply(ctx: Context): void {
-  ctx.router.route(FRAME_MOUNT_PREFIX, makeApp())
+  ctx.router.route(FRAME_MOUNT_PREFIX, makeApp(FRAME_MOUNT_PREFIX))
   ctx.routerHttp.mount(FRAME_MOUNT_PREFIX)
 }
