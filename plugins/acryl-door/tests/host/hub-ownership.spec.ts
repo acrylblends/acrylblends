@@ -101,7 +101,8 @@ describe('the page socket owner', () => {
     expect(await opens(origin.value)).toBe('opened')
   })
 
-  // Open: after a provider is removed and re-provided, the door's chosen route does not answer the next upgrade yet (the three scenarios above pass).
+  // Open: after a provider is removed and re-provided, an upgrade in the transition window is answered twice (write after end) and then never opens.
+  // The three scenarios above pass; serializing the choice (one disposal at a time) removed the earlier overlapping-owner race but not this one.
   it.skip('moves to the node server hub when routerHttp goes away and back when it returns', async () => {
     const ctx = await start()
     const fiber = ctx.plugin(routerHttp)

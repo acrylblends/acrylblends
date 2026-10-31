@@ -202,7 +202,10 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   // or restored moves the route to the live hub without a duplicate: the previous owner's fiber is disposed before the next mounts.
   let socketOwner: { allow: UpgradeWebSocket; fiber: Fiber } | undefined
   let prefixRemove: (() => void) | undefined
-  const chooseSocket = (): void => {
+  /** One choice at a time: the disposals are asynchronous, and two overlapping choices could mount two owners. */
+  let choosing = false
+  let chooseAgain = false
+  const chooseSocket = async (): Promise<void> => {
     try {
       const http = ctx.get('routerHttp') as
         | { upgrades?: () => UpgradeWebSocket; mount?: (prefix: string, options: { upgrade: string[] }) => () => void }
@@ -218,12 +221,18 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
         prefixRemove = http.mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
       }
       if (allow === undefined) {
-        void socketOwner?.fiber.dispose()
-        socketOwner = undefined
+        if (socketOwner !== undefined) {
+          const previous = socketOwner
+          socketOwner = undefined
+          await previous.fiber.dispose()
+        }
         return
       }
       if (socketOwner?.allow === allow) return
-      void socketOwner?.fiber.dispose()
+      // Dispose the previous owner before the next mounts, so the router holds one socket route, answerable by one hub.
+      const previous = socketOwner
+      socketOwner = undefined
+      if (previous !== undefined) await previous.fiber.dispose()
       socketOwner = {
         allow,
         fiber: ctx.plugin({
@@ -234,18 +243,39 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
         }),
       }
     } catch (cause) {
+      // A service being torn down answers with an inactive context: drop what this attempt claimed and choose again on the next event.
+      prefixRemove?.()
+      prefixRemove = undefined
+      const stale = socketOwner
+      socketOwner = undefined
+      if (stale !== undefined) void stale.fiber.dispose()
       reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
     }
   }
+  const scheduleChoose = (): void => {
+    if (choosing) {
+      chooseAgain = true
+      return
+    }
+    choosing = true
+    void chooseSocket().finally(() => {
+      choosing = false
+      if (chooseAgain) {
+        chooseAgain = false
+        scheduleChoose()
+      }
+    })
+  }
   ctx.effect(() => {
-    chooseSocket()
-    const off = ctx.on('internal/service' as never, chooseSocket as never) as unknown as (() => void) | undefined
+    scheduleChoose()
+    const off = ctx.on('internal/service' as never, scheduleChoose as never) as unknown as (() => void) | undefined
     return () => {
       off?.()
-      void socketOwner?.fiber.dispose()
-      socketOwner = undefined
       prefixRemove?.()
       prefixRemove = undefined
+      const owner = socketOwner
+      socketOwner = undefined
+      if (owner !== undefined) void owner.fiber.dispose()
     }
   }, 'acryl-door: the page socket owner')
   ctx.router.route('/', privateApi(
