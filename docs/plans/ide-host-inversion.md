@@ -156,3 +156,55 @@ Picked up at the Settings step of the page gate. Findings, in order:
 Next: fix the settings opening at the dialog's owner (render the settings dialog inside the frame with the providers its root expects, or have the workspace
 run the `settings.open` path through the settings trigger), then the gate's steps after Settings (palette, PTY tab, /app tile, chat mock), then the door's
 re-provide scenario.
+
+## 13. The app's own plugin rows in the frame (design note, 2026-10-31)
+
+Found while asserting the agent template's panel inside the `/app` tile: the generated layer mounts only the app's routes row, so an app's own plugins never run
+in the frame host. On the agent template that means no agent panel on the page, and no `/ask` either; the blank template is unaffected because it has no plugins
+of its own.
+
+### 1. Which rows the host owns, and which the layer owns
+
+The host launcher mounts, in its own layer: `node-server` (the framework's server), `web-server` (the webServer port DSH's driver rows register on), `page` (the
+document and the index tap), the client rows, and the DSH driver rows it selects by id. `app-instance` comes from `app/runtime.mjs`. The generator's layer keeps
+`app-routes` (`./src/frame.ts`), the frame packages with their rows, the door row when the app carries one, and the disabled/overridden DSH rows it already
+writes. So the layer owns: the app's routes row, the app's own plugin rows, the frame packages, and the door. The host owns: the server, the web-server port,
+the page, the app instance, and the DSH driver selection. `manifest` and `save` are app plugins but not rows the frame needs (they are CLI-time tools), so they
+stay out of the layer.
+
+### 2. How the app's own rows mount
+
+The same entries the app's own server mounts: the app's `blend.yaml` lists `- id: <name>` rows, and each resolves to `./plugins/<name>/index.ts` (the folder the
+scaffolder copied). The layer should carry them in `blend.yaml` order, after `app-routes`, skipping the ids the host or the generator already provides
+(`instance`, `acryl-router`, `acryl-node-server`, `acryl-web-server`, `acryl-page`, `manifest`, `save`, `acryl-door`). The attempted implementation in
+`packages/cli/src/init.ts` did exactly that (reading `blend.yaml`, falling back to the plugin folders, `readdirSync` for the rest) and is reverted, not landed.
+
+### 3. What actually fails, measured
+
+With those rows in the layer, DSH's startup audit reports (text as printed):
+
+```
+Failed plugins (6):
+  agent
+    Package: ./plugins/agent/index.ts
+    failed to import
+  tasks
+    Package: ./plugins/tasks/index.ts
+    failed to import
+  sandbox, extensions, builder, openai: the same
+```
+
+`failed to import` is `dsh-app-boot`'s label for a row whose Loader entry has no fiber (`inactiveEntries`: `if (fiber === void 0) ... error: "failed to import"`),
+so the real import rejection is swallowed. What was measured around it, on a scratch framed agent app:
+
+- Patching `cordis-plugin-loader`'s own `_init` catch to print `error` printed **nothing**: the row never reaches that catch, so the import happens on another
+  path (DSH's boot importer), which is where the next session must print the rejection.
+- The same plugins import cleanly from the app folder with the app's register:
+  `node --import ./plugins/acryl-node-server/src/register.ts -e "import('./plugins/agent/index.ts')"` prints `agent ok` (and the same without the register).
+- It is not a row-id collision: prefixing every id (`app-agent`, ...) fails identically. It is not the loader's TypeScript extension rewrite
+  (`__rewriteRelativeImportExtension`, which turns `./x.ts` into `./x.js`): an absolute `file:///.../plugins/agent/index.ts` row name and an extensionless
+  `./plugins/agent/index` row name fail the same way. All six app plugin rows fail while `app-routes` (`./src/frame.ts`) and the framework rows mount.
+
+Next: instrument DSH's boot import of layer rows (the path that runs before the Loader's `_init`) and print its rejection; the two candidates are a different base
+URL for rows inside the app's `plugins/` folders, and the boot importer evaluating rows before the app's register hooks are installed. Once the cause is known, the
+rows land in `init.ts` as described in (2) and the agent template's panel assertion can go back into the page gate.
