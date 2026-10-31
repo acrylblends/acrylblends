@@ -273,3 +273,18 @@ decision (a) note suggested, and it is the one that produced `service "model" ha
 not a repeat of this one: either a context whose group keeps the app's rows in one scope as the app's own server does (the server mounts every row through one
 `compose()` call on one plain Context), or a separate root Context for the app with the host's shared services (router, state, webServer, nodeServer) provided
 into it explicitly.
+
+### 13d. The Loader's entry isolate works; the panel's script still does not load under the host
+
+Following the coordinator's lead (2), the app's rows mount through the Loader's own entry option: the generated `app-plugins` row carries
+`isolate: {"agent":true,"extensions":true,"memory":true,"model":true,"sandbox":true,"tasks":true,"tools":true}` (the derived list), and `composeInto` with
+`host: true` leaves out the host's infrastructure rows (`instance`, `acryl-router`, `acryl-web-server`, `acryl-page`, `manifest`, `save`, `acryl-node-server`,
+`acryl-door`). Measured result: the host boots with every row active - DSH's driver rows and the app's own plugins coexist, no service collision - and the app
+answers at `/app` with its page carrying the agent-panel and door script tags.
+
+What still fails: the panel UI does not appear in the page. The app's panel endpoints are mounted on the host router at the ROOT (`/api/agent-panel/...`), not
+under `/app`, and at that root they answer 401 to a plain request (`/api/agent-panel/panel.js` 401, `/api/agent-panel/session` "unauthorized"), so the panel
+script is refused in the page even though its tag is served. The next probe is the panel's own origin/token admission under the host (its standalone gate,
+`verify-agent-panel.mjs`, shows the contract it expects), not the composition.
+
+The code is written and reverted; the branch stays green at the approved pair plus the notes.
