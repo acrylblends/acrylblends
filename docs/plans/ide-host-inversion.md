@@ -208,3 +208,31 @@ so the real import rejection is swallowed. What was measured around it, on a scr
 Next: instrument DSH's boot import of layer rows (the path that runs before the Loader's `_init`) and print its rejection; the two candidates are a different base
 URL for rows inside the app's `plugins/` folders, and the boot importer evaluating rows before the app's register hooks are installed. Once the cause is known, the
 rows land in `init.ts` as described in (2) and the agent template's panel assertion can go back into the page gate.
+
+### 13a. The cause, measured, and what mounting the rows then needs
+
+The swallowed rejection, printed by patching the Loader's activation step: `Error: invalid plugin, expect function or object with an "apply" method,
+received object`, once per row. A Cordis row's module must BE the plugin, while the app's registry mounts NAMED plugin objects
+(`import { agent, memory, model, tools } from '../plugins/agent/index.ts'`; `export const registry = { tasks, model, tools, memory, agent, ... }`), so the module
+namespace has no `apply`. That is why the rows never reached the loader's import catch: the import succeeded and the plugin check threw afterwards.
+
+A working mount is a one-line generated adapter per row, from the same source of truth the app already has (`src/app.ts`'s imports and its registry), never a
+hand-kept list:
+
+```js
+// frame/<row>.mjs
+export { agent as default } from '../plugins/agent/index.ts'
+```
+
+and the row names `./frame/<row>.mjs`; a row imported as a namespace (`* as panel`) mounts the module directly. Tried in a scaffolded agent app: all rows
+load and apply, and two further needs surfaced, which are the next step:
+
+- **The rows need their composition config.** The app's server passes per-row config in `createApp` (`builders`/`extensions` sources and the rest are set in code,
+  not in `blend.yaml`), so the layer's rows run without it: the builder row then fails with its own clear error ("the builder writes into …/plugins, which is
+  not an extensions source"). The composition the app's server builds should be exported by the template (one function `appRows()` the server and the generated
+  layer both mount), so the frame composes the app exactly as its own server does, config included.
+- **The launcher must print the cause.** DSH's "failed to import" hid this for two rounds, here and in ACRYL's 178 rows. The generated `scripts/ide-host.mjs`
+  should catch the boot's StartupError and print each failing row's id, module and the full error chain (`error.entries` carries the original failures), and
+  `--check` should fail naming them.
+
+Both are prerequisites for re-mounting the app rows and for the agent template's panel assertion in the page gate.
