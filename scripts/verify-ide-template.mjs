@@ -1052,7 +1052,35 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         log("the terminal's endpoints keep the app's origin and token admission under the mount")
       }
 
-      // A settings change is picked up on the next page load: reload, select the project's worktree if the reload asks for one, then open a chat.
+      // A settings change is picked up on the next page load. After a reload the frame restores the shown chat's worktree asynchronously (the tree follows
+      // the chat's folder), so the canvas can ask for a worktree for a moment. The two helpers below wait for the state instead of sampling it once: the old
+      // single click after 1.5 s lost that race on a loaded machine and the chat opened with no worktree, which the canvas answers with "Select a worktree
+      // first" and no composer.
+      const noticeShown = () =>
+        evaluate(`document.body.innerText.includes('Select a worktree first')`)
+      const selectWorktree = async () => {
+        const pressed = await until(
+          async () =>
+            await evaluate(`(() => {
+              const button = [...document.querySelectorAll('.dshWorkspaceSide button')].find((candidate) => (candidate.getAttribute('aria-label') ?? '').startsWith('New chat on'))
+              if (button === undefined) return false
+              button.click()
+              return true
+            })()`),
+          15_000,
+        )
+        if (pressed !== true) {
+          const sidebar = await evaluate(
+            `document.querySelector('.dshWorkspaceSide')?.innerText.slice(0, 600) ?? null`,
+          )
+          fail(
+            `the chat asks for a worktree but the sidebar offers no "New chat on" button: ${JSON.stringify(sidebar)}`,
+          )
+        }
+        // The canvas's notice is cleared by the canvas's own openChat on success, not by the sidebar; give the selection a moment, then let the caller
+        // open the chat again.
+        await sleep(1000)
+      }
       await cdp.send('Page.navigate', { url: `${origin}/` })
       const reloaded = await until(
         async () => await evaluate(`document.querySelector('.dshWorkspaceSide') !== null`),
@@ -1060,33 +1088,31 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       )
       if (reloaded !== true) fail('the frame did not come back after the settings reload')
       await sleep(1500)
-      if (
-        (await evaluate(`document.body.innerText.includes('Select a worktree first')`)) === true
-      ) {
-        await evaluate(
-          await evaluate(
-            `(() => { const button = [...document.querySelectorAll('.dshWorkspaceSide button')].find((candidate) => (candidate.getAttribute('aria-label') ?? '').startsWith('New chat on')); button?.click(); return true })()`,
-          ),
-        )
-        await sleep(1000)
-      }
+      if ((await noticeShown()) === true) await selectWorktree()
 
       // The workshop runs on the agent template; the blank app has no chat worktree, so its chat send is not checked here.
       if (template === 'agent') {
-        // A fresh chat from the tab menu: a session started after the key was saved shows no first-run card, and no page reload is needed (a reload
-        // can come back without a selected worktree and is not what the guide asks an attendee to do).
-        await evaluate(
-          `(() => { const button = [...document.querySelectorAll('button')].find((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Choose what to open'); button?.click(); return true })()`,
-        )
-        await sleep(500)
-        const chatOpened = await evaluate(`(() => {
-        const item = [...document.querySelectorAll('[role=menuitem],button,a')].find((candidate) => (candidate.textContent.trim()) === 'AcrylDSH Chat')
-        if (item === undefined) return false
-        item.click()
-        return true
-      })()`)
-        if (chatOpened !== true) fail('the tab menu has no AcrylDSH Chat item')
-        await sleep(1500)
+        // A fresh chat from the tab menu: a session started after the key was saved shows no first-run card.
+        const openMenuChat = async () => {
+          await evaluate(
+            `(() => { const button = [...document.querySelectorAll('button')].find((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Choose what to open'); button?.click(); return true })()`,
+          )
+          await sleep(500)
+          const chatOpened = await evaluate(`(() => {
+          const item = [...document.querySelectorAll('[role=menuitem],button,a')].find((candidate) => (candidate.textContent.trim()) === 'AcrylDSH Chat')
+          if (item === undefined) return false
+          item.click()
+          return true
+        })()`)
+          if (chatOpened !== true) fail('the tab menu has no AcrylDSH Chat item')
+          await sleep(1500)
+        }
+        await openMenuChat()
+        if ((await noticeShown()) === true) {
+          // The reload came back without a worktree still: select the project's, then open the chat once more.
+          await selectWorktree()
+          await openMenuChat()
+        }
         await sleep(1200)
         await sleep(1500)
         await evaluate(
