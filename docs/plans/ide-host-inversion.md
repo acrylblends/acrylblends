@@ -1,60 +1,113 @@
-# Host inversion: the app boots on our framework, DSH rides as rows
+# Host inversion: our framework hosts the app; DSH is the chat/session driver
 
-Status: design note for slice 107 (`107-host-inversion`), written before the code. Owner decision (2026-10-31): the app is hosted by our own framework, not `dsh --profile`; DSH is one driver (its chat, its session host, its conversation UI). The frame packages publish as the `@acrylblends` scope packages (DS_Fork3 owns the pipeline).
+Status: design note for slice 107 (`107-host-inversion`), revised after review. Owner direction (2026-10-31): the app is hosted by our own framework, not by `dsh --profile`; DSH is one driver (its chat, its session host); the frame packages publish as the `@acrylblends` scope packages (DS_Fork3 owns the pipeline).
 
-## 1. The composition
+What changed from the first draft: DSH's web server, web runtime, page and client boot are **not mounted**. Our node-server and router serve the document and the client modules; the document is the ACRYL frame's own layout; DSH contributes only the chat/session driver rows and the client packages the frame imports as libraries.
 
-The generated app's `dev` starts a launcher of ours, not the `dsh` bin. The launcher owns the Cordis `Context`, the layer order and the app's own rows; every DSH package it needs is a dependency mounted as a row of that composition, exactly as the frame's packages already are.
+## 1. Our HTTP host
 
-Layers, in order, each one a patch list over the previous:
+- `acryl-node-server` (ours) listens on the port and serves the router and the client modules; there is no DSH `webServer` or `web-startup` row.
+- The page is one document written and served by us (`clientModules`): the frame's client entry (the `acryl-app-shell` layout, which renders the left panel, main surface and right panel) is the root bundle. No DSH page, no DSH slots switched off: the frame's slots are the page's slots.
+- The app's own routes are mounted at `/app` on our router (the slice 6 prefix rule), served by our server; the door's page script rides the same document through our client-module serving (the slice 1/6 adaptation, now against our server instead of DSH's index-inject).
+- For the DSH driver rows that register HTTP endpoints (the remote gateway), our host provides **one compatibility service of our own**, `webServer`, with the slice of DSH's web-server interface they use (`register` prefix/exact, `registerUpgrade`, index tap if a row needs it), backed by our node-server. It is our adapter (estimate: 150-250 lines, tested like `routerHttp`), not DSH code; a row that needs more of the interface is listed with the extra surface and either served or excluded with a reason. This avoids mounting DSH's web server while keeping the driver rows unchanged.
 
-1. **DSH base** - the rows of `@deepseek-ai/dsh-base`'s bundle patch files (`package.json` -> `dsh.bundle.patch`): the LLM, session, agent, tools, storage and settings rows.
-2. **DSH web** - the rows of `@deepseek-ai/dsh-web-app`'s bundle patch files: the web server, the web runtime that serves the page and the client modules, the client-module rows (chat, conversation UI, settings screens, sidebar), the session controller, the workspace/files/terminal controllers, and the rest of the web surface DSH ships.
-3. **The frame** - the app's own `cordis.patch.yml`, the same rows the slice 6 overlay generates today: `app-instance`, the door when the app carries it, `app-routes` (the app's routes at `/app`), `acryl-router`, `acryl-router-http`, and the the `@acrylblends` scope packages frame packages; the switches (DSH's `ui-layout` off, `ui-sidebar`/`ui-conversation` on, the first-run dialog off) and the config (workspace directory under the app's home).
-4. **The app's own rows** - what `blend.yaml` mounts for the app on its own server stays for production; in the frame host the same routes are the `app-routes` row of layer 3, so there is one copy of the app's pages, not two.
+## 2. Our client runtime
 
-The launcher mounts the composed entries with Cordis's own loader (`@deepseek-ai/cordis-plugin-loader`) and applies patch lists with the entry-patch helper DSH already exports from `@deepseek-ai/dsh-app-boot` (insert/target/config replacement, the same semantics the profile layer has today). It does not use DSH's launcher, its profile directory, or `dsh plugin add`: the app's `node_modules` is the only package store, `npm install` is the only install step, and there is no `DSH_HOME/profiles/<name>` to create.
+- The page loads our client-module loader (DSH's `@deepseek-ai/dsh-client-modules` as an npm **library**, served by our server; ~1,900 lines) and the client graph of the frame: `acryl-app-shell`, `acryl-workspace`, and the DSH client packages the frame imports (table below).
+- DSH's client packages are served by **our** client-module serving, from `node_modules`, through their `dsh.client` entries; our loader resolves their bare imports. They are libraries, not rows of DSH's web runtime.
+- The chat tab mounts the conversation UI client module (DSH's `dsh-client-ui-conversation`, ~18,500 lib lines) as a library in the chat tile; it talks to the driver through the remote client packages (also libraries) over our host's gateway endpoint. The frame's chat tile already receives `renderConversation` today; under our page it receives the same component from the served module.
+- The client-side services the frame's client packages inject (`slots`, `locale`, `sidebarRight`, `sidebarRightTabs`, `shortcuts`, `layout`, `renderer`, ...) come from those client libraries, bootstrapped by the page's client entry. No DSH client runtime row or DSH client boot is mounted.
 
-**Services the launcher provides itself.** `profileContext` with `name: 'web'` (the DSH rows test it: desktop-only rows stay off, the web rows stay on), and the app instance (`appInstance`: root, home, dshHome) as `app/runtime.mjs` already does. `process.env.DSH_HOME` is set to the instance's home before DSH's rows are imported, so DSH's storage, settings, logs and sessions live inside the app's own data home, not in a user-wide one. `web-startup` is configured by layer 3 with the host and the port: `ACRYLBLENDS_PORT` (0: any free port), DSH's 3080 otherwise.
+## 3. The client contract, per package
 
-**What the page gets.** DSH's web runtime serves DSH's page with the ACRYL frame mounted in it through the client-module mechanism the frame already uses (`window.__ModuleLoader__.load`, the client bundles of the the `@acrylblends` scope packages rows). The client contract is not ported: it is DSH's, served by DSH's web runtime; our client packages are its plugins.
+Line counts are the package's shipped `lib` JavaScript (`.js`, no maps) in DSH `0.2.0-rc.2`, as installed in a frame profile; "frame imports" is how many of our `ide/*/src` files name it. Decision means: **library** = DSH npm package served by our server and loaded in our client graph, not ported; **port** = source under the `@acrylblends` scope packages with provenance. No package is ported in this slice unless a row below says so.
 
-## 2. Which DSH rows, and what must be ported
+| Package | lib lines | frame imports | Used for | Decision |
+| --- | ---: | ---: | --- | --- |
+| `dsh-client-modules` | 1,898 | 4 | client-module loader and client boot primitives | library, served by our server |
+| `dsh-client-store` | 179 | 2 | reactive store the client plugins share | library |
+| `dsh-client-ui-slots` | 576 | 23 | slot registry (the frame's link/extension points) | library |
+| `dsh-client-ui-renderer` | 1,898 | 13 | client renderer the frame's plugins register into | library |
+| `dsh-client-ui-primitives` | (npm package, not in this profile) | 11 | base UI components used by the frame's screens | library |
+| `dsh-client-locale` | 1,600 | 9 | localized strings | library |
+| `dsh-client-ui-theme` | 1,732 | 8 | theme tokens, light/dark | library |
+| `dsh-client-ui-settings` | 1,554 | 8 | Settings shell and sections | library |
+| `dsh-client-ui-session` | 504 | 6 | session views shared by chat/tabs | library |
+| `dsh-client-ui-layout` | 699 | 4 | layout service the frame's shell uses | library |
+| `dsh-client-ui-sidebar` | 541 | 5 | sidebar tab primitives | library |
+| `dsh-client-ui-sidebar-right` | 9,244 | 4 | right panel shell (File/Changes/Review mount here) | library |
+| `dsh-client-ui-commands` | 1,465 | 2 | command registry for the palette/shortcuts | library |
+| `dsh-client-shortcuts` | 2,557 | 5 | shortcut commands and the palette event | library |
+| `dsh-client-connection` | 2,352 | 1 | remote connection client | library |
+| `dsh-client-ui-settings-models` | 4,126 | 4 | Models settings page (the account card mounts here) | library |
+| `dsh-client-ui-settings-account` | 4,619 | 0 | account settings page used by sign-in | library |
+| `dsh-client-ui-conversation` | 18,505 | 7 | the DSH chat view in the chat tile | library, served as the chat module |
+| `dsh-client-ui-workspace` | 4,435 | 0 | workspace client the conversation UI injects | library |
+| `dsh-client-file-upload` | 1,982 | 0 | upload client the conversation UI injects | library |
+| `dsh-brand` | 32 | 0 | brand token helpers | library |
 
-All rows of layers 1 and 2 are mounted: the same composition `dsh --profile web` mounts today (dump it with `dsh --profile web --dump-config`). That includes the session host, the conversation UI, the chat's model/credentials rows, the client-module serving and every UI row the frame's tabs sit beside. The desktop-only rows stay disabled exactly as today, through `profileContext.name === 'web'`.
+If a library turns out to hard-depend on a DSH host row that we do not mount, the row is added to section 4 with its evidence; if a library turns out to need a profile-only mechanism, the note is amended with that package's port plan and provenance before the code. The frame's own client packages (the `@acrylblends` scope packages) keep their existing ports and provenance.
 
-**Nothing is ported.** Every DSH capability the frame uses is a Cordis row that the two bundle packages already declare and that DSH's own page loads; there is no package that has to be rewritten to become a row. The one DSH code we call rather than mount is the entry-patch helper (`applyEntryPatches`) and the generic Cordis loader, both library calls inside our launcher, not a DSH launcher or profile. If the implementation finds a row that cannot mount outside the profile (a hard-coded profile path, a CLI-parsed flag with no service seam), that row is the exception to record here with its reason; the client contract itself is not a candidate.
+## 4. The DSH driver rows
 
-## 3. What the generated app contains, and what `dev` runs
+Only the rows the chat and session need, grouped with why. Each is a standard Cordis row from DSH's npm packages, mounted in our composition after our own rows; "verified injects" are read from the installed `0.2.0-rc.2` package.
 
-- `package.json`: `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app` pinned exactly (as one meta-dependency would be), the the `@acrylblends` scope packages frame packages, the framework and DSH's Cordis/loader libraries; no profile script.
-- `scripts/ide-host.mjs`: the launcher: reads the app's `cordis.patch.yml` and the two DSH bundles' patch files, composes the entries, mounts them, forwards stop signals, sets the home and port.
-- `npm run dev`: `node --import ./plugins/acryl-node-server/src/register.ts scripts/ide-host.mjs` (the app's JSX register, because the app's `.tsx` pages compile in the host's process too).
-- `npm start` and production do not change: the app's own framework server (`src/main.ts`, the manifest rows), no frame, no door, no DSH.
-- The scaffolder (`acrylblends init`) writes the same files for every template with a frame row, and the upgrade path writes them into an existing app; both stop generating a DSH profile and stop calling `dsh plugin add` (`scripts/ide-profile.mjs` is replaced by `scripts/ide-host.mjs`; generation stays idempotent). The `ACRYLBLENDS_FRAME_PACKAGES` bridge for unpublished frame specs stays until the the `@acrylblends` scope packages packages are on npm.
+| Row (id) | Package | Why | Verified hard injects |
+| --- | --- | --- | --- |
+| `typert` | `@deepseek-ai/dsh-typert-registry` | the typed remote registry the conversation client calls through | - |
+| `typert-loader` | `@deepseek-ai/dsh-typert-loader` | registers the generated remote modules | - |
+| `typert-gateway` | `@deepseek-ai/dsh-api-gateway` | the HTTP/remote gateway the page's client connects to; registers on the host (through our `webServer` port) | - |
+| `session` | `@deepseek-ai/dsh-session` | the session host: create, read, send turns | - |
+| `session-persistence-jsonl` | `@deepseek-ai/dsh-session-persistence-jsonl` | keeps chat sessions across restarts | - |
+| `session-query-sqlite` | `@deepseek-ai/dsh-session-query-sqlite` | session list/search the left pane and controller read | - |
+| `session-projection` | `@deepseek-ai/dsh-session-projection` | the turn projections the conversation renders | - |
+| `session-title` | `@deepseek-ai/dsh-session-title` | titles for chat tabs | - |
+| `storage`, `storage-json`, `storage-domain` | DSH storage rows | the durable store the session/settings rows write through | - |
+| `agent` | `@deepseek-ai/dsh-agent` | runs a chat turn | - |
+| `agent-default-model` | `@deepseek-ai/dsh-agent-default-model` | the model a new session uses | - |
+| `llm` | `@deepseek-ai/dsh-llm` | the model service | - |
+| `llm-retry` | `@deepseek-ai/dsh-llm-retry` | provider retries | - |
+| `llm-deepseek` | `@deepseek-ai/dsh-llm-deepseek-api-key` | the API-key model provider | - |
+| `llm-deepseek-account` | `@deepseek-ai/dsh-llm-deepseek-account` | the account model provider (OAuth) | - |
+| `deepseek-account` | `@deepseek-ai/dsh-deepseek-account-platform` | the account catalog/OAuth service | - |
+| `credentials` | `@deepseek-ai/dsh-credentials-local` | the key store (never in the page/app folder) | - |
+| `authorization` | `@deepseek-ai/dsh-authorization` | the authorization service the sign-in host uses | - |
+| `settings` | `@deepseek-ai/dsh-settings` | settings the model rows read; needs `configEditor` and `profileContext` (we provide a minimal `profileContext`) | `configEditor`, `profileContext` |
+| `config-editor` | `@deepseek-ai/dsh-config-editor` | the settings store backend | - |
+| `attachment-local` | `@deepseek-ai/dsh-attachment-local` | attachments the session controller admits | - |
+| `file-reference-local` | `@deepseek-ai/dsh-file-reference-local` | file references the session controller resolves | - |
+| `session-controller` | `@deepseek-ai/dsh-api-session-controller` | the session remote API the conversation client calls | its row class injects `agents`, `sessionQuery`, `typert`; the service uses `typert`, `fileReferences`, `attachments` |
+| `api-remotes` | `@deepseek-ai/dsh-api-remotes` | the remote registry/gateway wiring | `typertGateway` |
+| `workspace-controller` | `@deepseek-ai/dsh-api-workspace-controller` | the workspace remote the conversation UI's workspace client injects; our workspace also uses its own files/git services | - |
 
-## 4. The boot gate
+Excluded with reasons: DSH's web server, web startup, web runtime, client HMR, DSH's UI client rows (not mounted as rows; the client packages are libraries), DSH's terminal/file/diff controllers (our workspace's, ported in slice 2), DSH's plugin manager/support rows (our the `@acrylblends` scope packages packages), the tool rows and their dependencies (the chat answers without tools; the owner's terminal agents are our PTYs), telemetry/product analytics (disabled in the web profile today). If a listed driver row's hard injects pull a row not listed, that row is added here with its evidence in the implementation commit; the gate's active-row list is the proof.
 
-`scripts/verify-ide-template.mjs <template>` keeps its shape (scaffold through the CLI, install, boot, real Chrome, free port) and its current assertions:
+## 5. What our ported packages hard-require from DSH
 
-- every row of the composed host active, none pending or failed (the launcher reports the same row status the loader gives; the gate parses it);
-- the page renders the ACRYL frame; the left panel shows Projects/sessions; the chat tab is in the tab strip; the right panel offers Files/Changes/Review; Settings has General, Models, Plugins, Support and Shortcuts; the command palette opens; a terminal tab answers in a PTY;
-- the app answers at `/app` with its own body and its page is shown in the workspace browser tile;
-- the door script rides the page once and a door call answers;
-- chat with a local Anthropic-Messages mock (the slice 3 gate's model), so the frame's chat is proven without a real provider.
+- `acryl-sign-in` host: DSH's `authorization` and `credentials` services (slice 5; listed above).
+- `acryl-workspace`'s connect-model control: DSH's `credentials`, `llm` and `session` remote faces (slice 3; the rows above).
+- `acryl-workspace`'s chat tile and session list: the session/agent rows above; its terminals, files, git, board, comments are ours (node-pty host routes), not DSH's controllers.
+- Settings screens, shortcuts and the palette are ours (the `@acrylblends` scope packages), mounted on our host.
 
-What changes: the gate no longer waits for `dsh`'s profile output or its `did not activate` lines; it reads the launcher's status, and it no longer creates a DSH profile. The port is always `ACRYLBLENDS_PORT=0`.
+## 6. What the generated app contains, and what `dev` runs
 
-## 5. What is kept from `106-ide-slice6-boot`
+- `package.json`: our framework, the the `@acrylblends` scope packages frame packages (published names; the `ACRYLBLENDS_FRAME_PACKAGES` bridge until then), DSH's driver packages pinned exactly, and the client libraries the frame imports. No DSH profile, no `dsh plugin add`.
+- `scripts/ide-host.mjs`: our launcher: chooses the instance/home/port (`ACRYLBLENDS_PORT`, 0 allowed), composes our rows (the app's frame layer: `app-instance`, door when present, `app-routes` at `/app`, our router/routerHttp, the the `@acrylblends` scope packages rows, the DSH driver rows), provides `profileContext` and the `webServer` compatibility port, mounts the client-module serving and the page, and forwards stop signals.
+- `npm run dev`: `node --import ./plugins/acryl-node-server/src/register.ts scripts/ide-host.mjs` (the app's JSX register, as the app's own scripts use). `npm start`/production stays the app's own framework server (no frame, no door, no DSH).
+- Scaffolder (`acrylblends init` and `acrylblends upgrade`): write the host script and layer instead of the DSH profile (`scripts/ide-profile.mjs` and the profile directory are removed); generation stays idempotent; blank first.
 
-Kept: the `/app` prefix and the single-prefix rule per template, the frame row shape (router + routerHttp claim + route), the tile decision (ACRYL's canvas browser tile, not DSH's right-sidebar browser), the door in each template, the boot gate and its surface assertions, the app's page check, the fixed spawn-dirs timing bound, and the docs decisions.
+## 7. The boot gate
 
-Dropped (replaced by the inversion): the DSH profile generator (`scripts/ide-profile.mjs`, `dsh plugin --profile add`, the profile package.json), the `dsh --profile` dev command and its profile arguments, and the DSH-profile row status parsing in the gate. The `106-ide-slice6-boot` branch is pushed as `d615176b` for reference; the backup can drop that branch once this branch carries the same gate.
+`scripts/verify-ide-template.mjs <template>` keeps the slice 6 shape and acceptance: scaffold through the CLI, install, boot, real Chrome on a free port, every row active; the frame renders; (a) left panel Projects/sessions; (b) right panel Files/editor/Changes/Review; (c) Settings General/Models/Plugins/Support/Shortcuts; (d) chat tab; (e) a terminal PTY that answers; (f) the command palette and shortcuts; (g) the door script once and a door call; (h) the app answers at `/app` and its page shows in the workspace browser tile; plus chat with the local Anthropic-Messages mock. What changes: no DSH profile and no `dsh` output to parse; the gate reads our launcher's row status, and the page is ours.
 
-## 6. Risks
+## 8. What is kept from `106-ide-slice6-boot`
 
-- **DSH's home services.** A row may read `DSH_HOME` or a home path before our launcher sets it; the launcher sets it first (the app instance is chosen before any DSH row is imported), and the gate proves no file outside the app's home is written.
-- **Loader resolution.** Rows name packages; the loader must resolve them from the app's own `node_modules`. The launcher runs with the app root as the loader base; the gate's boot is the proof.
-- **Patch semantics drift.** `applyEntryPatches` is DSH's; a DSH bump that changes it is the same decision as the existing DSH pin bump.
-- **Client HMR.** DSH's `client-hmr` row runs in the web layer; if it assumes a DSH profile, the gate sees it as a failed row and we record the exception.
-- **Electron.** The same launcher is what the Electron shell will load later; nothing in this slice builds the window.
+Kept: the `/app` prefix and the single-prefix rule, the frame row shape (router + `routerHttp` claim + route), the tile decision (ACRYL's canvas browser tile, not DSH's right-sidebar browser), the door in each template, the boot gate and its surface assertions, the app's page check, the `spawn-dirs` timing bound fix, and the docs decisions. Dropped: the DSH profile generator, the `dsh --profile` dev command and its arguments, and DSH-profile row parsing in the gate. The branch is pushed as `d615176b` for reference; it can be dropped once this branch carries the gate.
+
+## 9. Risks
+
+- **Driver row drift.** A DSH bump may change a row's injects; the gate's active-row list and the pin are the guard.
+- **`webServer` port surface.** If a driver row uses more of DSH's web-server interface than the port exposes, that row is either served by a small extension to our port or excluded with a reason in this note.
+- **Client library boot.** The client libraries expect DSH's client boot order; our page bootstraps them explicitly; the gate's chat/tile/settings checks are the proof.
+- **Settings' `profileContext`.** DSH's settings row hard-injects it; our host provides the minimal compatible object (name `web`, home, directories) and the gate proves settings and models work.
+- **Home.** DSH's rows keep their files in the app's own data home (the launcher sets `DSH_HOME` from the app instance before importing any driver row); the gate proves nothing is written to a user-wide home.
