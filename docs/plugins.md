@@ -121,6 +121,10 @@ removed the page reloads, so the feature shows with no restart.
   app was started in and is never stored.
 - **Safety.** Development only: it does nothing with `NODE_ENV=production` or `ACRYL_DOOR=off`. A page gets a token from `GET /api/agent-panel/session`, which answers only the app's own page (`Sec-Fetch-Site:
   same-origin`, or an `Origin` equal to the `Host`); `POST /api/agent-panel/ask` needs that token, and one run goes at a time. Every ask is written to `.acryl/audit/agent-panel.jsonl` without its text.
+- **Where the routes are.** The panel lives under the app's mount: at the root of the app's own server, and under the prefix a host serves the app at. The row's `mount` config names
+  it (the same rule `clientModules` takes), and the `agent` template's composition passes `FRAME_MOUNT_PREFIX` (`/app`) when the ACRYL frame hosts the app, so the panel is at
+  `/app/api/agent-panel/...` there and the host's own `/api` routes never answer for it. A composition that serves the app at a prefix must set `mount` to it, or the panel's
+  routes land at the root and no page under the prefix can reach them.
 - **Stop.** For `claude`, `codex` and `pi` the button ends the program. For the app's own agent, Stop cancels the run: the model call or tool in flight is dropped and the run ends `cancelled` (`agent.run(question, { signal })`; a task record, when the app records tasks, is marked failed).
 - The gate: `node scripts/verify-agent-panel.mjs [--driver claude|codex|pi]` adds the panel to a fresh `agent` app, opens it in headless Chrome, sends "create route hello /hello Hello" from the panel, and checks that `/hello`
   answers, the page reloaded, and the process is the same one.

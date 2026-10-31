@@ -81,8 +81,9 @@ async function until(fn, ms, every = 300) {
 /** Where each template's own page lives behind the frame prefix, and the text that proves it rendered. `blank`'s root is its JSON API; its page is /about. */
 const PAGES = {
   blank: { path: '/app/about', text: 'About' },
-  // The agent template's root answers JSON unless the request takes a page; its /settings page is the one that always renders.
-  agent: { path: '/app/settings', text: 'Settings' },
+  // The agent template's root answers JSON unless the request takes a page; its /settings page is the one that always renders. Its page also carries the
+  // agent panel (the template's own plugin), so the tile check asserts the panel there.
+  agent: { path: '/app/settings', text: 'Settings', panel: true },
 }
 
 const page = PAGES[template]
@@ -637,9 +638,78 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         )
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
 
-      // The agent template's own plugins run beside the host: the host's composition check (every row active, DSH's driver rows included) and the app's
-      // own page under /app prove it. TODO(13d): the panel UI assertion - the app's panel endpoints mount at the root (/api/agent-panel/...) and are
-      // refused there with 401, so the panel script does not load in the page; assert the panel once that admission is fixed.
+      // The agent template's own plugins run beside the host (the composition check above proves every row active), and the panel's routes belong under
+      // the app's mount: /app/api/agent-panel, where the app is served, not the host's own /api. Open the panel in the iframe, let its session load, and
+      // ask the app's own offline agent to add two numbers: the run starts and stops, and the answer lands in the panel's own log.
+      if (page.panel === true) {
+        const panel = await until(
+          async () =>
+            await evaluate(`(() => {
+            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
+            const open = root?.querySelector('button.open')
+            if (!open) return undefined
+            open.click()
+            const select = root.querySelector('select')
+            const drivers = [...select.options].map(option => option.value)
+            if (!drivers.includes('agent')) return undefined
+            select.value = 'agent'
+            const textarea = root.querySelector('textarea')
+            textarea.value = 'add 2 3'
+            root.querySelector('form').requestSubmit()
+            return { drivers }
+          })()`),
+          30_000,
+        )
+        if (panel === undefined)
+          fail(
+            `the agent panel did not appear in the app's page, or its session did not load; server said:\n${output.slice(-2500)}`,
+          )
+        const answered = await until(
+          async () =>
+            await evaluate(`(() => {
+            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
+            const log = root?.querySelector('#log')?.innerText ?? ''
+            if (!log.includes('The answer is 5.')) return undefined
+            return {
+              text: log.slice(-300),
+              send: root.querySelector('.send').disabled === false,
+              stopped: root.querySelector('.stop').disabled === true,
+            }
+          })()`),
+          30_000,
+        )
+        if (answered === undefined || answered.send !== true || answered.stopped !== true)
+          fail(
+            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}`,
+          )
+        log(
+          "the panel opens in the app, asks the app's own agent, and shows the answer (run started and stopped)",
+        )
+        // The same admission as the app's own server, never a looser one: the mounted path refuses a cross-site request, and an ask without the token.
+        const refused = (target, extra) =>
+          spawnSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', ...extra, target], {
+            encoding: 'utf8',
+          }).stdout
+        const crossSite = refused(`${origin}/app/api/agent-panel/session`, [
+          '-H',
+          'Sec-Fetch-Site: cross-site',
+        ])
+        const noToken = refused(`${origin}/app/api/agent-panel/ask`, [
+          '-H',
+          'Sec-Fetch-Site: same-origin',
+          '-X',
+          'POST',
+          '-d',
+          '{"message":"add 2 3"}',
+        ])
+        if (crossSite !== '403' || noToken !== '403')
+          fail(
+            `the panel's admission is not the app's own: a cross-site session answered ${crossSite} and an ask without the token answered ${noToken}, both expected 403`,
+          )
+        log("the panel's endpoints keep the app's origin and token admission under the mount")
+      }
 
       // (i) The chat, with the local model mock: the first-run card takes the key, the composer sends a message, and the model request carries
       // the key that was entered (the proof of use, not how fast a reply paints).
