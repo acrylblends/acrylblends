@@ -29,6 +29,7 @@ import {
   headlessDriver,
   whyNotChat,
 } from './headless.ts'
+import { mountedPrefix } from './mount.ts'
 import { provideDrivers } from './registry.ts'
 
 export type {
@@ -63,14 +64,8 @@ export interface PanelConfig {
 }
 
 /** The panel's routes under a checked mount: empty, or an absolute path such as `/app` with no trailing slash (the `routerHttp.mount` rule). */
-function panelPrefix(mount: string | undefined): string {
-  if (mount === undefined || mount === '') return PANEL_PATH
-  if (!/^\/[A-Za-z0-9._~\-/]*[A-Za-z0-9._~-]$/u.test(mount))
-    throw new TypeError(
-      `agent-panel: the app's mount "${mount}" must be empty or an absolute path such as "/app"`,
-    )
-  return `${mount}${PANEL_PATH}`
-}
+const panelPrefix = (mount: string | undefined): string =>
+  mountedPrefix(mount, PANEL_PATH, 'agent-panel')
 
 /** Whether a request comes from the app's own page: a browser says so itself (`Sec-Fetch-Site: same-origin`), or the Origin is the Host. */
 export function fromOwnPage(headers: Headers): boolean {
@@ -145,7 +140,13 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
         return c.json({ error: "only the app's own page may use the panel" }, 403)
       return c.json({
         token,
-        drivers: registry.list().map((driver) => ({ name: driver.name, kind: driver.kind })),
+        // A terminal driver names the browser module that draws its view and the prefix its endpoints live under: the plugin that owns the view
+        // also knows where the app is mounted, so the panel never guesses either.
+        drivers: registry.list().map((driver) => ({
+          name: driver.name,
+          kind: driver.kind,
+          ...(driver.kind === 'terminal' ? { view: driver.view } : {}),
+        })),
       })
     })
     .post(`${PREFIX}/ask`, async (c) => {

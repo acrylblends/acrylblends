@@ -22,10 +22,12 @@ export function terminalDriver(
   program: string,
   args: string[],
   spawn: PtySpawn,
+  view: TerminalDriver['view'],
 ): TerminalDriver {
   return {
     kind: 'terminal',
     name,
+    view,
     start({ cwd, env, cols, rows }): TerminalSession {
       // The agent runs `acryl look` without the folder prefix.
       const path = [join(cwd, '.acryl', 'bin'), env.PATH].filter(Boolean).join(delimiter)

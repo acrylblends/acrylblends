@@ -4,7 +4,7 @@ import { FitAddon } from './vendor/addon-fit.mjs'
 import { Terminal } from './vendor/xterm.mjs'
 import css from './vendor/xterm-css.mjs'
 
-const PREFIX = '/api/driver-pty'
+let PREFIX = '/api/driver-pty'
 const REMEMBERED = 'driver-pty-session'
 
 export interface TerminalView {
@@ -21,6 +21,8 @@ interface Options {
   token: string
   /** The terminal driver's name (`pty:claude`). */
   driver: string
+  /** The URL prefix the driver's endpoints live under (`/api/driver-pty`, or the app's mount followed by it). */
+  prefix: string
   /** Called with a line of status for the panel to show (`The terminal ended (exit 0).`). */
   status(text: string): void
   /** A plugin was installed or removed while the terminal was open. */
@@ -57,6 +59,7 @@ async function* frames(response: Response): AsyncGenerator<Frame> {
 
 export async function openTerminal(options: Options): Promise<TerminalView> {
   const { container, token, driver, status, onChange } = options
+  PREFIX = options.prefix
   const headers = { 'content-type': 'application/json', 'x-agent-panel-token': token }
   const call = (path: string, body: unknown = {}): Promise<Response> =>
     fetch(`${PREFIX}${path}`, { method: 'POST', headers, body: JSON.stringify(body) })

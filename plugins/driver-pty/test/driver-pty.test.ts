@@ -85,7 +85,13 @@ async function boot(config: driverPty.DriverPtyConfig, mountPanel = true) {
   )
   for (const plugin of [model, tools, memory, agent]) await mount(app.plugin(plugin))
   await mount(app.plugin(builder, {}))
-  if (mountPanel) await mount(app.plugin(panel, { drivers: [] }))
+  if (mountPanel)
+    await mount(
+      app.plugin(panel, {
+        drivers: [],
+        ...(config.mount === undefined ? {} : { mount: config.mount }),
+      }),
+    )
   const pty = await mount(app.plugin(driverPty, config))
   cleanup.push(async () => {
     for (const fiber of [...fibers].reverse()) await fiber.dispose()
@@ -95,16 +101,19 @@ async function boot(config: driverPty.DriverPtyConfig, mountPanel = true) {
       else process.env[key] = value
     }
   })
+  const base = config.mount ?? ''
   const token = mountPanel
     ? (
-        (await (await app.router.request('/api/agent-panel/session', { headers: OWN })).json()) as {
+        (await (
+          await app.router.request(`${base}/api/agent-panel/session`, { headers: OWN })
+        ).json()) as {
           token: string
         }
       ).token
     : ''
   const headers = { 'content-type': 'application/json', ...OWN, 'x-agent-panel-token': token }
   const post = (path: string, body: unknown = {}, extra: Record<string, string> = headers) =>
-    app.router.request(`/api/driver-pty${path}`, {
+    app.router.request(`${base}/api/driver-pty${path}`, {
       method: 'POST',
       headers: extra,
       body: JSON.stringify(body),
@@ -169,8 +178,58 @@ test('the panel lists the PTY drivers next to the chat ones, by kind', async () 
   ).json()) as { drivers: Array<{ name: string; kind: string }> }
   assert.deepEqual(session.drivers, [
     { name: 'agent', kind: 'chat' },
-    { name: 'pty:claude', kind: 'terminal' },
+    {
+      name: 'pty:claude',
+      kind: 'terminal',
+      view: { module: '/api/driver-pty/client/terminal.ts', prefix: '/api/driver-pty' },
+    },
   ])
+})
+
+test('a hosted app keeps the terminal under its mount: the routes answer at /app/api/driver-pty and the session names the view there', async () => {
+  const fake = fakeSpawn()
+  const { app, post, headers } = await boot({
+    spawn: fake.spawn,
+    programs: { node: [] },
+    mount: '/app',
+  })
+  // Nothing of the terminal answers at the root, where the host's own /api routes live.
+  assert.equal(
+    (
+      await app.router.request('/api/driver-pty/sessions', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ driver: 'pty:node' }),
+      })
+    ).status,
+    404,
+  )
+  const session = (await (
+    await app.router.request('/app/api/agent-panel/session', { headers: OWN })
+  ).json()) as { drivers: Array<{ name: string; kind: string }> }
+  assert.deepEqual(session.drivers, [
+    { name: 'agent', kind: 'chat' },
+    {
+      name: 'pty:node',
+      kind: 'terminal',
+      view: { module: '/app/api/driver-pty/client/terminal.ts', prefix: '/app/api/driver-pty' },
+    },
+  ])
+  const started = await post('/sessions', { driver: 'pty:node', cols: 80, rows: 24 })
+  assert.equal(started.status, 200)
+  const { id } = (await started.json()) as { id: string }
+  assert.equal(fake.made.length, 1)
+  const stopped = await app.router.request(`/app/api/driver-pty/${id}/stop`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  })
+  assert.equal(stopped.status, 200)
+  // The session is over: input to it is refused.
+  assert.equal((await post(`/${id}/input`, { data: 'x' })).status, 404)
+  const view = await app.router.request('/app/api/driver-pty/client/terminal.ts')
+  assert.equal(view.status, 200)
+  assert.match(view.headers.get('content-type') ?? '', /javascript/u)
 })
 
 test('a session: output streams with ids, input and resize reach the process, the exit ends the stream', async () => {

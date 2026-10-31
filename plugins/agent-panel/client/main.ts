@@ -8,7 +8,12 @@ let PREFIX = '/api/agent-panel'
 
 interface Session {
   token: string
-  drivers: Array<{ name: string; kind: 'chat' | 'terminal' }>
+  drivers: Array<{
+    name: string
+    kind: 'chat' | 'terminal'
+    /** A terminal driver says where its view module is and which prefix its endpoints live under (the driver's own plugin serves both). */
+    view?: { module: string; prefix: string }
+  }>
 }
 interface PanelEvent {
   event: string
@@ -211,13 +216,19 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
     term.hidden = !isTerminal
     termStop.hidden = !isTerminal
     if (!isTerminal) return
+    const selected = session.drivers.find((entry) => entry.name === driver.value)
+    if (selected?.view === undefined) {
+      line('This terminal driver does not provide its view.', 'err')
+      return
+    }
     try {
-      const url = '/api/driver-pty/client/terminal.ts'
+      const url = selected.view.module
       const { openTerminal } = (await import(url)) as {
         openTerminal(options: {
           container: HTMLElement
           token: string
           driver: string
+          prefix: string
           status(text: string): void
           onChange(change: { extension: string; action: string }): void
         }): Promise<{ detach(): void; stop(): Promise<void> }>
@@ -227,6 +238,7 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
         container: term,
         token: session.token,
         driver: driver.value,
+        prefix: selected.view.prefix,
         status: (text) => line(text, 'tool'),
         onChange: (change) => {
           line(`plugin ${change.extension}: ${change.action}`, 'tool')

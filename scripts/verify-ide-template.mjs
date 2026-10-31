@@ -212,6 +212,27 @@ try {
   if (again.status === 0) fail('a second init did not refuse')
   log('scaffolded through the CLI with the frame specs; a second init refused')
 
+  if (page.panel === true) {
+    // The PTY driver is the second app row that serves its own routes: it must live under the app's mount too, and the terminal gate runs `node`
+    // itself, so the assertion does not depend on which coding agents are installed on the machine.
+    const add = spawnSync(process.execPath, [cli, 'add', 'driver-pty'], {
+      cwd: app,
+      encoding: 'utf8',
+      env,
+    })
+    if (add.status !== 0)
+      fail(`add driver-pty failed (exit ${String(add.status)}):\n${add.stdout}${add.stderr}`)
+    const blendFile = join(app, 'blend.yaml')
+    const blend = readFileSync(blendFile, 'utf8')
+    const configured = blend.replace(
+      '    - id: driver-pty\n      name: driver-pty\n',
+      '    - id: driver-pty\n      name: driver-pty\n      config:\n        programs:\n          node: []\n',
+    )
+    if (configured === blend) fail('add did not mount the driver-pty row in blend.yaml')
+    writeFileSync(blendFile, configured)
+    log('the panel and the PTY driver are added, with node as the terminal program')
+  }
+
   const install = spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
     cwd: app,
     encoding: 'utf8',
@@ -709,6 +730,71 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
             `the panel's admission is not the app's own: a cross-site session answered ${crossSite} and an ask without the token answered ${noToken}, both expected 403`,
           )
         log("the panel's endpoints keep the app's origin and token admission under the mount")
+
+        // The PTY driver is the second app-owned row with routes of its own: a session starts and stops at /app/api/driver-pty, the panel's session
+        // names the terminal view under the same mount, and the view module answers there. The same admission refuses a cross-site or untokened call.
+        const pty = await evaluate(`(async () => {
+          const session = await (await fetch('/app/api/agent-panel/session')).json()
+          const driver = session.drivers.find(entry => entry.kind === 'terminal')
+          if (driver === undefined) return { error: 'no terminal driver', drivers: session.drivers }
+          const headers = { 'content-type': 'application/json', 'x-agent-panel-token': session.token }
+          const view = await fetch(driver.view.module)
+          const started = await fetch('/app/api/driver-pty/sessions', { method: 'POST', headers, body: JSON.stringify({ driver: driver.name, cols: 80, rows: 24 }) })
+          const created = await started.json().catch(() => ({}))
+          if (started.status !== 200 || typeof created.id !== 'string')
+            return { error: 'start answered ' + started.status, body: created, view: view.status }
+          const stopped = await fetch('/app/api/driver-pty/' + created.id + '/stop', { method: 'POST', headers, body: '{}' })
+          return {
+            driver: driver.name,
+            view: driver.view,
+            viewStatus: view.status,
+            viewType: view.headers.get('content-type'),
+            started: started.status,
+            stopped: stopped.status,
+          }
+        })()`)
+        if (
+          pty === undefined ||
+          pty.started !== 200 ||
+          pty.stopped !== 200 ||
+          pty.viewStatus !== 200
+        )
+          fail(
+            `the PTY session did not start and stop at the app's mount: ${JSON.stringify(pty)} (server said:\n${output.slice(-1500)})`,
+          )
+        if (
+          pty.view?.prefix !== '/app/api/driver-pty' ||
+          !String(pty.view?.module ?? '').startsWith('/app/api/driver-pty/')
+        )
+          fail(`the terminal view is not under the app's mount: ${JSON.stringify(pty.view)}`)
+        log(
+          `the PTY starts and stops at /app/api/driver-pty (${pty.driver}); its view answers there`,
+        )
+        const crossSitePty = refused(`${origin}/app/api/driver-pty/sessions`, [
+          '-H',
+          'Sec-Fetch-Site: cross-site',
+          '-H',
+          'Content-Type: application/json',
+          '-X',
+          'POST',
+          '-d',
+          '{"driver":"pty:node"}',
+        ])
+        const noTokenPty = refused(`${origin}/app/api/driver-pty/sessions`, [
+          '-H',
+          'Sec-Fetch-Site: same-origin',
+          '-H',
+          'Content-Type: application/json',
+          '-X',
+          'POST',
+          '-d',
+          '{"driver":"pty:node"}',
+        ])
+        if (crossSitePty !== '403' || noTokenPty !== '403')
+          fail(
+            `the terminal's admission is not the panel's own: a cross-site session answered ${crossSitePty} and an untokened one answered ${noTokenPty}, both expected 403`,
+          )
+        log("the terminal's endpoints keep the app's origin and token admission under the mount")
       }
 
       // (i) The chat, with the local model mock: the first-run card takes the key, the composer sends a message, and the model request carries
