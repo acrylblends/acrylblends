@@ -9,7 +9,7 @@
  */
 
 import { Acryl, type MiddlewareHandler } from 'acryl-router'
-import type { UpgradeWebSocket } from 'acryl-router/helpers'
+import type { UpgradeWebSocket, WSEvents } from 'acryl-router/helpers'
 import { loopbackAuthority } from 'acryl-router/middleware'
 import { parseChannelToHost, WINDOW_ID } from '../page/protocol.ts'
 import type { UiChannel } from './channel.ts'
@@ -20,7 +20,8 @@ export const SOCKET_HEARTBEAT_MS = 15_000
 
 export interface PageSocketOptions {
   readonly prefix: string
-  readonly upgrade: UpgradeWebSocket
+  /** The live upgrade helper: the route is mounted once, so the helper is read per request (a restarting host has a new one). */
+  readonly upgrade: () => UpgradeWebSocket | undefined
   readonly heartbeatMs?: number
 }
 
@@ -39,10 +40,7 @@ export const ownOrigin: MiddlewareHandler = async (c, next) => {
 
 export function pageSocketRoutes(channel: UiChannel, options: PageSocketOptions): Acryl {
   const heartbeatMs = options.heartbeatMs ?? SOCKET_HEARTBEAT_MS
-  return new Acryl().get(
-    `${options.prefix}/channel/ws`,
-    ownOrigin,
-    options.upgrade((c) => {
+  const events = (c: Parameters<MiddlewareHandler>[0]): WSEvents => {
       const windowId = c.req.query('window') as string
       const focused = c.req.query('focused') === '1'
       const shellQuery = Number(c.req.query('shell'))
@@ -73,6 +71,16 @@ export function pageSocketRoutes(channel: UiChannel, options: PageSocketOptions)
           detach?.()
         },
       }
-    }, { textOnly: true }),
+  }
+  // Mounted once, ahead of the private routes: the route must keep its precedence across a host restart, so the middleware asks for the live helper
+  // at request time and refuses cleanly while none is ready.
+  return new Acryl().get(
+    `${options.prefix}/channel/ws`,
+    ownOrigin,
+    async (c, next) => {
+      const allow = options.upgrade()
+      if (allow === undefined) return c.json(error('the page channel is not ready yet'), 503)
+      return allow(events, { textOnly: true })(c, next)
+    },
   )
 }
