@@ -31,16 +31,29 @@ Landed: the scaffolder (`acrylblends init`) calls the generator for a template w
 
 Not yet done, in this order: (1) a per-template boot gate: scaffold with the frame specs, install, run `npm run profile`, `npm run dev`, assert the profile's rows are active and the app's page answers at `/app` inside the frame; (2) the remaining templates one at a time: todo, notes, chat, agent (its own panel stays inside the tile, per the decision above), nodejs, each with the same gate; (3) `acrylblends upgrade` for pre-frame apps; (4) Windows (mbpi9win) for the template gate. Publishing the ide packages (owner decision: npm names) is the blocker for a real attendee app to install the frame at all, and the `ACRYLBLENDS_FRAME_PACKAGES` bridge is a checkout-only stopgap. The tile at `/app` is reachable (ACRYL's canvas has a browser tile kind, `BrowserPane`, and the tab strip offers it) but is not yet asserted in a gate.
 
-**Open question to settle first:** the browser tile is DSH's `ui-sidebar-browser`, enabled only in the desktop profile (the documented `right-panel-open@1024` difference). Whether a web-hosted frame can show the app's page at `/app` in a tile, or needs its own tab kind, decides how a template's page reaches the main surface. Do not assume; check `packages/bundle/web-app/cordis.patch.yml` and ACRYL's canvas tab kinds.
+**Open question to settle first:** the browser tile is DSH's `ui-sidebar-browser`, enabled only in the desktop profile (the documented `right-panel-open@1024` difference). Whether a web-hosted frame can show the app's page at `/app` in a tile, or needs its own tab kind, decides how a template's page reaches the main surface. Do not assume; check `packages/bundle/web-app/cordis.patch.yml` and ACRYL's canvas tab kinds. Settled: ACRYL's canvas browser tile shows the app at `/app`, and every gate asserts it.
+
+## Slice 6, step 2 landed: todo, notes, chat and nodejs on the frame
+
+`todo`, `notes`, `chat` and `nodejs` now build from one mount prefix: their own path on their own server (the todo app keeps `/todo`; the others keep the root) and `/app` when the ACRYL frame hosts them. Every link, form action and client-script URL in a template's pages is derived from that prefix, so the standalone URLs do not move, and each template's test asserts both. The app's composition is exported as `composeInto`; the generated `app-plugins` row calls it with `host: true`, which leaves the host's infrastructure rows (server, router, page, app instance, door) to the frame and mounts the app's own rows at `/app`. `src/frame.ts` claims `/app` on the frame's router-http adapter, and `template.json` lists the host rows the launcher mounts (`acryl-web-server`, `acryl-page`); `todo` now carries the door like the other templates.
+
+- `todo`: 448ab65f (merged to `main` as 94e25bae)
+- `notes`: e82ce3e7
+- `chat`: 4babfcff
+- `nodejs`: ef01af0d
+- the shared gate change (each template's page, plus the JSON route that proves its API answers at the prefix): 448ab65f
+
+Each step was proved the same way: the template's own suite and `npm run check` (also in Codex's workspace-write sandbox, where only the real-server tests skip), a framed test that mounts the app at `/app` and checks its page, its API or client module and its prefix-derived URLs, the page gate end to end (composition, the app's page in the browser tile, a door call, the frame's panels, the palette, a PTY, chat with the local model, Settings, the key rule), and the full repository check.
+
+Not covered by this step: the agent template's own panel does not load inside its `/app` tile under the host (section 13d of ide-host-inversion.md); decision 3 keeps the panel and records its host admission as a post-workshop change.
 
 ## Next steps, in order
 
-1. Settle the tile question above; record the answer in ide-port.md.
-2. Scaffolder: every template calls `ideProfilePlan` with its app rows; blank first, gate on a real boot (app's page at `/app` inside the frame).
-3. The other templates, one commit each: todo, notes, chat, agent (panel intact), nodejs.
-4. `acrylblends upgrade` for pre-frame apps.
-5. Windows: the template gate on mbpi9win (arrange with the owner; do not fake).
-6. After the port: Electron window, workshop guide rerun, owner's attendee test. The workshop of 2026-11-20 stays on the `agent` template.
+1. `acrylblends upgrade` for pre-frame apps (DS_Fork3's slice, branch `112-upgrade`): write the generated profile and layer into an existing app without touching its source.
+2. Windows: the template gate on mbpi9win (arrange with the owner; do not fake).
+3. The agent template's own panel under the frame host (decision 3, section 13d of ide-host-inversion.md).
+4. Publishing the ide packages: the `ACRYLBLENDS_FRAME_PACKAGES` bridge is a checkout-only stopgap, and a real attendee app cannot install the frame until the `@acrylblends/*` names are published.
+5. After the port: Electron window, workshop guide rerun, owner's attendee test. The workshop of 2026-11-20 stays on the `agent` template.
 
 ## Rules that keep this safe
 
