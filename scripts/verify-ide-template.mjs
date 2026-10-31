@@ -456,20 +456,36 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
     fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the tile check')
   const profile = mkdtempSync(join(tmpdir(), 'ide-template-tile-'))
   const port = 9600 + Math.floor(Math.random() * 300)
+  // Chrome's own output is the only clue when it does not come up, so it is kept and printed if the endpoint never answers. The wait is 30 s: a loaded CI
+  // runner can take several seconds, and the old ten-second wait then fell through to a bare ECONNREFUSED from the DevTools call.
+  let chromeOutput = ''
   const child = spawn(chrome, [...chromeFlags(profile, port), '--hide-scrollbars'], {
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
+  const collect = (chunk) => {
+    chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
+  }
+  child.stdout?.on('data', collect)
+  child.stderr?.on('data', collect)
   try {
-    for (let i = 0; i < 200; i += 1) {
+    let ready = false
+    for (let i = 0; i < 600; i += 1) {
+      if (child.exitCode !== null) break
       if (
         await fetch(`http://127.0.0.1:${port}/json/version`).then(
           (r) => r.ok,
           () => false,
         )
-      )
+      ) {
+        ready = true
         break
+      }
       await sleep(50)
     }
+    if (!ready)
+      fail(
+        `Chrome did not open its DevTools endpoint on port ${String(port)} within 30 s (exit ${String(child.exitCode)}):\n${chromeOutput}`,
+      )
     const cdp = await devtools(port)
     try {
       await cdp.send('Page.enable')
