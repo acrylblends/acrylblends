@@ -64,12 +64,16 @@ describe('Compress Middleware', () => {
     c.header('Content-Range', 'bytes 0-1023/2048')
     return c.body('a'.repeat(1024), 206)
   })
+  // 60,000 bytes in 100 chunks: all the streaming path needs (several chunks through the compression stream), without 10,000 awaited writes. The old
+  // 10,000 took 508 ms on a Windows 10 machine and over the 5 s test timeout on a loaded windows-latest runner (measured 2026-10-31; the whole file was
+  // 2.14 s and 45/45 there), so the cost, not a hang, was the failure.
+  const CHUNKS = 100
+  const CHUNK = 'chunk '.repeat(100)
   app.get('/stream', (c) =>
     stream(c, async (stream) => {
       c.header('Content-Type', 'text/plain')
-      // 60000 bytes
-      for (let i = 0; i < 10000; i++) {
-        await stream.write('chunk ')
+      for (let i = 0; i < CHUNKS; i++) {
+        await stream.write(CHUNK)
       }
     })
   )
@@ -77,9 +81,8 @@ describe('Compress Middleware', () => {
     stream(c, async (stream) => {
       c.header('Content-Type', 'text/plain')
       c.header('Content-Encoding', 'br')
-      // 60000 bytes
-      for (let i = 0; i < 10000; i++) {
-        await stream.write(new Uint8Array([0, 1, 2, 3, 4, 5])) // Simulated compressed data
+      for (let i = 0; i < CHUNKS; i++) {
+        await stream.write(new Uint8Array(600)) // Simulated compressed data
       }
     })
   )
