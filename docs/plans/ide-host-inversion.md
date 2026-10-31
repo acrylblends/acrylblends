@@ -360,3 +360,36 @@ breakage. The door's `/api/acryl-door` is host-owned in the frame (the host laye
 because the CLI addresses it by app URL plus that path. The frame packages (`acryl-workspace`, `acryl-plugin-admin`, `acryl-support`, `acryl-sign-in`) are host rows and claim
 `/api/acryl-*` through `routerHttp`, so they are never in DSH's `/api`. The templates other than `agent` mount their routes at `/` on their own server and have no framed composition
 yet; when they get one they take the same `mount` config the agent template passes.
+
+## 19. `acrylblends upgrade` brings a pre-frame app onto the host layout (2026-10-31)
+
+The parked slice (6fc3d33e, `20b67da0`) was planned against the DSH-profile layout. What still fits the host launcher: the frame half of `upgrade` as a step
+planned before anything is written, with per-file conflict detection by the generated marker, a refusal (exit 1, nothing written) unless `--force`, which
+saves the app's version under `.acrylblends/upgrade-backup/` first, an idempotent second run, and a boot gate on a real app. What does not fit: the
+`scripts/ide-profile.mjs` profile script and the `profile` npm script (the host launcher replaced them), the `app-routes` row alone (the framed app now also
+mounts its own plugins through `frame/app-plugins.mjs` with the entry isolate, and the mount config lives in the composition root), and the rule that an app
+without `src/frame.ts` simply stays standalone (every app made by the previous published release lacks it; the upgrade now brings the frame row and the
+scaffold it needs).
+
+The shape now: `planFrameStep` identifies the app's template from the released scaffold (`packages/cli/legacy/1.1.0`, copied verbatim from the `v1.1.0`
+tag: each template's route module, and `src/app.ts` for the agent and to-do templates), and plans three kinds of writes. The template's own files are
+`same` when they already equal the current template's, `update` when they equal the released ones, `add` when missing and `conflict` when the app edited
+them. The generated files (overlay, `cordis.yml`, `scripts/ide-host.mjs`, `app/runtime.mjs`, `frame/app-plugins.mjs`) are ours by their marker line. The
+two host plugins the launcher mounts by path (`acryl-web-server`, `acryl-page`) are copied when missing. `package.json` is merged, never a conflict (its
+`dev` script moves to the launcher; `start` keeps the app's own server). The app's `blend.yaml` and any file of its own are untouched. The old
+`scripts/ide-profile.mjs` is removed when it carries the generated marker.
+
+`appFrameRows` (the row ids, the isolate scan and the generated composition file) moved out of `init` into `packages/cli/src/frame-rows.ts`, so `init` and
+`upgrade` write the same rows from one home; `init` keeps its behavior (a template with `composeInto` gets the app-plugins row; the blank template keeps its
+own composition). `applyIdeProfile` now goes through the same plan/write as the upgrade, so planning and applying cannot drift.
+
+Tests: `packages/cli/test/upgrade-frame.test.ts` builds a released-layout app (current scaffold, then the released files, no frame row, no host plugins) and
+covers the write and its report, the agent template's composition row with its isolate and the mount config, idempotency, a hand-written overlay refusal, an
+edited scaffold refusal and `--force` with the backup, a template without a frame row (notes) staying standalone, an unidentified scaffold, and the old
+profile script removal. The gate `scripts/verify-upgrade-frame.mjs` (wired as `verify:upgrade-frame`) builds the same fixture, runs the upgrade against this
+checkout's frame specs, asserts every reported change and that `blend.yaml` and a file of the app's own are byte-identical, installs, runs a second upgrade
+that must change nothing, then runs the page gate on the result (`verify-ide-template.mjs agent --existing <app>`: composition, `/app`, the panel run, the
+PTY under the mount, the chat and Settings).
+
+Known boundary: an app whose scaffold was edited (or made by a release other than 1.1.0) is identified only through its other template files; when none
+matches, the upgrade leaves it standalone and says so. `--force` covers a recognized template with edited files, never an unidentified one.
