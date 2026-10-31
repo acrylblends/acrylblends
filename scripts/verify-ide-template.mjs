@@ -702,6 +702,29 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       log('the Preview Notice stays dismissed after the host restart')
 
       // (i) The Settings day-one path: Models loads with no provider-directory error, takes the model key, and the chat then needs no key card.
+      // A profile without a key opens DSH's first-run "Add an API key" dialog over the frame; the guide's path is Settings > Models, so it is dismissed the
+      // way a user can ("Configure later") before Settings is opened. (Found on the frame jobs: the only dialog there was this one, with no settings nav.)
+      const firstRunDismissed = await evaluate(`(() => {
+        const dialog = [...document.querySelectorAll('[role=dialog]')].find((candidate) => candidate.querySelector('input[aria-label="API key"]') !== null)
+        if (dialog === undefined) return false
+        const later = [...dialog.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Configure later')
+        if (later === undefined) return false
+        later.click()
+        return true
+      })()`)
+      if (firstRunDismissed === true) {
+        const closed = await until(
+          async () =>
+            (await evaluate(
+              `[...document.querySelectorAll('[role=dialog]')].some((candidate) => candidate.querySelector('input[aria-label="API key"]') !== null)`,
+            )) === false,
+          10_000,
+        )
+        if (closed !== true) fail('the first-run key dialog did not close after "Configure later"')
+        log(
+          'the first-run key dialog is dismissed (Configure later), so the key is entered in Settings > Models',
+        )
+      }
       // Close any palette or menu left open (a command named Settings lives in the palette too), then press the frame's own Settings button.
       for (const type of ['keyDown', 'keyUp'])
         await cdp.send('Input.dispatchKeyEvent', {
@@ -729,29 +752,39 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         const detail = await evaluate(`document.body.innerText.slice(0, 400)`)
         fail(`Settings did not open a dialog: ${JSON.stringify(detail)}`)
       }
-      // The dialog remembers a section (a runner's agent home opened it on General); the Models page is chosen explicitly instead of assumed.
+      // The dialog remembers a section (a runner's agent home opened it on General); the Models page is chosen the way the product's own
+      // openSettingsSection does it: a button in the dialog's nav, by its accessible name in either shipped language.
       const modelsSection = await until(
         async () =>
           await evaluate(`(() => {
-            const dialog = document.querySelector('[role=dialog]')
-            if (dialog === null) return false
-            const item = [...dialog.querySelectorAll('button,[role=tab],[role=menuitem],a')].find((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Models')
+            const item = [...document.querySelectorAll('[role=dialog] nav button')].find((candidate) => {
+              const label = (candidate.getAttribute('aria-label') ?? '').trim()
+              const text = (candidate.textContent ?? '').replace(/\\s+/g, ' ').trim()
+              return ['Models', '模型'].includes(label === '' ? text : label)
+            })
             if (item === undefined) return false
             item.click()
             return true
           })()`),
         10_000,
       )
-      if (modelsSection !== true) fail('the Settings dialog has no Models section')
+      if (modelsSection !== true) {
+        const dump = await evaluate(
+          `JSON.stringify([...document.querySelectorAll('[role=dialog]')].map((dialog) => ({ label: dialog.getAttribute('aria-label'), html: dialog.outerHTML.slice(0, 1400) })))`,
+        )
+        fail(`the Settings dialog has no Models section: ${String(dump).slice(0, 4000)}`)
+      }
       const models = await until(
         async () =>
           await evaluate(`(() => {
-            const dialog = document.querySelector('[role=dialog]')
-            if (dialog === null) return undefined
-            const text = dialog.innerText
-            if (text.includes('Loading the provider directory failed')) return { failed: text.slice(0, 400) }
-            const input = dialog.querySelector('input[type=password]') ?? dialog.querySelector('input[aria-label="API key"]')
-            return input === null ? undefined : { text: text.slice(0, 200) }
+            const dialogs = [...document.querySelectorAll('[role=dialog]')]
+            for (const dialog of dialogs) {
+              const text = dialog.innerText
+              if (text.includes('Loading the provider directory failed')) return { failed: text.slice(0, 400) }
+              const input = dialog.querySelector('input[type=password]') ?? dialog.querySelector('input[aria-label="API key"]')
+              if (input !== null) return { text: text.slice(0, 200) }
+            }
+            return undefined
           })()`),
         20_000,
       )
@@ -771,7 +804,13 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       })()`)
       await cdp.send('Input.insertText', { text: GATE_KEY })
       await sleep(250)
-      if ((await click('Save and continue')) !== true) fail('Settings > Models has no save action')
+      // The Models page saves a provider key with Apply (the first-run card used Save and continue); both are tried, the page one first.
+      if ((await click('Apply')) !== true && (await click('Save and continue')) !== true) {
+        const dump = await evaluate(
+          `JSON.stringify([...document.querySelectorAll('[role=dialog]')].map((dialog) => ({ label: dialog.getAttribute('aria-label'), text: dialog.innerText.slice(0, 400), buttons: [...dialog.querySelectorAll('button')].map((button) => button.textContent.trim()) })))`,
+        )
+        fail(`Settings > Models has no save action: ${String(dump).slice(0, 2500)}`)
+      }
       const saved = await until(
         async () =>
           await evaluate(`(() => {
