@@ -7,6 +7,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { type App, createApp, readManifest } from '../src/app.ts'
+import { FRAME_MOUNT_PREFIX } from '../src/todo.ts'
 
 /** Throwaway homes live inside the project (`.acrylblends/` is ignored by git): a sandboxed agent may not write to the system temp folder. */
 const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
@@ -14,9 +15,16 @@ mkdirSync(scratch, { recursive: true })
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
-/** Boot the app with its data in `home`, run the test, always stop it. In process by default (`app.root.router.request`); `listen` starts the real server on any free port. */
-async function withApp(home: string, run: (app: App) => Promise<void>, listen = false) {
-  const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0), { listen })
+/** Boot the app with its data in `home`, run the test, always stop it. In process by default (`app.root.router.request`); `listen` starts the real server on any free port; `prefix` mounts it where the frame does. */
+async function withApp(
+  home: string,
+  run: (app: App) => Promise<void>,
+  options: { listen?: boolean; prefix?: string } = {},
+) {
+  const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
+    listen: false,
+    ...options,
+  })
   try {
     await run(app)
   } finally {
@@ -103,7 +111,7 @@ test(
           assert.equal((await post({})).status, 201)
           assert.equal((await post({ origin: new URL(app.url).origin })).status, 201)
         },
-        true,
+        { listen: true },
       ),
     ),
 )
@@ -176,9 +184,41 @@ test('serves the page, and streams the list: now, and again on every change', ()
     }),
   ))
 
+test('the frame mounts the same app at /app; the app on its own server keeps /todo', () =>
+  withHome((home) =>
+    withApp(
+      home,
+      async (app) => {
+        // The frame row claims the app's prefix on the host's web server; the app's own rows mount it there.
+        const frame = await import('../src/frame.ts')
+        assert.deepEqual([...frame.inject].sort(), ['routerHttp'])
+        assert.equal(FRAME_MOUNT_PREFIX, '/app')
+        const page = await app.root.router.request(FRAME_MOUNT_PREFIX)
+        assert.equal(page.status, 200)
+        const html = await page.text()
+        assert.match(html, /<title>Todo<\/title>/)
+        // The page writes every URL from the prefix it is mounted at.
+        assert.match(html, new RegExp(`const base = "${FRAME_MOUNT_PREFIX}"`, 'u'))
+        assert.deepEqual(await (await send(app, 'GET', `${FRAME_MOUNT_PREFIX}/api`)).json(), [])
+        const created = await send(app, 'POST', `${FRAME_MOUNT_PREFIX}/api`, { title: 'framed' })
+        assert.equal(created.status, 201)
+        const list = (await (await send(app, 'GET', `${FRAME_MOUNT_PREFIX}/api`)).json()) as Array<{
+          title: string
+        }>
+        assert.deepEqual(
+          list.map((todo) => todo.title),
+          ['framed'],
+        )
+        // The standalone URLs did not move: the app still answers under /todo on its own server.
+        assert.equal((await send(app, 'GET', '/todo')).status, 404)
+      },
+      { prefix: FRAME_MOUNT_PREFIX },
+    ),
+  ))
+
 test('the manifest decides what is mounted', () => {
   assert.deepEqual(
     readManifest().plugins.map((row) => row.id),
-    ['router', 'state', 'todo', 'server'],
+    ['router', 'state', 'todo', 'server', 'acryl-door'],
   )
 })

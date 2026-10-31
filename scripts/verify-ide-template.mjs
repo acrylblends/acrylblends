@@ -78,11 +78,18 @@ async function until(fn, ms, every = 300) {
   }
 }
 
-/** Where each template's own page lives behind the frame prefix, and the text that proves it rendered. `blank`'s root is its JSON API; its page is /about. */
+/**
+ * Where each template's own page lives behind the frame prefix, the text that proves it rendered, and (when the template has one) the JSON route that
+ * proves its API answers there too. `blank`'s root is its JSON API; its page is /about. The agent template's root answers JSON unless the request takes a
+ * page; its /settings page is the one that always renders. `notes` has no unauthenticated JSON route at the prefix, so its page is the proof.
+ */
 const PAGES = {
-  blank: { path: '/app/about', text: 'About' },
-  // The agent template's root answers JSON unless the request takes a page; its /settings page is the one that always renders.
-  agent: { path: '/app/settings', text: 'Settings' },
+  blank: { path: '/app/about', text: 'About', api: { path: '/app' } },
+  agent: { path: '/app/settings', text: 'Settings', api: { path: '/app' } },
+  todo: { path: '/app', text: 'Todo', api: { path: '/app/api', list: true } },
+  notes: { path: '/app/login', text: 'Log in' },
+  chat: { path: '/app', text: 'Chat', api: { path: '/app/health' } },
+  nodejs: { path: '/app/about', text: 'About', api: { path: '/app/health' } },
 }
 
 const page = PAGES[template]
@@ -293,22 +300,29 @@ ${composition.stdout}`)
     fail(`the frame page carries the door script ${String(tags)} times, expected once`)
   log('the page loads the workspace client and carries the door script once')
 
-  // The app answers at its prefix: /app is the app's root (blank answers JSON there). Retried, because the app's row claims the prefix a moment after DSH
-  // prints its URL.
-  const appFile = join(scratch, 'app.json')
-  const appJson = await until(async () => {
-    const code = Number(
-      spawnSync('curl', ['-sL', '-o', appFile, '-w', '%{http_code}', `${origin}/app`], {
-        encoding: 'utf8',
-      }).stdout,
-    )
-    if (code !== 200) return undefined
-    const parsed = JSON.parse(readFileSync(appFile, 'utf8'))
-    return parsed.ok === true ? parsed : undefined
-  }, 30_000)
-  if (appJson === undefined)
-    fail(`the app did not answer at /app; server said:\n${output.slice(-2500)}`)
-  log(`the app answers at /app: ${JSON.stringify(appJson)}`)
+  // The app answers at its prefix: its API route when the template has one (blank's and the agent's root, todo's list, the chat's and nodejs' health
+  // route). Retried, because the app's rows mount a moment after the launcher prints its URL.
+  if (page.api !== undefined) {
+    const apiFile = join(scratch, 'app-api.json')
+    const appApi = await until(async () => {
+      const code = Number(
+        spawnSync(
+          'curl',
+          ['-sL', '-o', apiFile, '-w', '%{http_code}', `${origin}${page.api.path}`],
+          {
+            encoding: 'utf8',
+          },
+        ).stdout,
+      )
+      if (code !== 200) return undefined
+      const parsed = JSON.parse(readFileSync(apiFile, 'utf8'))
+      if (page.api.list === true) return Array.isArray(parsed) ? parsed : undefined
+      return parsed?.ok === true ? parsed : undefined
+    }, 30_000)
+    if (appApi === undefined)
+      fail(`the app did not answer at ${page.api.path}; server said:\n${output.slice(-2500)}`)
+    log(`the app answers at ${page.api.path}: ${JSON.stringify(appApi).slice(0, 200)}`)
+  }
 
   const brief = await until(async () => {
     const door = spawnSync(join(app, '.acryl', 'bin', 'acryl'), ['brief', '--json'], {
