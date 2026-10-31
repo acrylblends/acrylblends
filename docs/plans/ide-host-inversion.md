@@ -406,3 +406,17 @@ composition, `/app`, the panel run, the PTY under the mount, the chat and Settin
 
 Known boundary: an app whose scaffold was edited (or made by a release other than 1.1.0) is identified only through its other template files; when none
 matches, the upgrade leaves it standalone and says so. `--force` covers a recognized template with edited files, never an unidentified one.
+
+## 20. The Windows 10 ConPTY resize: a test child that never read stdin (2026-10-31)
+
+The driver-pty suite's real-PTY resize test failed on mbpi9win (Windows 10 Pro `10.0.19045`): after the driver's resize the child kept its start size. A minimal repro outside the framework (node-pty `1.2.0-beta.15`, and `1.2.0-beta.18`; Node 24.18.0) compared two children of the same `pty.spawn(process.execPath, ['-e', script], { cols: 90, rows: 20 })` and the same `pty.resize(110, 35)` after 2.5 s:
+
+- A Node child that never reads stdin: its `process.stdout.columns` and `getWindowSize()` stay `90x20`; its `resize` event either does not fire or fires with the old size.
+- The same Node child calling `process.stdin.setRawMode(true)` and `process.stdin.resume()` (what claude, codex and pi do): its next tick reports `110x35`.
+- A PowerShell child printing `[Console]::WindowWidth`/`[Console]::WindowHeight`: `110x35` from the next sample on.
+
+`useConptyDll: true` only makes the spawn size current (a child started after the resize sees `110x35`); it does not change the live case. The node-pty version does not change it either.
+
+Cause: the ConPTY console is resized by `pty.resize` in every case (the client repaints at 35 rows, and the console API reports the new size); Node's tty learns of the change through its console input handling, so a child that never reads its console input never sees it. The real programs the driver starts read stdin in raw mode, so the framed terminal is not limited on Windows 10; the test's ECHO program was the one that never read stdin. It now reads stdin in raw mode on Windows, like a real program, and keeps its POSIX behavior (SIGWINCH reaches Node there). If a Windows host ever again delivers no resize to the child, the test skips with this section as the reason rather than passing silently.
+
+The suite keeps the platform's evidence as it is: the new size where `resize` fires, or the console's `ESC [ 8 ; rows ; cols t` report where it appears.
