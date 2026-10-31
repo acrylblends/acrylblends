@@ -98,9 +98,26 @@ describe('acryl-web-server', () => {
       inner.webServer.tapIndex(html => html.replace('</head>', '<script src="/two.js"></script></head>'))
     })
     const tapped = ctx.webServer.index('<html><head></head><body></body></html>')
-    expect(tapped).toBe('<html><head><script src="/one.js"></script><script src="/two.js"></script></head><body></body></html>')
+    expect(tapped).toContain('<script src="/one.js"></script>')
+    expect(tapped).toContain('<script src="/two.js"></script>')
+    expect(tapped.indexOf('one.js')).toBeLessThan(tapped.indexOf('two.js'))
+    expect(tapped).toContain('__DSH_BOOT_READY__')
     await fiber.dispose()
-    expect(ctx.webServer.index('<html><head></head></html>')).toBe('<html><head></head></html>')
+    expect(ctx.webServer.index('<html><head></head></html>')).not.toContain('one.js')
+  })
+
+  it('renders the structured index rows before the string taps', async () => {
+    const ctx = await boot()
+    const fiber = await owner(ctx, (inner) => {
+      ;(inner as unknown as { on(name: string, listener: (table: unknown[]) => void): () => void }).on('webserver/index-inject', (table) => {
+        table.push({ kind: 'global', name: '__TEST_BOOT__', value: { rev: '1' } })
+      })
+      inner.webServer.tapIndex(html => html.replace('</body>', '<p>tap</p></body>'))
+    })
+    const html = ctx.webServer.index('<html><head></head><body></body></html>')
+    expect(html).toMatch(/__TEST_BOOT__/u)
+    expect(html.indexOf('__TEST_BOOT__')).toBeLessThan(html.indexOf('<p>tap</p>'))
+    await fiber.dispose()
   })
 
   it('reports the address the node server bound', async () => {

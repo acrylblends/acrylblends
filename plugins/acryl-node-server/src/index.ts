@@ -104,19 +104,22 @@ export class NodeServer extends Service {
     // `Response` stay the platform's, because this adapter shares its process with the rest of the app; so the adapter's lightweight
     // request is made a real one (its signal still aborts when the client goes away) before the router re-creates it with its own signal.
     this.server = createAdaptorServer({
-      fetch: async (request, bindings) => {
+      fetch: (request, bindings) => {
         const { incoming, outgoing } = bindings as { incoming: IncomingMessage; outgoing: ServerResponse }
-        // A raw route owns the node response: write it here and tell the adapter not to write anything.
+        // A raw route owns the node response: start it and return the sentinel synchronously, so the adapter (which checks the
+        // sentinel before treating the result as a promise) writes nothing. The handler's own failure becomes a 500 here.
         const raw = this.rawFor(incoming)
         if (raw !== undefined) {
-          try {
-            await raw(incoming, outgoing)
-          } catch {
-            if (!outgoing.headersSent) {
-              outgoing.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' })
-              outgoing.end('internal error')
-            } else outgoing.destroy()
-          }
+          void (async () => {
+            try {
+              await raw(incoming, outgoing)
+            } catch {
+              if (!outgoing.headersSent) {
+                outgoing.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' })
+                outgoing.end('internal error')
+              } else outgoing.destroy()
+            }
+          })()
           return RAW_RESPONSE_HANDLED
         }
         return router.fetch(new AdapterRequest(request), { remoteAddress: incoming.socket.remoteAddress, localPort: incoming.socket.localPort })

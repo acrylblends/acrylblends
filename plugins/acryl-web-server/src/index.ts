@@ -46,7 +46,7 @@ export interface WebServerService {
   registerUpgrade(route: WebServerUpgradeRoute): () => void
   /** Transform the served index document while the caller lives; returns its remover. */
   tapIndex(transform: IndexTap): () => void
-  /** The document with every live transform applied, in registration order. */
+  /** The document with the structured injection rows (the client modules' boot wire) and then every live tap applied. */
   index(html: string): string
 }
 
@@ -54,6 +54,56 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     webServer: WebServerService
   }
+}
+
+/** One structured index-injection row (DSH's contract): the kinds the client modules and a door script use. */
+interface IndexRow {
+  readonly kind?: string
+  readonly placement?: 'head' | 'body'
+  readonly text?: string
+  readonly src?: string
+  readonly name?: string
+  readonly value?: unknown
+}
+
+/** The boot-readiness tail the client shell waits for, as DSH renders it. */
+const READY_MARKUP = '<script>(globalThis.__DSH_BOOT_READY__ ??= Promise.withResolvers()).resolve()</script>'
+
+/** A JSON literal safe inside a `<script>`: a sequence like `</script>` must not end it. */
+const scriptJson = (value: unknown): string => JSON.stringify(value).replaceAll('</', '<\\/')
+
+/** Render one row; an unknown kind is skipped rather than emitted as broken markup. */
+function rowMarkup(row: IndexRow): string {
+  if (row.kind === 'script') return `<script>${row.text ?? ''}</script>`
+  if (row.kind === 'script-src') return `<script type="module" crossorigin src="${row.src ?? ''}"></script>`
+  if (row.kind === 'script-preload') return `<link rel="modulepreload" crossorigin href="${row.src ?? ''}" />`
+  if (row.kind === 'global') return `<script>globalThis[${scriptJson(row.name ?? '')}] = ${scriptJson(row.value)}</script>`
+  return ''
+}
+
+/** Insert each group after its opening tag, as DSH's served index does; a document without the tag gets the group first. */
+export function renderIndexRows(html: string, rows: readonly IndexRow[]): string {
+  let head = ''
+  let body = ''
+  for (const row of rows) {
+    const markup = rowMarkup(row)
+    if (markup === '') continue
+    if (row.placement === 'body') body += markup
+    else head += markup
+  }
+  body += READY_MARKUP
+  let document = html
+  const headOpen = /<head(?:\s[^>]*)?>/iu.exec(document)
+  if (head !== '') {
+    const at = headOpen === null ? 0 : headOpen.index + headOpen[0].length
+    document = `${document.slice(0, at)}${head}${document.slice(at)}`
+  }
+  const bodyOpen = /<body(?:\s[^>]*)?>/iu.exec(document)
+  if (body !== '') {
+    const at = bodyOpen === null ? document.length : bodyOpen.index + bodyOpen[0].length
+    document = `${document.slice(0, at)}${body}${document.slice(at)}`
+  }
+  return document
 }
 
 /** The port, backed by `nodeServer`'s raw routes; every registration belongs to the plugin that made it. */
@@ -95,7 +145,11 @@ export class WebServer extends Service implements WebServerService {
   }
 
   index(html: string): string {
-    let document = html
+    // The rows are DSH's index-injection contract (`webserver/index-inject`): the client-module row pushes its boot wire there. The rows render
+    // first, the string taps after, the same order DSH's own web server uses.
+    const rows: IndexRow[] = []
+    ;(this.ctx as unknown as { emit(name: string, table: IndexRow[]): void }).emit('webserver/index-inject', rows)
+    let document = renderIndexRows(html, rows)
     for (const tap of [...this.taps]) document = tap(document)
     return document
   }

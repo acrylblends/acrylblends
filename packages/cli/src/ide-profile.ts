@@ -115,6 +115,7 @@ export const DRIVER_ROWS: readonly string[] = [
   'storage-json',
   'storage-domain',
   'agent',
+  'agent-loop',
   'agent-default-model',
   'llm',
   'llm-retry',
@@ -128,6 +129,7 @@ export const DRIVER_ROWS: readonly string[] = [
   'attachment-local',
   'file-reference-local',
   'session-controller',
+  'settings-controller',
   'api-remotes',
   'workspace',
   'workspace-controller',
@@ -137,6 +139,31 @@ export const DRIVER_ROWS: readonly string[] = [
   'fs-sandbox',
   'sandbox-policy',
   'commands',
+]
+
+/**
+ * The client rows the frame and the chat load: the client-module serving row plus exactly the client packages the frame's and the chat's
+ * `dsh.client` inject lists name, as installed in the app, and the two services those rows wait for (`client-resources`, `ui-input-trigger`).
+ * DSH's `ui-layout` client row is deliberately absent: the ACRYL frame registers the `layout` service itself (DSH's row would register it twice,
+ * the failure the old overlay avoided by disabling the row); the only layout client row mounted is `acryl-app-shell`, so the document renders
+ * the ACRYL frame.
+ */
+export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string }[] = [
+  { id: 'client-modules', name: '@deepseek-ai/dsh-client-modules' },
+  { id: 'client-locale', name: '@deepseek-ai/dsh-client-locale' },
+  { id: 'client-shortcuts', name: '@deepseek-ai/dsh-client-shortcuts' },
+  { id: 'ui-renderer', name: '@deepseek-ai/dsh-client-ui-renderer' },
+  { id: 'ui-theme', name: '@deepseek-ai/dsh-client-ui-theme' },
+  { id: 'ui-settings', name: '@deepseek-ai/dsh-client-ui-settings' },
+  { id: 'ui-settings-models', name: '@deepseek-ai/dsh-client-ui-settings-models' },
+  { id: 'ui-session', name: '@deepseek-ai/dsh-client-ui-session' },
+  { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
+  { id: 'ui-sidebar-right', name: '@deepseek-ai/dsh-client-ui-sidebar-right' },
+  { id: 'ui-commands', name: '@deepseek-ai/dsh-client-ui-commands' },
+  { id: 'ui-workspace', name: '@deepseek-ai/dsh-client-ui-workspace' },
+  { id: 'ui-conversation', name: '@deepseek-ai/dsh-client-ui-conversation' },
+  { id: 'client-resources', name: '@deepseek-ai/dsh-client-resources' },
+  { id: 'ui-input-trigger', name: '@deepseek-ai/dsh-client-ui-input-trigger' },
 ]
 
 /**
@@ -195,10 +222,13 @@ function hostScriptOf(profile: string): string {
     '',
     "const frameLayer = load(readFileSync(join(appRoot, 'cordis.patch.yml'), 'utf8')) ?? []",
     "/** Our host rows first: the framework's node server, then the webServer port the driver rows register on (they are the app's, not DSH's). */",
+    'const clientRows = ' + JSON.stringify(CLIENT_ROWS, null, 2).replaceAll('\\n', '\\n'),
     'const hostLayer = [{',
     '  insert: [',
     "    { id: 'node-server', name: './plugins/acryl-node-server/src/index.ts', config: { hostname: '127.0.0.1', port: Number(port), scan: Number(port) === 0 ? 0 : 20 } },",
     "    { id: 'web-server', name: './plugins/acryl-web-server/src/index.ts' },",
+    "    { id: 'page', name: './plugins/acryl-page/src/index.ts' },",
+    '    ...clientRows,',
     '  ],',
     '}]',
     'const layers = [',
@@ -225,7 +255,10 @@ function hostScriptOf(profile: string): string {
     "  hostContext.provide('profileContext', profileContext)",
     "}, pathToFileURL(join(appRoot, 'package.json')).href)",
     "const server = ctx.get('nodeServer')",
-    "console.log(`acrylblends host: ${server === undefined ? 'no node server' : server.url}`)",
+    "const connection = ctx.get('connection')",
+    "// The chat's remote RPC is token-authenticated: the printed URL carries the launch token, and the page exchange turns it into a cookie.",
+    'const url = server === undefined ? undefined : connection === undefined ? server.url : connection.authenticatedUrl(server.url)',
+    "console.log(`acrylblends host: ${url ?? 'no node server'}`)",
     'if (check) {',
     "  const loader = ctx.get('loader')",
     '  const rows = [...loader.entries()]',
