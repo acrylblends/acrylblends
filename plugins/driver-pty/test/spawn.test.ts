@@ -14,7 +14,11 @@ test('a bare program on Windows is resolved with PATHEXT, and a path is left as 
   writeFileSync(exe, '')
   const env = { PATH: dir, PATHEXT: '.COM;.EXE;.BAT;.CMD' }
   assert.equal(resolveProgram('runner', env, 'win32').toLowerCase(), exe.toLowerCase())
-  assert.equal(resolveProgram('runner.exe', env, 'win32').toLowerCase(), exe.toLowerCase())
+  // A name that already carries its extension is used as it is. Create that exact file too: Windows resolves runner.exe to runner.EXE, but a case-sensitive
+  // filesystem (the Linux CI runner) does not.
+  const exact = join(dir, 'runner.exe')
+  writeFileSync(exact, '')
+  assert.equal(resolveProgram('runner.exe', env, 'win32').toLowerCase(), exact.toLowerCase())
   // Only the extensions PATHEXT names.
   assert.equal(resolveProgram('runner', { PATH: dir, PATHEXT: '.BAT' }, 'win32'), 'runner')
   // Anything with a separator is the caller's path already.

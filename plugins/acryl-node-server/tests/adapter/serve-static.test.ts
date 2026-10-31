@@ -795,13 +795,16 @@ describe('Serve Static Middleware', () => {
   })
 
   describe('Stream error handling', () => {
-    const testFile = path.join(__dirname, 'assets', 'static', 'plain.txt')
-    console.log(testFile)
+    // A folder of its own: this test makes its file unreadable, and chmodding the fixture shared with the other test files failed them with EACCES on a
+    // parallel worker (seen on the macOS runner). Nothing outside this block reads it.
+    const root = mkdtempSync(path.join(tmpdir(), 'serve-static-unreadable-'))
+    const testFile = path.join(root, 'static', 'plain.txt')
+    mkdirSync(path.dirname(testFile), { recursive: true })
+    writeFileSync(testFile, 'plain\n')
     let originalMode: number
 
     beforeEach(() => {
-      const stats = statSync(testFile)
-      originalMode = stats.mode
+      originalMode = statSync(testFile).mode
       // Remove read permission to trigger stream error
       chmodSync(testFile, 0o000)
     })
@@ -810,12 +813,16 @@ describe('Serve Static Middleware', () => {
       chmodSync(testFile, originalMode)
     })
 
+    afterAll(() => {
+      rmSync(root, { recursive: true, force: true })
+    })
+
     // Skip on Windows as chmod doesn't work for file permissions
     ;(process.platform === 'win32' ? it.skip : it)(
       'Should handle read permission errors gracefully',
       async () => {
         const app = new Acryl()
-        app.use('/static/*', serveStatic({ root: './tests/adapter/assets' }))
+        app.use('/static/*', serveStatic({ root }))
         const server = createAdaptorServer(app)
         await expect(
           requestServer(server, { method: 'GET', path: '/static/plain.txt' })
