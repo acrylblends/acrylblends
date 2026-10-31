@@ -81,6 +81,8 @@ async function until(fn, ms, every = 300) {
 /** Where each template's own page lives behind the frame prefix, and the text that proves it rendered. `blank`'s root is its JSON API; its page is /about. */
 const PAGES = {
   blank: { path: '/app/about', text: 'About' },
+  // The agent template's root answers JSON unless the request takes a page; its /settings page is the one that always renders.
+  agent: { path: '/app/settings', text: 'Settings' },
 }
 
 const page = PAGES[template]
