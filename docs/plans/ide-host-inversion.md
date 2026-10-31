@@ -508,13 +508,18 @@ a browser tab reaches `/app`; `.acryl/door.json` appears in the app.
 State carried into 114: 115 gives the host a real DSH profile, and the fresh-app page gates (agent and blank) are green on the day-one path: Settings > Models
 loads and takes the key, the Preview Notice is dismissed and stays dismissed after a restart, the chat needs no key card after a settings reload (the reload is
 what makes a saved key effective in the running page) and answers against the mock, and the key text is confined to DSH's `.credentials.yaml`. The upgrade gate's
-page run on the upgraded fixture is green after that reload now. The failure was the gate, not the upgraded app: the app's profile manifest, composition bundle
-(with the `workspace-controller` `documentsDirectory` config) and `storages/workspace.json` were all complete, and the frame restores the shown chat's worktree
-asynchronously after a reload (the tree follows the chat's folder; `relocateShown` documents the startup-before-discovery case). The gate sampled the canvas
-notice once, 1.5 s after the reload, and pressed "New chat on ..." once; under the full check's load the restore landed after that sample, the tab menu opened a
-chat with no selected worktree, and the canvas answered with its notice. It now waits for the sidebar's "New chat on ..." button before pressing it (and names
-the sidebar text when there is none), and when the notice is still there after opening the chat it selects the project's worktree and opens the chat once more.
-The persistence design is unchanged.
+page run on the upgraded fixture is green after that reload, and the reload's window is a product rule now, not a gate workaround. The frame restores the shown
+chat's worktree asynchronously after a reload (the session list arrives, then the tree follows the chat's folder; `relocateShown` documents the
+startup-before-discovery case), and a reload can also come back with no shown chat at all. A new chat asked in that window used to open with no selected
+worktree, which the canvas answered with "Select a worktree first." and no composer. In the ported `ide/acryl-workspace` package, `WorkspaceShellState` now
+exposes `restoring()` and `waitForSelection()` (8 s bound; a selection settles waiting callers, a restore that ends without one settles them with undefined,
+and disposal settles them too), and `WorkspaceCanvas.openChat`, with no selected worktree, shows "Restoring the worktree of the open chat…" and opens the chat
+on the worktree once the selection resolves; when no restore picks one (a reload with no shown chat), it falls back to the first worktree the sidebar lists
+(the app's project) and selects it. Only a workspace with no worktree keeps "Select a worktree first.", and a chat is never opened with no worktree. The page
+gate now asks for the new chat as soon as the frame is back - inside the window - with no fallback or worktree retry (it retries only the tab menu's own press
+when the menu did not open), and its Settings step waits for the dialog instead of accepting an immediate snapshot. The upgraded app itself was complete
+(profile manifest, composition bundle with the `workspace-controller` `documentsDirectory` config, `storages/workspace.json`); the persistence design is
+unchanged.
 
 Remaining for 114: rewrite the guide's blocks to the frame flow (day-one frame; Settings > Models; chat; a coding agent in a PTY tab; edit the app and see it at
 /app; upgrade an older app), rehearse end to end exactly as an attendee would from the packed CLI in an isolated HOME, fix every failure at the cause, commit to
