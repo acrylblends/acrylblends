@@ -8,9 +8,16 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { diffStat, unifiedDiff } from './diff'
+import {
+  frameProfileForApp,
+  type IdeProfileInput,
+  type IdeProfileWritePlan,
+  planIdeProfileWrite,
+  writeIdeProfilePlan,
+} from './ide-profile'
 import { UsageError } from './init'
 import type { Io } from './io'
 import {
@@ -87,6 +94,54 @@ function readText(path: string): string {
   return readFileSync(path, 'utf8')
 }
 
+/** The overlay row that mounts an app's own routes inside the frame: the file `init` writes for a template that has one. */
+const FRAME_ROW = { id: 'app-routes', name: './src/frame.ts' } as const
+
+/** What `upgrade` does about the frame for one app: nothing (no row file, or no specs to install), or a write plan. */
+type FrameStep =
+  | { readonly kind: 'missing-row' }
+  | { readonly kind: 'unavailable' }
+  | {
+      readonly kind: 'planned'
+      readonly plan: IdeProfileWritePlan
+      readonly input: IdeProfileInput
+      /** Files that exist and acrylblends did not write: a refusal, unless `--force` backs them up. */
+      readonly conflicts: readonly string[]
+      readonly changed: boolean
+    }
+
+/**
+ * Plan the frame half of an upgrade (IDE port, slice 6): an app whose template carries `src/frame.ts` gets the profile, the overlay, the runtime row and the
+ * `dev`/`profile` scripts, exactly as `init` writes them for a fresh app; an app made before the frame has no row file and stays standalone, said plainly.
+ * The specs are the environment's (a pre-frame app has no pins) or the app's own `package.json` (a framed app regenerates from what it installed).
+ */
+function planFrameStep(appDir: string): FrameStep {
+  if (!existsSync(join(appDir, 'src', 'frame.ts'))) return { kind: 'missing-row' }
+  const specs = frameProfileForApp(appDir)
+  if (specs === undefined) return { kind: 'unavailable' }
+  let name = basename(appDir)
+  try {
+    const manifest = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8')) as {
+      name?: unknown
+    }
+    if (typeof manifest.name === 'string' && manifest.name !== '') name = manifest.name
+  } catch {
+    // The app's manifest was read by `upgrade` already; a name it cannot give falls back to the folder's.
+  }
+  const input: IdeProfileInput = {
+    appName: name,
+    dshVersion: specs.dshVersion,
+    frameworkVersion: specs.frameworkVersion,
+    spec: (packageName) => specs.packages[packageName],
+    dependencies: specs.packages,
+    rows: [FRAME_ROW],
+  }
+  const plan = planIdeProfileWrite(appDir, input)
+  const conflicts = plan.files.filter((file) => file.state === 'conflict').map((file) => file.file)
+  const changed = plan.manifestChanged || plan.files.some((file) => file.state !== 'same')
+  return { kind: 'planned', plan, input, conflicts, changed }
+}
+
 /** The library copies an app carries: the plugins listed in `plugins/library.json`, or when there is none the folders of `plugins/` that the library knows. */
 function carriedCopies(dir: string): string[] {
   const listFile = join(dir, LIBRARY_LIST)
@@ -129,8 +184,21 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
   const selected = (options.names.length > 0 ? [...options.names] : carried).filter((name) =>
     library.has(name),
   )
-  if (selected.length === 0) {
-    io.stdout.write('nothing to upgrade: the app carries no library plugins\n')
+  // The frame half of the upgrade, planned before anything is written so a refusal leaves the folder exactly as it was.
+  const frame = planFrameStep(appDir)
+  if (frame.kind === 'planned' && frame.conflicts.length > 0 && !options.force) {
+    io.stderr.write(
+      `error: ${frame.conflicts.join(', ')} in ${appDir} exist and acrylblends did not write them; nothing was changed. Move them aside (or merge them into the app's own overlay) and run again, or run again with --force (they are saved under .acrylblends/upgrade-backup/ first)\n`,
+    )
+    return 1
+  }
+  const frameChanged = frame.kind === 'planned' && frame.changed
+  if (selected.length === 0 && !frameChanged) {
+    io.stdout.write(
+      frame.kind === 'planned'
+        ? 'nothing to upgrade: the library plugins and the frame are up to date\n'
+        : 'nothing to upgrade: the app carries no library plugins\n',
+    )
     return 0
   }
 
@@ -243,6 +311,26 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
         )
       }
     }
+    if (frame.kind === 'missing-row')
+      io.stdout.write(
+        `  ${'frame'.padEnd(22)} no src/frame.ts: this app predates the frame and keeps running standalone\n`,
+      )
+    else if (frame.kind === 'unavailable')
+      io.stdout.write(
+        `  ${'frame'.padEnd(22)} no frame packages to install: set ACRYLBLENDS_FRAME_PACKAGES while they are unpublished\n`,
+      )
+    else {
+      const touched = frame.plan.files.filter((file) => file.state !== 'same')
+      const parts = [
+        touched.length > 0
+          ? touched
+              .map((file) => `${file.file} ${file.state === 'add' ? 'added' : 'updated'}`)
+              .join(', ')
+          : 'up to date',
+        frame.plan.manifestChanged ? 'package.json merged' : '',
+      ].filter(Boolean)
+      io.stdout.write(`  ${'frame'.padEnd(22)} ${parts.join(', ')}\n`)
+    }
     if (conflicts > 0 && !options.force) {
       io.stderr.write(
         `\nerror: ${conflicts} file(s) were edited in this app and the upgrade would replace them; nothing was changed. Review the diffs above, move your changes out of the plugin (a plugin of your own in plugins/<name>/), or run again with --force (the edited versions are saved under .acrylblends/upgrade-backup/)\n`,
@@ -251,11 +339,11 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
     }
     if (options.dryRun) {
       io.stdout.write(
-        `\n${changes === 0 ? 'everything is up to date' : 'dry run: nothing was changed'}\n`,
+        `\n${changes === 0 && !frameChanged ? 'everything is up to date' : 'dry run: nothing was changed'}\n`,
       )
       return 0
     }
-    if (changes === 0) {
+    if (changes === 0 && !frameChanged) {
       io.stdout.write('\neverything is up to date\n')
       return 0
     }
@@ -307,6 +395,21 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
     ) {
       manifest.dependencies.acrylblends = `^${VERSION}`
       writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
+    }
+    // The frame last, and re-planned against the manifest the plugin step left: the app row, the overlay, the runtime row and the profile script land as
+    // `init` writes them for a fresh app, and a file of the app's own (no marker line) was refused above unless --force, which backs it up here.
+    if (frame.kind === 'planned') {
+      if (frameChanged) {
+        for (const file of frame.conflicts) {
+          mkdirSync(dirname(join(backup, file)), { recursive: true })
+          cpSync(join(appDir, file), join(backup, file))
+        }
+        writeIdeProfilePlan(appDir, planIdeProfileWrite(appDir, frame.input))
+      }
+      if (frame.conflicts.length > 0)
+        io.stdout.write(
+          `the frame file(s) replaced by --force are saved in ${posix(relative(appDir, backup))}/\n`,
+        )
     }
     io.stdout.write(
       `\nupgraded ${plans
