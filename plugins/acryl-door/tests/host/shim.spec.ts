@@ -45,6 +45,8 @@ describe('the shim text', () => {
 })
 
 describe('the folder\'s command with two apps running', () => {
+  // Real work with real processes: two app boots (each its own router, node server and door), a page channel, and two child processes whose own
+  // bound is 30 s in the harness. The default 5 s timeout is a property of the test runner here, not of the work, and a loaded machine trips it.
   it('reaches only its own app: brief names its folder, look sees its own page, and an acryl on PATH is never used', async () => {
     const first = await app()
     const second = await app()
@@ -81,8 +83,7 @@ describe('the folder\'s command with two apps running', () => {
     const secondLook = await runCommand(second.root, ['look'], { cwd: decoy, path })
     expect(secondLook.code).toBe(1)
     expect(secondLook.err).toMatch(/^no-window:/u)
-  })
-
+  }, 30_000)
   it('is private to the user, and says no app is running once its app stops', async () => {
     const running = await app()
     const shim = join(running.root, '.acryl', 'bin', 'acryl')
