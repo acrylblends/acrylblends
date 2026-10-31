@@ -58,8 +58,10 @@ describe('docs', () => {
 
   it('mentions none of the removed runtime', () => {
     for (const { name, text } of markdown) {
+      // `@acrylblends/` used to name a removed runtime; since the owner's naming decision (2026-10-31) it is the scope the frame's packages publish
+      // under (docs/plans/frame-publish.md), so the scope itself is allowed and the other names stay forbidden.
       expect(text, name).not.toMatch(
-        /@acrylblends\/|hookable|unplugin|effect-ts|definePlugin|createApp\(\{ plugins/i,
+        /hookable|unplugin|effect-ts|definePlugin|createApp\(\{ plugins/i,
       )
       expect(text, name).not.toContain(String.fromCharCode(0x2014)) // no em dash
     }
