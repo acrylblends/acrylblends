@@ -19,7 +19,7 @@
     "verify:ide-host": "node --import ./scripts/workspace-source.mjs scripts/verify-ide-host.mjs",
     "verify:frame-publish": "node --import ./scripts/workspace-source.mjs scripts/verify-frame-publish.mjs",
     "verify:ide-template": "node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs blank",
-    "check": "pnpm run lint && pnpm run build && pnpm run verify:framework && pnpm run verify:secrets && pnpm run typecheck && pnpm run test && pnpm run verify:scaffolder && pnpm run verify:ide-host && pnpm run verify:ide-template && pnpm run verify:byo && pnpm run verify:panel && pnpm run verify:door && pnpm run verify:dev-install && pnpm run verify:production && pnpm run verify:driver-pty && pnpm run verify:packed && pnpm run verify:tarball && pnpm run verify:vitest-peer",
+    "check": "pnpm run lint && pnpm run build && pnpm run verify:framework && pnpm run verify:secrets && pnpm run typecheck && pnpm run test && pnpm run verify:scaffolder && pnpm run verify:ide-host && pnpm run verify:ide-template && pnpm run verify:upgrade-frame && pnpm run verify:byo && pnpm run verify:panel && pnpm run verify:door && pnpm run verify:dev-install && pnpm run verify:production && pnpm run verify:driver-pty && pnpm run verify:packed && pnpm run verify:tarball && pnpm run verify:vitest-peer",
     "verify:model": "node scripts/verify-real-model.mjs",
     "verify:framework": "node scripts/stage-framework.mjs --check",
     "verify:secrets": "node scripts/verify-docs-secrets.mjs",
@@ -33,7 +33,8 @@
     "verify:vitest-peer": "node scripts/verify-vitest-peer.mjs",
     "verify:create": "node scripts/verify-create-npm.mjs",
     "verify:packed": "node scripts/verify-packed.mjs",
-    "verify:tarball": "node scripts/verify-tarball.mjs"
+    "verify:tarball": "node scripts/verify-tarball.mjs",
+    "verify:upgrade-frame": "node --import ./scripts/workspace-source.mjs scripts/verify-upgrade-frame.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

@@ -33,6 +33,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
 const template = process.argv[2] ?? 'blank'
 const keep = process.argv.includes('--keep')
+/** A gate may check an app it built itself (the upgrade gate): --existing <dir> skips scaffolding and checks that app in place. */
+const existing =
+  process.argv.indexOf('--existing') === -1
+    ? undefined
+    : process.argv[process.argv.indexOf('--existing') + 1]
 /** Settings is another worker's surface while its registration lands; the rest of the gate still runs and the step says it was skipped. */
 const skipSettings = process.env.GATE_SKIP_SETTINGS === '1'
 const log = (message) => console.log(`verify-ide-template(${template}): ${message}`)
@@ -179,7 +184,7 @@ const cliVersion = JSON.parse(
 const frameworkVersion = `^${cliVersion}`
 
 const scratch = mkdtempSync(join(tmpdir(), `ide-template-${template}-`))
-const app = join(scratch, `${template}-app`)
+const app = existing === undefined ? join(scratch, `${template}-app`) : resolve(existing)
 const home = join(scratch, 'home')
 let server
 let mock
@@ -188,35 +193,41 @@ try {
     ...process.env,
     ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, { dshVersion: DSH_VERSION, frameworkVersion }),
   }
-  const init = spawnSync(
-    process.execPath,
-    [cli, 'init', app, '--name', `${template}-app`, '--template', template, '--yes', '--no-next'],
-    { encoding: 'utf8', env },
-  )
-  if (init.status !== 0)
-    fail(`init failed (exit ${String(init.status)}):\n${init.stdout}${init.stderr}`)
-  const overlay = readFileSync(join(app, 'cordis.patch.yml'), 'utf8')
-  for (const row of [
-    '- id: app-routes',
-    'name: ./src/frame.ts',
-    'name: ./plugins/acryl-door/src/index.ts',
-    'name: acryl-app-shell',
-    'name: acryl-workspace',
-  ])
-    if (!overlay.includes(row)) fail(`the generated overlay is missing ${JSON.stringify(row)}`)
-  const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
-  const dev = String(manifest.scripts?.dev ?? '')
-  if (dev !== 'node --import ./plugins/acryl-node-server/src/register.ts scripts/ide-host.mjs')
-    fail(`the app's dev script does not boot the host launcher: ${dev}`)
-  if (!existsSync(join(app, 'scripts', 'ide-host.mjs')))
-    fail('the generated launcher scripts/ide-host.mjs is missing')
-  const again = spawnSync(
-    process.execPath,
-    [cli, 'init', app, '--name', `${template}-app`, '--template', template, '--yes', '--no-next'],
-    { encoding: 'utf8', env },
-  )
-  if (again.status === 0) fail('a second init did not refuse')
-  log('scaffolded through the CLI with the frame specs; a second init refused')
+  if (existing === undefined) {
+    const init = spawnSync(
+      process.execPath,
+      [cli, 'init', app, '--name', `${template}-app`, '--template', template, '--yes', '--no-next'],
+      { encoding: 'utf8', env },
+    )
+    if (init.status !== 0)
+      fail(`init failed (exit ${String(init.status)}):\n${init.stdout}${init.stderr}`)
+    const overlay = readFileSync(join(app, 'cordis.patch.yml'), 'utf8')
+    for (const row of [
+      '- id: app-routes',
+      'name: ./src/frame.ts',
+      'name: ./plugins/acryl-door/src/index.ts',
+      'name: acryl-app-shell',
+      'name: acryl-workspace',
+    ])
+      if (!overlay.includes(row)) fail(`the generated overlay is missing ${JSON.stringify(row)}`)
+    const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
+    const dev = String(manifest.scripts?.dev ?? '')
+    if (dev !== 'node --import ./plugins/acryl-node-server/src/register.ts scripts/ide-host.mjs')
+      fail(`the app's dev script does not boot the host launcher: ${dev}`)
+    if (!existsSync(join(app, 'scripts', 'ide-host.mjs')))
+      fail('the generated launcher scripts/ide-host.mjs is missing')
+    const again = spawnSync(
+      process.execPath,
+      [cli, 'init', app, '--name', `${template}-app`, '--template', template, '--yes', '--no-next'],
+      { encoding: 'utf8', env },
+    )
+    if (again.status === 0) fail('a second init did not refuse')
+    log('scaffolded through the CLI with the frame specs; a second init refused')
+  } else {
+    for (const file of ['cordis.patch.yml', 'scripts/ide-host.mjs', 'frame/app-plugins.mjs'])
+      if (!existsSync(join(app, file))) fail(`the app given to --existing has no ${file}`)
+    log(`checking the app at ${app} (--existing)`)
+  }
 
   if (page.panel === true) {
     // The PTY driver is the second app row that serves its own routes: it must live under the app's mount too, and the terminal gate runs `node`

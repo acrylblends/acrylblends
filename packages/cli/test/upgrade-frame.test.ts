@@ -1,0 +1,230 @@
+/**
+ * The upgrade half of the IDE port: `acrylblends upgrade` brings an app made by the previous published release (1.1.0) onto the frame-hosted layout. The
+ * fixture is that release's scaffold (the `legacy/1.1.0` files) in an app the current CLI scaffolded; the upgrade replaces only the template's own files
+ * (never a file the app edited) and prints exactly what it changed. A second run changes nothing.
+ */
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { type Io, init, parseUpgradeOptions, upgrade } from '../src/index'
+import { legacyRoot, legacyScaffold } from '../src/legacy'
+import type { Template } from '../src/templates'
+
+const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-upgrade-frame-'))
+afterAll(() => rmSync(scratch, { recursive: true, force: true }))
+afterEach(() => {
+  delete process.env.ACRYLBLENDS_FRAME_PACKAGES
+})
+
+function session(cwd: string) {
+  const out: string[] = []
+  const err: string[] = []
+  const io: Io = {
+    stdout: { write: (text: string) => out.push(text) },
+    stderr: { write: (text: string) => err.push(text) },
+    cwd,
+    ask: undefined,
+    install: async () => 0,
+  }
+  return { io, out: () => out.join(''), err: () => err.join('') }
+}
+
+const FRAME_SPECS = JSON.stringify({
+  dshVersion: '0.2.0-rc.2',
+  frameworkVersion: '^1.0.10',
+  packages: {
+    'acryl-app-shell': 'file:/checkout/ide/acryl-app-shell',
+    'acryl-web': 'file:/checkout/ide/acryl-web',
+  },
+})
+
+/**
+ * An app as the previous published release made it: scaffolded now (which gives it the plugins), then its scaffold replaced by the released files, its
+ * frame row removed and the two host plugins (which that release did not carry) dropped.
+ */
+async function preFrameApp(name: string, template: Template = 'blank'): Promise<string> {
+  delete process.env.ACRYLBLENDS_FRAME_PACKAGES
+  const { io } = session(scratch)
+  const code = await init(
+    {
+      directory: name,
+      template,
+      yes: true,
+      name,
+      install: false,
+      desktop: false,
+      quietNext: true,
+    },
+    io,
+  )
+  expect(code).toBe(0)
+  const root = join(scratch, name)
+  for (const file of legacyScaffold(template)) {
+    const released = readFileSync(join(legacyRoot(), template, file), 'utf8')
+    writeFileSync(join(root, file), released.replaceAll('__APP_NAME__', name))
+  }
+  rmSync(join(root, 'src', 'frame.ts'), { force: true })
+  rmSync(join(root, 'frame'), { recursive: true, force: true })
+  for (const plugin of ['acryl-page', 'acryl-web-server'])
+    rmSync(join(root, 'plugins', plugin), { recursive: true, force: true })
+  expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
+  return root
+}
+
+const runUpgrade = async (root: string, argv: readonly string[] = []) => {
+  const { io, out, err } = session(root)
+  const code = await upgrade(parseUpgradeOptions(argv), io)
+  return { code, out, err }
+}
+
+const read = (root: string, file: string): string => readFileSync(join(root, file), 'utf8')
+
+describe('upgrading a pre-frame app to the host layout', () => {
+  it('writes the launcher, the overlay, the runtime row and the frame row, and prints each change', async () => {
+    const root = await preFrameApp('framed-later')
+    const blendBefore = read(root, 'blend.yaml')
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    const overlay = read(root, 'cordis.patch.yml')
+    expect(overlay).toContain('- id: app-routes')
+    expect(overlay).toContain('name: ./src/frame.ts')
+    expect(existsSync(join(root, 'cordis.yml'))).toBe(true)
+    expect(existsSync(join(root, 'scripts', 'ide-host.mjs'))).toBe(true)
+    expect(existsSync(join(root, 'app', 'runtime.mjs'))).toBe(true)
+    expect(existsSync(join(root, 'src', 'frame.ts'))).toBe(true)
+    expect(existsSync(join(root, 'plugins', 'acryl-page', 'src', 'index.ts'))).toBe(true)
+    expect(existsSync(join(root, 'plugins', 'acryl-web-server', 'src', 'index.ts'))).toBe(true)
+    const manifest = JSON.parse(read(root, 'package.json')) as {
+      scripts: Record<string, string>
+      dependencies: Record<string, string>
+    }
+    expect(manifest.scripts.dev).toBe(
+      'node --import ./plugins/acryl-node-server/src/register.ts scripts/ide-host.mjs',
+    )
+    // The standalone start is the app's own and does not move.
+    expect(manifest.scripts.start).toBe(
+      'node --import ./plugins/acryl-node-server/src/register.ts src/main.ts',
+    )
+    expect(manifest.dependencies['@deepseek-ai/dsh-base']).toBe('0.2.0-rc.2')
+    expect(manifest.dependencies['acryl-app-shell']).toBe('file:/checkout/ide/acryl-app-shell')
+    // The app's own configuration is untouched.
+    expect(read(root, 'blend.yaml')).toBe(blendBefore)
+    const report = out()
+    expect(report).toMatch(/frame\s+.*src\/frame\.ts added/u)
+    expect(report).toMatch(/src\/routes\.ts updated/u)
+    expect(report).toMatch(/scripts\/ide-host\.mjs added/u)
+    expect(report).toMatch(/cordis\.patch\.yml added/u)
+    expect(report).toMatch(/plugins\/acryl-page added/u)
+    expect(report).toMatch(/package\.json merged/u)
+  })
+
+  it('gives the agent template the composition row with its entry isolate and the mount config', async () => {
+    const root = await preFrameApp('agent-later', 'agent')
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    const overlay = read(root, 'cordis.patch.yml')
+    expect(overlay).toContain('- id: app-plugins')
+    expect(overlay).toContain('name: ./frame/app-plugins.mjs')
+    expect(overlay).toMatch(/isolate: \{[^}]*"agent":true/u)
+    expect(overlay).toContain('- id: app-routes')
+    expect(existsSync(join(root, 'frame', 'app-plugins.mjs'))).toBe(true)
+    expect(read(root, 'frame/app-plugins.mjs')).toContain(
+      "import { composeInto } from '../src/app.ts'",
+    )
+    const appTs = read(root, 'src/app.ts')
+    expect(appTs).toContain('export async function composeInto')
+    expect(appTs).toContain("'agent-panel': { mount: FRAME_MOUNT_PREFIX }")
+    expect(out()).toMatch(/src\/app\.ts updated/u)
+  })
+
+  it('is idempotent: a second run changes no bytes and says everything is up to date', async () => {
+    const root = await preFrameApp('already-framed', 'agent')
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    expect((await runUpgrade(root)).code).toBe(0)
+    const files = [
+      'cordis.patch.yml',
+      'cordis.yml',
+      'package.json',
+      'scripts/ide-host.mjs',
+      'app/runtime.mjs',
+      'src/frame.ts',
+      'src/app.ts',
+      'src/routes.ts',
+      'frame/app-plugins.mjs',
+    ]
+    const before = files.map((file) => read(root, file))
+    const second = await runUpgrade(root)
+    expect(second.code).toBe(0)
+    expect(second.out()).toMatch(/everything is up to date/u)
+    expect(files.map((file) => read(root, file))).toEqual(before)
+  })
+
+  it('refuses a cordis.patch.yml the app wrote, and changes nothing', async () => {
+    const root = await preFrameApp('refuses')
+    const own = '# my own overlay\n- insert:\n    - id: mine\n      name: ./mine.mjs\n'
+    writeFileSync(join(root, 'cordis.patch.yml'), own)
+    const manifestBefore = read(root, 'package.json')
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, err } = await runUpgrade(root)
+    expect(code).toBe(1)
+    expect(err()).toMatch(/cordis\.patch\.yml.*did not write/u)
+    expect(read(root, 'cordis.patch.yml')).toBe(own)
+    expect(read(root, 'package.json')).toBe(manifestBefore)
+    expect(existsSync(join(root, 'scripts', 'ide-host.mjs'))).toBe(false)
+  })
+
+  it('refuses an edited scaffold file and, with --force, replaces it and saves the app version', async () => {
+    // The route module identifies the template; the composition root is the file the app edited, so the frame step would replace it.
+    const root = await preFrameApp('edited-app', 'agent')
+    const edited = `${read(root, 'src/app.ts')}\n// mine\n`
+    writeFileSync(join(root, 'src', 'app.ts'), edited)
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const refused = await runUpgrade(root)
+    expect(refused.code).toBe(1)
+    expect(refused.err()).toMatch(/src\/app\.ts/u)
+    expect(read(root, 'src/app.ts')).toBe(edited)
+    expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
+    const forced = await runUpgrade(root, ['--force'])
+    expect(forced.code).toBe(0)
+    expect(read(root, 'src/app.ts')).not.toContain('// mine')
+    expect(read(root, 'src/app.ts')).toContain('export async function composeInto')
+    expect(forced.out()).toMatch(/saved in \.acrylblends\/upgrade-backup\//u)
+    const backups = join(root, '.acrylblends', 'upgrade-backup')
+    expect(existsSync(backups)).toBe(true)
+  })
+
+  it('leaves a template without a frame row standalone, and says so', async () => {
+    const root = await preFrameApp('notes-later', 'notes')
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    expect(out()).toMatch(/the notes template has no src\/frame\.ts yet/u)
+    expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
+  })
+
+  it('leaves an app whose scaffold is not the previous release (edited, or another version) alone', async () => {
+    const root = await preFrameApp('custom-scaffold')
+    writeFileSync(join(root, 'src', 'routes.ts'), '// my own routes\nexport const routes = {}\n')
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    expect(out()).toMatch(/not the previous release's scaffold/u)
+    expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
+  })
+
+  it('removes the DSH-profile script of the older layout when the host launcher replaces it', async () => {
+    const root = await preFrameApp('old-profile')
+    writeFileSync(
+      join(root, 'scripts', 'ide-profile.mjs'),
+      '// Generated by acrylblends: the old profile script\n',
+    )
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    expect(existsSync(join(root, 'scripts', 'ide-profile.mjs'))).toBe(false)
+    expect(out()).toMatch(/scripts\/ide-profile\.mjs removed/u)
+  })
+})

@@ -405,6 +405,7 @@
     "dist",
     "lib",
     "templates",
+    "legacy",
     "shared",
     "plugins",
     "docs"

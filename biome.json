@@ -20,6 +20,7 @@
       "!plugins/driver-acp/test/acp-v1",
       "!packages/framework",
       "!packages/cli/lib",
+      "!packages/cli/legacy",
       "!packages/cli/templates/todo/src/todo.ts",
       "!packages/cli/templates/todo/src/page.ts",
       "!plugins/desktop/user-data.ts",
