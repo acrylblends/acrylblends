@@ -81,7 +81,9 @@
     "tsdown": "0.22.2",
     "typescript": "6.0.3",
     "vitest": "4.1.11",
-    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2"
+    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2",
+    "acryl-router-http": "workspace:*",
+    "acryl-web-server": "workspace:*"
   },
   "acryl": {
     "schemaVersion": 1,

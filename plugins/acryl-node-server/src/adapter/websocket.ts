@@ -182,8 +182,13 @@ export const setupWebSocket = (options: {
   server: UpgradeSource
   fetchCallback: FetchCallback
   wss: WebSocketServerLike
+  /**
+   * Leave a request alone when a raw upgrade handler claimed it. Set by a transport that shares its upgrade source with raw claims (the node
+   * server's HTTP server); a hub fed by its own emitter (the Web adapter) must still answer its own upgrades, which arrive through a raw claim.
+   */
+  skipWhenRawUpgrade?: boolean
 }): void => {
-  const { server, fetchCallback, wss } = options
+  const { server, fetchCallback, wss, skipWhenRawUpgrade = false } = options
 
   const waiterMap = new Map<
     IncomingMessage,
@@ -218,7 +223,7 @@ export const setupWebSocket = (options: {
 
   server.on('upgrade', async (request, socket: Duplex, head) => {
     // A raw upgrade handler claimed this path before the WebSocket setup ran: the socket is (or will be) its own.
-    if ((request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] === true) return
+    if (skipWhenRawUpgrade && (request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] === true) return
     if (request.headers.upgrade?.toLowerCase() !== 'websocket') {
       // Nobody else listens: an upgrade to another protocol is answered, not left hanging.
       if (server.listenerCount('upgrade') === 1) rejectUpgradeRequest(socket, 400)

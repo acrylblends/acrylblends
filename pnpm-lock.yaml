@@ -1004,6 +1004,12 @@ importers:
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.5
+      acryl-router-http:
+        specifier: workspace:*
+        version: link:../acryl-router-http
+      acryl-web-server:
+        specifier: workspace:*
+        version: link:../acryl-web-server
       jsdom:
         specifier: 29.1.1
         version: 29.1.1

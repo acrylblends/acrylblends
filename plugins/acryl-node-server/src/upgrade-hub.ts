@@ -83,12 +83,12 @@ export class UpgradeHub {
    * Accept upgrades from `source` and answer them with `router`: the request runs through the router's middleware with the socket's peer address and local port as connection
    * facts (so the same loopback, origin and host checks work), and the upgrade bindings travel in `c.env` for `upgradeWebSocket`.
    */
-  attach(source: UpgradeSource, router: UpgradeRouter): void {
+  attach(source: UpgradeSource, router: UpgradeRouter, options: { skipWhenRawUpgrade?: boolean } = {}): void {
     const fetchCallback: FetchCallback = (request, env) => {
       const { incoming } = env as { incoming: { socket: { remoteAddress?: string; localPort?: number } } }
       return router.fetch(request, { remoteAddress: incoming.socket.remoteAddress, localPort: incoming.socket.localPort }, env)
     }
-    setupWebSocket({ server: source, fetchCallback, wss: this.server })
+    setupWebSocket({ server: source, fetchCallback, wss: this.server, ...options })
   }
 
   /** How many sockets are open. */
