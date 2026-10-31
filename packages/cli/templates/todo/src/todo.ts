@@ -10,14 +10,27 @@ import { Acryl, HTTPException } from '../plugins/acryl-router/src/index.ts'
 import { bodyLimit, loopbackOnly, trimTrailingSlash } from '../plugins/acryl-router/src/middleware/index.ts'
 import { schemaValidator, streamSSE, type StandardSchema } from '../plugins/acryl-router/src/helpers/index.ts'
 import type {} from '../plugins/acryl-state/src/index.ts'
-import { PAGE } from './page.ts'
+import { pageHtml } from './page.ts'
 
 /** Stable Cordis plugin name, equal to the package name and the Loader row id. */
 export const name = 'acryl-todo'
 export const inject = ['router', 'state']
 
+/**
+ * The only place the app's mount prefix is named: the app answers under `/todo` on its own server (`npm start`), and the ACRYL frame mounts the same app
+ * at `/app` (`npm run dev`). Every URL the page writes is derived from the prefix it is mounted at, so both are served by one source.
+ */
+export const FRAME_MOUNT_PREFIX = '/app'
+
 export interface Todo { id: number, title: string, done: boolean }
-export interface Config { file?: string }
+export interface Config {
+  file?: string
+  /**
+   * The path the app is mounted at, and the base of every URL its page writes. `/todo` on the app's own server (and the default); the ACRYL frame passes
+   * `/app` so the same app answers at the frame's app prefix, with nothing else of its URLs moved.
+   */
+  prefix?: string
+}
 
 /** Standard Schema for the body of a new todo, written by hand so the example has no schema library. */
 const NewTodo: StandardSchema<{ title: string }> = {
@@ -71,6 +84,7 @@ function save(file: string, todos: readonly Todo[]): void {
 }
 
 export function apply(ctx: Context, config: Config = {}): void {
+  const prefix = config.prefix ?? '/todo'
   const todos = ctx.state.cell<readonly Todo[]>('todo.list', load(config.file))
   if (config.file !== undefined) {
     const file = config.file
@@ -88,7 +102,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   // so the page is found either way while each route keeps one canonical path (the router itself treats `/a` and `/a/` as different).
   const api = new Acryl()
     .use(loopbackOnly({ inProcess: 'allow' }), bodyLimit({ maxSize: MAX_BODY_BYTES }), trimTrailingSlash())
-    .get('/', c => c.html(PAGE))
+    .get('/', c => c.html(pageHtml(prefix)))
     .get('/api', c => c.json(todos.get()))
     .post('/api', schemaValidator('json', NewTodo), c => {
       const todo: Todo = { id: nextId(), title: c.req.valid('json').title, done: false }
@@ -119,7 +133,5 @@ export function apply(ctx: Context, config: Config = {}): void {
         unsubscribe()
       }
     }))
-  ctx.router.route('/todo', api)
-
-  ctx.inject(['routerHttp'], inner => { inner.routerHttp.mount('/todo') })
+  ctx.router.route(prefix === '' ? '/' : prefix, api)
 }
