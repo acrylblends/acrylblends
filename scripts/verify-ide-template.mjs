@@ -28,6 +28,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
+import { doorShimCommand, npmCommand } from './lib/platform.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
@@ -239,7 +240,7 @@ try {
     log('the panel and the PTY driver are added, with node as the terminal program')
   }
 
-  const install = spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
+  const install = spawnSync(npmCommand(), ['install', '--no-audit', '--no-fund'], {
     cwd: app,
     encoding: 'utf8',
     env: { ...process.env, npm_config_loglevel: 'error' },
@@ -282,7 +283,7 @@ ${composition.stdout}`)
   )
 
   let output = ''
-  server = spawn('npm', ['run', 'dev'], {
+  server = spawn(npmCommand(), ['run', 'dev'], {
     cwd: app,
     env: bootEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -346,7 +347,7 @@ ${composition.stdout}`)
   }
 
   const brief = await until(async () => {
-    const door = spawnSync(join(app, '.acryl', 'bin', 'acryl'), ['brief', '--json'], {
+    const door = spawnSync(doorShimCommand(app), ['brief', '--json'], {
       cwd: app,
       encoding: 'utf8',
     })
