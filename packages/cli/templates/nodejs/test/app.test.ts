@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { type App, createApp } from '../src/app.ts'
-import { APP_NAME } from '../src/routes.ts'
+import { APP_NAME, FRAME_MOUNT_PREFIX } from '../src/routes.ts'
 
 /** Throwaway homes and databases live inside the project (`.acrylblends/` is ignored by git), because a sandboxed agent may not write to the system temp folder. */
 const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
@@ -14,11 +14,12 @@ mkdirSync(scratch, { recursive: true })
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
-/** Boot the app in a throwaway home on any free port, run the test, always stop it and remove the home. */
-async function withApp(run: (app: App) => Promise<void>) {
+/** Boot the app in a throwaway home on any free port, run the test, always stop it and remove the home. `prefix` mounts it where the frame does. */
+async function withApp(run: (app: App) => Promise<void>, options: { prefix?: string } = {}) {
   const home = await mkdtemp(join(scratch, 'app-test-'))
   const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
     listen: false,
+    ...options,
   })
   try {
     await run(app)
@@ -76,3 +77,37 @@ test('GET /counter serves a page with a client component, and the component is c
     const runtime = await app.root.router.request('/client/@acrylblends/jsx-dom.js')
     assert.equal(runtime.status, 200)
   }))
+
+test('the frame mounts the app at /app: its pages, health route and client component follow the prefix', () =>
+  withApp(
+    async (app) => {
+      const root = await app.root.router.request(FRAME_MOUNT_PREFIX)
+      assert.equal(root.status, 200)
+      assert.deepEqual(await root.json(), { app: APP_NAME, ok: true })
+      const about = await app.root.router.request(`${FRAME_MOUNT_PREFIX}/about`)
+      assert.equal(about.status, 200)
+      assert.match(await about.text(), /<main><h1>About<\/h1>/u)
+      const health = await app.root.router.request(`${FRAME_MOUNT_PREFIX}/health`)
+      assert.equal(health.status, 200)
+      assert.deepEqual(await health.json(), { ok: true })
+      const page = await app.root.router.request(`${FRAME_MOUNT_PREFIX}/counter`)
+      assert.equal(page.status, 200)
+      assert.match(
+        await page.text(),
+        new RegExp(`<script type="module" src="${FRAME_MOUNT_PREFIX}/client/counter\\.tsx">`, 'u'),
+      )
+      const module = await app.root.router.request(`${FRAME_MOUNT_PREFIX}/client/counter.tsx`)
+      assert.equal(module.status, 200)
+      assert.match(module.headers.get('content-type') ?? '', /javascript/u)
+      assert.doesNotMatch(await module.text(), /<Counter|<button/u)
+      // The component's import of the DOM renderer is served below the app's prefix too.
+      assert.equal(
+        (await app.root.router.request(`${FRAME_MOUNT_PREFIX}/client/@acrylblends/jsx-dom.js`))
+          .status,
+        200,
+      )
+      // The app's own URLs are not mounted in the frame; its own server keeps them (the tests above).
+      assert.equal((await app.root.router.request('/about')).status, 404)
+    },
+    { prefix: FRAME_MOUNT_PREFIX },
+  ))
