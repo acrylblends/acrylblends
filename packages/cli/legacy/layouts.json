@@ -1,0 +1,524 @@
+{
+  "generatedBy": "scripts/build-legacy-layouts.mjs",
+  "releases": [
+    {
+      "version": "0.3.0",
+      "layouts": {
+        "agent": "c2f30958043b",
+        "blank": "9c650cf52bf3",
+        "todo": "45694a8d9e15"
+      }
+    },
+    {
+      "version": "0.4.0",
+      "layouts": {
+        "agent": "2e790da977b2",
+        "blank": "aea589283445",
+        "todo": "02e613b3625c"
+      }
+    },
+    {
+      "version": "0.4.1",
+      "layouts": {
+        "agent": "2e790da977b2",
+        "blank": "aea589283445",
+        "todo": "5923d3a6099f"
+      }
+    },
+    {
+      "version": "0.5.0",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "b2cbb759c889",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.5.1",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "b2cbb759c889",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.6.0",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "b2cbb759c889",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.6.1",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "b2cbb759c889",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.6.2",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "b2cbb759c889",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.6.3",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "b2cbb759c889",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.6.4",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "b2cbb759c889",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.7.0",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "d6d371c9a65e",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.7.1",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "d6d371c9a65e",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.7.2",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "d6d371c9a65e",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.7.3",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "d6d371c9a65e",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.7.4",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "d6d371c9a65e",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.7.5",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "d6d371c9a65e",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.7.6",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "d6d371c9a65e",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.7.7",
+      "layouts": {
+        "agent": "157ce3db1112",
+        "blank": "d6d371c9a65e",
+        "todo": "8e64211312f3"
+      }
+    },
+    {
+      "version": "0.7.8",
+      "layouts": {
+        "agent": "71fb54a5a942",
+        "blank": "5a91c558af22",
+        "chat": "7076cc821e2c",
+        "nodejs": "b1bd9462496c",
+        "notes": "6cab2d09747c",
+        "todo": "b79078a87565"
+      }
+    },
+    {
+      "version": "0.8.0",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "f20ad9a51b06",
+        "nodejs": "1d477f37aaf4",
+        "notes": "7ca2dfed623a",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "0.8.1",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "0.9.0",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "0.9.0-next.1",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "0.9.1",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "0.9.2",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "0.10.0",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "0.11.0",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.0",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.0-rc.1",
+      "layouts": {
+        "agent": "b5ef3c786ae4",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.1",
+      "layouts": {
+        "agent": "6a5fb9c15c53",
+        "blank": "5a91c558af22",
+        "chat": "a9a9ab44c58e",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.2",
+      "layouts": {
+        "agent": "6a5fb9c15c53",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.3",
+      "layouts": {
+        "agent": "6a5fb9c15c53",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.4",
+      "layouts": {
+        "agent": "6a5fb9c15c53",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.5",
+      "layouts": {
+        "agent": "24c681a00fca",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.6",
+      "layouts": {
+        "agent": "24c681a00fca",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.7",
+      "layouts": {
+        "agent": "6307045545dc",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.8",
+      "layouts": {
+        "agent": "74ece148269c",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.9",
+      "layouts": {
+        "agent": "74ece148269c",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.0.10",
+      "layouts": {
+        "agent": "74ece148269c",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    },
+    {
+      "version": "1.1.0",
+      "layouts": {
+        "agent": "855359304707",
+        "blank": "5a91c558af22",
+        "chat": "7dbe6d5170df",
+        "nodejs": "d5bab75076ef",
+        "notes": "4edc36949c15",
+        "todo": "849a18d66dc1"
+      }
+    }
+  ],
+  "templates": {
+    "agent": {
+      "c2f30958043b": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "2e790da977b2": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "157ce3db1112": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "71fb54a5a942": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "b5ef3c786ae4": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "6a5fb9c15c53": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "24c681a00fca": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "6307045545dc": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "74ece148269c": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "855359304707": [
+        "src/app.ts",
+        "src/routes.ts"
+      ]
+    },
+    "blank": {
+      "9c650cf52bf3": [
+        "src/routes.ts"
+      ],
+      "aea589283445": [
+        "src/routes.ts"
+      ],
+      "b2cbb759c889": [
+        "src/routes.ts"
+      ],
+      "d6d371c9a65e": [
+        "src/routes.ts"
+      ],
+      "5a91c558af22": [
+        "src/routes.ts"
+      ]
+    },
+    "chat": {
+      "7076cc821e2c": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "f20ad9a51b06": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "a9a9ab44c58e": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "7dbe6d5170df": [
+        "src/app.ts",
+        "src/routes.ts"
+      ]
+    },
+    "nodejs": {
+      "b1bd9462496c": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "1d477f37aaf4": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "d5bab75076ef": [
+        "src/app.ts",
+        "src/routes.ts"
+      ]
+    },
+    "notes": {
+      "6cab2d09747c": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "7ca2dfed623a": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "4edc36949c15": [
+        "src/app.ts",
+        "src/routes.ts"
+      ]
+    },
+    "todo": {
+      "45694a8d9e15": [
+        "src/app.ts",
+        "src/todo.ts"
+      ],
+      "02e613b3625c": [
+        "src/app.ts",
+        "src/todo.ts"
+      ],
+      "5923d3a6099f": [
+        "src/app.ts",
+        "src/todo.ts"
+      ],
+      "8e64211312f3": [
+        "src/app.ts",
+        "src/todo.ts"
+      ],
+      "b79078a87565": [
+        "src/app.ts",
+        "src/todo.ts"
+      ],
+      "849a18d66dc1": [
+        "src/app.ts",
+        "src/todo.ts"
+      ]
+    }
+  }
+}
