@@ -361,7 +361,53 @@ because the CLI addresses it by app URL plus that path. The frame packages (`acr
 `/api/acryl-*` through `routerHttp`, so they are never in DSH's `/api`. The templates other than `agent` mount their routes at `/` on their own server and have no framed composition
 yet; when they get one they take the same `mount` config the agent template passes.
 
-## 19. The Windows 10 ConPTY resize: a test child that never read stdin (2026-10-31)
+## 19. `acrylblends upgrade` brings a pre-frame app onto the host layout (2026-10-31)
+
+The parked slice (6fc3d33e, `20b67da0`) was planned against the DSH-profile layout. What still fits the host launcher: the frame half of `upgrade` as a step
+planned before anything is written, with per-file conflict detection by the generated marker, a refusal (exit 1, nothing written) unless `--force`, which
+saves the app's version under `.acrylblends/upgrade-backup/` first, an idempotent second run, and a boot gate on a real app. What does not fit: the
+`scripts/ide-profile.mjs` profile script and the `profile` npm script (the host launcher replaced them), the `app-routes` row alone (the framed app now also
+mounts its own plugins through `frame/app-plugins.mjs` with the entry isolate, and the mount config lives in the composition root), and the rule that an app
+without `src/frame.ts` simply stays standalone (every app made by the previous published release lacks it; the upgrade now brings the frame row and the
+scaffold it needs).
+
+The shape now: the fixtures cover every published release that shipped templates, `acrylblends` 0.3.0 through 1.1.0 (40 versions, checked against npm; the
+releases before 0.3.0 predate the CLI's templates), deduplicated by content hash to 31 distinct scaffolds under `packages/cli/legacy/<template>/<hash>/`.
+`scripts/build-legacy-layouts.mjs` derives them from the release tags: for each template it takes the route module `src/frame.ts` imports (or `src/routes.ts`)
+plus `src/app.ts` where the current template exports `composeInto`, so the file list follows the templates rather than a hand list; `--check` compares the
+committed bytes with the tags. `planFrameStep` identifies the app's template from those files and plans three kinds of writes. The template's own files are
+`same` when they already equal the current template's, `update` when they equal the released ones, `add` when missing and `conflict` when the app edited
+them. The generated files (overlay, `cordis.yml`, `scripts/ide-host.mjs`, `app/runtime.mjs`, `frame/app-plugins.mjs`) are ours by their marker line. The
+two host plugins the launcher mounts by path (`acryl-web-server`, `acryl-page`) are copied when missing. `package.json` is merged, never a conflict (its
+`dev` script moves to the launcher; `start` keeps the app's own server). The app's `blend.yaml` and any file of its own are untouched. The old
+`scripts/ide-profile.mjs` is removed when it carries the generated marker.
+
+`appFrameRows` (the row ids, the isolate scan and the generated composition file) moved out of `init` into `packages/cli/src/frame-rows.ts`, so `init` and
+`upgrade` write the same rows from one home; `init` keeps its behavior (a template with `composeInto` gets the app-plugins row; the blank template keeps its
+own composition). `applyIdeProfile` now goes through the same plan/write as the upgrade, so planning and applying cannot drift.
+
+Releases before 0.7.8 cannot be carried forward: their `src/main.ts` imports `./plugins/...`, where the app keeps its plugins one folder up (`../plugins/...`
+since 0.7.8), so such an app cannot start as scaffolded and replacing the scaffold the upgrade owns would not fix the entry module it does not. The upgrade
+recognises that entry module (`brokenEntry`), reports it precisely in the CLI's message ("src/main.ts imports './plugins/...', as acrylblends 0.3.0 through
+0.7.7 wrote it ... change those imports to '../plugins/...' and run again"), and leaves the frame alone; their layouts are still in the fixtures so the app is
+identified and the message is exact. Every template without the frame row in the current release keeps the older plain report ("the notes template has no
+src/frame.ts yet: left standalone"); every built-in template has the row now, so that branch is tested on the planning function with a temporary template
+folder without `src/frame.ts`.
+
+Tests: `packages/cli/test/upgrade-frame.test.ts` builds a released-layout app (current scaffold, then the released files, no frame row, no host plugins) and
+covers the write and its report, the agent template's composition row with its isolate and the mount config, idempotency, a hand-written overlay refusal, an
+edited scaffold refusal and `--force` with the backup, the planning function's no-frame-row branch, an unidentified scaffold, the pre-0.7.8 report, the old
+profile script removal, and a loop over every distinct scaffold of all six templates (each upgrades and settles, or is reported). The gate
+`scripts/verify-upgrade-frame.mjs` (wired as `verify:upgrade-frame`) iterates every distinct scaffold: the safe ones get the upgrade with every reported
+change asserted and `blend.yaml` and a file of the app's own byte-identical, then a second run that must change nothing; the pre-0.7.8 ones are asserted to
+get the precise report and no frame files. The oldest releasable layout per template is installed and booted (the frame page and `/app` answer, then the
+server and its port are checked gone), and a 1.1.0 agent app is upgraded and run through the page gate (`verify-ide-template.mjs agent --existing <app>`:
+composition, `/app`, the panel run, the PTY under the mount, the chat and Settings).
+
+Known boundary: an app whose scaffold was edited (or made by a release other than 1.1.0) is identified only through its other template files; when none
+matches, the upgrade leaves it standalone and says so. `--force` covers a recognized template with edited files, never an unidentified one.
+
+## 20. The Windows 10 ConPTY resize: a test child that never read stdin (2026-10-31)
 
 The driver-pty suite's real-PTY resize test failed on mbpi9win (Windows 10 Pro `10.0.19045`): after the driver's resize the child kept its start size. A minimal repro outside the framework (node-pty `1.2.0-beta.15`, and `1.2.0-beta.18`; Node 24.18.0) compared two children of the same `pty.spawn(process.execPath, ['-e', script], { cols: 90, rows: 20 })` and the same `pty.resize(110, 35)` after 2.5 s:
 
