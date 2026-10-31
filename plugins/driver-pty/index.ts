@@ -193,7 +193,15 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
         return c.json({ error: 'a terminal is already open; stop it first' }, 409)
       const num = (value: unknown, fallback: number) =>
         typeof value === 'number' && value >= 1 && value <= 1000 ? Math.floor(value) : fallback
-      live = startSession(driver, num(body.cols, 80), num(body.rows, 24))
+      let session: Live
+      try {
+        session = startSession(driver, num(body.cols, 80), num(body.rows, 24))
+      } catch (error) {
+        // The cause (a native module that cannot spawn, a program that is gone) goes to the app's log; the page gets a plain answer, as everywhere else.
+        console.error('driver-pty: the terminal could not start:', error)
+        return c.json({ error: 'the terminal could not start; the app log has the reason' }, 500)
+      }
+      live = session
       return c.json({ id: live.id })
     })
     .get(`${PREFIX}/:id/output`, (c) => {

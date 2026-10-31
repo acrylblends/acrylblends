@@ -480,3 +480,17 @@ test('reloading the plugin with a real session open leaves no process behind', a
   assert.equal(alive(Number(parent)), false, 'the program is gone')
   assert.equal(alive(Number(child)), false, 'its child is gone')
 })
+
+test('a terminal that cannot start answers 500 with a plain reason and leaves no session behind', async () => {
+  const { post } = await boot({
+    spawn: () => {
+      throw new Error('the native PTY refused this program')
+    },
+    programs: { node: [] },
+  })
+  const started = await post('/sessions', { driver: 'pty:node', cols: 80, rows: 24 })
+  assert.equal(started.status, 500)
+  assert.match(JSON.stringify(await started.json()), /could not start/u)
+  // Nothing is held: a second start reaches the spawn again, it is not a 409 for a terminal that never existed.
+  assert.equal((await post('/sessions', { driver: 'pty:node' })).status, 500)
+})

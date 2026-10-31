@@ -536,13 +536,17 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       if (left === undefined) fail('the left panel has no Projects/session rows')
       log(`the left panel shows Projects and ${String(left.rows)} tree rows`)
 
-      // (d) DSH chat as a tab.
-      const tabs = await evaluate(
-        `[...document.querySelectorAll('[role=tab]')].map(tab => tab.textContent.trim())`,
-      )
-      if (!Array.isArray(tabs) || !tabs.some((text) => text.includes('AcrylDSH Chat')))
-        fail(`the chat tab is not in the tab strip: ${JSON.stringify(tabs)}`)
-      log('the chat tab is in the tab strip')
+      // (d) DSH chat as a tab. Its title arrives asynchronously and differs by timing: the frame's own "AcrylDSH Chat" until DSH's session title row
+      // names the session "New chat". Match the tab by what it is, not by one of its labels, and wait for it like every other surface here.
+      const chatTabs = () =>
+        evaluate(`[...document.querySelectorAll('[role=tab]')].map(tab => tab.textContent.trim())`)
+      const chatTab = await until(async () => {
+        const tabs = await chatTabs()
+        return Array.isArray(tabs) ? tabs.find((text) => /chat/iu.test(text)) : undefined
+      }, 20_000)
+      if (chatTab === undefined)
+        fail(`the chat tab is not in the tab strip: ${JSON.stringify(await chatTabs())}`)
+      log(`the chat tab is in the tab strip ("${chatTab.trim()}")`)
 
       // (b) The right panel with the workspace's Files/Changes/Review views (DSH's right sidebar, which the workspace fills).
       // The panel opens empty and fills after its tab types register; the toggle button also appears a moment after the frame, so the wait
@@ -823,7 +827,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       // (i) The chat, with the local model mock: the first-run card takes the key, the composer sends a message, and the model request carries
       // the key that was entered (the proof of use, not how fast a reply paints).
       await evaluate(
-        `(() => { const tab = [...document.querySelectorAll('[role=tab]')].find(candidate => candidate.textContent.includes('AcrylDSH Chat')); tab?.click(); return true })()`,
+        `(() => { const tab = [...document.querySelectorAll('[role=tab]')].find(candidate => /chat/iu.test(candidate.textContent)); tab?.click(); return true })()`,
       )
       await sleep(500)
       const card = await until(
@@ -926,6 +930,11 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       child.once('exit', done)
       setTimeout(done, 5_000)
     })
-    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
+    } catch {
+      // Windows can still hold a file of the closed browser for a moment. The folder sits in the temp directory, and a page that passed stays passed;
+      // the run's own scratch is removed by the caller, which reports a failure of its own.
+    }
   }
 }
