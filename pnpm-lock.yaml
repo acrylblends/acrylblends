@@ -1285,6 +1285,31 @@ importers:
         specifier: 8.21.3
         version: 8.21.3
 
+  plugins/acryl-web-server:
+    dependencies:
+      acryl-node-server:
+        specifier: workspace:*
+        version: link:../acryl-node-server
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.0.4
+        version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.5)
+      '@types/node':
+        specifier: ^22.20.0
+        version: 22.20.5
+      acryl-router:
+        specifier: workspace:*
+        version: link:../acryl-router
+      tsdown:
+        specifier: 0.22.2
+        version: 0.22.2(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@22.20.5)(jsdom@29.1.1)(msw@2.15.0(@types/node@22.20.5)(typescript@6.0.3))(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.0))
+
 packages:
 
   '@asamuzakjp/css-color@5.1.11':

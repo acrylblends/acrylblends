@@ -67,10 +67,11 @@ test('the frame row mounts the same routes under /app; the app on its own server
       assert.equal(response.status, 200, path)
       await response.body?.cancel()
     }
-    // The frame row: the same routes under the one prefix the app names.
+    // The frame row requires the frame's router and web adapter; the app's routes mount at the one prefix the app names.
     const frame = await import('../src/frame.ts')
-    const { FRAME_MOUNT_PREFIX } = await import('../src/routes.ts')
-    frame.apply(app.root)
+    assert.deepEqual([...frame.inject].sort(), ['router', 'routerHttp'])
+    const { FRAME_MOUNT_PREFIX, routes } = await import('../src/routes.ts')
+    routes.apply(app.root, { prefix: FRAME_MOUNT_PREFIX })
     for (const path of ['', '/about', '/health']) {
       const response = await app.root.router.request(`${FRAME_MOUNT_PREFIX}${path}`)
       assert.equal(response.status, 200, path)

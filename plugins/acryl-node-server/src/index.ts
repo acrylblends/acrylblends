@@ -10,12 +10,14 @@
  * open streams, closes every connection and returns once the port is free.
  */
 
-import type { Server } from 'node:http'
+import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import type { Duplex } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from 'acryl-router'
 import { Request as AdapterRequest } from './adapter/request.ts'
+import { RAW_RESPONSE_HANDLED, RAW_UPGRADE_HANDLED, type RawUpgradeRequest } from './adapter/raw.ts'
 import { createAdaptorServer } from './adapter/server.ts'
 import { UpgradeHub, type UpgradeHubOptions } from './upgrade-hub.ts'
 import type { UpgradeWebSocket } from 'acryl-router/helpers'
@@ -29,6 +31,29 @@ export { UpgradeEmitter, UpgradeHub, type UpgradeHubOptions, type UpgradeRouter 
 /** Stable Cordis plugin name, equal to the package name and the Loader row id. */
 export const name = 'acryl-node-server'
 export const inject = ['router']
+
+/** A raw node handler: the request and response are the platform's, and the adapter writes nothing for them. */
+export interface RawRoute {
+  readonly kind: 'prefix' | 'exact'
+  readonly path: string
+  readonly handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+}
+
+/** A raw upgrade handler: the socket is the handler's once the path matches; the router never sees the upgrade. */
+export interface RawUpgradeRoute {
+  readonly path: string
+  readonly handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>
+}
+
+/** The pathname of a request target, for raw matching: a malformed one matches nothing (`'/'` matches only itself). */
+function pathnameOf(target: string | undefined): string {
+  if (target === undefined) return '/'
+  try {
+    return new URL(target, 'http://node-server.invalid').pathname
+  } catch {
+    return '/'
+  }
+}
 
 export interface Config {
   hostname: string
@@ -64,6 +89,11 @@ export class NodeServer extends Service {
   private readonly server: Server
   private hub: UpgradeHub | undefined
   private bound = 0
+  /** Raw routes registered by the host's compatibility layer (see {@link registerRaw}). */
+  private readonly rawExact = new Map<string, RawRoute['handler']>()
+  private readonly rawPrefix = new Map<string, RawRoute['handler']>()
+  private readonly rawUpgrades = new Map<string, RawUpgradeRoute['handler']>()
+  private rawUpgradeListener: ((req: IncomingMessage, socket: Duplex, head: Buffer) => void) | undefined
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'nodeServer')
@@ -74,7 +104,23 @@ export class NodeServer extends Service {
     // `Response` stay the platform's, because this adapter shares its process with the rest of the app; so the adapter's lightweight
     // request is made a real one (its signal still aborts when the client goes away) before the router re-creates it with its own signal.
     this.server = createAdaptorServer({
-      fetch: (request, { incoming }) => router.fetch(new AdapterRequest(request), { remoteAddress: incoming.socket.remoteAddress, localPort: incoming.socket.localPort }),
+      fetch: async (request, bindings) => {
+        const { incoming, outgoing } = bindings as { incoming: IncomingMessage; outgoing: ServerResponse }
+        // A raw route owns the node response: write it here and tell the adapter not to write anything.
+        const raw = this.rawFor(incoming)
+        if (raw !== undefined) {
+          try {
+            await raw(incoming, outgoing)
+          } catch {
+            if (!outgoing.headersSent) {
+              outgoing.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' })
+              outgoing.end('internal error')
+            } else outgoing.destroy()
+          }
+          return RAW_RESPONSE_HANDLED
+        }
+        return router.fetch(new AdapterRequest(request), { remoteAddress: incoming.socket.remoteAddress, localPort: incoming.socket.localPort })
+      },
       hostname: config.hostname,
       overrideGlobalObjects: false,
     }) as Server
@@ -83,6 +129,64 @@ export class NodeServer extends Service {
       this.server.closeAllConnections()
       if (this.server.listening) await new Promise<void>(resolve => { this.server.close(() => { resolve() }) })
     }, 'acryl-node-server: close listener and open connections')
+  }
+
+  /**
+   * Serve a raw node handler at `path`, beside the router: `exact` matches the pathname only, `prefix` the path and everything below it. The
+   * handler gets the platform's `IncomingMessage`/`ServerResponse` and owns the response; the router is not run for it. A path already served
+   * throws. The returned remover restores the path (the server itself goes on serving the rest).
+   */
+  registerRaw(route: RawRoute): () => void {
+    const table = route.kind === 'exact' ? this.rawExact : this.rawPrefix
+    if (table.has(route.path)) throw new Error(`acryl-node-server: ${route.path} is already served`)
+    table.set(route.path, route.handler)
+    return () => {
+      if (table.get(route.path) === route.handler) table.delete(route.path)
+    }
+  }
+
+  /**
+   * Claim an upgrade path for a raw node handler: the handler receives `(req, socket, head)` and from then on owns the socket. The router's
+   * WebSocket handling never sees a claimed upgrade. A path already claimed throws; the remover releases it.
+   */
+  registerRawUpgrade(route: RawUpgradeRoute): () => void {
+    if (this.rawUpgrades.has(route.path))
+      throw new Error(`acryl-node-server: the upgrade path ${route.path} is already claimed`)
+    this.rawUpgrades.set(route.path, route.handler)
+    this.ensureRawUpgradeListener()
+    return () => {
+      if (this.rawUpgrades.get(route.path) !== route.handler) return
+      this.rawUpgrades.delete(route.path)
+      if (this.rawUpgrades.size === 0 && this.rawUpgradeListener !== undefined) {
+        this.server.off('upgrade', this.rawUpgradeListener)
+        this.rawUpgradeListener = undefined
+      }
+    }
+  }
+
+  /** The raw handler for a request: an exact path first, then the longest matching prefix. */
+  private rawFor(incoming: IncomingMessage): RawRoute['handler'] | undefined {
+    const path = pathnameOf(incoming.url)
+    const exact = this.rawExact.get(path)
+    if (exact !== undefined) return exact
+    let best: { length: number; handler: RawRoute['handler'] } | undefined
+    for (const [prefix, handler] of this.rawPrefix)
+      if ((path === prefix || path.startsWith(`${prefix}/`)) && (best === undefined || prefix.length > best.length))
+        best = { length: prefix.length, handler }
+    return best?.handler
+  }
+
+  /** Install the one raw upgrade listener the first claim needs; it runs before the router's WebSocket setup. */
+  private ensureRawUpgradeListener(): void {
+    if (this.rawUpgradeListener !== undefined) return
+    const listener = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
+      const handler = this.rawUpgrades.get(pathnameOf(request.url))
+      if (handler === undefined) return
+      ;(request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] = true
+      Promise.resolve(handler(request, socket, head)).catch(() => socket.destroy())
+    }
+    this.rawUpgradeListener = listener
+    this.server.prependListener('upgrade', listener)
   }
 
   /**

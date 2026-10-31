@@ -3,6 +3,7 @@ import { defineWebSocketHelper } from 'acryl-router/helpers'
 import type { IncomingMessage } from 'node:http'
 import { STATUS_CODES } from 'node:http'
 import type { Duplex } from 'node:stream'
+import { RAW_UPGRADE_HANDLED, type RawUpgradeRequest } from './raw.ts'
 import type { FetchCallback } from './types.ts'
 import type { WebSocketData, WebSocketLike, WebSocketServerLike } from './websocket-types.ts'
 
@@ -216,6 +217,8 @@ export const setupWebSocket = (options: {
   }
 
   server.on('upgrade', async (request, socket: Duplex, head) => {
+    // A raw upgrade handler claimed this path before the WebSocket setup ran: the socket is (or will be) its own.
+    if ((request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] === true) return
     if (request.headers.upgrade?.toLowerCase() !== 'websocket') {
       // Nobody else listens: an upgrade to another protocol is answered, not left hanging.
       if (server.listenerCount('upgrade') === 1) rejectUpgradeRequest(socket, 400)

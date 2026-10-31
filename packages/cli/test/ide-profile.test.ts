@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, test } from 'vitest'
 import {
   applyIdeProfile,
+  DRIVER_ROWS,
   FRAME_PACKAGES,
   ideProfilePlan,
   profileNameFor,
@@ -40,7 +41,7 @@ test('one profile per app, named from the app and safe for a DSH profile', () =>
   assert.notEqual(profileNameFor('a'), profileNameFor('b'))
   assert.match(
     ideProfilePlan(input).packageJson,
-    /"dev": "dsh --profile acrylblends-my-app --patch cordis.patch.yml --no-open"/u,
+    /"dev": "node --import \.\/plugins\/acryl-node-server\/src\/register\.ts scripts\/ide-host\.mjs"/u,
   )
 })
 
@@ -57,11 +58,19 @@ test("the overlay mounts the frame rows and leaves DSH's own brand row out", () 
   assert.match(overlay, /- id: ui-brand-official\n {2}disabled: true/u)
 })
 
-test("the overlay turns DSH's own frame off, so the ACRYL frame's root registration can land", () => {
-  const overlay = ideProfilePlan(input).overlay
-  assert.match(overlay, /- id: ui-layout\n {2}disabled: true/u)
-  assert.match(overlay, /- id: ui-sidebar\n {2}disabled: false/u)
-  assert.match(overlay, /- id: ui-conversation\n {2}disabled: false/u)
+test('the driver rows carry no DSH web surface: our node server and page serve the app', () => {
+  for (const id of [
+    'webserver',
+    'web-startup',
+    'web-runtime',
+    'client-hmr',
+    'ui-layout',
+    'ui-sidebar',
+    'ui-conversation',
+  ])
+    assert.ok(!DRIVER_ROWS.includes(id), `${id} must not be a driver row`)
+  assert.doesNotMatch(ideProfilePlan(input).overlay, /- id: ui-layout/u)
+  assert.doesNotMatch(ideProfilePlan(input).overlay, /- id: webserver/u)
 })
 
 test("the overlay keeps the first chat's workspace in the app's own data home", () => {
@@ -71,10 +80,10 @@ test("the overlay keeps the first chat's workspace in the app's own data home", 
   )
 })
 
-test("the overlay turns DSH's API-key first-run dialog off, so it cannot cover the frame", () => {
+test("the overlay gives the chat driver's connection our trust fact, not DSH's web runtime", () => {
   assert.match(
     ideProfilePlan(input).overlay,
-    /- id: ui-settings-models\n {2}config:\n {4}credentialOnboarding: false/u,
+    /- id: connection\n {2}inject: \[\]\n {2}config:\n {4}trustedHosts: \['127\.0\.0\.1'\]/u,
   )
 })
 
@@ -85,7 +94,9 @@ test("the manifest carries the DSH pin, the framework, the frame packages, and k
     dependencies: { yaml: '^2.9.0' },
   })
   const manifest = JSON.parse(ideProfilePlan(input, existing).packageJson)
-  assert.equal(manifest.dependencies['@deepseek-ai/dsh'], '0.2.0-rc.2')
+  assert.equal(manifest.dependencies['@deepseek-ai/dsh-base'], '0.2.0-rc.2')
+  assert.equal(manifest.dependencies['@deepseek-ai/dsh-web-app'], '0.2.0-rc.2')
+  assert.equal(manifest.dependencies['@deepseek-ai/dsh'], undefined)
   assert.equal(manifest.dependencies.acrylblends, '^1.0.10')
   assert.equal(manifest.dependencies['acryl-web'], 'file:../acryl-web')
   assert.equal(manifest.dependencies.yaml, '^2.9.0')
@@ -98,28 +109,35 @@ test('applying twice changes nothing the second time', () => {
   assert.deepEqual([...first.written].sort(), [
     'app/runtime.mjs',
     'cordis.patch.yml',
+    'cordis.yml',
     'package.json',
-    'scripts/ide-profile.mjs',
+    'scripts/ide-host.mjs',
   ])
   const bytes = [
     'app/runtime.mjs',
     'cordis.patch.yml',
+    'cordis.yml',
     'package.json',
-    'scripts/ide-profile.mjs',
+    'scripts/ide-host.mjs',
   ].map((file) => readFileSync(join(root, file), 'utf8'))
   const second = applyIdeProfile(root, input)
   assert.deepEqual(second.written, [])
   assert.deepEqual([...second.unchanged].sort(), [
     'app/runtime.mjs',
     'cordis.patch.yml',
+    'cordis.yml',
     'package.json',
-    'scripts/ide-profile.mjs',
+    'scripts/ide-host.mjs',
   ])
   assert.deepEqual(
     bytes,
-    ['app/runtime.mjs', 'cordis.patch.yml', 'package.json', 'scripts/ide-profile.mjs'].map((file) =>
-      readFileSync(join(root, file), 'utf8'),
-    ),
+    [
+      'app/runtime.mjs',
+      'cordis.patch.yml',
+      'cordis.yml',
+      'package.json',
+      'scripts/ide-host.mjs',
+    ].map((file) => readFileSync(join(root, file), 'utf8')),
   )
 })
 

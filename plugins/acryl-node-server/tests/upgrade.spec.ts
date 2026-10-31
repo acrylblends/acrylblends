@@ -80,7 +80,7 @@ describe('WebSocket upgrades on the standalone adapter', () => {
   it('runs the route middleware first: a refusal is a plain HTTP status with Connection: close, before any handshake', async () => {
     const ctx = await boot()
     const seen = fresh()
-    await ctx.plugin(wsPlugin('ws-a', '/ws', seen)).fiber
+    await ctx.plugin(wsPlugin('ws-a', '/ws', seen))
     await expect(open(wsUrl(ctx, '/ws'), {})).rejects.toThrow('refused 403 close')
     expect(seen.opened).toBe(0)
     const ws = await open(wsUrl(ctx, '/ws'))
@@ -94,7 +94,7 @@ describe('WebSocket upgrades on the standalone adapter', () => {
 
   it('refuses a path nobody mounts and a request with a non-websocket Upgrade header', async () => {
     const ctx = await boot()
-    await ctx.plugin(wsPlugin('ws-a', '/ws', fresh())).fiber
+    await ctx.plugin(wsPlugin('ws-a', '/ws', fresh()))
     await expect(open(wsUrl(ctx, '/nope'))).rejects.toThrow(/refused 404 close/u)
     // `Upgrade: h2c` on the mounted path is not a WebSocket: a plain 400, the socket is closed.
     const reply = await new Promise<string>(resolve => {
@@ -110,7 +110,7 @@ describe('WebSocket upgrades on the standalone adapter', () => {
   it('with textOnly the handler never sees a binary frame; a frame over maxPayload closes the socket with 1009', async () => {
     const ctx = await boot({ websocket: { maxPayload: 1024 } })
     const seen = fresh()
-    await ctx.plugin(wsPlugin('ws-a', '/ws', seen, { textOnly: true })).fiber
+    await ctx.plugin(wsPlugin('ws-a', '/ws', seen, { textOnly: true }))
     const ws = await open(wsUrl(ctx, '/ws'))
     ws.send(Buffer.from([1, 2, 3]), { binary: true })
     ws.send('text')
@@ -123,7 +123,7 @@ describe('WebSocket upgrades on the standalone adapter', () => {
   it('a peer that stops answering pings is terminated, and the handler sees close once', async () => {
     const ctx = await boot({ websocket: { heartbeat: 50 } })
     const seen = fresh()
-    await ctx.plugin(wsPlugin('ws-a', '/ws', seen)).fiber
+    await ctx.plugin(wsPlugin('ws-a', '/ws', seen))
     const ws = await open(wsUrl(ctx, '/ws'), { 'x-allow': 'yes' }, { autoPong: false })
     await closed(ws)
     await settle()
@@ -136,8 +136,8 @@ describe('WebSocket upgrades on the standalone adapter', () => {
     const b = fresh()
     const pluginA = ctx.plugin(wsPlugin('ws-a', '/a', a))
     const pluginB = ctx.plugin(wsPlugin('ws-b', '/b', b))
-    await pluginA.fiber
-    await pluginB.fiber
+    await pluginA
+    await pluginB
     const aSockets = await Promise.all([open(wsUrl(ctx, '/a')), open(wsUrl(ctx, '/a')), open(wsUrl(ctx, '/a'))])
     const bSocket = await open(wsUrl(ctx, '/b'))
     const aClosed = aSockets.map(closed)
@@ -157,7 +157,7 @@ describe('WebSocket upgrades on the standalone adapter', () => {
 
   it('stopping the server closes every socket', async () => {
     const ctx = await boot({ websocket: { grace: 500 } })
-    await ctx.plugin(wsPlugin('ws-a', '/ws', fresh())).fiber
+    await ctx.plugin(wsPlugin('ws-a', '/ws', fresh()))
     const ws = await open(wsUrl(ctx, '/ws'))
     const done = closed(ws)
     await ctx.fiber.dispose()
@@ -185,9 +185,9 @@ describe('testWebSocket: the in-process pair', () => {
         onMessage(event, ws) { ws.send(`echo ${String(event.data)}`) },
         onClose(event) { seen.closed.push({ code: event.code, reason: event.reason }) },
       })))
-    const refused = await testWebSocket((request, env) => app.fetch(request, env), '/ws')
+    const refused = await testWebSocket(async (request, env) => await app.fetch(request, env), '/ws')
     expect(refused).toEqual({ status: 403 })
-    const { status, socket } = await testWebSocket((request, env) => app.fetch(request, env), '/ws', { headers: { 'x-allow': 'yes' } })
+    const { status, socket } = await testWebSocket(async (request, env) => await app.fetch(request, env), '/ws', { headers: { 'x-allow': 'yes' } })
     expect(status).toBe(101)
     socket!.send('hi')
     expect(socket!.received).toEqual(['echo hi'])
