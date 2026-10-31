@@ -1,0 +1,102 @@
+/** Raw node handlers beside the router: exact and prefix paths, the longest prefix, duplicates, disposal, errors, and a claimed upgrade. */
+import { connect } from 'node:net'
+import { Context } from '@deepseek-ai/cordis'
+import { Acryl, apply as routerApply, name as routerName } from 'acryl-router'
+import { afterEach, describe, expect, it } from 'vitest'
+import * as nodeServer from '../src/index.ts'
+
+const contexts: Context[] = []
+afterEach(async () => {
+  while (contexts.length > 0) await contexts.pop()?.fiber.dispose()
+})
+
+async function boot(config: Partial<nodeServer.Config> = {}): Promise<Context> {
+  const ctx = new Context()
+  contexts.push(ctx)
+  await ctx.plugin({ name: routerName, apply: routerApply })
+  const fiber = ctx.plugin(nodeServer, { port: 0, scan: 0, ...config })
+  await fiber
+  if (ctx.get('nodeServer') === undefined)
+    throw new Error(`acryl-node-server did not provide nodeServer (fiber state ${String(fiber.state)})`)
+  return ctx
+}
+
+describe('raw node routes', () => {
+  it('serves an exact path and a prefix, and the router serves everything else', async () => {
+    const ctx = await boot()
+    const server = ctx.nodeServer
+    server.registerRaw({
+      kind: 'exact',
+      path: '/raw/exact',
+      handler: (req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end(`exact ${String(req.method)}`) },
+    })
+    server.registerRaw({
+      kind: 'prefix',
+      path: '/raw/prefix',
+      handler: (_req, res) => { res.writeHead(200); res.end('prefix') },
+    })
+    ctx.router.route('/', new Acryl().get('/router', c => c.text('router')))
+
+    expect(await (await fetch(`${server.url}/raw/exact`)).text()).toBe('exact GET')
+    expect(await (await fetch(`${server.url}/raw/prefix`)).text()).toBe('prefix')
+    expect(await (await fetch(`${server.url}/raw/prefix/below?x=1`)).text()).toBe('prefix')
+    expect(await (await fetch(`${server.url}/router`)).text()).toBe('router')
+    expect((await fetch(`${server.url}/raw/exact/below`)).status).toBe(404)
+    expect((await fetch(`${server.url}/raw/prefixes`)).status).toBe(404)
+  })
+
+  it('prefers the longest prefix when two overlap', async () => {
+    const ctx = await boot()
+    const server = ctx.nodeServer
+    server.registerRaw({ kind: 'prefix', path: '/api', handler: (_req, res) => { res.end('short') } })
+    server.registerRaw({ kind: 'prefix', path: '/api/deeper', handler: (_req, res) => { res.end('long') } })
+    expect(await (await fetch(`${server.url}/api/x`)).text()).toBe('short')
+    expect(await (await fetch(`${server.url}/api/deeper/x`)).text()).toBe('long')
+  })
+
+  it('refuses a duplicate path, and its remover gives the path back', async () => {
+    const ctx = await boot()
+    const server = ctx.nodeServer
+    const remove = server.registerRaw({ kind: 'exact', path: '/one', handler: (_req, res) => { res.end('one') } })
+    expect(() => server.registerRaw({ kind: 'exact', path: '/one', handler: (_req, res) => { res.end('two') } })).toThrow(/already served/u)
+    expect(await (await fetch(`${server.url}/one`)).text()).toBe('one')
+    remove()
+    expect((await fetch(`${server.url}/one`)).status).toBe(404)
+  })
+
+  it('answers 500 when a handler throws, without leaking the error', async () => {
+    const ctx = await boot()
+    const server = ctx.nodeServer
+    server.registerRaw({ kind: 'exact', path: '/boom', handler: () => { throw new Error('secret detail') } })
+    const response = await fetch(`${server.url}/boom`)
+    expect(response.status).toBe(500)
+    expect(await response.text()).toBe('internal error')
+  })
+
+  it('hands a claimed upgrade to the raw handler and never to the router', async () => {
+    const ctx = await boot()
+    const server = ctx.nodeServer
+    let upgraded = ''
+    let routerUpgrade = false
+    ctx.router.route('/', new Acryl().get('/ws', (c) => {
+      routerUpgrade = true
+      return c.text('router upgrade')
+    }))
+    // Attach the router's WebSocket setup too, so the claimed upgrade exercises the adapter's skip path, not only the missing-listener case.
+    server.upgrades()
+    server.registerRawUpgrade({
+      path: '/raw/socket',
+      handler: (req, socket) => { upgraded = req.url ?? ''; socket.destroy() },
+    })
+    await new Promise<void>((resolve, reject) => {
+      const client = connect(Number(new URL(server.url).port), '127.0.0.1', () => {
+        client.write('GET /raw/socket HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n')
+      })
+      client.once('error', reject)
+      client.once('close', () => { resolve() })
+      setTimeout(() => { client.destroy(); resolve() }, 5_000)
+    })
+    expect(upgraded).toBe('/raw/socket')
+    expect(routerUpgrade).toBe(false)
+  })
+})

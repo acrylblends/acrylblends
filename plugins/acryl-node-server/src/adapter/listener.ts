@@ -14,6 +14,7 @@ import {
 } from './request.ts'
 import { defaultContentType, cacheKey, Response as LightweightResponse } from './response.ts'
 import type { InternalCache } from './response.ts'
+import { RAW_RESPONSE_HANDLED } from './raw.ts'
 import type { CustomErrorHandler, FetchCallback, HttpBindings } from './types.ts'
 import {
   readWithoutBlocking,
@@ -500,6 +501,9 @@ export const getRequestListener = (
       res = fetchCallback(req, { incoming, outgoing } as HttpBindings) as
         | Response
         | Promise<Response>
+        | typeof RAW_RESPONSE_HANDLED
+      // A raw handler (not a `Response`) owns the node response: it has written (or is writing) it, so the adapter writes nothing.
+      if (res === RAW_RESPONSE_HANDLED) return
       if (!isPromise(res) && isImmediateCacheableResponse(res)) {
         // Synchronous cacheable response — no close listener needed.
         // No I/O events can fire between fetchCallback returning and responseViaCache
