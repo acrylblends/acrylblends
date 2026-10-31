@@ -649,17 +649,11 @@ try {
   // The templates ship `typescript`: the door serves its page modules through the app's own compiler, so a scratch app without it is
   // not the app a person gets.
   const specs = { ...frameSpecs(), ...doorSpecs, typescript: '6.0.3' }
-  const byRow = Object.fromEntries(
-    FRAME_PACKAGES.filter((entry) => entry.spec !== '' || entry.installed !== true).map((entry) => [
-      entry.row ?? entry.name,
-      entry.name,
-    ]),
-  )
   const input = {
     appName: 'boot',
     dshVersion: DSH_VERSION,
     frameworkVersion: FRAMEWORK_VERSION,
-    spec: (row) => (byRow[row] === undefined ? undefined : specs[byRow[row]]),
+    spec: (name) => specs[name],
     dependencies: specs,
   }
   const wrote = applyIdeProfile(app, input)

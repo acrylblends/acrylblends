@@ -62,7 +62,7 @@ describe('scaffolding a template into the frame', () => {
     expect(overlay).toContain('name: acryl-app-shell')
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
     expect(String(manifest.scripts.dev)).toMatch(
-      /^dsh --profile acrylblends-framed --patch cordis\.patch\.yml/u,
+      /^node --import \.\/plugins\/acryl-node-server\/src\/register\.ts node_modules\/@deepseek-ai\/dsh\/lib\/bin\.js --profile acrylblends-framed --patch cordis\.patch\.yml/u,
     )
     expect(manifest.scripts.profile).toBe('node scripts/ide-profile.mjs')
     expect(manifest.dependencies['acryl-app-shell']).toBe('file:/checkout/ide/acryl-app-shell')
@@ -88,6 +88,6 @@ describe('scaffolding a template into the frame', () => {
     expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
     expect(out.join('')).toMatch(/the ACRYL frame is not published yet/u)
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-    expect(manifest.scripts.dev).not.toMatch(/dsh --profile/u)
+    expect(manifest.scripts.dev).not.toMatch(/dsh\/lib\/bin\.js --profile/u)
   })
 })

@@ -7,7 +7,16 @@ import type { Context } from '@deepseek-ai/cordis'
 import { FRAME_MOUNT_PREFIX, makeApp } from './routes.ts'
 
 export const name = 'app-routes'
+export const inject = ['router', 'routerHttp']
 
-export function apply(ctx: Context): void {
+/** The one router-http call this row makes, typed here: the service is read by the frame's own row, and a port is a pass. */
+interface RouterHttp {
+  mount(prefix: string): () => void
+}
+
+export function apply(ctx: Context & { readonly routerHttp: RouterHttp }): void {
+  // The routes go on the frame's router at the prefix, and the prefix is claimed on the frame's web server, which serves the
+  // router's answers over HTTP: a route registered but never mounted is unreachable inside the frame.
   ctx.router.route(FRAME_MOUNT_PREFIX, makeApp())
+  ctx.routerHttp.mount(FRAME_MOUNT_PREFIX)
 }

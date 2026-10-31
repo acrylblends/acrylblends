@@ -40,7 +40,7 @@ test('one profile per app, named from the app and safe for a DSH profile', () =>
   assert.notEqual(profileNameFor('a'), profileNameFor('b'))
   assert.match(
     ideProfilePlan(input).packageJson,
-    /"dev": "dsh --profile acrylblends-my-app --patch cordis.patch.yml --no-open"/u,
+    /"dev": "node --import \.\/plugins\/acryl-node-server\/src\/register\.ts node_modules\/@deepseek-ai\/dsh\/lib\/bin\.js --profile acrylblends-my-app --patch cordis\.patch\.yml --no-open"/u,
   )
 })
 
