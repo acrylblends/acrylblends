@@ -1,12 +1,20 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { chromeCandidates, doorShimCommand, npmCommand } from './platform.mjs'
+import { batchCommand, chromeCandidates, doorShimCommand, npmCommand } from './platform.mjs'
 
 test('npm is spawned as npm.cmd on Windows and as npm elsewhere', () => {
   assert.equal(npmCommand('win32'), 'npm.cmd')
   assert.equal(npmCommand('darwin'), 'npm')
   assert.equal(npmCommand('linux'), 'npm')
+})
+
+test('a batch file is spawned through the shell on Windows, and as it is elsewhere', () => {
+  assert.deepEqual(batchCommand('npm.cmd', 'win32'), {
+    command: '"npm.cmd"',
+    options: { shell: true },
+  })
+  assert.deepEqual(batchCommand('npm', 'linux'), { command: 'npm', options: {} })
 })
 
 test('the door command is the .cmd wrapper the door writes on Windows', () => {

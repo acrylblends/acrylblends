@@ -28,7 +28,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
-import { doorShimCommand, npmCommand } from './lib/platform.mjs'
+import { batchCommand, doorShimCommand, npmCommand } from './lib/platform.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
@@ -240,10 +240,12 @@ try {
     log('the panel and the PTY driver are added, with node as the terminal program')
   }
 
-  const install = spawnSync(npmCommand(), ['install', '--no-audit', '--no-fund'], {
+  const npm = batchCommand(npmCommand())
+  const install = spawnSync(npm.command, ['install', '--no-audit', '--no-fund'], {
     cwd: app,
     encoding: 'utf8',
     env: { ...process.env, npm_config_loglevel: 'error' },
+    ...npm.options,
   })
   if (install.status !== 0)
     fail(`npm install failed:
@@ -282,12 +284,14 @@ ${composition.stdout}`)
     'composition: every row active, no DSH web row, PENDING on provider removal and active on restore, two reloads clean',
   )
 
+  // The launcher the app's `dev` script names, run with this Node. Through npm on Windows the child would sit under cmd.exe, and stopping the gate would
+  // leave it running; this is the same command the script asserts above.
   let output = ''
-  server = spawn(npmCommand(), ['run', 'dev'], {
-    cwd: app,
-    env: bootEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  server = spawn(
+    process.execPath,
+    ['--import', './plugins/acryl-node-server/src/register.ts', 'scripts/ide-host.mjs'],
+    { cwd: app, env: bootEnv, stdio: ['ignore', 'pipe', 'pipe'] },
+  )
   server.stdout.on('data', (chunk) => (output += chunk))
   server.stderr.on('data', (chunk) => (output += chunk))
   const url = await until(
@@ -347,9 +351,11 @@ ${composition.stdout}`)
   }
 
   const brief = await until(async () => {
-    const door = spawnSync(doorShimCommand(app), ['brief', '--json'], {
+    const shim = batchCommand(doorShimCommand(app))
+    const door = spawnSync(shim.command, ['brief', '--json'], {
       cwd: app,
       encoding: 'utf8',
+      ...shim.options,
     })
     return door.status === 0 ? door : undefined
   }, 30_000)

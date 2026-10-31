@@ -14,6 +14,15 @@ export const doorShimCommand = (app, platform = process.platform) =>
   join(app, '.acryl', 'bin', platform === 'win32' ? 'acryl.cmd' : 'acryl')
 
 /**
+ * How to spawn a batch file (npm.cmd, the door's .cmd): Windows cannot run it without cmd.exe, and the path is quoted for that shell. On every other
+ * platform the command is spawned as it is.
+ */
+export const batchCommand = (command, platform = process.platform) =>
+  platform === 'win32'
+    ? { command: `"${command}"`, options: { shell: true } }
+    : { command, options: {} }
+
+/**
  * Where a Chrome or Chromium may be, in the order to try: `CHROME_BIN` wins; Windows names Chrome's two Program Files locations and the per-user
  * install, macOS the app bundle, and every other platform (Linux) the distribution paths.
  */
