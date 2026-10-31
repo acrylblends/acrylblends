@@ -99,7 +99,9 @@ describe('acryl-kv-db through a real Loader', () => {
       expect(entryOf(ctx, kvId).fiber?.state).toBe(ACTIVE)
     }
     expect(await ctx.kv.get('count')).toBe(10)
-  })
+    // Ten open/close cycles of a real SQLite database take about 1 s on a Windows 10 machine (measured 2026-10-31) and crossed the 5 s default on a loaded
+    // windows-latest runner, together with this file's other work. The bound allows the load; a hang still fails it.
+  }, 20_000)
 
   it('unloads cleanly, and leaves the database file free to remove', async () => {
     const root = app()

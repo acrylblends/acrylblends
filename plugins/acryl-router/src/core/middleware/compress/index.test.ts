@@ -66,9 +66,18 @@ describe('Compress Middleware', () => {
   })
   // 60,000 bytes in 100 chunks: all the streaming path needs (several chunks through the compression stream), without 10,000 awaited writes. The old
   // 10,000 took 508 ms on a Windows 10 machine and over the 5 s test timeout on a loaded windows-latest runner (measured 2026-10-31; the whole file was
-  // 2.14 s and 45/45 there), so the cost, not a hang, was the failure.
+  // 2.14 s and 45/45 there), so the cost, not a hang, was the failure. The bytes are incompressible (a fixed pseudo-random pattern), so gzip's own output
+  // crosses its buffer and the response arrives in more than one compressed chunk; a repeated string would compress to a single small chunk.
   const CHUNKS = 100
-  const CHUNK = 'chunk '.repeat(100)
+  const CHUNK = (() => {
+    const bytes = new Uint8Array(600)
+    let seed = 7
+    for (let i = 0; i < bytes.length; i += 1) {
+      seed = (seed * 1103515245 + 12345) % 2147483648
+      bytes[i] = seed % 256
+    }
+    return bytes
+  })()
   app.get('/stream', (c) =>
     stream(c, async (stream) => {
       c.header('Content-Type', 'text/plain')
@@ -195,7 +204,16 @@ describe('Compress Middleware', () => {
   describe('Streaming Responses', () => {
     it('should compress streaming responses written in multiple chunks', async () => {
       const res = await testCompression('/stream', 'gzip', 'gzip')
-      const decompressed = await decompressResponse(res)
+      // Read the compressed body as it arrives: more than one chunk proves the compressor flushes while the response streams, not once at the end.
+      const chunks: Uint8Array[] = []
+      const reader = res.body!.getReader()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+      }
+      expect(chunks.length).toBeGreaterThan(1)
+      const decompressed = await decompressResponse(new Response(new Blob(chunks), res))
       expect(decompressed.length).toBe(60000)
     })
 
