@@ -704,15 +704,19 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       // (i) The Settings day-one path: Models loads with no provider-directory error, takes the model key, and the chat then needs no key card.
       // A profile without a key opens DSH's first-run "Add an API key" dialog over the frame; the guide's path is Settings > Models, so it is dismissed the
       // way a user can ("Configure later") before Settings is opened. (Found on the frame jobs: the only dialog there was this one, with no settings nav.)
-      const firstRunDismissed = await evaluate(`(() => {
-        const dialog = [...document.querySelectorAll('[role=dialog]')].find((candidate) => candidate.querySelector('input[aria-label="API key"]') !== null)
-        if (dialog === undefined) return false
-        const later = [...dialog.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Configure later')
-        if (later === undefined) return false
-        later.click()
-        return true
-      })()`)
-      if (firstRunDismissed === true) {
+      const firstRun = await until(async () => {
+        const state = await evaluate(`(() => {
+          const dialog = [...document.querySelectorAll('[role=dialog]')].find((candidate) => candidate.querySelector('input[aria-label="API key"]') !== null)
+          if (dialog === undefined) return 'none'
+          const later = [...dialog.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Configure later')
+          if (later === undefined) return 'no-later'
+          later.click()
+          return 'dismissed'
+        })()`)
+        return state === 'none' ? undefined : state
+      }, 15_000)
+      if (firstRun === 'no-later') fail('the first-run key dialog has no "Configure later" button')
+      if (firstRun === 'dismissed') {
         const closed = await until(
           async () =>
             (await evaluate(
@@ -739,7 +743,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       const settingsOpen = await until(
         async () =>
           await evaluate(`(() => {
-            if (document.querySelector('[role=dialog]') !== null) return true
+            if ([...document.querySelectorAll('[role=dialog]')].some((candidate) => candidate.querySelector('nav') !== null)) return true
             const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
               (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
             for (const button of buttons) button.click()
@@ -1241,11 +1245,24 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           const detail = await evaluate(`document.body.innerText.slice(0, 500)`)
           fail(`the chat has no composer after the settings reload: ${JSON.stringify(detail)}`)
         }
-        await evaluate(
-          `document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.focus()`,
-        )
-        await cdp.send('Input.insertText', { text: GATE_MESSAGE })
-        await sleep(250)
+        // The composer takes the text through the focused contenteditable; a re-render can drop the focus before the insert, so the text is verified and the
+        // insert repeated. The send control is then waited for, and a failure names the buttons that are there.
+        let typed = false
+        for (let attempt = 0; attempt < 3 && !typed; attempt += 1) {
+          await evaluate(
+            `document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.focus()`,
+          )
+          await cdp.send('Input.insertText', { text: GATE_MESSAGE })
+          await sleep(250)
+          typed = await until(
+            async () =>
+              (await evaluate(
+                `(document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.textContent ?? '').includes(${JSON.stringify(GATE_MESSAGE)})`,
+              )) === true,
+            5_000,
+          )
+        }
+        if (typed !== true) fail('the chat composer did not take the message text')
         const sendEnabled = await until(
           async () =>
             await evaluate(`(() => {
@@ -1255,7 +1272,11 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           15_000,
         )
         if (sendEnabled !== true) {
-          const detail = await evaluate(`document.body.innerText.slice(0, 500)`)
+          const detail = await evaluate(`JSON.stringify({
+            text: document.body.innerText.slice(0, 400),
+            buttons: [...document.querySelectorAll('button')].map((candidate) => candidate.getAttribute('aria-label') ?? candidate.textContent.trim()).filter(Boolean).slice(0, 40),
+            composer: (document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.textContent ?? '').slice(0, 120),
+          })`)
           fail(`the chat has no send control: ${JSON.stringify(detail)}`)
         }
         await evaluate(
