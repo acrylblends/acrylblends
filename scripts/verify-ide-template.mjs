@@ -13,10 +13,18 @@
 //
 // The template's page and the text it must show come from PAGES below; a template without an entry fails rather than skipping the tile check.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
@@ -25,10 +33,41 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
 const template = process.argv[2] ?? 'blank'
 const keep = process.argv.includes('--keep')
+/** Settings is another worker's surface while its registration lands; the rest of the gate still runs and the step says it was skipped. */
+const skipSettings = process.env.GATE_SKIP_SETTINGS === '1'
 const log = (message) => console.log(`verify-ide-template(${template}): ${message}`)
 const fail = (message) => {
   throw new Error(`verify-ide-template(${template}): ${message}`)
 }
+/** Every file under `folder` whose bytes contain `needle`, optionally skipping paths the filter refuses. */
+function filesContaining(folder, needle, include = () => true) {
+  const found = []
+  const walk = (dir) => {
+    let entries
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry)
+      let info
+      try {
+        info = statSync(path)
+      } catch {
+        continue
+      }
+      if (info.isDirectory()) {
+        if (!include(`${path}${sep}`)) continue
+        walk(path)
+      } else if (info.size < 1024 * 1024 && include(path) && readFileSync(path).includes(needle))
+        found.push(path)
+    }
+  }
+  walk(folder)
+  return found
+}
+
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 async function until(fn, ms, every = 300) {
   const end = Date.now() + ms
@@ -183,6 +222,8 @@ ${install.stdout}${install.stderr}`)
   const bootEnv = {
     ...process.env,
     ACRYLBLENDS_HOME: join(app, '.acrylblends'),
+    // DSH's own home is the app's home too; the launcher sets it in-process, and the environment covers the modules that read it at import.
+    DSH_HOME: join(app, '.acrylblends'),
     // Any free port: the gate may share the machine with a person's frame or another worker's run.
     ACRYLBLENDS_PORT: '0',
   }
@@ -295,6 +336,18 @@ ${composition.stdout}`)
   log(`the app's page answers at ${page.path}`)
 
   await checkTileInBrowser(url, origin, jar, page, output, mock)
+  // The owner's rule: the key lives only in DSH's own store, never in the page or the app folder.
+  const keyFiles = filesContaining(bootEnv.ACRYLBLENDS_HOME, GATE_KEY)
+  if (keyFiles.length === 0) fail('the host did not store the key in its own home')
+  const appFiles = filesContaining(
+    app,
+    GATE_KEY,
+    (file) => !file.includes(`${sep}.acrylblends${sep}`),
+  )
+  if (appFiles.length > 0) fail(`the key reached the app folder: ${appFiles.join(', ')}`)
+  log(
+    `the key is in the host's own store (${keyFiles.map((file) => relative(bootEnv.ACRYLBLENDS_HOME, file)).join(', ')}) and nowhere in the app folder`,
+  )
   log('OK')
 } finally {
   if (mock !== undefined) await mock.close()
@@ -642,32 +695,41 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         fail(
           `the model request did not carry the entered key; requests: ${JSON.stringify(mock.requests.map((request) => ({ url: request.url, key: request.headers['x-api-key'] ?? null })))}`,
         )
-      log('the chat sent a message with the key entered in the card, and the local model answered')
-
-      // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
-      // (c) Settings: General, Models, Plugins, Support, Shortcuts.
-      if ((await click('Settings')) !== true) fail('the frame has no Settings button')
-      const settings = await until(
-        async () =>
-          await evaluate(`(() => {
-            const text = document.body.innerText
-            const labels = [...document.querySelectorAll('button,[role=tab],[role=menuitem],a')]
-              .map(element => element.getAttribute('aria-label') ?? element.textContent.trim())
-              .filter(Boolean)
-            return { text: text.slice(-4000), labels: labels.slice(0, 120) }
-          })()`),
-        10_000,
+      const inPage = await evaluate(
+        `document.documentElement.outerHTML.includes(${JSON.stringify(GATE_KEY)}) || document.body.innerText.includes(${JSON.stringify(GATE_KEY)})`,
       )
-      if (settings === undefined) fail('Settings did not open')
-      const settingsText = `${settings.text}\n${settings.labels.join('\n')}`
-      const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
-      const missing = sections.filter((section) => !settingsText.includes(section))
-      if (missing.length > 0)
-        fail(
-          `Settings is missing ${missing.join(', ')}: ${JSON.stringify(settings).slice(0, 3000)}`,
+      if (inPage === true) fail('the API key is still in the page after it was stored')
+      log(
+        'the chat sent a message with the key entered in the card, and the local model answered; the page does not keep the key',
+      )
+
+      if (skipSettings) log('Settings skipped (GATE_SKIP_SETTINGS=1)')
+      else {
+        // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
+        // (c) Settings: General, Models, Plugins, Support, Shortcuts.
+        if ((await click('Settings')) !== true) fail('the frame has no Settings button')
+        const settings = await until(
+          async () =>
+            await evaluate(`(() => {
+              const text = document.body.innerText
+              const labels = [...document.querySelectorAll('button,[role=tab],[role=menuitem],a')]
+                .map(element => element.getAttribute('aria-label') ?? element.textContent.trim())
+                .filter(Boolean)
+              return { text: text.slice(-4000), labels: labels.slice(0, 120) }
+            })()`),
+          10_000,
         )
-      log(`Settings has ${sections.join(', ')}`)
-      await pressEscape()
+        if (settings === undefined) fail('Settings did not open')
+        const settingsText = `${settings.text}\n${settings.labels.join('\n')}`
+        const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
+        const missing = sections.filter((section) => !settingsText.includes(section))
+        if (missing.length > 0)
+          fail(
+            `Settings is missing ${missing.join(', ')}: ${JSON.stringify(settings).slice(0, 3000)}`,
+          )
+        log(`Settings has ${sections.join(', ')}`)
+        await pressEscape()
+      }
     } finally {
       cdp.close()
     }
