@@ -196,7 +196,12 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
     'save',
     'acryl-door',
   ])
-  const carriesAppPlugins = existsSync(join(directory, 'src', 'app.ts'))
+  // Only a template whose app.ts exports the composition gets the row; the others keep their own server composition untouched.
+  const carriesAppPlugins =
+    existsSync(join(directory, 'src', 'app.ts')) &&
+    readFileSync(join(directory, 'src', 'app.ts'), 'utf8').includes(
+      'export async function composeInto',
+    )
   let appIsolate: Record<string, true> | undefined
   if (carriesAppPlugins) {
     const own: string[] = []
