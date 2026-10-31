@@ -538,3 +538,14 @@ unchanged.
 Remaining for 114: rewrite the guide's blocks to the frame flow (day-one frame; Settings > Models; chat; a coding agent in a PTY tab; edit the app and see it at
 /app; upgrade an older app), rehearse end to end exactly as an attendee would from the packed CLI in an isolated HOME, fix every failure at the cause, commit to
 `114-workshop-guide`, and push nothing to the registry repository without the coordinator's approval.
+
+## 23. CI after 115: the restarted host's token, and the notice check's Chrome (2026-10-31)
+
+The first CI run after 115 landed (`797c8215`, run 41247560397) failed only in the two frame jobs. macOS, `blank`: after the settings restart the tile check
+failed. The restart mints a new connection token - the log shows the same port with two different tokens - and the gate does refresh `url`, `origin` and the
+cookie jar through the new token (the frame rendered after the restart), so the failure was the tile itself: its one-shot "Go" press landed on a fresh page
+whose tile was still wiring, and the app's page never loaded in the iframe. The tile check now presses Go up to three times (the address stays typed) and, on
+failure, names the iframe's `src`, title and text instead of only the server output. Windows: the notice check's own headless Chrome did not open within its
+20-second loop, with Chrome's output discarded; the launch now waits up to 60 seconds, ends early when Chrome exits, and names the exit code and Chrome's last
+lines. Product note: a host restart issues a new token, so a frame left open with the old token is expected to be re-opened through the browser with the new
+printed URL; the gate follows the new token rather than requiring an old tab to survive the restart. The frame jobs on `118-ci-after-115` are the evidence.

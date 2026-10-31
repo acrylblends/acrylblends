@@ -361,13 +361,25 @@ ${composition.stdout}`)
     const child = spawn(chrome, [...chromeFlags(profile, devPort), '--hide-scrollbars'], {
       stdio: 'ignore',
     })
+    let chromeOutput = ''
+    const collect = (chunk) => {
+      chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
+    }
+    child.stdout?.on('data', collect)
+    child.stderr?.on('data', collect)
     let cdp
     try {
-      for (let i = 0; i < 200 && cdp === undefined; i += 1) {
+      let ready = false
+      for (let i = 0; i < 600 && !ready; i += 1) {
+        if (child.exitCode !== null) break
         cdp = await devtools(devPort).catch(() => undefined)
-        if (cdp === undefined) await sleep(100)
+        if (cdp !== undefined) ready = true
+        else await sleep(100)
       }
-      if (cdp === undefined) fail('headless Chrome did not open for the notice check')
+      if (!ready)
+        fail(
+          `headless Chrome did not open for the notice check (exit ${String(child.exitCode)}):\n${chromeOutput}`,
+        )
       await cdp.send('Page.enable')
       await cdp.send('Runtime.enable')
       for (const cookie of cookiesOf(jar))
@@ -927,21 +939,36 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           `the browser tile has no address input: ${JSON.stringify(diagnostics)} (screenshot /tmp/verify-ide-template-tile.png)`,
         )
       }
-      if ((await click('Go')) !== true) fail('the browser tile has no Go button')
-      const shown = await until(
-        async () =>
-          await evaluate(`(() => {
-            const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-            if (frame === null) return undefined
-            const text = frame.contentDocument?.body?.innerText ?? ''
-            return text.includes(${JSON.stringify(page.text)}) ? text.slice(0, 200) : undefined
-          })()`),
-        30_000,
-      )
-      if (shown === undefined)
-        fail(
-          `the app's page did not load in the frame's browser tile; server said:\n${output.slice(-2500)}`,
+      // The first press can land while the fresh page (a host restart makes a new one) is still wiring its tile; the address stays typed, so a second
+      // press navigates the same place. The failure names the iframe's state, not only the server output.
+      let shown
+      for (let attempt = 0; attempt < 3 && shown === undefined; attempt += 1) {
+        if ((await click('Go')) !== true) fail('the browser tile has no Go button')
+        shown = await until(
+          async () =>
+            await evaluate(`(() => {
+              const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+              if (frame === null) return undefined
+              const text = frame.contentDocument?.body?.innerText ?? ''
+              return text.includes(${JSON.stringify(page.text)}) ? text.slice(0, 200) : undefined
+            })()`),
+          attempt === 0 ? 30_000 : 10_000,
         )
+      }
+      if (shown === undefined) {
+        const diagnostics = await evaluate(`(() => {
+          const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+          return {
+            src: frame?.getAttribute('src') ?? null,
+            title: frame?.contentDocument?.title ?? null,
+            text: frame?.contentDocument?.body?.innerText?.slice(0, 300) ?? null,
+            browserPane: document.querySelectorAll('.dshWorkspaceBrowser').length,
+          }
+        })()`)
+        fail(
+          `the app's page did not load in the frame's browser tile: ${JSON.stringify(diagnostics)}; server said:\n${output.slice(-1500)}`,
+        )
+      }
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
 
       // The agent template's own plugins run beside the host (the composition check above proves every row active), and the panel's routes belong under
