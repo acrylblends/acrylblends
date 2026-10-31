@@ -343,5 +343,20 @@ Measured in the page gate: the panel script loads at `/app/api/agent-panel/panel
 same prefix, the session answers and the run's events arrive over the panel's socket, all inside the app's tile. The panel unit suite gains the mounted case (routes under the
 mount, nothing at the root, the mounted import and the `start('/app/api/agent-panel')` call, the mount's validation).
 
-The same shape applies to any app plugin that mounts its own routes rather than joining `makeApp`: `driver-pty` still mounts `/api/driver-pty` on the router, and an app that
-adds it to a framed composition needs the same `mount` value; that is the next user of this seam, not a new mechanism.
+The same shape applies to any app plugin that mounts its own routes rather than joining `makeApp`. The PTY driver is the second: `driver-pty` takes the same `mount` config, its routes and
+client modules live at `<mount>/api/driver-pty`, and `composeInto` passes `FRAME_MOUNT_PREFIX` to its row too (the row exists when `add driver-pty` mounted it; the override is unused
+otherwise). A terminal driver now carries its view with it (`view: { module, prefix }` in `acrylblends/drivers`, read in the panel's session), so the panel loads the terminal module and
+calls its endpoints at the mounted path instead of knowing `/api/driver-pty` itself. The shared mount rule is one function, `mountedPrefix` in `plugins/agent-panel/mount.ts`, used by the
+panel and the PTY driver.
+
+The page gate adds `driver-pty` to the agent app (with `programs: { node: [] }`, so it does not depend on which coding agents a machine has) and asserts the terminal at the mounted
+path: the session names `pty:node` with its view under `/app/api/driver-pty`, the view module answers there, a session starts (200 with an id) and stops (200), and a cross-site or
+untokened start answers 403. The PTY suite gains the mounted case on the same rule the panel's gained.
+
+Survey of the other app-owned rows that claim a root `/api` path under the host (2026-10-31): `acryl-state` mounts `/api/state` on the router, and `acryl-inspect` mounts `/api/inspect`;
+both also claim that prefix through `routerHttp` when it exists, and the host's raw routing picks the longest prefix, so `/api/state` and `/api/inspect` beat DSH's `/api` and are served.
+They work, but they live outside the app's mount (their browser modules are addressed root-absolute, `/api/state/client.js`); moving them under the mount is a later change, not a
+breakage. The door's `/api/acryl-door` is host-owned in the frame (the host layer mounts the row, `composeInto` leaves the app's out) and claims a longer prefix than `/api` by design,
+because the CLI addresses it by app URL plus that path. The frame packages (`acryl-workspace`, `acryl-plugin-admin`, `acryl-support`, `acryl-sign-in`) are host rows and claim
+`/api/acryl-*` through `routerHttp`, so they are never in DSH's `/api`. The templates other than `agent` mount their routes at `/` on their own server and have no framed composition
+yet; when they get one they take the same `mount` config the agent template passes.

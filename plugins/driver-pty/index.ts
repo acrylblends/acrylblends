@@ -5,6 +5,8 @@
  * - The drivers are `terminal` entries of the panel's `drivers` service (`pty:claude`, ...). A panel without this plugin lists none; this plugin without a panel is pending.
  * - Transport is server-sent events down and POST up (no WebSocket): `POST /api/driver-pty/sessions`, `GET /api/driver-pty/<id>/output` (events with ids; a reconnect replays
  *   from `Last-Event-ID`, from a ring buffer of at least 64 KB), `POST .../input`, `.../resize`, `.../stop`. Same origin check and token as the panel, development only.
+ * - The routes live under the app's mount, like the panel's: `/api/driver-pty` on the app's own server, `<mount>/api/driver-pty` when a host serves the app at a prefix
+ *   (the frame's `/app`). The row's `mount` config names it, and each driver carries its view (`view: { module, prefix }`) so the panel calls the mounted paths.
  * - Every process is acquired inside one `ctx.effect`; its disposer ends the process (group), closes the streams and writes the audit line. Unloading or reloading the
  *   plugin with a session open leaves no process behind.
  */
@@ -16,6 +18,7 @@ import { streamSSE } from '../acryl-router/src/helpers/index.ts'
 import { Acryl } from '../acryl-router/src/index.ts'
 import type { TerminalDriver, TerminalSession } from '../agent-panel/drivers.ts'
 import { onPath } from '../agent-panel/headless.ts'
+import { mountedPrefix } from '../agent-panel/mount.ts'
 import type {} from '../agent-panel/registry.ts'
 import { loadNodePty, type PtySpawn } from './spawn.ts'
 import { terminalDriver } from './terminal.ts'
@@ -26,7 +29,7 @@ export const inject = ['drivers', 'router', 'appInstance']
 export type { PtyProcess, PtySpawn } from './spawn.ts'
 export { terminalDriver } from './terminal.ts'
 
-const PREFIX = '/api/driver-pty'
+const DRIVER_PATH = '/api/driver-pty'
 const CLIENT_DIR = join(import.meta.dirname, 'client')
 /** The least output a reconnecting page can be given again. */
 const SCROLLBACK = 64 * 1024
@@ -36,6 +39,11 @@ export interface DriverPtyConfig {
   programs?: Record<string, string[]>
   /** The PTY implementation; default node-pty. Tests give a fake. */
   spawn?: PtySpawn
+  /**
+   * The URL prefix the app is mounted at: empty on the app's own server, `/app` when the ACRYL frame hosts it (the same `mount` the panel takes). The
+   * terminal's routes and its browser view live under it, so the terminal belongs to the app and is served wherever the app is.
+   */
+  mount?: string
 }
 
 interface Chunk {
@@ -61,6 +69,7 @@ interface Live {
 
 export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise<void> {
   if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off') return
+  const PREFIX = mountedPrefix(config.mount, DRIVER_PATH, 'driver-pty')
   const root = ctx.appInstance.root
   let spawn = config.spawn
   if (!spawn) {
@@ -80,7 +89,14 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
       (['claude', 'codex', 'pi'] as const).filter(onPath).map((p) => [p, [] as string[]]),
     )
   for (const [program, args] of Object.entries(programs))
-    ctx.effect(() => ctx.drivers.register(terminalDriver(`pty:${program}`, program, args, spawn)))
+    ctx.effect(() =>
+      ctx.drivers.register(
+        terminalDriver(`pty:${program}`, program, args, spawn, {
+          module: `${PREFIX}/client/terminal.ts`,
+          prefix: PREFIX,
+        }),
+      ),
+    )
 
   const auditFile = join(root, '.acryl', 'audit', 'driver-pty.jsonl')
   const audit = (entry: Record<string, unknown>): void => {
@@ -162,7 +178,7 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
   ctx.effect(() => off)
 
   const app = new Acryl()
-    .route(`${PREFIX}/client`, clientModules({ root: CLIENT_DIR }))
+    .route(`${PREFIX}/client`, clientModules({ root: CLIENT_DIR, mount: `${PREFIX}/client` }))
     .post(`${PREFIX}/sessions`, async (c) => {
       if (!ctx.drivers.authorized(c.req.raw.headers)) return refuse(c)
       const body = (await c.req.json().catch(() => ({}))) as {

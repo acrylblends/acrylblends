@@ -138,6 +138,9 @@ works in its interactive mode and acts through the door as the headless drivers 
 
 - **Transport.** Server-sent events down, POST up (no WebSocket): `POST /api/driver-pty/sessions`, `GET /api/driver-pty/<id>/output` (events with ids; a reconnect replays from `Last-Event-ID` out of a
   64 KB ring buffer), `POST .../input` (keystrokes batched per animation frame), `.../resize`, `.../stop`. The same own-page check and token as the panel; one terminal at a time.
+- **Where the routes are.** Like the panel, the terminal lives under the app's mount: the row's `mount` config names it, and the `agent` template's composition passes `FRAME_MOUNT_PREFIX`, so under the
+  frame the routes are at `/app/api/driver-pty/...` rather than at the host's own `/api`. Each terminal driver carries its view with it (`view: { module, prefix }` in `acrylblends/drivers`), so the panel
+  loads the terminal module and calls its endpoints at the mounted path instead of assuming the root.
 - **Reload.** When a plugin is installed or removed while the terminal is open the page reloads, and the panel shows the same terminal again with its output.
 - **Disposal.** Every process is started inside one `ctx.effect`; its disposer ends the process group (the console on Windows), closes the streams and writes the audit line (`.acryl/audit/driver-pty.jsonl`,
   never the keystrokes). Unloading the plugin leaves no process behind. Development only, like the panel.
