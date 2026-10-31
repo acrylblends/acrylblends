@@ -1,9 +1,10 @@
 // The panel in the page: a button at the corner opens a side panel (a shadow root, so the app's CSS cannot touch it and it cannot touch the app's). It asks the app's
-// agent through POST /api/agent-panel/ask, shows the answer as it arrives, and reloads the page after a run that installed or removed a plugin.
+// agent through POST <prefix>/ask, shows the answer as it arrives, and reloads the page after a run that installed or removed a plugin. `panel.js` calls
+// `start` with the prefix the app is served under (the root of its own server, or `/app` when the ACRYL frame hosts it).
 import { describeTool } from './describe.ts'
 import { renderMarkdown } from './markdown.ts'
 
-const PREFIX = '/api/agent-panel'
+let PREFIX = '/api/agent-panel'
 
 interface Session {
   token: string
@@ -162,7 +163,9 @@ textarea { width: 100%; min-height: 64px; resize: vertical; padding: 8px; border
 .row button:disabled { opacity: 0.45; cursor: not-allowed }
 `
 
-async function start(): Promise<void> {
+/** Start the panel against the app served at `prefix` (`/api/agent-panel` at the root, `/app/api/agent-panel` in the frame). */
+export async function start(prefix: string = '/api/agent-panel'): Promise<void> {
+  PREFIX = prefix
   const reply = await fetch(`${PREFIX}/session`)
   if (!reply.ok) return
   let session = (await reply.json()) as Session
@@ -482,5 +485,3 @@ async function start(): Promise<void> {
     // No storage: nothing to show again.
   }
 }
-
-void start()

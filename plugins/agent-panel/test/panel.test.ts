@@ -19,8 +19,11 @@ afterEach(async () => {
 
 const OWN = { 'sec-fetch-site': 'same-origin' }
 
-/** An app with the agent family, the panel mounted BEFORE a page of the app's own. */
-async function boot(env: Record<string, string | undefined> = {}) {
+/** An app with the agent family, the panel mounted BEFORE a page of the app's own. `panel` and `pagePrefix` mirror the frame host: the app mounted at a prefix. */
+async function boot(
+  env: Record<string, string | undefined> = {},
+  options: { panel?: panel.PanelConfig; pagePrefix?: string } = {},
+) {
   const saved = { NODE_ENV: process.env.NODE_ENV, ACRYL_DOOR: process.env.ACRYL_DOOR }
   process.env.NODE_ENV = env.NODE_ENV ?? 'test'
   if (env.ACRYL_DOOR === undefined) delete process.env.ACRYL_DOOR
@@ -28,6 +31,14 @@ async function boot(env: Record<string, string | undefined> = {}) {
   const root = mkdtempSync(join(tmpdir(), 'panel-root-'))
   const app = new Context()
   const fibers: Array<ReturnType<Context['plugin']>> = []
+  cleanup.push(async () => {
+    for (const fiber of [...fibers].reverse()) await fiber.dispose()
+    rmSync(root, { recursive: true, force: true })
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  })
   // One after another, as `blend.yaml` does (compose): the panel's middleware is mounted before the page it wraps.
   const mount = async (fiber: ReturnType<Context['plugin']>) => {
     fibers.push(fiber)
@@ -43,14 +54,14 @@ async function boot(env: Record<string, string | undefined> = {}) {
     () => app.plugin(memory),
     () => app.plugin(agent),
     () => app.plugin(builder, {}),
-    () => app.plugin(panel, { drivers: [] }),
+    () => app.plugin(panel, { drivers: [], ...options.panel }),
     () =>
       app.plugin({
         name: 'page',
         inject: ['router'],
         apply(ctx: Context) {
           ctx.router.route(
-            '/',
+            options.pagePrefix ?? '/',
             new router.Acryl()
               .get('/', (c) => c.html('<!doctype html><html><body><h1>Home</h1></body></html>'))
               .get('/data', (c) => c.json({ ok: true })),
@@ -59,14 +70,6 @@ async function boot(env: Record<string, string | undefined> = {}) {
       }),
   ])
     await mount(start())
-  cleanup.push(async () => {
-    for (const fiber of [...fibers].reverse()) await fiber.dispose()
-    rmSync(root, { recursive: true, force: true })
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key]
-      else process.env[key] = value
-    }
-  })
   return { app, root }
 }
 
@@ -92,6 +95,31 @@ test('the script tag is added to HTML pages and to nothing else', async () => {
     /<script type="module" src="\/api\/agent-panel\/panel\.js"><\/script><\/body>/u,
   )
   assert.equal(await (await app.router.request('/data')).text(), '{"ok":true}')
+})
+
+test("a hosted app keeps the panel under its mount: the root's /api path is not the panel's, and the page carries the mounted tag", async () => {
+  const { app } = await boot({}, { panel: { mount: '/app' }, pagePrefix: '/app' })
+  const page = await (await app.router.request('/app')).text()
+  assert.match(
+    page,
+    /<script type="module" src="\/app\/api\/agent-panel\/panel\.js"><\/script><\/body>/u,
+  )
+  assert.equal((await app.router.request('/api/agent-panel/session', { headers: OWN })).status, 404)
+  const session = await app.router.request('/app/api/agent-panel/session', { headers: OWN })
+  assert.equal(session.status, 200)
+  const loader = await (await app.router.request('/app/api/agent-panel/panel.js')).text()
+  assert.match(loader, /start\("\/app\/api\/agent-panel"\)/u)
+  const main = await app.router.request('/app/api/agent-panel/client/main.ts')
+  assert.equal(main.status, 200)
+  assert.match(main.headers.get('content-type') ?? '', /javascript/u)
+})
+
+test('the mount must be empty or an absolute path without a trailing slash', async () => {
+  for (const mount of ['app', '/app/', 'https://example.com'])
+    await assert.rejects(
+      async () => boot({}, { panel: { mount } }),
+      /absolute path such as "\/app"/u,
+    )
 })
 
 test("only the app's own page gets a session, and the token is needed to ask", async () => {

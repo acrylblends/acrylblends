@@ -7,6 +7,8 @@
  * - `GET /api/agent-panel/session` gives the page the drivers it may use and a token; `POST /api/agent-panel/ask` runs one message and answers server-sent events:
  *   `text`, `tool`, `change`, `done`, `error`.
  * - Only the app's own page may ask (a same-origin request carrying the token), one run at a time, and every ask is written to `.acryl/audit/agent-panel.jsonl`.
+ * - The routes live under the app's mount: the root of the app's own server, or the frame's prefix (`/app`) when the frame hosts it, where the host's own
+ *   `/api` routes would otherwise answer first. The row's `mount` config names it.
  * - Development only: the plugin does nothing with `NODE_ENV=production` or `ACRYL_DOOR=off`.
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto'
@@ -41,7 +43,8 @@ export type {
 export const name = 'agent-panel'
 export const inject = ['router', 'agent', 'extensions', 'appInstance']
 
-const PREFIX = '/api/agent-panel'
+/** The panel's own routes, fixed relative to the app's mount. */
+const PANEL_PATH = '/api/agent-panel'
 
 /** The slice of the door the panel uses; the door is optional (it is a development plugin, and a different row). */
 interface DoorPort {
@@ -52,6 +55,21 @@ const CLIENT_DIR = join(import.meta.dirname, 'client')
 export interface PanelConfig {
   /** Headless coding agents to offer besides the app's own agent; default: the ones found on the machine. */
   drivers?: readonly HeadlessName[]
+  /**
+   * The URL prefix the app is mounted at: empty on the app's own server, `/app` when the ACRYL frame hosts it (the same prefix `makeApp` and
+   * `routerHttp.mount` take). The panel's routes, script tag and client live under it, so they belong to the app and are served wherever it is.
+   */
+  mount?: string
+}
+
+/** The panel's routes under a checked mount: empty, or an absolute path such as `/app` with no trailing slash (the `routerHttp.mount` rule). */
+function panelPrefix(mount: string | undefined): string {
+  if (mount === undefined || mount === '') return PANEL_PATH
+  if (!/^\/[A-Za-z0-9._~\-/]*[A-Za-z0-9._~-]$/u.test(mount))
+    throw new TypeError(
+      `agent-panel: the app's mount "${mount}" must be empty or an absolute path such as "/app"`,
+    )
+  return `${mount}${PANEL_PATH}`
 }
 
 /** Whether a request comes from the app's own page: a browser says so itself (`Sec-Fetch-Site: same-origin`), or the Origin is the Host. */
@@ -65,6 +83,7 @@ export function fromOwnPage(headers: Headers): boolean {
 
 export function apply(ctx: Context, config: PanelConfig = {}): void {
   if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off') return
+  const PREFIX = panelPrefix(config.mount)
   const root = ctx.appInstance.root
   const token = randomBytes(24).toString('hex')
   const auditFile = join(root, '.acryl', 'audit', 'agent-panel.jsonl')
@@ -111,12 +130,16 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
       await addScript(c, next)
     })
     .get(`${PREFIX}/panel.js`, (c) =>
-      c.body(`import '${PREFIX}/client/main.ts'\n`, 200, {
-        'content-type': 'text/javascript; charset=utf-8',
-        'cache-control': 'no-cache',
-      }),
+      c.body(
+        `import { start } from '${PREFIX}/client/main.ts'\nstart(${JSON.stringify(PREFIX)})\n`,
+        200,
+        {
+          'content-type': 'text/javascript; charset=utf-8',
+          'cache-control': 'no-cache',
+        },
+      ),
     )
-    .route(`${PREFIX}/client`, clientModules({ root: CLIENT_DIR }))
+    .route(`${PREFIX}/client`, clientModules({ root: CLIENT_DIR, mount: `${PREFIX}/client` }))
     .get(`${PREFIX}/session`, (c) => {
       if (!fromOwnPage(c.req.raw.headers))
         return c.json({ error: "only the app's own page may use the panel" }, 403)

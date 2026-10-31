@@ -21,7 +21,7 @@ import { type OpenAIConfig, openai } from '../plugins/openai/index.ts'
 import { sandboxPlugin } from '../plugins/sandbox/index.ts'
 import { save } from '../plugins/save/index.ts'
 import { tasks } from '../plugins/tasks/index.ts'
-import { routes } from './routes.ts'
+import { FRAME_MOUNT_PREFIX, routes } from './routes.ts'
 
 /** The plugins this app's code provides. `blend.yaml` chooses, orders and configures them. */
 export const registry = {
@@ -164,6 +164,9 @@ export async function composeInto(
         ],
       },
       builder: { dir: extensionsDir },
+      // The plugins that serve routes of their own mount them under the app's prefix, as makeApp does. On the app's own server that prefix is the root (the
+      // row's default); the frame host serves the app at FRAME_MOUNT_PREFIX, and its own `/api` routes would answer for a panel left at the root.
+      ...(options.host === true ? { 'agent-panel': { mount: FRAME_MOUNT_PREFIX } } : {}),
       // The frame host runs the server itself and its app instance carries no port; only the app's own server configures one.
       ...(options.host === true
         ? {}

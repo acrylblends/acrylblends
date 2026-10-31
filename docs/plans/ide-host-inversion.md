@@ -321,3 +321,27 @@ Measured in the re-provide test at dispatch: the node server held three `upgrade
 Fix: the raw upgrade listener is attached once when the node server is made and consults the claim registry for the server's lifetime; claims coming and going never add or remove a listener. `upgradeListenerCount` is exposed for the test, which asserts it is 1 and stays 1 across a claim added, removed and added again. The WeakSet remains only as a guard; the re-provide test passes with the guard disabled, which proves the single ownership is the fix. Refusals keep one writer: an unclaimed WebSocket upgrade gets 503 and another protocol 400 from the raw listener (flagged so a hub setup leaves it alone), and a hub's own rejection no longer depends on the server's listener count.
 
 `66865602` carries the fix and the door's provider-removed-and-restored test is unskipped and green (101 exactly once). Suites: node-server 554, router-http 20, web-server 7, door 169 passed / 1 skipped; lint green; full `pnpm run check` EXIT 0 on `66865602`. Sections 14-16 are kept as the record of the narrowing.
+
+## 18. The panel under the app's mount (2026-10-31)
+
+Section 13d left one blocker: the panel script was refused in the page. The cause was measured in the driver, not in the panel: DSH's `connection` row registers a `prefix /api`
+route on the host's webServer (`deepseek-harness/packages/client/connection/src/index.ts`, `API_PATH = '/api'`), and that route answers every request under `/api` first. Its
+admission refuses a request without DSH's browser session with exactly the 401 `unauthorized` seen in the page. The panel had mounted `/api/agent-panel` on the host's router at
+the ROOT, so the driver's prefix route answered before the router ever saw the panel, and the panel's routes were not under the app's mount (`/app`) at all.
+
+Fix, at the cause: the panel row takes the app's mount as its config (`mount`, the same rule and the same validation family as `clientModules`'s option). Its routes, the
+script tag it adds to pages, its client-module mount and its WebSocket path are all `${mount}/api/agent-panel`, and the served `panel.js` calls `start(prefix)` so the client
+uses the mounted path instead of a hardcoded root one. The agent template's `composeInto` passes `FRAME_MOUNT_PREFIX` (`/app`) in host mode, as a config override keyed by
+the row id `agent-panel`, the same mechanism that carries the `server`, `tasks`, `extensions`, `builder` and `model` values. On the app's own server the row keeps its
+default (the root), so standalone behavior and the standalone panel gate are unchanged.
+
+The admission is the same one, not a loosened one: `Sec-Fetch-Site: same-origin` (or `Origin` equal to `Host`) for the session, and the token for ask, stop and run, now at
+`/app/api/agent-panel/...`. The page gate asserts both directions: the panel appears in the app's iframe, offers its `agent` driver, and "add 2 3" produces a run that starts
+and stops with "The answer is 5." in the panel's own log; a cross-site session and an ask without the token answer 403 at the mounted path.
+
+Measured in the page gate: the panel script loads at `/app/api/agent-panel/panel.js` (200 through the `/app` routerHttp mount), the client modules compile and load under the
+same prefix, the session answers and the run's events arrive over the panel's socket, all inside the app's tile. The panel unit suite gains the mounted case (routes under the
+mount, nothing at the root, the mounted import and the `start('/app/api/agent-panel')` call, the mount's validation).
+
+The same shape applies to any app plugin that mounts its own routes rather than joining `makeApp`: `driver-pty` still mounts `/api/driver-pty` on the router, and an app that
+adds it to a framed composition needs the same `mount` value; that is the next user of this seam, not a new mechanism.
