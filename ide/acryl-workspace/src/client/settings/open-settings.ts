@@ -38,6 +38,14 @@ export function findSettingsTrigger(doc: Document): HTMLButtonElement | null {
   return null
 }
 
+/** How the frame's layout opens the settings panel when the page has no DSH sidebar trigger; set by the workspace client while it lives. */
+let openSettingsPanel: (() => void) | undefined
+
+/** Register the panel opener (the layout service's keyed `settings` panel); undefined clears it when the client unloads. */
+export function setSettingsPanelOpener(open: (() => void) | undefined): void {
+  openSettingsPanel = open
+}
+
 /** The accessible names DSH gives its Settings trigger. */
 const SETTINGS_TRIGGER_LABELS: readonly string[] = ['Settings', '设置']
 
@@ -58,8 +66,12 @@ export function openSettingsSection(
 ): boolean {
   const labels: readonly string[] = [en[`${section}Nav`], zh[`${section}Nav`]]
   const trigger = findSettingsTrigger(doc)
-  if (trigger === null) return false
-  trigger.click()
+  // A frame of our own renders no DSH sidebar, so there is no trigger to press; the layout service's keyed panel is the same panel the
+  // trigger opens. The workspace client registers the opener once per activation.
+  if (trigger === null) {
+    if (openSettingsPanel === undefined) return false
+    openSettingsPanel()
+  } else trigger.click()
   const deadline = Date.now() + SECTION_TIMEOUT_MS
   const selectSection = (): void => {
     const dialog = doc.querySelector('[role="dialog"] nav')

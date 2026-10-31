@@ -364,20 +364,22 @@ async function checkTileInBrowser(url, origin, jar, page, output) {
 
       // (b) The right panel with the workspace's Files/Changes/Review views (DSH's right sidebar, which the workspace fills).
       await click('Show right panel')
+      // The panel opens empty and fills after its tab types register: wait for the views themselves, not the first non-null snapshot.
       const right = await until(
         async () =>
           await evaluate(`(() => {
             const bar = document.querySelector('[data-acryl-slot=rightbar]')
             if (bar === null) return undefined
             const text = bar.innerText
+            if (!text.includes('Changes')) return undefined
             const labels = [...bar.querySelectorAll('button,[role=tab]')]
               .map(element => element.getAttribute('aria-label') ?? element.getAttribute('title') ?? element.textContent.trim())
               .filter(Boolean)
             return { text: text.slice(0, 600), labels: labels.slice(0, 60) }
           })()`),
-        10_000,
+        15_000,
       )
-      if (right === undefined) fail('the right panel did not open')
+      if (right === undefined) fail('the right panel did not open with its views')
       const rightText = `${right.text}\n${right.labels.join('\n')}`
       for (const label of ['Changes', 'Review'])
         if (!rightText.includes(label))
