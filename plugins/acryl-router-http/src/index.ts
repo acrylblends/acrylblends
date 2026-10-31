@@ -43,6 +43,8 @@ export class RouterHttp extends Service implements RouterHttpService {
   private hub: UpgradeHub | undefined
   /** One upgrade helper per calling context: a fresh wrapper per call made every service event look like an owner change. */
   private readonly upgradeHelpers = new WeakMap<object, UpgradeWebSocket>()
+  /** A stable identity for this service instance's hub: a caller that must recognize the same owner across calls keys on this, not on a helper. */
+  private readonly hubIdentity: object = {}
   /** The adapter's own context: the hub lives as long as the adapter, whichever plugin asked for it first (`this.ctx` is the caller's). */
   private readonly home: Context
   private readonly upgradesIn = new UpgradeEmitter()
@@ -101,6 +103,11 @@ export class RouterHttp extends Service implements RouterHttpService {
    * `upgradeWebSocket` for the calling plugin: the sockets its routes accept are closed with 1001 when it unloads. Needs the `ws` package.
    * The route must be on a path the plugin mounted with `upgrade: [path]`.
    */
+  /** Stable for this service's lifetime; a re-provided adapter has a new one, which is how a caller sees a new owner. */
+  hubToken(): object {
+    return this.hubIdentity
+  }
+
   upgrades(): UpgradeWebSocket {
     const owner = this.ctx
     const cached = this.upgradeHelpers.get(owner)

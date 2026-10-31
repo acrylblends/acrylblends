@@ -56,12 +56,14 @@ function handshake(origin: string): Promise<string> {
 
 /** The door moves the route on a service event; a client arriving in the same tick retries, as a browser reconnecting would. */
 async function opens(origin: string): Promise<string> {
+  const answers: string[] = []
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const answer = await handshake(origin)
     if (answer === 'opened') return answer
+    answers.push(answer)
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
-  return 'never opened'
+  return `never opened (${answers.slice(-2).join(', ')})`
 }
 
 describe('the page socket owner', () => {
@@ -101,10 +103,10 @@ describe('the page socket owner', () => {
     expect(await opens(origin.value)).toBe('opened')
   })
 
-  // Open: after a provider is removed and re-provided, the steady state still does not answer 101 (the transition windows themselves are now clean:
-  // an upgrade with no listener is refused 503 and closed by the transport, and a second answer is suppressed at the socket). The three scenarios
-  // above pass; the choice is serialized, the prefix claim is released by identity, and routerHttp's upgrade helper is memoized per caller so a
-  // service event no longer looks like an owner change. The next attempt must key the owner on the hub, not the service proxy.
+  // Open: after a provider is removed and re-provided the steady state answers the upgrade with a plain 200 (the raw claim that survives and the
+  // route mounted for the new hub answer through different hub generations). The transition windows themselves are clean: an upgrade with no
+  // listener is refused 503/400 before any HTTP route and the reject writer checks the socket, so it is never answered twice. The three scenarios
+  // above pass; the owner and the claim are keyed on routerHttp's stable hub token, the choice is serialized, and the helper is memoized per caller.
   it.skip('moves to the node server hub when routerHttp goes away and back when it returns', async () => {
     const ctx = await start()
     const fiber = ctx.plugin(routerHttp)
