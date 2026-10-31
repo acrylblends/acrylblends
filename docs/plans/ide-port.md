@@ -87,8 +87,15 @@ DSH has its own desktop shell; ACRYL's `apps/acryl-desktop` (111 files, 21k line
 
 ## Decisions needed from the owner
 
-1. DSH hosts the application (the `dsh` profile is the app's launcher), the framework is rows of it, DSH's client packages are the contract and its conversation UI is the chat (sections "What slice 0 settled" and 1).
-2. The names the ported packages publish under, and where their source lives in the repository.
+**Answered by the owner on 2026-10-31:**
+
+- **1. Hosting: our own framework hosts the application.** DSH's packages become rows of our composition; the app is no longer launched as a `dsh --profile`, and the generated DSH profile, the overlay and the generated `dev` command are superseded (design note: [ide-host-inversion.md](ide-host-inversion.md)). What this changes in the already-landed work: the profile/overlay generator and the generated launcher are replaced; the boot gates stop composing a DSH profile; the door keeps one host path (the framework's router) instead of two. The ported packages are unchanged, which is what keeping them host-neutral bought. The comparison reference set (ACRYL's Desktop) is unaffected.
+- **2. Publish names: the frame packages publish as the `@acrylblends` scope packages.** Source stays at `ide/<name>/`; the publish pipeline is built in dry-run first.
+
+Still open:
+
+1. (answered above)
+2. (answered above)
 3. The order of slices (frame and Settings first, as asked).
 4. Electron: `plugins/desktop` stays the shell (section 4).
 5. Provenance wording for source derived from ACRYL and DSH (both MIT).
