@@ -28,6 +28,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
+import { doorSpawn, npmSpawn } from './lib/platform.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
@@ -167,6 +168,9 @@ function startMockLlm() {
         requests,
         close: () =>
           new Promise((closed) => {
+            // A keep-alive socket from the driver can outlive the last answer; closing only the listener would wait for it forever, and the gate
+            // would print OK and never exit.
+            mock.closeAllConnections()
             mock.close(() => {
               closed()
             })
@@ -250,10 +254,12 @@ try {
     log('the panel and the PTY driver are added, with node as the terminal program')
   }
 
-  const install = spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
+  const npm = npmSpawn()
+  const install = spawnSync(npm.command, ['install', '--no-audit', '--no-fund'], {
     cwd: app,
     encoding: 'utf8',
     env: { ...process.env, npm_config_loglevel: 'error' },
+    ...npm.options,
   })
   if (install.status !== 0)
     fail(`npm install failed:
@@ -300,15 +306,17 @@ ${composition.stdout}`)
     'composition: every row active, no DSH web row, PENDING on provider removal and active on restore, two reloads clean',
   )
 
+  // The launcher the app's `dev` script names, run with this Node. Through npm on Windows the child would sit under cmd.exe, and stopping the gate would
+  // leave it running; this is the same command the script asserts above.
   let output = ''
   let serverUrl
   const startServer = async () => {
     const from = output.length
-    server = spawn('npm', ['run', 'dev'], {
-      cwd: app,
-      env: bootEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    server = spawn(
+      process.execPath,
+      ['--import', './plugins/acryl-node-server/src/register.ts', 'scripts/ide-host.mjs'],
+      { cwd: app, env: bootEnv, stdio: ['ignore', 'pipe', 'pipe'] },
+    )
     server.stdout.on('data', (chunk) => (output += chunk))
     server.stderr.on('data', (chunk) => (output += chunk))
     const found = await until(
@@ -480,9 +488,11 @@ ${composition.stdout}`)
   }
 
   const brief = await until(async () => {
-    const door = spawnSync(join(app, '.acryl', 'bin', 'acryl'), ['brief', '--json'], {
+    const shim = doorSpawn(app)
+    const door = spawnSync(shim.command, ['brief', '--json'], {
       cwd: app,
       encoding: 'utf8',
+      ...shim.options,
     })
     return door.status === 0 ? door : undefined
   }, 30_000)
@@ -588,20 +598,36 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
     fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the tile check')
   const profile = mkdtempSync(join(tmpdir(), 'ide-template-tile-'))
   const port = 9600 + Math.floor(Math.random() * 300)
+  // Chrome's own output is the only clue when it does not come up, so it is kept and printed if the endpoint never answers. The wait is 30 s: a loaded CI
+  // runner can take several seconds, and the old ten-second wait then fell through to a bare ECONNREFUSED from the DevTools call.
+  let chromeOutput = ''
   const child = spawn(chrome, [...chromeFlags(profile, port), '--hide-scrollbars'], {
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
+  const collect = (chunk) => {
+    chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
+  }
+  child.stdout?.on('data', collect)
+  child.stderr?.on('data', collect)
   try {
-    for (let i = 0; i < 200; i += 1) {
+    let ready = false
+    for (let i = 0; i < 600; i += 1) {
+      if (child.exitCode !== null) break
       if (
         await fetch(`http://127.0.0.1:${port}/json/version`).then(
           (r) => r.ok,
           () => false,
         )
-      )
+      ) {
+        ready = true
         break
+      }
       await sleep(50)
     }
+    if (!ready)
+      fail(
+        `Chrome did not open its DevTools endpoint on port ${String(port)} within 30 s (exit ${String(child.exitCode)}):\n${chromeOutput}`,
+      )
     const cdp = await devtools(port)
     try {
       await cdp.send('Page.enable')
@@ -768,13 +794,17 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       if (left === undefined) fail('the left panel has no Projects/session rows')
       log(`the left panel shows Projects and ${String(left.rows)} tree rows`)
 
-      // (d) DSH chat as a tab.
-      const tabs = await evaluate(
-        `[...document.querySelectorAll('[role=tab]')].map(tab => tab.textContent.trim())`,
-      )
-      if (!Array.isArray(tabs) || !tabs.some((text) => text.includes('AcrylDSH Chat')))
-        fail(`the chat tab is not in the tab strip: ${JSON.stringify(tabs)}`)
-      log('the chat tab is in the tab strip')
+      // (d) DSH chat as a tab. Its title arrives asynchronously and differs by timing: the frame's own "AcrylDSH Chat" until DSH's session title row
+      // names the session "New chat". Match the tab by what it is, not by one of its labels, and wait for it like every other surface here.
+      const chatTabs = () =>
+        evaluate(`[...document.querySelectorAll('[role=tab]')].map(tab => tab.textContent.trim())`)
+      const chatTab = await until(async () => {
+        const tabs = await chatTabs()
+        return Array.isArray(tabs) ? tabs.find((text) => /chat/iu.test(text)) : undefined
+      }, 20_000)
+      if (chatTab === undefined)
+        fail(`the chat tab is not in the tab strip: ${JSON.stringify(await chatTabs())}`)
+      log(`the chat tab is in the tab strip ("${chatTab.trim()}")`)
 
       // (b) The right panel with the workspace's Files/Changes/Review views (DSH's right sidebar, which the workspace fills).
       // The panel opens empty and fills after its tab types register; the toggle button also appears a moment after the frame, so the wait
@@ -1107,7 +1137,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         await sleep(1200)
         await sleep(1500)
         await evaluate(
-          `(() => { const tab = [...document.querySelectorAll('[role=tab]')].find(candidate => candidate.textContent.includes('AcrylDSH Chat')); tab?.click(); return true })()`,
+          `(() => { const tab = [...document.querySelectorAll('[role=tab]')].find(candidate => /chat/iu.test(candidate.textContent)); tab?.click(); return true })()`,
         )
         await sleep(800)
         if (
@@ -1210,6 +1240,11 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       child.once('exit', done)
       setTimeout(done, 5_000)
     })
-    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
+    } catch {
+      // Windows can still hold a file of the closed browser for a moment. The folder sits in the temp directory, and a page that passed stays passed;
+      // the run's own scratch is removed by the caller, which reports a failure of its own.
+    }
   }
 }

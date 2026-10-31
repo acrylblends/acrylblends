@@ -24,7 +24,11 @@ export const MOUNTED: readonly Mounted[] = [
   { name: 'driver-acp', local: 'driverAcp', needs: ['agent-panel'], after: 'agent-panel' },
 ]
 
-const ROW = /^( *)- id: ?(\S+)\n\1 {2}name: ?(\S+)\n/gmu
+/** A row, in either line ending: a file edited on Windows (or checked out with core.autocrlf) is still a Blend. */
+const ROW = /^( *)- id: ?(\S+)\r?\n\1 {2}name: ?(\S+)\r?\n/gmu
+
+/** The line ending the text already uses, so an edit keeps the file's own style. */
+const eolOf = (text: string): string => (text.includes('\r\n') ? '\r\n' : '\n')
 
 /** The `name:` of every row of the app's `blend.yaml`, or `undefined` when it has none. */
 export function rowNames(appDir: string): string[] | undefined {
@@ -59,16 +63,17 @@ export function mount(appDir: string, plugin: Mounted): MountResult {
     if ([...text.matchAll(ROW)].some((match) => match[3] === plugin.name))
       done.push('blend.yaml (already has the row)')
     else {
+      const eol = eolOf(text)
       const anchor = plugin.after
         ? new RegExp(
-            `^( *)- id: ?\\S+\\n\\1 {2}name: ?${plugin.after}\\n(?:\\1 {2}config:\\n(?:\\1 {4}.*\\n|\\1 {2}\\s*\\n)*)?`,
+            `^( *)- id: ?\\S+\\r?\\n\\1 {2}name: ?${plugin.after}\\r?\\n(?:\\1 {2}config:\\r?\\n(?:\\1 {4}.*\\r?\\n|\\1 {2}\\s*\\r?\\n)*)?`,
             'mu',
           )
-        : /^( *)- id: ?routes\n/mu
+        : /^( *)- id: ?routes\r?\n/mu
       const found = anchor.exec(text)
       if (found) {
         const indent = found[1] as string
-        const row = `${indent}- id: ${plugin.row ?? plugin.name}\n${indent}  name: ${plugin.name}\n`
+        const row = `${indent}- id: ${plugin.row ?? plugin.name}${eol}${indent}  name: ${plugin.name}${eol}`
         const at = plugin.after ? found.index + found[0].length : found.index
         text = text.slice(0, at) + row + text.slice(at)
         writeFileSync(manifestFile, text)
@@ -85,16 +90,19 @@ export function mount(appDir: string, plugin: Mounted): MountResult {
     const entry = `'${plugin.name}': ${plugin.local}`
     if (text.includes(entry)) done.push('src/app.ts (already registered)')
     else {
-      const imports = [...text.matchAll(/^import .* from '\.\.\/plugins\/[^']+'\n/gmu)]
+      const eol = eolOf(text)
+      const imports = [...text.matchAll(/^import .* from '\.\.\/plugins\/[^']+'\r?\n/gmu)]
       const last = imports.at(-1)
       // The registry as the templates write it: one entry per line, or all on one line (`{ 'acryl-router': router, routes }`).
-      const table = /^export const registry = \{(\s)/mu.exec(text)
+      const table = /^export const registry = \{(\r?\n)/mu.exec(text)
       if (last && table) {
         const file = plugin.entry ?? 'index.ts'
-        const line = `import * as ${plugin.local} from '../plugins/${plugin.name}/${file}'\n`
+        const line = `import * as ${plugin.local} from '../plugins/${plugin.name}/${file}'${eol}`
         const at = table.index + table[0].length
         text =
-          text.slice(0, at) + (table[1] === '\n' ? `  ${entry},\n` : `${entry}, `) + text.slice(at)
+          text.slice(0, at) +
+          (table[1] === '\n' || table[1] === '\r\n' ? `  ${entry},${eol}` : `${entry}, `) +
+          text.slice(at)
         const lastEnd = last.index + last[0].length
         text = text.slice(0, lastEnd) + line + text.slice(lastEnd)
         writeFileSync(appFile, text)

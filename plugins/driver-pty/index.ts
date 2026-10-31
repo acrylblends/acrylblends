@@ -20,7 +20,7 @@ import type { TerminalDriver, TerminalSession } from '../agent-panel/drivers.ts'
 import { onPath } from '../agent-panel/headless.ts'
 import { mountedPrefix } from '../agent-panel/mount.ts'
 import type {} from '../agent-panel/registry.ts'
-import { loadNodePty, type PtySpawn } from './spawn.ts'
+import { loadNodePty, type PtySpawn, resolveProgram } from './spawn.ts'
 import { terminalDriver } from './terminal.ts'
 
 export const name = 'driver-pty'
@@ -91,7 +91,8 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
   for (const [program, args] of Object.entries(programs))
     ctx.effect(() =>
       ctx.drivers.register(
-        terminalDriver(`pty:${program}`, program, args, spawn, {
+        // The name stays the program the app configured; the PTY runs its full path (Windows does not search PATH itself).
+        terminalDriver(`pty:${program}`, resolveProgram(program), args, spawn, {
           module: `${PREFIX}/client/terminal.ts`,
           prefix: PREFIX,
         }),
@@ -193,7 +194,15 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
         return c.json({ error: 'a terminal is already open; stop it first' }, 409)
       const num = (value: unknown, fallback: number) =>
         typeof value === 'number' && value >= 1 && value <= 1000 ? Math.floor(value) : fallback
-      live = startSession(driver, num(body.cols, 80), num(body.rows, 24))
+      let session: Live
+      try {
+        session = startSession(driver, num(body.cols, 80), num(body.rows, 24))
+      } catch (error) {
+        // The cause (a native module that cannot spawn, a program that is gone) goes to the app's log; the page gets a plain answer, as everywhere else.
+        console.error('driver-pty: the terminal could not start:', error)
+        return c.json({ error: 'the terminal could not start; the app log has the reason' }, 500)
+      }
+      live = session
       return c.json({ id: live.id })
     })
     .get(`${PREFIX}/:id/output`, (c) => {

@@ -1,9 +1,10 @@
 name: CI
 
-# The framework's home (spec 049 slice 17). Two jobs:
+# The framework's home (spec 049 slice 17). The jobs:
 #  - `check`: the whole gate (`pnpm run check`: lint, build, typecheck, every test, the scaffolder, the guide, the panel, the tarball) on Linux, Node 22, 24 and 26.
 #  - `packages`: the framework packages' own suites (the router, node server, state, inspect, db and kv providers, the door, the framework build) on Linux, macOS and Windows,
 #    Node 22, 24 and 26 (26 is what a fresh Homebrew install gives). The SQLite provider and the JSON-file store follow the operating system's file locking and rename rules, so one runner proves neither.
+#  - `frame`: the six-template framed page gate on Linux, macOS and Windows, in headless Chrome, with a local model mock and no secret.
 on:
   push:
     branches: [main, '[0-9][0-9][0-9]-*']
@@ -73,6 +74,44 @@ jobs:
       - run: pnpm run test:driver-pty
       # `npm create acrylblends my-app agent` from the packed tarballs on every OS: 1.0.4 and 1.0.5 failed on every Windows machine and nothing ran the command there.
       - run: pnpm run verify:create
+
+  # The framed page gate for every template, on every OS a workshop attendee uses (the matrix ran by hand on our Linux and Windows hosts before this job existed; nothing
+  # else would catch a regression in the frame, its client modules or the templates). One job per OS: the six templates share one build, and each template is its own step so a
+  # failure names it and the rest still run. The gate scaffolds through the CLI, installs the framework, DSH and the frame packages from npm (the file: specs point at this
+  # checkout's build), boots the app on our host and walks it in headless Chrome: the frame's panels, Settings, a real PTY, the app's page in the browser tile, and the chat
+  # against a local Anthropic-Messages mock. No secret is involved: the only key in play is the gate's own fake one, entered through the frame.
+  frame:
+    name: frame (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The gate needs the CLI's dist and the ide packages' lib folders: the scaffolded apps take the frame packages as file: specs into this checkout.
+      - run: pnpm run build
+      # Chrome is installed on all three images (Google Chrome: /usr/bin on ubuntu, the app bundle on macOS, Program Files on Windows); scripts/lib/platform.mjs finds
+      # each, and CHROME_BIN overrides it. A runner without a browser fails the gate's tile step with that message rather than skipping it.
+      - name: frame gate (blank)
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs blank
+      - name: frame gate (agent)
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs agent
+      - name: frame gate (todo)
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs todo
+      - name: frame gate (notes)
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs notes
+      - name: frame gate (chat)
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs chat
+      - name: frame gate (nodejs)
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs nodejs
 
   # The desktop door in a real Electron (windows and menu as door verbs, a window attached to a dev server, the guards on Quit and the last window). Its own job, not in `check`:
   # it downloads Electron and opens windows. Linux runs it under a virtual display; a failure here fails the build, it is not skipped.

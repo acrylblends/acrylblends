@@ -5,6 +5,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { chromeCandidates } from './platform.mjs'
 import { freePort } from './port.mjs'
 import { startGroup, stopGroup } from './proc.mjs'
 
@@ -20,14 +21,7 @@ async function until(fn, ms, every = 400) {
 
 /** A Chrome or Chromium on this machine, or undefined. */
 export function findChrome() {
-  return [
-    process.env.CHROME_BIN,
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-  ].find((path) => path && existsSync(path))
+  return chromeCandidates().find((path) => existsSync(path))
 }
 
 /** Evaluate calls over the DevTools protocol of the one page of `port`, or of `tab` (an entry of the browser's `/json` list) when one is given. */

@@ -408,6 +408,9 @@ async function realSpawn(t: { skip(reason: string): void }): Promise<PtySpawn | 
 
 /** A Node program that echoes what it is typed, prints its window size, and prints the size again on resize. */
 const ECHO = [
+  // Read stdin the way an agent CLI does (raw mode). Node learns of a ConPTY resize through its console input handling: on Windows a child that never
+  // reads stdin keeps its start size (docs/plans/ide-host-inversion.md section 20). The POSIX path is unchanged; SIGWINCH reaches Node there.
+  'if (process.platform === "win32") { process.stdin.setRawMode(true); process.stdin.resume() }',
   'process.stdout.write("size " + process.stdout.columns + "x" + process.stdout.rows + "\\n")',
   'process.stdout.on("resize", () => process.stdout.write("size " + process.stdout.columns + "x" + process.stdout.rows + "\\n"))',
   'process.stdin.on("data", (d) => process.stdout.write("typed " + JSON.stringify(String(d)) + "\\n"))',
@@ -445,7 +448,17 @@ test('a real PTY: the program sees its size, a resize, and what is typed', async
       return /typed "hi/u.test(printed) && resized(printed)
     },
   )
-  const events = await reading
+  const events = await Promise.race([reading, sleep(20_000).then(() => undefined)])
+  if (events === undefined) {
+    // A Windows build that still delivers no console resize to the child: the platform's own evidence is in section 20. Never a silent pass.
+    if (process.platform === 'win32') {
+      t.skip(
+        'this Windows build delivers no console resize to the child; docs/plans/ide-host-inversion.md section 20',
+      )
+      return
+    }
+    assert.fail('the resize and the typed line did not arrive')
+  }
   const shown = JSON.stringify(text(events))
   assert.match(text(events), /size 90x20/u, shown)
   assert.ok(resized(text(events)), shown)
@@ -479,4 +492,18 @@ test('reloading the plugin with a real session open leaves no process behind', a
   await pty.dispose()
   assert.equal(alive(Number(parent)), false, 'the program is gone')
   assert.equal(alive(Number(child)), false, 'its child is gone')
+})
+
+test('a terminal that cannot start answers 500 with a plain reason and leaves no session behind', async () => {
+  const { post } = await boot({
+    spawn: () => {
+      throw new Error('the native PTY refused this program')
+    },
+    programs: { node: [] },
+  })
+  const started = await post('/sessions', { driver: 'pty:node', cols: 80, rows: 24 })
+  assert.equal(started.status, 500)
+  assert.match(JSON.stringify(await started.json()), /could not start/u)
+  // Nothing is held: a second start reaches the spawn again, it is not a 409 for a terminal that never existed.
+  assert.equal((await post('/sessions', { driver: 'pty:node' })).status, 500)
 })
