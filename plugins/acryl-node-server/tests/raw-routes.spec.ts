@@ -64,6 +64,21 @@ describe('raw node routes', () => {
     expect((await fetch(`${server.url}/one`)).status).toBe(404)
   })
 
+  it('keeps one raw upgrade listener across claims added, removed and added again', async () => {
+    const ctx = await boot()
+    const server = ctx.nodeServer
+    const before = server.upgradeListenerCount
+    expect(before).toBe(1)
+    const first = server.registerRawUpgrade({ path: '/raw/socket', handler: (_req, socket) => { socket.destroy() } })
+    expect(server.upgradeListenerCount).toBe(before)
+    first()
+    expect(server.upgradeListenerCount).toBe(before)
+    const second = server.registerRawUpgrade({ path: '/raw/socket', handler: (_req, socket) => { socket.destroy() } })
+    expect(server.upgradeListenerCount).toBe(before)
+    second()
+    expect(server.upgradeListenerCount).toBe(before)
+  })
+
   it('answers 500 when a handler throws, without leaking the error', async () => {
     const ctx = await boot()
     const server = ctx.nodeServer

@@ -107,12 +107,9 @@ describe('the page socket owner', () => {
     expect(await opens(origin.value)).toBe('opened')
   })
 
-  // Open: after a provider is removed and re-provided the steady state still answers the upgrade with a plain, empty 200. The socket route is now
-  // mounted once ahead of the private routes and reads a live upgrade helper per request, and the routerHttp claim lives inside its service's
-  // ctx.inject scope, so neither the route's precedence nor the claim's lifetime is tied to a service event; the remaining 200 therefore comes from
-  // the upgrade path itself after the re-provide, not from route precedence. The transition windows are clean (503/400 before any HTTP route, no
-  // second answer). The three supporting scenarios pass.
-  it.skip('moves to the node server hub when routerHttp goes away and back when it returns', async () => {
+  // After a provider is removed and re-provided the steady state answers 101 exactly once. The raw transport dispatches each upgrade request once:
+  // a second dispatch (a re-added raw listener) emitted the same request into the hub twice, rejected the first waiter and answered a plain 200.
+  it('moves to the node server hub when routerHttp goes away and back when it returns', async () => {
     const ctx = await start()
     const fiber = ctx.plugin(routerHttp)
     await fiber.await()
