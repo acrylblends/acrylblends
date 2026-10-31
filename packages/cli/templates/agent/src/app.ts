@@ -98,8 +98,19 @@ export async function composeInto(
   const listen = options.listen !== false && options.host !== true
   const leaveOut = new Set<string>()
   let extensionsReadOnly = false
-  // In the frame host the server and the door are the host's rows; the app contributes only its own plugins.
+  // In the frame host the infrastructure rows are the host's own (its server, its web-server port, its router, the app instance, the door): the app
+  // contributes only the plugins that are its own.
   if (!listen || options.host === true) leaveOut.add('acryl-node-server').add('acryl-door')
+  if (options.host === true)
+    for (const row of [
+      'instance',
+      'acryl-router',
+      'acryl-web-server',
+      'acryl-page',
+      'manifest',
+      'save',
+    ])
+      leaveOut.add(row)
   if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off')
     leaveOut.add('acryl-door')
   // Production: the rows that give a visitor power over the running app or the owner's model key are left out too. The agent (`POST /ask` spends the model key and runs tools),
