@@ -24,6 +24,8 @@ export interface AppOptions {
   trustProxy?: boolean
   /** The address people use in the browser, for example `https://notes.example.com`. Behind a proxy the app sees `http://127.0.0.1:3000`, so csrf needs it. Default: PUBLIC_ORIGIN. */
   publicOrigin?: string
+  /** The path the app is mounted at: '' on its own server, `/app` in the ACRYL frame. Every link, form action and redirect is written from it. */
+  prefix?: string
 }
 
 export function createApi(db: Db) {
@@ -74,11 +76,14 @@ export function createApp(
   {
     trustProxy = process.env.TRUST_PROXY === '1',
     publicOrigin = process.env.PUBLIC_ORIGIN,
+    prefix = '',
   }: AppOptions = {},
 ) {
   const auth = authStore(db)
   const notes = notesStore(db)
   const app = new Acryl<Env>()
+  // Every URL the pages and redirects write starts at the path the app is mounted at.
+  const at = (path: string): string => `${prefix}${path}`
   // Refuses a form POST that does not come from this site (checks Origin and Sec-Fetch-Site); JSON requests are not form-shaped and pass.
   app.use(csrf(publicOrigin ? { origin: [publicOrigin] } : undefined))
   // A secure cookie is only sent over HTTPS: set when the request is HTTPS, or a proxy we trust says it was.
@@ -100,14 +105,14 @@ export function createApp(
 
   const requireUser = createMiddleware<Env>(async (c, next) => {
     const user = await auth.userFor(getCookie(c, COOKIE))
-    if (!user) return c.redirect('/login')
+    if (!user) return c.redirect(at('/login'))
     c.set('user', user)
     await next()
   })
 
-  app.get('/', (c) => c.redirect('/notes'))
-  app.get('/signup', (c) => c.html(authPage('signup')))
-  app.get('/login', (c) => c.html(authPage('login')))
+  app.get('/', (c) => c.redirect(at('/notes')))
+  app.get('/signup', (c) => c.html(authPage('signup', [], '', prefix)))
+  app.get('/login', (c) => c.html(authPage('login', [], '', prefix)))
 
   app.post('/signup', async (c) => {
     const form = await c.req.parseBody()
@@ -117,10 +122,10 @@ export function createApp(
     const errors = checkCredentials(email, form.password, true)
     if (errors.length === 0 && (await auth.findUser(email)))
       errors.push('That email already has an account. Log in instead.')
-    if (errors.length > 0) return c.html(authPage('signup', errors, email), 400)
+    if (errors.length > 0) return c.html(authPage('signup', errors, email, prefix), 400)
     const id = await auth.createUser(email, String(form.password))
     setCookie(c, COOKIE, await auth.startSession(id), session(c))
-    return c.redirect('/notes', 303)
+    return c.redirect(at('/notes'), 303)
   })
 
   app.post('/login', async (c) => {
@@ -129,19 +134,19 @@ export function createApp(
       .trim()
       .toLowerCase()
     const errors = checkCredentials(email, form.password, false)
-    if (errors.length > 0) return c.html(authPage('login', errors, email), 400)
+    if (errors.length > 0) return c.html(authPage('login', errors, email, prefix), 400)
     const user = await auth.findUser(email)
     if (!user || !(await verifyPassword(String(form.password), user.password_hash)))
-      return c.html(authPage('login', ['Wrong email or password.'], email), 401)
+      return c.html(authPage('login', ['Wrong email or password.'], email, prefix), 401)
     setCookie(c, COOKIE, await auth.startSession(user.id), session(c))
-    return c.redirect('/notes', 303)
+    return c.redirect(at('/notes'), 303)
   })
 
   app.post('/logout', async (c) => {
     const token = getCookie(c, COOKIE)
     if (token) await auth.endSession(token)
     deleteCookie(c, COOKIE, { path: '/' })
-    return c.redirect('/login', 303)
+    return c.redirect(at('/login'), 303)
   })
 
   app.use('/notes/*', requireUser)
@@ -149,10 +154,10 @@ export function createApp(
 
   app.get('/notes', async (c) => {
     const q = (c.req.query('q') ?? '').trim()
-    return c.html(listPage(c.get('user').email, await notes.list(c.get('user').id, q), q))
+    return c.html(listPage(c.get('user').email, await notes.list(c.get('user').id, q), q, prefix))
   })
   app.get('/notes/new', (c) =>
-    c.html(formPage(c.get('user').email, '/notes', { title: '', body: '' })),
+    c.html(formPage(c.get('user').email, '/notes', { title: '', body: '' }, [], prefix)),
   )
   app.post('/notes', async (c) => {
     const form = await c.req.parseBody()
@@ -164,17 +169,18 @@ export function createApp(
           '/notes',
           { title: String(form.title ?? ''), body: String(form.body ?? '') },
           checked.issues.map((i) => i.message),
+          prefix,
         ),
         400,
       )
     await notes.create(c.get('user').id, checked.value.title, checked.value.body)
-    return c.redirect('/notes', 303)
+    return c.redirect(at('/notes'), 303)
   })
   app.get('/notes/:id/edit', async (c) => {
     const note = await notes.get(c.get('user').id, Number(c.req.param('id')))
     return note
-      ? c.html(formPage(c.get('user').email, `/notes/${note.id}`, note))
-      : c.html(listPage(c.get('user').email, [], ''), 404)
+      ? c.html(formPage(c.get('user').email, `/notes/${note.id}`, note, [], prefix))
+      : c.html(listPage(c.get('user').email, [], '', prefix), 404)
   })
   app.post('/notes/:id', async (c) => {
     const id = Number(c.req.param('id'))
@@ -187,17 +193,18 @@ export function createApp(
           `/notes/${id}`,
           { title: String(form.title ?? ''), body: String(form.body ?? '') },
           checked.issues.map((i) => i.message),
+          prefix,
         ),
         400,
       )
     if (!(await notes.update(c.get('user').id, id, checked.value.title, checked.value.body)))
       return c.text('No such note.', 404)
-    return c.redirect('/notes', 303)
+    return c.redirect(at('/notes'), 303)
   })
   app.post('/notes/:id/delete', async (c) => {
     if (!(await notes.remove(c.get('user').id, Number(c.req.param('id')))))
       return c.text('No such note.', 404)
-    return c.redirect('/notes', 303)
+    return c.redirect(at('/notes'), 303)
   })
 
   app.route('/api/notes', createApi(db))

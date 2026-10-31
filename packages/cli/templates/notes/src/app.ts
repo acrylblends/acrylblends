@@ -14,7 +14,7 @@ import {
   type ParameterValue,
 } from '../plugins/manifest/index.ts'
 import { doorEnabled } from './door.ts'
-import { routes } from './routes.ts'
+import { FRAME_MOUNT_PREFIX, routes } from './routes.ts'
 
 /** The plugins this app's code provides. `blend.yaml` chooses, orders and configures them. */
 export const registry = {
@@ -64,42 +64,70 @@ export interface AppOptions {
   readonly values?: Readonly<Record<string, ParameterValue>>
   /** The SQLite file, relative to the app folder; an absolute path is used as it is (tests give a file in a throwaway home). Default: `data/notes.sqlite`. */
   readonly database?: string
+  /** The path the app is mounted at; absent on its own server, where it keeps the root, and {@link FRAME_MOUNT_PREFIX} in the frame. */
+  readonly prefix?: string
   /** Start the HTTP server (default). Tests pass `false` and call `app.root.router.request(path)`: it needs no port, so it also runs where a sandbox forbids listening. */
   readonly listen?: boolean
 }
 
+/** The rows the frame host provides: the app contributes only the plugins that are its own. */
+const HOST_ROWS = [
+  'instance',
+  'acryl-router',
+  'acryl-node-server',
+  'acryl-web-server',
+  'acryl-page',
+  'manifest',
+  'save',
+  'acryl-door',
+]
+
 /**
- * The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. The `db` row opens the database and applies
- * `migrations/`; the one place that names the SQLite provider is this file (`acrylblends check-deps`), so a different provider is a change here.
+ * The app's rows, composed into `ctx`: the app's own server calls this from `createApp`, and the generated frame layer mounts it as one row, so the frame
+ * runs the app exactly as the app's own server does (same rows, same order, same config). `host: true` leaves the infrastructure rows to the frame host,
+ * which is where the door lives too, and mounts the app at {@link FRAME_MOUNT_PREFIX}. The `db` row opens the database and applies `migrations/`; the one
+ * place that names the SQLite provider is this file (`acrylblends check-deps`), so a different provider is a change here.
  */
-export async function createApp(chosen: AppInstance, options: AppOptions = {}): Promise<App> {
+export async function composeInto(
+  ctx: Context,
+  chosen: AppInstance,
+  options: AppOptions & { readonly host?: boolean } = {},
+): Promise<Fiber[]> {
   const read = readManifest(options.values)
-  const listen = options.listen
-  // Rows left out: the server (and the door, which needs it) when the app is reached in process; the door when it is switched off; live plugin installs in production.
-  const leaveOut = new Set<string>()
-  if (listen === false) leaveOut.add('acryl-node-server').add('acryl-door')
+  const own = options.host !== true && options.listen !== false
+  // The frame host mounts the app under its own prefix; the app's own server keeps the root.
+  const prefix = options.prefix ?? (options.host === true ? FRAME_MOUNT_PREFIX : undefined)
+  // Rows left out: the server (and the door, which needs it) when the app is reached in process or inside the frame host; the door when it is switched
+  // off; live plugin installs in production.
+  const leaveOut = new Set<string>(options.host === true ? HOST_ROWS : [])
+  if (!own) leaveOut.add('acryl-node-server').add('acryl-door')
   if (!doorEnabled()) leaveOut.add('acryl-door')
   if (process.env.NODE_ENV === 'production') leaveOut.add('extensions')
   const manifest = without(read, ...leaveOut)
   const file = options.database ?? 'data/notes.sqlite'
+  return compose(ctx, manifest, registry, {
+    db: {
+      path: isAbsolute(file) ? file : resolve(projectRoot, file),
+      migrations: join(projectRoot, 'migrations'),
+    },
+    // The routes row mounts the app (and its client modules) at the prefix the frame host chose.
+    routes: { ...(prefix === undefined ? {} : { prefix }) },
+    // What is installed while the app runs lives in plugins/, next to the plugins copied from the library (plugins/library.json lists those, so they are not installed twice).
+    extensions: { sources: [{ dir: join(projectRoot, 'plugins'), trust: 'install' }] },
+    // Only the app's own server listens; the frame host owns the server and its port.
+    ...(own ? { server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 } } : {}),
+  })
+}
+
+/** The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. */
+export async function createApp(chosen: AppInstance, options: AppOptions = {}): Promise<App> {
   const root = new Context()
   const first = root.plugin(instance, chosen)
   await first.await()
-  const fibers: Fiber[] = [
-    first,
-    ...(await compose(root, manifest, registry, {
-      db: {
-        path: isAbsolute(file) ? file : resolve(projectRoot, file),
-        migrations: join(projectRoot, 'migrations'),
-      },
-      // What is installed while the app runs lives in plugins/, next to the plugins copied from the library (plugins/library.json lists those, so they are not installed twice).
-      extensions: { sources: [{ dir: join(projectRoot, 'plugins'), trust: 'install' }] },
-      server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 },
-    })),
-  ]
+  const fibers: Fiber[] = [first, ...(await composeInto(root, chosen, options))]
   return {
     root,
-    url: listen === false ? '' : root.nodeServer.url,
+    url: options.listen === false ? '' : root.nodeServer.url,
     async stop() {
       for (const fiber of [...fibers].reverse()) await fiber.dispose()
     },
