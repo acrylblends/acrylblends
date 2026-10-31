@@ -838,6 +838,19 @@ spec:
       try {
         const up = await waitForOk(`http://127.0.0.1:${port}/`)
         if (!up) fail(`${kind}: npm start did not serve for the door check`)
+        // Readiness: the app's door writes its connection file and the folder shim once its carrier has bound. Wait for both (bounded), then ask
+        // once: a blind retry would hide a door that never comes up.
+        const doorReady = await (async () => {
+          const deadline = Date.now() + 30_000
+          const doorFile = join(notes, '.acryl', 'door.json')
+          const doorShim = join(notes, '.acryl', 'bin', 'acryl')
+          while (Date.now() < deadline) {
+            if (existsSync(doorFile) && existsSync(doorShim)) return true
+            await new Promise((resume) => setTimeout(resume, 100))
+          }
+          return false
+        })()
+        if (!doorReady) fail(`${kind}: the door did not report ready within 30s`)
         const brief = spawnSync(join(notes, '.acryl', 'bin', 'acryl'), ['brief'], {
           cwd: notes,
           encoding: 'utf8',

@@ -101,10 +101,10 @@ describe('the page socket owner', () => {
     expect(await opens(origin.value)).toBe('opened')
   })
 
-  // Open: after a provider is removed and re-provided, an upgrade in the transition window is answered twice (write after end) and then never opens.
-  // The three scenarios above pass; the choice is serialized and the prefix claim is released by identity (an older release cannot undo a newer
-  // claim), which removed the overlapping-owner and stale-release races but not this one. Tying a claim to the service instance's identity churned
-  // (the service proxy is not stable across resolutions), so the next attempt must key on the hub, not the service object.
+  // Open: after a provider is removed and re-provided, the steady state still does not answer 101 (the transition windows themselves are now clean:
+  // an upgrade with no listener is refused 503 and closed by the transport, and a second answer is suppressed at the socket). The three scenarios
+  // above pass; the choice is serialized, the prefix claim is released by identity, and routerHttp's upgrade helper is memoized per caller so a
+  // service event no longer looks like an owner change. The next attempt must key the owner on the hub, not the service proxy.
   it.skip('moves to the node server hub when routerHttp goes away and back when it returns', async () => {
     const ctx = await start()
     const fiber = ctx.plugin(routerHttp)

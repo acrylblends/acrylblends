@@ -59,10 +59,24 @@ test('creates, completes, lists and deletes', () =>
   ))
 
 /** A sandbox may forbid listening on a port (Codex's workspace-write does). The one test that needs a real connection (the origin check looks at who connected) is skipped there, and says so. */
+/**
+ * Whether this environment forbids listening at all: only a sandbox's refusal (EPERM/EACCES) means the real-server test must skip. A loaded
+ * machine can fail a bind transiently, so that is retried briefly; any other outcome lets the real test run, where a host that truly cannot
+ * listen fails loudly instead of hiding behind a skip.
+ */
 const canListen = await new Promise<boolean>((done) => {
-  const probe = createServer()
-  probe.once('error', () => done(false))
-  probe.listen(0, '127.0.0.1', () => probe.close(() => done(true)))
+  let attempts = 0
+  const probeOnce = (): void => {
+    attempts += 1
+    const probe = createServer()
+    probe.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EPERM' || error.code === 'EACCES') done(false)
+      else if (attempts < 3) setTimeout(probeOnce, 100)
+      else done(true)
+    })
+    probe.listen(0, '127.0.0.1', () => probe.close(() => done(true)))
+  }
+  probeOnce()
 })
 const skip = canListen ? false : 'this environment does not allow listening on a port'
 if (!canListen)

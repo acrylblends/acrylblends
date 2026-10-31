@@ -41,6 +41,8 @@ export class RouterHttp extends Service implements RouterHttpService {
   private readonly router: Context['router']
   private readonly web: WebServerPort
   private hub: UpgradeHub | undefined
+  /** One upgrade helper per calling context: a fresh wrapper per call made every service event look like an owner change. */
+  private readonly upgradeHelpers = new WeakMap<object, UpgradeWebSocket>()
   /** The adapter's own context: the hub lives as long as the adapter, whichever plugin asked for it first (`this.ctx` is the caller's). */
   private readonly home: Context
   private readonly upgradesIn = new UpgradeEmitter()
@@ -100,7 +102,12 @@ export class RouterHttp extends Service implements RouterHttpService {
    * The route must be on a path the plugin mounted with `upgrade: [path]`.
    */
   upgrades(): UpgradeWebSocket {
-    return this.ensureHub().upgradeWebSocketFor(this.ctx) as unknown as UpgradeWebSocket
+    const owner = this.ctx
+    const cached = this.upgradeHelpers.get(owner)
+    if (cached !== undefined) return cached
+    const created = this.ensureHub().upgradeWebSocketFor(owner) as unknown as UpgradeWebSocket
+    this.upgradeHelpers.set(owner, created)
+    return created
   }
 
   /** How many WebSocket connections are open now. */

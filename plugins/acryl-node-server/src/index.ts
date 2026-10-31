@@ -109,6 +109,15 @@ export class NodeServer extends Service {
         // A raw route owns the node response: start it and return the sentinel synchronously, so the adapter (which checks the
         // sentinel before treating the result as a promise) writes nothing. The handler's own failure becomes a 500 here.
         const raw = this.rawFor(incoming)
+        if (raw === undefined && incoming.headers.upgrade !== undefined) {
+          // An upgrade that reaches the HTTP fetch path has no WebSocket listener to claim it (a provider transition, or no hub at all): refuse it
+          // here, cleanly, instead of routing it as a normal request where a second answer could be written.
+          const websocket = incoming.headers.upgrade.toLowerCase() === 'websocket'
+          return new Response('', {
+            status: websocket ? 503 : 400,
+            headers: { connection: 'close' },
+          })
+        }
         if (raw !== undefined) {
           void (async () => {
             try {

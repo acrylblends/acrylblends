@@ -145,6 +145,8 @@ const appendResponseHeaders = (headers: string[], responseHeaders?: Headers) => 
 }
 
 const rejectUpgradeRequest = (socket: Duplex, status: number, responseHeaders?: Headers) => {
+  // The socket already has its answer (a provider transition can route one upgrade to two handlers for a moment): never write a second one.
+  if (socket.destroyed || socket.writableEnded) return
   const responseLines = ['Connection: close', 'Content-Length: 0']
   appendResponseHeaders(responseLines, responseHeaders)
 
