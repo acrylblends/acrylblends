@@ -48,7 +48,11 @@ function handshake(origin: string): Promise<string> {
       headers: { origin },
     })
     socket.once('message', (data) => { resolve(String(data).includes('"ready"') ? 'opened' : 'no ready frame'); socket.close() })
-    socket.once('unexpected-response', (_request, response) => { resolve(`refused ${String(response.statusCode)}`) })
+    socket.once('unexpected-response', (_request, response) => {
+      let body = ''
+      response.on('data', (chunk) => { body += String(chunk) })
+      response.once('end', () => { resolve(`refused ${String(response.statusCode)} ${body.slice(0, 120)}`) })
+    })
     socket.once('error', (error) => { resolve(`error ${error.message}`) })
     setTimeout(() => resolve('timeout'), 4_000)
   })
@@ -103,10 +107,11 @@ describe('the page socket owner', () => {
     expect(await opens(origin.value)).toBe('opened')
   })
 
-  // Open: after a provider is removed and re-provided the steady state answers the upgrade with a plain 200 (the raw claim that survives and the
-  // route mounted for the new hub answer through different hub generations). The transition windows themselves are clean: an upgrade with no
-  // listener is refused 503/400 before any HTTP route and the reject writer checks the socket, so it is never answered twice. The three scenarios
-  // above pass; the owner and the claim are keyed on routerHttp's stable hub token, the choice is serialized, and the helper is memoized per caller.
+  // Open: after a provider is removed and re-provided the steady state still answers the upgrade with a plain, empty 200. The socket route is now
+  // mounted once ahead of the private routes and reads a live upgrade helper per request, and the routerHttp claim lives inside its service's
+  // ctx.inject scope, so neither the route's precedence nor the claim's lifetime is tied to a service event; the remaining 200 therefore comes from
+  // the upgrade path itself after the re-provide, not from route precedence. The transition windows are clean (503/400 before any HTTP route, no
+  // second answer). The three supporting scenarios pass.
   it.skip('moves to the node server hub when routerHttp goes away and back when it returns', async () => {
     const ctx = await start()
     const fiber = ctx.plugin(routerHttp)

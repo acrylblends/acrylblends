@@ -10,7 +10,7 @@
  */
 
 import { join } from 'node:path'
-import type { Context, Fiber } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { Acryl } from 'acryl-router'
 import type { UpgradeWebSocket } from 'acryl-router/helpers'
@@ -197,110 +197,63 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     }, 'acryl-door: the page script in the host index')
   })
   // The page channel also runs over a WebSocket, which is not one of the browser's six connections per host. Without `ws` or an adapter that
-  // upgrades, the pages use the stream. The route has ONE owner, chosen by service presence: routerHttp's hub (the Web adapter, which also needs
-  // its prefix claimed) whenever the host composes it, the node server's hub otherwise. A service change re-runs the choice, so a provider removed
-  // or restored moves the route to the live hub without a duplicate: the previous owner's fiber is disposed before the next mounts.
-  const nodeHubToken = { node: true }
-  let socketOwner: { hub: object; allow: UpgradeWebSocket; fiber: Fiber } | undefined
-  /**
-   * The routerHttp prefix claim, by identity: a release always releases the claim object it was made for, so a release from an older owner
-   * generation can never undo a newer claim (the service events that drive the choice can overlap a teardown with the next claim).
-   */
-  let prefixClaim: { readonly remove: () => void; readonly hub: object } | undefined
-  const releasePrefix = (
-    claim: { readonly remove: () => void; readonly hub: object } | undefined = prefixClaim,
-  ): void => {
-    if (claim === undefined || prefixClaim !== claim) return
-    prefixClaim = undefined
-    claim.remove()
+  // upgrades, the pages use the stream. The socket route is mounted ONCE here, ahead of the private routes, so it keeps its precedence when the host
+  // restarts; what moves is the upgrade helper it reads per request. While routerHttp exists its inject scope owns the prefix claim and sets the
+  // helper (Cordis disposes the claim exactly when the service goes away); the node server's hub is the helper only while routerHttp is absent.
+  // An upgrade while no helper is ready is refused 503 by the route, never answered twice.
+  let pageUpgrade: UpgradeWebSocket | undefined
+  let nodeUpgrade: UpgradeWebSocket | undefined
+  const endNodeOwner = (): void => {
+    if (pageUpgrade === nodeUpgrade) pageUpgrade = undefined
+    nodeUpgrade = undefined
   }
-  /** One choice at a time: the disposals are asynchronous, and two overlapping choices could mount two owners. */
-  let choosing = false
-  let chooseAgain = false
-  const chooseSocket = async (): Promise<void> => {
-    let claimedHere: { readonly remove: () => void; readonly hub: object } | undefined
+  const nodeFallback = (): void => {
+    if (ctx.get('routerHttp') !== undefined || nodeUpgrade !== undefined) return
     try {
-      const http = ctx.get('routerHttp') as
-        | { upgrades?: () => UpgradeWebSocket; mount?: (prefix: string, options: { upgrade: string[] }) => () => void }
-        | undefined
-      const httpAllow = http?.upgrades?.()
-      // The node server's hub attaches to the transport when asked, so it is only touched when routerHttp is not the owner.
-      const allow = httpAllow ?? (ctx.get('nodeServer') as unknown as NodeServerLike | undefined)?.upgrades?.()
-      const wantHttp = httpAllow !== undefined && http !== undefined && typeof http.mount === 'function'
-      // The claim stores the hub handle it was made for (the memoized upgrade helper): a restored service yields a new one, so the old claim is
-      // released and the prefix is claimed again for the new hub in the order below. A claim left over from the old hub would answer through a
-      // hub whose bindings the new route does not share.
-      // The hub handle, not the helper or the service proxy: a stable per-service token, so a service event is not an owner change but a
-      // restored adapter is.
-      const hub =
-        httpAllow !== undefined
-          ? ((http as { hubToken?: () => object } | undefined)?.hubToken?.() ?? httpAllow)
-          : nodeHubToken
-      if (prefixClaim !== undefined && prefixClaim.hub !== hub) releasePrefix()
-      // Order keeps one owner: leaving routerHttp removes its upgrade claim before its route goes; entering it mounts the route first and
-      // claims the prefix after. No window has a claim whose hub has no route (an upgrade there is answered twice or never).
-      if (!wantHttp) releasePrefix()
-      if (socketOwner?.hub !== hub) {
-        const previous = socketOwner
-        socketOwner = undefined
-        if (previous !== undefined) await previous.fiber.dispose()
-        if (allow !== undefined) {
-          socketOwner = {
-            hub,
-            allow,
-            fiber: ctx.plugin({
-              name: 'acryl-door-page-socket',
-              apply(inner) {
-                inner.router.route('/', pageSocketRoutes(channel, { prefix: DOOR_PREFIX, upgrade: allow }))
-              },
-            }),
-          }
-        }
-      }
-      if (wantHttp && prefixClaim === undefined && allow !== undefined) {
-        try {
-          const remove = (http as { mount: (prefix: string, options: { upgrade: string[] }) => () => void }).mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
-          claimedHere = { remove, hub }
-          prefixClaim = claimedHere
-        } catch (cause) {
-          // The mount cleans up after itself when it fails; nothing of this attempt owns a claim.
-          reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
-        }
+      const allow = (ctx.get('nodeServer') as unknown as NodeServerLike | undefined)?.upgrades?.()
+      if (allow !== undefined) {
+        nodeUpgrade = allow
+        pageUpgrade = allow
       }
     } catch (cause) {
-      // A service being torn down answers with an inactive context: drop this attempt's owner and choose again on the next event.
-      releasePrefix(claimedHere)
-      const stale = socketOwner
-      socketOwner = undefined
-      if (stale !== undefined) void stale.fiber.dispose()
       reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
     }
   }
-  const scheduleChoose = (): void => {
-    if (choosing) {
-      chooseAgain = true
-      return
+  ctx.inject(['routerHttp'], (inner) => {
+    // The adapter is here: the node helper gives way, and this scope owns the prefix claim and the helper until Cordis disposes it with the service.
+    endNodeOwner()
+    const http = inner.get('routerHttp') as unknown as
+      | { upgrades?: () => UpgradeWebSocket; mount?: (prefix: string, options: { upgrade: string[] }) => () => void }
+      | undefined
+    try {
+      const allow = http?.upgrades?.()
+      if (allow === undefined || http === undefined || typeof http.mount !== 'function') return
+      pageUpgrade = allow
+      const remove = http.mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
+      inner.effect(() => () => {
+        remove()
+        if (pageUpgrade === allow) pageUpgrade = undefined
+        nodeFallback()
+      }, 'acryl-door: the page socket via routerHttp')
+    } catch (cause) {
+      reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
     }
-    choosing = true
-    void chooseSocket().finally(() => {
-      choosing = false
-      if (chooseAgain) {
-        chooseAgain = false
-        scheduleChoose()
+  })
+  ctx.inject(['nodeServer'], (inner) => {
+    inner.effect(() => {
+      nodeFallback()
+      const onService = inner.on as unknown as (name: string, listener: () => void) => () => void
+      const off = onService('internal/service', () => {
+        if (ctx.get('routerHttp') !== undefined) endNodeOwner()
+        else nodeFallback()
+      })
+      return () => {
+        off()
+        endNodeOwner()
       }
-    })
-  }
-  ctx.effect(() => {
-    scheduleChoose()
-    const off = ctx.on('internal/service' as never, scheduleChoose as never) as unknown as (() => void) | undefined
-    return () => {
-      off?.()
-      releasePrefix()
-      const owner = socketOwner
-      socketOwner = undefined
-      if (owner !== undefined) void owner.fiber.dispose()
-    }
-  }, 'acryl-door: the page socket owner')
+    }, 'acryl-door: the page socket on the node server')
+  })
+  ctx.router.route('/', pageSocketRoutes(channel, { prefix: DOOR_PREFIX, upgrade: () => pageUpgrade }))
   ctx.router.route('/', privateApi(
     DOOR_PREFIX,
     pageModule,
