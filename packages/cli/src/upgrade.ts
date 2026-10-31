@@ -22,7 +22,14 @@ import {
 } from './ide-profile'
 import { UsageError } from './init'
 import type { Io } from './io'
-import { appNameOf, carriesFrame, identifyTemplate, readLegacy } from './legacy'
+import {
+  appNameOf,
+  brokenEntry,
+  carriesFrame,
+  identifyTemplate,
+  readLegacy,
+  releasedRange,
+} from './legacy'
 import {
   closure,
   copyPlugin,
@@ -123,6 +130,7 @@ interface FrameFileWrite {
 /** What `upgrade` does about the frame for one app: nothing (and why), or a plan computed before anything is written. */
 type FrameStep =
   | { readonly kind: 'unidentified' }
+  | { readonly kind: 'broken-scaffold'; readonly file: string }
   | { readonly kind: 'no-frame-template'; readonly template: Template }
   | { readonly kind: 'unavailable'; readonly template: Template }
   | {
@@ -157,13 +165,15 @@ function generatedState(existing: string | undefined, text: string): FrameFileWr
  */
 function planFrameStep(appDir: string, library: ReadonlyMap<string, LibraryPlugin>): FrameStep {
   const name = appNameOf(appDir)
-  const layout = identifyTemplate(appDir, name)
-  if (layout === undefined) return { kind: 'unidentified' }
-  if (!carriesFrame(layout.template))
-    return { kind: 'no-frame-template', template: layout.template }
+  // The releases before 0.7.8 wrote an entry module that cannot run (see brokenEntry): nothing the upgrade writes can make it boot.
+  const broken = brokenEntry(appDir)
+  if (broken !== undefined) return { kind: 'broken-scaffold', file: broken }
+  const template = identifyTemplate(appDir, name)
+  if (template === undefined) return { kind: 'unidentified' }
+  if (!carriesFrame(template)) return { kind: 'no-frame-template', template }
   const specs = frameProfileForApp(appDir)
-  if (specs === undefined) return { kind: 'unavailable', template: layout.template }
-  const released = readLegacy(appDir, layout, name)
+  if (specs === undefined) return { kind: 'unavailable', template }
+  const released = readLegacy(appDir, template, name)
   const files: FrameFileWrite[] = released.files.map((file) => ({
     file: file.file,
     text: file.text,
@@ -212,7 +222,7 @@ function planFrameStep(appDir: string, library: ReadonlyMap<string, LibraryPlugi
     removeProfileScript
   return {
     kind: 'planned',
-    template: layout.template,
+    template,
     input,
     profile,
     files,
@@ -225,8 +235,10 @@ function planFrameStep(appDir: string, library: ReadonlyMap<string, LibraryPlugi
 
 /** The `frame` line `upgrade` prints: every file it changes, or why it leaves the app alone. */
 function frameReport(frame: FrameStep): string {
+  if (frame.kind === 'broken-scaffold')
+    return `${frame.file} imports './plugins/...', as acrylblends 0.3.0 through 0.7.7 wrote it (the plugins are one folder up; 0.7.8 fixed the paths), so the app cannot start: change those imports to '../plugins/...' and run again`
   if (frame.kind === 'unidentified')
-    return "not the previous release's scaffold (edited, or another version): left on the framework alone"
+    return `not the scaffold of any published acrylblends release (${releasedRange()}), so it was edited or another version made it: left on the framework alone`
   if (frame.kind === 'no-frame-template')
     return `the ${frame.template} template has no src/frame.ts yet: left standalone`
   if (frame.kind === 'unavailable')

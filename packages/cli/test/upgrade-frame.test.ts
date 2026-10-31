@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { type Io, init, parseUpgradeOptions, upgrade } from '../src/index'
-import { legacyRoot, legacyScaffold } from '../src/legacy'
+import { legacyVariants, releasedVariant, variantFromBrokenEra } from '../src/legacy'
 import type { Template } from '../src/templates'
 
 const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-upgrade-frame-'))
@@ -43,7 +43,11 @@ const FRAME_SPECS = JSON.stringify({
  * An app as the previous published release made it: scaffolded now (which gives it the plugins), then its scaffold replaced by the released files, its
  * frame row removed and the two host plugins (which that release did not carry) dropped.
  */
-async function preFrameApp(name: string, template: Template = 'blank'): Promise<string> {
+async function preFrameApp(
+  name: string,
+  template: Template = 'blank',
+  version = '1.1.0',
+): Promise<string> {
   delete process.env.ACRYLBLENDS_FRAME_PACKAGES
   const { io } = session(scratch)
   const code = await init(
@@ -60,10 +64,10 @@ async function preFrameApp(name: string, template: Template = 'blank'): Promise<
   )
   expect(code).toBe(0)
   const root = join(scratch, name)
-  for (const file of legacyScaffold(template)) {
-    const released = readFileSync(join(legacyRoot(), template, file), 'utf8')
+  const variant = releasedVariant(template, version)
+  expect(variant, `no ${version} layout for ${template}`).toBeDefined()
+  for (const [file, released] of variant!.files)
     writeFileSync(join(root, file), released.replaceAll('__APP_NAME__', name))
-  }
   rmSync(join(root, 'src', 'frame.ts'), { force: true })
   rmSync(join(root, 'frame'), { recursive: true, force: true })
   for (const plugin of ['acryl-page', 'acryl-web-server'])
@@ -79,6 +83,18 @@ const runUpgrade = async (root: string, argv: readonly string[] = []) => {
 }
 
 const read = (root: string, file: string): string => readFileSync(join(root, file), 'utf8')
+
+/** The first release that shipped a variant, for the fixture app's scaffold. */
+function versionFor(template: Template, id: string): string {
+  const index = JSON.parse(
+    readFileSync(new URL('../legacy/layouts.json', import.meta.url), 'utf8'),
+  ) as {
+    releases: Array<{ version: string; layouts: Record<string, string> }>
+  }
+  const release = index.releases.find((entry) => entry.layouts[template] === id)
+  if (release === undefined) throw new Error(`no release shipped ${template} ${id}`)
+  return release.version
+}
 
 describe('upgrading a pre-frame app to the host layout', () => {
   it('writes the launcher, the overlay, the runtime row and the frame row, and prints each change', async () => {
@@ -211,9 +227,65 @@ describe('upgrading a pre-frame app to the host layout', () => {
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { code, out } = await runUpgrade(root)
     expect(code).toBe(0)
-    expect(out()).toMatch(/not the previous release's scaffold/u)
+    expect(out()).toMatch(/not the scaffold of any published acrylblends release/u)
     expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
   })
+
+  it('reports an app made before 0.7.8 (its entry imports ./plugins) instead of writing a frame the app cannot start', async () => {
+    const root = await preFrameApp('broken-era', 'agent', '0.7.7')
+    writeFileSync(
+      join(root, 'src', 'main.ts'),
+      readFileSync(join(root, 'src', 'main.ts'), 'utf8').replaceAll(
+        "from '../plugins/",
+        "from './plugins/",
+      ),
+    )
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    expect(out()).toMatch(
+      /src\/main\.ts imports '\.\/plugins\/\.\.\.', as acrylblends 0\.3\.0 through 0\.7\.7/u,
+    )
+    expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
+    expect(existsSync(join(root, 'src', 'frame.ts'))).toBe(false)
+  })
+
+  it('every distinct scaffold the releases shipped either upgrades and settles, or is reported as unable to start', async () => {
+    const framed: Template[] = ['blank', 'todo', 'agent']
+    for (const template of framed) {
+      for (const variant of legacyVariants(template)) {
+        const name = `${template}-${variant.id}`
+        const root = await preFrameApp(name, template, versionFor(template, variant.id))
+        process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+        const blendBefore = read(root, 'blend.yaml')
+        if (variantFromBrokenEra(template, variant.id)) {
+          writeFileSync(
+            join(root, 'src', 'main.ts'),
+            readFileSync(join(root, 'src', 'main.ts'), 'utf8').replaceAll(
+              "from '../plugins/",
+              "from './plugins/",
+            ),
+          )
+          const reported = await runUpgrade(root)
+          expect(reported.code, `${template} ${variant.id}`).toBe(0)
+          expect(reported.out()).toMatch(/imports '\.\/plugins\/\.\.\.'/u)
+          expect(read(root, 'blend.yaml'), `${template} ${variant.id}`).toBe(blendBefore)
+          expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
+          continue
+        }
+        const upgraded = await runUpgrade(root)
+        expect(upgraded.code, `${template} ${variant.id}: ${upgraded.err()}`).toBe(0)
+        expect(
+          existsSync(join(root, 'cordis.patch.yml')),
+          `${template} ${variant.id}\n${upgraded.out()}${upgraded.err()}`,
+        ).toBe(true)
+        expect(existsSync(join(root, 'src', 'frame.ts')), `${template} ${variant.id}`).toBe(true)
+        expect(read(root, 'blend.yaml'), `${template} ${variant.id}`).toBe(blendBefore)
+        const second = await runUpgrade(root)
+        expect(second.out(), `${template} ${variant.id}`).toMatch(/everything is up to date/u)
+      }
+    }
+  }, 180_000)
 
   it('removes the DSH-profile script of the older layout when the host launcher replaces it', async () => {
     const root = await preFrameApp('old-profile')
