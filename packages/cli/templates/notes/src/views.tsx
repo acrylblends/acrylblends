@@ -11,13 +11,16 @@ if (filter) filter.addEventListener('input', () => {
 })
 `
 
+/** `base` is the path the app is mounted at: an empty string on its own server, `/app` when the ACRYL frame hosts it. Every URL here starts there. */
 const Layout = ({
   title,
   user,
+  base,
   children,
 }: {
   title: string
   user?: string
+  base: string
   children?: unknown
 }) => (
   <html lang="en">
@@ -37,23 +40,23 @@ const Layout = ({
         <strong>Notes</strong>
         {user ? (
           <>
-            <a href="/notes">All notes</a>
-            <a href="/notes/new">New note</a>
-            <form method="post" action="/logout">
+            <a href={`${base}/notes`}>All notes</a>
+            <a href={`${base}/notes/new`}>New note</a>
+            <form method="post" action={`${base}/logout`}>
               <span>{user} </span>
               <button type="submit">Log out</button>
             </form>
           </>
         ) : (
           <>
-            <a href="/login">Log in</a>
-            <a href="/signup">Sign up</a>
+            <a href={`${base}/login`}>Log in</a>
+            <a href={`${base}/signup`}>Sign up</a>
           </>
         )}
       </nav>
       {children}
       <script dangerouslySetInnerHTML={{ __html: counterScript }} />
-      <script type="module" src="/client/counter.tsx" />
+      <script type="module" src={`${base}/client/counter.tsx`} />
       {doorEnabled() ? <script type="module" src="/api/acryl-door/page.js" /> : null}
     </body>
   </html>
@@ -68,12 +71,17 @@ const Errors = ({ errors }: { errors: string[] }) =>
     </ul>
   ) : null
 
-export const authPage = (mode: 'login' | 'signup', errors: string[] = [], email = ''): string =>
+export const authPage = (
+  mode: 'login' | 'signup',
+  errors: string[] = [],
+  email = '',
+  base = '',
+): string =>
   (
-    <Layout title={mode === 'login' ? 'Log in' : 'Sign up'}>
+    <Layout title={mode === 'login' ? 'Log in' : 'Sign up'} base={base}>
       <h1>{mode === 'login' ? 'Log in' : 'Sign up'}</h1>
       <Errors errors={errors} />
-      <form method="post" action={`/${mode}`}>
+      <form method="post" action={`${base}/${mode}`}>
         <label for="email">Email</label>
         <input id="email" name="email" type="email" value={email} />
         <label for="password">Password</label>
@@ -85,11 +93,11 @@ export const authPage = (mode: 'login' | 'signup', errors: string[] = [], email 
     </Layout>
   ).toString()
 
-export const listPage = (user: string, notes: Note[], q: string): string =>
+export const listPage = (user: string, notes: Note[], q: string, base = ''): string =>
   (
-    <Layout title="Notes" user={user}>
+    <Layout title="Notes" user={user} base={base}>
       <h1>Your notes</h1>
-      <form method="get" action="/notes">
+      <form method="get" action={`${base}/notes`}>
         <label for="filter">Search</label>
         <input id="filter" name="q" type="search" value={q} />
         <button type="submit">Search</button>
@@ -98,8 +106,8 @@ export const listPage = (user: string, notes: Note[], q: string): string =>
       <ul>
         {notes.map((n) => (
           <li data-note>
-            <a href={`/notes/${n.id}/edit`}>{n.title}</a>
-            <form method="post" action={`/notes/${n.id}/delete`} style="display:inline">
+            <a href={`${base}/notes/${n.id}/edit`}>{n.title}</a>
+            <form method="post" action={`${base}/notes/${n.id}/delete`} style="display:inline">
               <button type="submit">Delete</button>
             </form>
           </li>
@@ -113,12 +121,13 @@ export const formPage = (
   action: string,
   note: { title: string; body: string },
   errors: string[] = [],
+  base = '',
 ): string =>
   (
-    <Layout title="Note" user={user}>
+    <Layout title="Note" user={user} base={base}>
       <h1>{action === '/notes' ? 'New note' : 'Edit note'}</h1>
       <Errors errors={errors} />
-      <form method="post" action={action}>
+      <form method="post" action={`${base}${action}`}>
         <label for="title">Title</label>
         <input id="title" name="title" value={note.title} />
         <label for="body">Note</label>
@@ -127,7 +136,7 @@ export const formPage = (
         </textarea>
         <small id="count" aria-live="polite" data-island="counter" />
         <p>
-          <button type="submit">Save</button> <a href="/notes">Cancel</a>
+          <button type="submit">Save</button> <a href={`${base}/notes`}>Cancel</a>
         </p>
       </form>
     </Layout>
