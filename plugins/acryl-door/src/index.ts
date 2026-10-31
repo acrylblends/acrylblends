@@ -213,34 +213,33 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
       const httpAllow = http?.upgrades?.()
       // The node server's hub attaches to the transport when asked, so it is only touched when routerHttp is not the owner.
       const allow = httpAllow ?? (ctx.get('nodeServer') as unknown as NodeServerLike | undefined)?.upgrades?.()
-      // The prefix claim belongs to routerHttp's mount only: the plain node server's hub sees every upgrade itself.
-      if (http === undefined || httpAllow === undefined || typeof http.mount !== 'function') {
-        prefixRemove?.()
+      const wantHttp = httpAllow !== undefined && http !== undefined && typeof http.mount === 'function'
+      // Order keeps one owner: leaving routerHttp removes its upgrade claim before its route goes; entering it mounts the route first and
+      // claims the prefix after. No window has a claim whose hub has no route (an upgrade there is answered twice or never).
+      if (!wantHttp && prefixRemove !== undefined) {
+        prefixRemove()
         prefixRemove = undefined
-      } else if (prefixRemove === undefined) {
-        prefixRemove = http.mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
       }
-      if (allow === undefined) {
-        if (socketOwner !== undefined) {
-          const previous = socketOwner
-          socketOwner = undefined
-          await previous.fiber.dispose()
+      if (socketOwner?.allow !== allow) {
+        const previous = socketOwner
+        socketOwner = undefined
+        if (previous !== undefined) await previous.fiber.dispose()
+        if (allow !== undefined) {
+          socketOwner = {
+            allow,
+            fiber: ctx.plugin({
+              name: 'acryl-door-page-socket',
+              apply(inner) {
+                inner.router.route('/', pageSocketRoutes(channel, { prefix: DOOR_PREFIX, upgrade: allow }))
+              },
+            }),
+          }
         }
-        return
       }
-      if (socketOwner?.allow === allow) return
-      // Dispose the previous owner before the next mounts, so the router holds one socket route, answerable by one hub.
-      const previous = socketOwner
-      socketOwner = undefined
-      if (previous !== undefined) await previous.fiber.dispose()
-      socketOwner = {
-        allow,
-        fiber: ctx.plugin({
-          name: 'acryl-door-page-socket',
-          apply(inner) {
-            inner.router.route('/', pageSocketRoutes(channel, { prefix: DOOR_PREFIX, upgrade: allow }))
-          },
-        }),
+      if (wantHttp && prefixRemove === undefined) {
+        try {
+        prefixRemove = (http as { mount: (prefix: string, options: { upgrade: string[] }) => () => void }).mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
+        } catch (cause) { reportError('open the page channel over a WebSocket (the pages use the event stream)', cause) }
       }
     } catch (cause) {
       // A service being torn down answers with an inactive context: drop what this attempt claimed and choose again on the next event.
