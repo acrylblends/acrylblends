@@ -93,7 +93,6 @@ export class NodeServer extends Service {
   private readonly rawExact = new Map<string, RawRoute['handler']>()
   private readonly rawPrefix = new Map<string, RawRoute['handler']>()
   private readonly rawUpgrades = new Map<string, RawUpgradeRoute['handler']>()
-  private rawUpgradeListener: ((req: IncomingMessage, socket: Duplex, head: Buffer) => void) | undefined
   /** One raw dispatch per upgrade request: a second listener (or a re-added one) must never emit the same request again. */
   private readonly rawUpgradeSeen = new WeakSet<IncomingMessage>()
 
@@ -138,6 +137,31 @@ export class NodeServer extends Service {
       hostname: config.hostname,
       overrideGlobalObjects: false,
     }) as Server
+    // ONE raw upgrade listener for the server's lifetime, ahead of the router's WebSocket setups. It consults the registry, so a claim added or
+    // removed never adds or removes a listener; a request it dispatched once is never dispatched again (a guard beside the single ownership).
+    this.server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+      if (this.rawUpgradeSeen.has(request)) return
+      const websocket = request.headers.upgrade?.toLowerCase() === 'websocket'
+      const handler = this.rawUpgrades.get(pathnameOf(request.url))
+      // A raw claim owns its path. A WebSocket upgrade nobody claimed is left to the router's hub when one is attached; with no hub, or for a
+      // protocol this server does not speak, the refusal is written here, cleanly, and never by a second handler.
+      if (handler === undefined) {
+        if (!websocket || this.hub !== undefined) return
+        if (socket.destroyed || socket.writableEnded) return
+        ;(request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] = true
+        socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+        return
+      }
+      if (!websocket) {
+        if (socket.destroyed || socket.writableEnded) return
+        ;(request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] = true
+        socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+        return
+      }
+      this.rawUpgradeSeen.add(request)
+      ;(request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] = true
+      Promise.resolve(handler(request, socket, head)).catch(() => socket.destroy())
+    })
     ctx.effect(() => async () => {
       await this.hub?.close()
       this.server.closeAllConnections()
@@ -161,20 +185,16 @@ export class NodeServer extends Service {
 
   /**
    * Claim an upgrade path for a raw node handler: the handler receives `(req, socket, head)` and from then on owns the socket. The router's
-   * WebSocket handling never sees a claimed upgrade. A path already claimed throws; the remover releases it.
+   * WebSocket handling never sees a claimed upgrade. A path already claimed throws; the remover releases the claim. The transport's one raw
+   * listener exists for the server's whole lifetime and consults this registry, so claims coming and going never add or remove a listener.
    */
   registerRawUpgrade(route: RawUpgradeRoute): () => void {
     if (this.rawUpgrades.has(route.path))
       throw new Error(`acryl-node-server: the upgrade path ${route.path} is already claimed`)
     this.rawUpgrades.set(route.path, route.handler)
-    this.ensureRawUpgradeListener()
     return () => {
       if (this.rawUpgrades.get(route.path) !== route.handler) return
       this.rawUpgrades.delete(route.path)
-      if (this.rawUpgrades.size === 0 && this.rawUpgradeListener !== undefined) {
-        this.server.off('upgrade', this.rawUpgradeListener)
-        this.rawUpgradeListener = undefined
-      }
     }
   }
 
@@ -190,21 +210,6 @@ export class NodeServer extends Service {
     return best?.handler
   }
 
-  /** Install the one raw upgrade listener the first claim needs; it runs before the router's WebSocket setup. */
-  private ensureRawUpgradeListener(): void {
-    if (this.rawUpgradeListener !== undefined) return
-    const listener = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
-      if (this.rawUpgradeSeen.has(request)) return
-      const handler = this.rawUpgrades.get(pathnameOf(request.url))
-      if (handler === undefined) return
-      this.rawUpgradeSeen.add(request)
-      ;(request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] = true
-      Promise.resolve(handler(request, socket, head)).catch(() => socket.destroy())
-    }
-    this.rawUpgradeListener = listener
-    this.server.prependListener('upgrade', listener)
-  }
-
   /**
    * `upgradeWebSocket` for the plugin that asks (call it once, in `apply`): `app.get('/ws', upgrade((c) => ({ onMessage(event, ws) { ... } })))`. Checks go in ordinary middleware on the
    * route, and a handler that returns a `Response` refuses the upgrade with that status before any handshake. Every socket it accepts belongs to the calling plugin: when the plugin
@@ -216,6 +221,11 @@ export class NodeServer extends Service {
       this.hub.attach(this.server, this.ctx.router, { skipWhenRawUpgrade: true })
     }
     return this.hub.upgradeWebSocketFor(this.ctx)
+  }
+
+  /** How many `upgrade` listeners the transport holds (raw plus router setups); a test asserts it does not grow across claim changes. */
+  get upgradeListenerCount(): number {
+    return this.server.listenerCount('upgrade')
   }
 
   /** How many WebSocket connections are open now. */

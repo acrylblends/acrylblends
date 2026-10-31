@@ -227,8 +227,8 @@ export const setupWebSocket = (options: {
     // A raw upgrade handler claimed this path before the WebSocket setup ran: the socket is (or will be) its own.
     if (skipWhenRawUpgrade && (request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] === true) return
     if (request.headers.upgrade?.toLowerCase() !== 'websocket') {
-      // Nobody else listens: an upgrade to another protocol is answered, not left hanging.
-      if (server.listenerCount('upgrade') === 1) rejectUpgradeRequest(socket, 400)
+      // An upgrade to another protocol is answered, not left hanging (the transport's raw listener flags the ones it already answered).
+      rejectUpgradeRequest(socket, 400)
       return
     }
 
@@ -251,9 +251,7 @@ export const setupWebSocket = (options: {
         responseHeaders = response.headers
       }
     } catch {
-      if (server.listenerCount('upgrade') === 1) {
-        rejectUpgradeRequest(socket, 500)
-      }
+      rejectUpgradeRequest(socket, 500)
       return
     }
 
@@ -261,9 +259,7 @@ export const setupWebSocket = (options: {
 
     if (!waiter || waiter.connectionSymbol !== env[CONNECTION_SYMBOL_KEY]) {
       rejectWaiter(request)
-      if (server.listenerCount('upgrade') === 1) {
-        rejectUpgradeRequest(socket, status, responseHeaders)
-      }
+      rejectUpgradeRequest(socket, status, responseHeaders)
       return
     }
 
