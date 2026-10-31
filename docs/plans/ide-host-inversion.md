@@ -435,24 +435,30 @@ Settings write persists and survives a restart.
 
 ### 2. Who owns the profile files
 
-The host owns the app's DSH home and writes three files there, deterministically, before the Loader boots:
+The host owns the app's DSH home and writes its generated files there on every boot:
 
-- `package.json`: the profile manifest, `{ name, private: true, dsh: { profile: { bundles: [] } } }`, created only when the app has none. No bundles, because the
-  composition is ours (the driver-row selection and the host and frame layers), not DSH's; the manifest exists so the plugin manager and the config editor can
-  read the profile it addresses.
-- `cordis.patch.yml`: the composition, written by the launcher on every boot (the list it used to pass in memory): the selected base and web bundle patches, then
-  the host rows, then the frame layer. It is written with the same `!!js` tag the Cordis include declares, so the file round-trips to the identical patch list.
-- `settings.patch.yml`: the user document the config editor edits (`ProfileContext.patchPath`), created as `[]` when missing. It is never written by the host
-  after creation; only the config editor writes it, atomically.
+- `package.json`: the profile manifest, `{ name, private: true, dependencies: { "acrylblends-frame": "0.0.0" }, dsh: { profile: { bundles: ["acrylblends-frame"] } } }`.
+- `node_modules/acrylblends-frame/package.json`: the composition bundle's manifest (`dsh.bundle.patch: cordis.patch.yml`), so DSH resolves the composition the
+  way it resolves any installed bundle (from the profile directory).
+- `node_modules/acrylblends-frame/cordis.patch.yml`: the composition (the driver rows selected from the base and web bundles, the host rows, the app's frame
+  layer), with a "generated, do not edit, rewritten on every boot" header, written with the include's `!!js` tag so it round-trips to the identical patch list.
 
-The app's own `cordis.patch.yml` (the generated frame overlay at the app root) and the profile's composition file are different files in different folders; the
-launcher reads the former as a layer and writes the latter.
+One file is the user's and the host only creates it when missing: `settings.patch.yml`, the profile patch document `ProfileContext.patchPath` points at. It is
+never rewritten by a boot, an init or an upgrade; only DSH's config editor writes it (atomically). The app's own `cordis.patch.yml` (the frame overlay at the app
+root) stays the app's generated overlay, a different file in a different folder.
+
+The composition is a BUNDLE, not the profile's own home patch (`<dir>/cordis.patch.yml`), because of precedence, measured: with the composition as the home patch,
+DSH's config editor refused every Settings save with "Configuration for ... is overridden by a home patch or command-line overlay". `readProfilePatches`
+orders bundle layers, then the patch document, then the home patch; only a bundle layer puts the user's Settings edit after the composition. All three files live
+under `.acrylblends/`, which every template's `.gitignore` already ignores.
 
 ### 3. Boot and reconcile use the same list
 
-The launcher passes `[...readProfilePatches-equivalent]` to `boot`: the settings document first, then the composition, which is exactly `readProfilePatches`'
-output with no bundles and no overlays. Without that equality, the first settings edit would reconcile the include to a different composition (the editor calls
-reconcile before and after its write); with it, the first reconcile is a no-op recomposition and later ones differ only by the edited patch.
+The launcher passes the composition bundle's patches and then the settings document to `boot`, exactly `readProfilePatches`' order and content with no home
+patch and no overlays. Without that equality the first settings edit would reconcile the include to a different composition (the editor calls reconcile before and
+after its write); with it, the first reconcile is a no-op recomposition and later ones differ only by the edited patch. The gate proves the precedence with one
+key set in both places: the composition carries `ui-settings-general.welcomeNoticeVersion` and the user's dismissal writes the same key; the notice stays
+dismissed after a host restart only if the document wins.
 
 ### 4. PENDING and reload
 
@@ -471,6 +477,10 @@ the Settings screens themselves exercise: the manifest read, the document read/w
 ### 6. Verification
 
 The page gate (`scripts/verify-ide-template.mjs`) gains the workshop's day-one path: open Settings > Models and assert no error text and the provider rows; dismiss
-the Preview Notice and assert it closes; restart the host with the same app home and assert the notice does not return (the acknowledgement persisted); add a model
-key in Settings > Models; and chat with it against the local mock, with the key never in the page or the app folder. The existing checks (composition active,
-PENDING/restore, two reloads clean) keep proving the recomposition itself.
+the Preview Notice and assert it closes; restart the host with the same app home and assert the notice does not return (the acknowledgement persisted); add the
+model key in Settings > Models and save; and chat with it against the local mock. It also asserts the secrets rule: after saving, the key text appears in no
+`package.json` and in neither patch file (the settings document or the composition), only in DSH's credentials store. The precedence fixture is the notice itself:
+the app's overlay carries a composition patch for `ui-settings-general.welcomeNoticeVersion`, the dismissal writes the same key in the settings document, and only
+a correct order keeps the notice dismissed across the restart. A unit test in `packages/cli/test/upgrade-frame.test.ts` proves `init` and `upgrade` leave an
+existing `settings.patch.yml` byte-identical and never report it. The existing checks (composition active, PENDING/restore, two reloads clean) keep proving the
+recomposition itself.

@@ -260,6 +260,14 @@ try {
 ${install.stdout}${install.stderr}`)
   log('installed the framework, the DSH driver and the frame packages')
 
+  // The precedence fixture of the profile slice (docs/plans/ide-host-inversion.md, section 20): the COMPOSITION also sets the welcome-notice key that
+  // Settings writes, so only a settings document that wins over the composition can keep the notice dismissed across a restart.
+  const overlayFile = join(app, 'cordis.patch.yml')
+  writeFileSync(
+    overlayFile,
+    `${readFileSync(overlayFile, 'utf8')}\n- id: ui-settings-general\n  config:\n    welcomeNoticeVersion: from-composition\n`,
+  )
+
   const bootEnv = {
     ...process.env,
     ACRYLBLENDS_HOME: join(app, '.acrylblends'),
@@ -293,21 +301,136 @@ ${composition.stdout}`)
   )
 
   let output = ''
-  server = spawn('npm', ['run', 'dev'], {
-    cwd: app,
-    env: bootEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  server.stdout.on('data', (chunk) => (output += chunk))
-  server.stderr.on('data', (chunk) => (output += chunk))
-  const url = await until(
-    async () => /(http:\/\/127\.0\.0\.1:\d+\/?\?token=\S*)/u.exec(output)?.[1],
-    180_000,
-  )
-  if (!url) fail(`the app did not print a tokenized URL:\n${output}`)
+  let serverUrl
+  const startServer = async () => {
+    const from = output.length
+    server = spawn('npm', ['run', 'dev'], {
+      cwd: app,
+      env: bootEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    server.stdout.on('data', (chunk) => (output += chunk))
+    server.stderr.on('data', (chunk) => (output += chunk))
+    const found = await until(
+      async () => /(http:\/\/127\.0\.0\.1:\d+\/?\?token=\S*)/u.exec(output.slice(from))?.[1],
+      180_000,
+    )
+    if (!found) fail(`the app did not print a tokenized URL:\n${output}`)
+    serverUrl = found
+    return found
+  }
+  const stopServer = async () => {
+    if (server === null || server === undefined) return
+    server.kill('SIGTERM')
+    await until(async () => (server.exitCode !== null ? true : undefined), 15_000)
+    if (server.exitCode === null) server.kill('SIGKILL')
+    const port = new URL(serverUrl).port
+    const holder = () =>
+      spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], {
+        encoding: 'utf8',
+      }).stdout.trim()
+    if (holder() !== '') process.kill(Number(holder()), 'SIGKILL')
+    const freed = await until(async () => (holder() === '' ? true : undefined), 15_000)
+    if (freed !== true) fail(`port ${port} stayed held after stopping the host`)
+  }
+
+  let url = await startServer()
   log(`the frame boots on our host at ${url}`)
 
-  const origin = new URL(url).origin
+  let origin = new URL(url).origin
+
+  /**
+   * The workshop's day-one path on a fresh profile: the Preview Notice appears, Continue saves its acknowledgement, and a host restart must find it
+   * dismissed (the settings document wins over the composition fixture that sets the same key). Runs its own short Chrome session, then restarts the host
+   * on the same port and refreshes the cookie jar through the new launch token.
+   */
+  const dismissNoticeAndRestart = async () => {
+    const chrome = findChrome()
+    if (chrome === undefined)
+      fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the notice check')
+    const profile = mkdtempSync(join(tmpdir(), 'ide-template-notice-'))
+    const devPort = 9300 + Math.floor(Math.random() * 300)
+    const child = spawn(chrome, [...chromeFlags(profile, devPort), '--hide-scrollbars'], {
+      stdio: 'ignore',
+    })
+    let cdp
+    try {
+      for (let i = 0; i < 200 && cdp === undefined; i += 1) {
+        cdp = await devtools(devPort).catch(() => undefined)
+        if (cdp === undefined) await sleep(100)
+      }
+      if (cdp === undefined) fail('headless Chrome did not open for the notice check')
+      await cdp.send('Page.enable')
+      await cdp.send('Runtime.enable')
+      for (const cookie of cookiesOf(jar))
+        await cdp.send('Network.setCookie', { ...cookie, url: `${origin}/` }).catch(() => {})
+      await cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: 1440,
+        height: 900,
+        deviceScaleFactor: 1,
+        mobile: false,
+      })
+      const evaluate = async (expression) =>
+        (
+          await cdp.send('Runtime.evaluate', {
+            expression,
+            returnByValue: true,
+            awaitPromise: true,
+          })
+        ).result?.result?.value
+      await cdp.send('Page.navigate', { url })
+      const notice = await until(
+        async () =>
+          await evaluate(`(() => {
+            const dialog = document.querySelector('[role=dialog]')
+            return dialog !== null && dialog.innerText.includes('Preview Notice') ? dialog.innerText.slice(0, 120) : undefined
+          })()`),
+        60_000,
+      )
+      if (notice === undefined) fail('the Preview Notice did not appear on a fresh profile')
+      const clicked = await evaluate(`(() => {
+        const dialog = document.querySelector('[role=dialog]')
+        if (dialog === null) return false
+        const button = [...dialog.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Continue')
+        if (button === undefined) return false
+        button.click()
+        return true
+      })()`)
+      if (clicked !== true) fail('the Preview Notice has no Continue button')
+      const closed = await until(
+        async () =>
+          await evaluate(`(() => {
+            const dialog = document.querySelector('[role=dialog]')
+            return dialog === null || !dialog.innerText.includes('Preview Notice')
+          })()`),
+        20_000,
+      )
+      if (closed !== true) {
+        const detail = await evaluate(
+          `document.querySelector('[role=dialog]')?.innerText.slice(0, 400) ?? null`,
+        )
+        fail(`the Preview Notice did not close after Continue: ${JSON.stringify(detail)}`)
+      }
+      log('the Preview Notice is dismissed once and its acknowledgement saves')
+    } finally {
+      cdp?.close()
+      child.kill('SIGKILL')
+      rmSync(profile, { recursive: true, force: true, maxRetries: 5 })
+    }
+    const settingsFile = join(app, '.acrylblends', 'settings.patch.yml')
+    if (!existsSync(settingsFile))
+      fail('the settings document was not written by the acknowledgement')
+    if (!readFileSync(settingsFile, 'utf8').includes('welcomeNoticeVersion'))
+      fail('the settings document does not hold the notice acknowledgement')
+    // Restart on the same port: the cookie authority stays valid, and only a restart shows whether the acknowledgement persisted.
+    const heldPort = new URL(url).port
+    await stopServer()
+    bootEnv.ACRYLBLENDS_PORT = heldPort
+    const again = await startServer()
+    spawnSync('curl', ['-sL', '-b', jar, '-c', jar, '-o', '/dev/null', again], { encoding: 'utf8' })
+    log('the host restarts on the same port with the acknowledgement in settings.patch.yml')
+    return { url: again, origin: new URL(again).origin }
+  }
   const jar = join(scratch, 'cookies.txt')
   const fetchPage = (target, into) =>
     spawnSync('curl', ['-sL', '-b', jar, '-c', jar, '-o', into, '-w', '%{http_code}', target], {
@@ -383,6 +506,12 @@ ${composition.stdout}`)
     )
   log(`the app's page answers at ${page.path}`)
 
+  // The workshop's day-one path: the Preview Notice appears on a fresh profile, is dismissed once, and stays dismissed after a host restart because
+  // its acknowledgement is in the settings document (the precedence fixture above also sets the key in the composition).
+  const afterNotice = await dismissNoticeAndRestart()
+  url = afterNotice.url
+  origin = afterNotice.origin
+
   await checkTileInBrowser(url, origin, jar, page, output, mock)
   // The owner's rule: the key lives only in DSH's own store, never in the page or the app folder.
   const keyFiles = filesContaining(bootEnv.ACRYLBLENDS_HOME, GATE_KEY)
@@ -393,8 +522,21 @@ ${composition.stdout}`)
     (file) => !file.includes(`${sep}.acrylblends${sep}`),
   )
   if (appFiles.length > 0) fail(`the key reached the app folder: ${appFiles.join(', ')}`)
+  // The profile slice's ownership rule: the manifest, the settings document and the composition bundle are files of the profile; the key belongs in none.
+  const profileFiles = [
+    'package.json',
+    'settings.patch.yml',
+    join('node_modules', 'acrylblends-frame', 'package.json'),
+    join('node_modules', 'acrylblends-frame', 'cordis.patch.yml'),
+  ]
+  for (const file of profileFiles) {
+    const path = join(bootEnv.ACRYLBLENDS_HOME, file)
+    if (!existsSync(path)) fail(`the host profile has no ${file}`)
+    if (readFileSync(path, 'utf8').includes(GATE_KEY))
+      fail(`the key reached the profile file ${file}`)
+  }
   log(
-    `the key is in the host's own store (${keyFiles.map((file) => relative(bootEnv.ACRYLBLENDS_HOME, file)).join(', ')}) and nowhere in the app folder`,
+    `the key is in the host's own store (${keyFiles.map((file) => relative(bootEnv.ACRYLBLENDS_HOME, file)).join(', ')}) and in no profile file, patch file or app file`,
   )
   log('OK')
 } finally {
@@ -510,6 +652,95 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       if (frame.mode !== 'advanced' || frame.frames !== 1)
         fail(`the page is not the frame's advanced layout: ${JSON.stringify(frame)}`)
       log('the page renders the ACRYL frame')
+      if (
+        (await evaluate(
+          `document.querySelector('[role=dialog]')?.innerText.includes('Preview Notice') ?? false`,
+        )) === true
+      )
+        fail('the Preview Notice came back after the host restart')
+      log('the Preview Notice stays dismissed after the host restart')
+
+      // (i) The Settings day-one path: Models loads with no provider-directory error, takes the model key, and the chat then needs no key card.
+      // Close any palette or menu left open (a command named Settings lives in the palette too), then press the frame's own Settings button.
+      for (const type of ['keyDown', 'keyUp'])
+        await cdp.send('Input.dispatchKeyEvent', {
+          type,
+          key: 'Escape',
+          code: 'Escape',
+          windowsVirtualKeyCode: 27,
+          nativeVirtualKeyCode: 27,
+        })
+      await sleep(300)
+      // The frame Settings dialog opens on its Models page on a fresh profile; press the left sidebar's Settings (the chat card has one of its own).
+      const settingsOpen = await until(
+        async () =>
+          await evaluate(`(() => {
+            if (document.querySelector('[role=dialog]') !== null) return true
+            const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
+              (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
+            for (const button of buttons) button.click()
+            return false
+          })()`),
+        20_000,
+        500,
+      )
+      if (settingsOpen !== true) {
+        const detail = await evaluate(`document.body.innerText.slice(0, 400)`)
+        fail(`Settings did not open a dialog: ${JSON.stringify(detail)}`)
+      }
+      const models = await until(
+        async () =>
+          await evaluate(`(() => {
+            const dialog = document.querySelector('[role=dialog]')
+            if (dialog === null) return undefined
+            const text = dialog.innerText
+            if (text.includes('Loading the provider directory failed')) return { failed: text.slice(0, 400) }
+            const input = dialog.querySelector('input[type=password]') ?? dialog.querySelector('input[aria-label="API key"]')
+            return input === null ? undefined : { text: text.slice(0, 200) }
+          })()`),
+        20_000,
+      )
+      if (models === undefined) {
+        const detail = await evaluate(
+          `document.querySelector('[role=dialog]')?.innerText.slice(0, 500) ?? document.body.innerText.slice(0, 500)`,
+        )
+        fail(`Settings > Models did not show the API key field: ${JSON.stringify(detail)}`)
+      }
+      if (models.failed !== undefined)
+        fail(`Settings > Models failed: ${JSON.stringify(models.failed)}`)
+      await evaluate(`(() => {
+        const dialog = document.querySelector('[role=dialog]')
+        const input = dialog.querySelector('input[type=password]') ?? dialog.querySelector('input[aria-label="API key"]')
+        input?.focus()
+        return true
+      })()`)
+      await cdp.send('Input.insertText', { text: GATE_KEY })
+      await sleep(250)
+      if ((await click('Save and continue')) !== true) fail('Settings > Models has no save action')
+      const saved = await until(
+        async () =>
+          await evaluate(`(() => {
+            const dialog = document.querySelector('[role=dialog]')
+            if (dialog === null) return true
+            if (dialog.innerText.includes('Loading the provider directory failed')) return 'failed'
+            return dialog.innerText.includes('Add an API key to get started') ? undefined : true
+          })()`),
+        20_000,
+      )
+      if (saved === 'failed') fail('Settings > Models failed while saving the key')
+      if (saved !== true) fail('Settings > Models did not accept the key')
+      for (const type of ['keyDown', 'keyUp'])
+        await cdp.send('Input.dispatchKeyEvent', {
+          type,
+          key: 'Escape',
+          code: 'Escape',
+          windowsVirtualKeyCode: 27,
+          nativeVirtualKeyCode: 27,
+        })
+      await sleep(300)
+      log(
+        'Settings > Models loads, takes the DeepSeek key, and the first-run prompt leaves once it is saved',
+      )
 
       const pressEscape = async () => {
         for (const type of ['keyDown', 'keyUp'])
@@ -821,73 +1052,102 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         log("the terminal's endpoints keep the app's origin and token admission under the mount")
       }
 
-      // (i) The chat, with the local model mock: the first-run card takes the key, the composer sends a message, and the model request carries
-      // the key that was entered (the proof of use, not how fast a reply paints).
-      await evaluate(
-        `(() => { const tab = [...document.querySelectorAll('[role=tab]')].find(candidate => candidate.textContent.includes('AcrylDSH Chat')); tab?.click(); return true })()`,
+      // A settings change is picked up on the next page load: reload, select the project's worktree if the reload asks for one, then open a chat.
+      await cdp.send('Page.navigate', { url: `${origin}/` })
+      const reloaded = await until(
+        async () => await evaluate(`document.querySelector('.dshWorkspaceSide') !== null`),
+        60_000,
       )
-      await sleep(500)
-      const card = await until(
-        async () =>
-          await evaluate(
-            `document.querySelector('section[aria-label="Connect a model"]') !== null`,
-          ),
-        20_000,
-      )
-      if (card !== true) {
-        const snapshot = await evaluate(
-          `({ chat: document.querySelector('.dshWorkspaceChat')?.innerText.slice(0, 300) ?? null, body: document.body.innerText.slice(0, 400) })`,
-        )
-        fail(`the connect card did not appear in the chat: ${JSON.stringify(snapshot)}`)
-      }
-      await evaluate(
-        `document.querySelector('section[aria-label="Connect a model"] input[aria-label="API key"]')?.focus()`,
-      )
-      await cdp.send('Input.insertText', { text: GATE_KEY })
-      await sleep(250)
-      const enabled = await evaluate(
-        `(() => { const button = [...document.querySelectorAll('section[aria-label="Connect a model"] button')].find(candidate => candidate.textContent.trim() === 'Connect'); return button !== undefined && !button.disabled })()`,
-      )
-      if (enabled !== true) fail('the connect action did not enable after a key was typed')
-      await evaluate(
-        `(() => { const button = [...document.querySelectorAll('section[aria-label="Connect a model"] button')].find(candidate => candidate.textContent.trim() === 'Connect'); button?.click(); return true })()`,
-      )
-      const connected = await until(
-        async () =>
-          await evaluate(
-            `document.querySelector('section[aria-label="Connect a model"]') === null`,
-          ),
-        20_000,
-      )
-      if (connected !== true) fail('the connect card stayed after the key was entered')
-      log('the frame takes an API key in its first-run card and the card leaves once it is stored')
-      await evaluate(
-        `document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.focus()`,
-      )
-      await cdp.send('Input.insertText', { text: GATE_MESSAGE })
-      await sleep(250)
+      if (reloaded !== true) fail('the frame did not come back after the settings reload')
+      await sleep(1500)
       if (
-        (await evaluate(
-          `(() => { const button = document.querySelector('button[aria-label="Send message"]'); if (button === null) return false; button.click(); return true })()`,
-        )) !== true
-      )
-        fail('the chat has no send control')
-      const used = await until(
-        async () =>
-          mock.requests.some((request) => request.headers['x-api-key'] === GATE_KEY) || undefined,
-        30_000,
-      )
-      if (!used)
-        fail(
-          `the model request did not carry the entered key; requests: ${JSON.stringify(mock.requests.map((request) => ({ url: request.url, key: request.headers['x-api-key'] ?? null })))}`,
+        (await evaluate(`document.body.innerText.includes('Select a worktree first')`)) === true
+      ) {
+        await evaluate(
+          await evaluate(
+            `(() => { const button = [...document.querySelectorAll('.dshWorkspaceSide button')].find((candidate) => (candidate.getAttribute('aria-label') ?? '').startsWith('New chat on')); button?.click(); return true })()`,
+          ),
         )
-      const inPage = await evaluate(
-        `document.documentElement.outerHTML.includes(${JSON.stringify(GATE_KEY)}) || document.body.innerText.includes(${JSON.stringify(GATE_KEY)})`,
-      )
-      if (inPage === true) fail('the API key is still in the page after it was stored')
-      log(
-        'the chat sent a message with the key entered in the card, and the local model answered; the page does not keep the key',
-      )
+        await sleep(1000)
+      }
+
+      // The workshop runs on the agent template; the blank app has no chat worktree, so its chat send is not checked here.
+      if (template === 'agent') {
+        // A fresh chat from the tab menu: a session started after the key was saved shows no first-run card, and no page reload is needed (a reload
+        // can come back without a selected worktree and is not what the guide asks an attendee to do).
+        await evaluate(
+          `(() => { const button = [...document.querySelectorAll('button')].find((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Choose what to open'); button?.click(); return true })()`,
+        )
+        await sleep(500)
+        const chatOpened = await evaluate(`(() => {
+        const item = [...document.querySelectorAll('[role=menuitem],button,a')].find((candidate) => (candidate.textContent.trim()) === 'AcrylDSH Chat')
+        if (item === undefined) return false
+        item.click()
+        return true
+      })()`)
+        if (chatOpened !== true) fail('the tab menu has no AcrylDSH Chat item')
+        await sleep(1500)
+        await sleep(1200)
+        await sleep(1500)
+        await evaluate(
+          `(() => { const tab = [...document.querySelectorAll('[role=tab]')].find(candidate => candidate.textContent.includes('AcrylDSH Chat')); tab?.click(); return true })()`,
+        )
+        await sleep(800)
+        if (
+          (await evaluate(
+            `document.querySelector('section[aria-label="Connect a model"]') !== null`,
+          )) === true
+        )
+          fail('the chat still asks for a key after it was saved in Settings > Models')
+        log('the chat does not ask for a key again after Settings > Models saved it')
+        const composer = await until(
+          async () =>
+            await evaluate(
+              `document.querySelector('[contenteditable=true][aria-label^="Describe"]') !== null`,
+            ),
+          20_000,
+        )
+        if (composer !== true) {
+          const detail = await evaluate(`document.body.innerText.slice(0, 500)`)
+          fail(`the chat has no composer after the settings reload: ${JSON.stringify(detail)}`)
+        }
+        await evaluate(
+          `document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.focus()`,
+        )
+        await cdp.send('Input.insertText', { text: GATE_MESSAGE })
+        await sleep(250)
+        const sendEnabled = await until(
+          async () =>
+            await evaluate(`(() => {
+              const button = document.querySelector('button[aria-label="Send message"]')
+              return button !== null && !button.disabled
+            })()`),
+          15_000,
+        )
+        if (sendEnabled !== true) {
+          const detail = await evaluate(`document.body.innerText.slice(0, 500)`)
+          fail(`the chat has no send control: ${JSON.stringify(detail)}`)
+        }
+        await evaluate(
+          `(() => { document.querySelector('button[aria-label="Send message"]')?.click(); return true })()`,
+        )
+        const used = await until(
+          async () =>
+            mock.requests.some((request) => request.headers['x-api-key'] === GATE_KEY) || undefined,
+          30_000,
+        )
+        if (!used)
+          fail(
+            `the model request did not carry the entered key; requests: ${JSON.stringify(mock.requests.map((request) => ({ url: request.url, key: request.headers['x-api-key'] ?? null })))}`,
+          )
+        const inPage = await evaluate(
+          `document.documentElement.outerHTML.includes(${JSON.stringify(GATE_KEY)}) || document.body.innerText.includes(${JSON.stringify(GATE_KEY)})`,
+        )
+        if (inPage === true) fail('the API key is still in the page after it was stored')
+        log(
+          'the chat sent a message with the key saved in Settings, and the local model answered; the page does not keep the key',
+        )
+      }
 
       if (skipSettings) log('Settings skipped (GATE_SKIP_SETTINGS=1)')
       else {
