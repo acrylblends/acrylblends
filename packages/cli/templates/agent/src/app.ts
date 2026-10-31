@@ -78,26 +78,28 @@ const DEVELOPMENT_ROWS: Record<string, string> = {
 }
 
 /**
- * The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. The app's `plugins/`
- * folder is trusted to install at start, and is where the builder writes.
+ * The app's rows in the manifest's order, composed into `ctx`: the app's own server calls this from `createApp`, and the generated frame layer mounts it
+ * as one row, so the frame runs the app exactly as the app's own server does (same rows, same order, same config). `host: true` leaves the server and the
+ * door to the frame host, which mounts its own.
  */
-export async function createApp(
+export async function composeInto(
+  ctx: Context,
   chosen: AppInstance,
   options: {
     values?: Readonly<Record<string, ParameterValue>>
-    /** A real model (any OpenAI-compatible API) in place of the offline scripted one. */
     model?: OpenAIConfig
-    /** Start the HTTP server (default). Tests pass `false` and call `app.root.router.request(path)`: it needs no port, so it also runs where a sandbox forbids listening. */
     listen?: boolean
+    host?: boolean
   } = {},
-): Promise<App> {
+): Promise<Fiber[]> {
   const read = readManifest(options.values)
   // Rows left out: the server (and so the door, which needs it) when the app is reached in process; the door in production and with ACRYL_DOOR=off (one process at a time
   // serves a folder's door, so the tests that start several apps set it).
-  const listen = options.listen !== false
+  const listen = options.listen !== false && options.host !== true
   const leaveOut = new Set<string>()
   let extensionsReadOnly = false
-  if (!listen) leaveOut.add('acryl-node-server').add('acryl-door')
+  // In the frame host the server and the door are the host's rows; the app contributes only its own plugins.
+  if (!listen || options.host === true) leaveOut.add('acryl-node-server').add('acryl-door')
   if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off')
     leaveOut.add('acryl-door')
   // Production: the rows that give a visitor power over the running app or the owner's model key are left out too. The agent (`POST /ask` spends the model key and runs tools),
@@ -136,13 +138,9 @@ export async function createApp(
     console.warn(
       'warning: extensions/ is the old folder for plugins the agent writes; move them to plugins/ ("git mv extensions/<name> plugins/<name>"). extensions/ is read for this release only.',
     )
-  const root = new Context()
-  const first = root.plugin(instance, chosen)
-  await first.await()
   const fibers: Fiber[] = [
-    first,
     // The `model` row mounts the scripted model, or the real one when a model is configured.
-    ...(await compose(root, manifest, options.model ? { ...registry, model: openai } : registry, {
+    ...(await compose(ctx, manifest, options.model ? { ...registry, model: openai } : registry, {
       ...(options.model ? { model: { ...options.model } } : {}),
       // Runtime values the manifest cannot hold: the manifest's own digest (every task records it), and who may install.
       tasks: { manifest: `sha256:${manifest.digest}` },
@@ -155,12 +153,42 @@ export async function createApp(
         ],
       },
       builder: { dir: extensionsDir },
-      server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0, hostname: chosen.host },
+      // The frame host runs the server itself and its app instance carries no port; only the app's own server configures one.
+      ...(options.host === true
+        ? {}
+        : {
+            server: {
+              port: chosen.port.start,
+              scan: chosen.port.scan ? 20 : 0,
+              hostname: chosen.host,
+            },
+          }),
     })),
   ]
+  return fibers
+}
+
+/**
+ * The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. The app's `plugins/`
+ * folder is trusted to install at start, and is where the builder writes.
+ */
+export async function createApp(
+  chosen: AppInstance,
+  options: {
+    values?: Readonly<Record<string, ParameterValue>>
+    /** A real model (any OpenAI-compatible API) in place of the offline scripted one. */
+    model?: OpenAIConfig
+    /** Start the HTTP server (default). Tests pass `false` and call `app.root.router.request(path)`: it needs no port, so it also runs where a sandbox forbids listening. */
+    listen?: boolean
+  } = {},
+): Promise<App> {
+  const root = new Context()
+  const first = root.plugin(instance, chosen)
+  await first.await()
+  const fibers: Fiber[] = [first, ...(await composeInto(root, chosen, options))]
   return {
     root,
-    url: listen ? root.nodeServer.url : '',
+    url: options.listen === false ? '' : root.nodeServer.url,
     async stop() {
       for (const fiber of [...fibers].reverse()) await fiber.dispose()
     },

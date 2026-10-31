@@ -157,6 +157,122 @@ Next: fix the settings opening at the dialog's owner (render the settings dialog
 run the `settings.open` path through the settings trigger), then the gate's steps after Settings (palette, PTY tab, /app tile, chat mock), then the door's
 re-provide scenario.
 
+## 13. The app's own plugin rows in the frame (design note, 2026-10-31)
+
+Found while asserting the agent template's panel inside the `/app` tile: the generated layer mounts only the app's routes row, so an app's own plugins never run
+in the frame host. On the agent template that means no agent panel on the page, and no `/ask` either; the blank template is unaffected because it has no plugins
+of its own.
+
+### 1. Which rows the host owns, and which the layer owns
+
+The host launcher mounts, in its own layer: `node-server` (the framework's server), `web-server` (the webServer port DSH's driver rows register on), `page` (the
+document and the index tap), the client rows, and the DSH driver rows it selects by id. `app-instance` comes from `app/runtime.mjs`. The generator's layer keeps
+`app-routes` (`./src/frame.ts`), the frame packages with their rows, the door row when the app carries one, and the disabled/overridden DSH rows it already
+writes. So the layer owns: the app's routes row, the app's own plugin rows, the frame packages, and the door. The host owns: the server, the web-server port,
+the page, the app instance, and the DSH driver selection. `manifest` and `save` are app plugins but not rows the frame needs (they are CLI-time tools), so they
+stay out of the layer.
+
+### 2. How the app's own rows mount
+
+The same entries the app's own server mounts: the app's `blend.yaml` lists `- id: <name>` rows, and each resolves to `./plugins/<name>/index.ts` (the folder the
+scaffolder copied). The layer should carry them in `blend.yaml` order, after `app-routes`, skipping the ids the host or the generator already provides
+(`instance`, `acryl-router`, `acryl-node-server`, `acryl-web-server`, `acryl-page`, `manifest`, `save`, `acryl-door`). The attempted implementation in
+`packages/cli/src/init.ts` did exactly that (reading `blend.yaml`, falling back to the plugin folders, `readdirSync` for the rest) and is reverted, not landed.
+
+### 3. What actually fails, measured
+
+With those rows in the layer, DSH's startup audit reports (text as printed):
+
+```
+Failed plugins (6):
+  agent
+    Package: ./plugins/agent/index.ts
+    failed to import
+  tasks
+    Package: ./plugins/tasks/index.ts
+    failed to import
+  sandbox, extensions, builder, openai: the same
+```
+
+`failed to import` is `dsh-app-boot`'s label for a row whose Loader entry has no fiber (`inactiveEntries`: `if (fiber === void 0) ... error: "failed to import"`),
+so the real import rejection is swallowed. What was measured around it, on a scratch framed agent app:
+
+- Patching `cordis-plugin-loader`'s own `_init` catch to print `error` printed **nothing**: the row never reaches that catch, so the import happens on another
+  path (DSH's boot importer), which is where the next session must print the rejection.
+- The same plugins import cleanly from the app folder with the app's register:
+  `node --import ./plugins/acryl-node-server/src/register.ts -e "import('./plugins/agent/index.ts')"` prints `agent ok` (and the same without the register).
+- It is not a row-id collision: prefixing every id (`app-agent`, ...) fails identically. It is not the loader's TypeScript extension rewrite
+  (`__rewriteRelativeImportExtension`, which turns `./x.ts` into `./x.js`): an absolute `file:///.../plugins/agent/index.ts` row name and an extensionless
+  `./plugins/agent/index` row name fail the same way. All six app plugin rows fail while `app-routes` (`./src/frame.ts`) and the framework rows mount.
+
+Next: instrument DSH's boot import of layer rows (the path that runs before the Loader's `_init`) and print its rejection; the two candidates are a different base
+URL for rows inside the app's `plugins/` folders, and the boot importer evaluating rows before the app's register hooks are installed. Once the cause is known, the
+rows land in `init.ts` as described in (2) and the agent template's panel assertion can go back into the page gate.
+
+### 13a. The cause, measured, and what mounting the rows then needs
+
+The swallowed rejection, printed by patching the Loader's activation step: `Error: invalid plugin, expect function or object with an "apply" method,
+received object`, once per row. A Cordis row's module must BE the plugin, while the app's registry mounts NAMED plugin objects
+(`import { agent, memory, model, tools } from '../plugins/agent/index.ts'`; `export const registry = { tasks, model, tools, memory, agent, ... }`), so the module
+namespace has no `apply`. That is why the rows never reached the loader's import catch: the import succeeded and the plugin check threw afterwards.
+
+A working mount is a one-line generated adapter per row, from the same source of truth the app already has (`src/app.ts`'s imports and its registry), never a
+hand-kept list:
+
+```js
+// frame/<row>.mjs
+export { agent as default } from '../plugins/agent/index.ts'
+```
+
+and the row names `./frame/<row>.mjs`; a row imported as a namespace (`* as panel`) mounts the module directly. Tried in a scaffolded agent app: all rows
+load and apply, and two further needs surfaced, which are the next step:
+
+- **The rows need their composition config.** The app's server passes per-row config in `createApp` (`builders`/`extensions` sources and the rest are set in code,
+  not in `blend.yaml`), so the layer's rows run without it: the builder row then fails with its own clear error ("the builder writes into …/plugins, which is
+  not an extensions source"). The composition the app's server builds should be exported by the template (one function `appRows()` the server and the generated
+  layer both mount), so the frame composes the app exactly as its own server does, config included.
+- **The launcher must print the cause.** DSH's "failed to import" hid this for two rounds, here and in ACRYL's 178 rows. The generated `scripts/ide-host.mjs`
+  should catch the boot's StartupError and print each failing row's id, module and the full error chain (`error.entries` carries the original failures), and
+  `--check` should fail naming them.
+
+Both are prerequisites for re-mounting the app rows and for the agent template's panel assertion in the page gate.
+
+### 13b. The composition row, landed, and the service-name collision it hits
+
+`composeInto(ctx, chosen, options)` is now exported by the agent template's `src/app.ts`: `createApp` calls it (same rows, same order, same config as before; its
+own suite is 15/15), and a generated `frame/app-plugins.mjs` row can call it with `{ host: true }` (no server config, and the server and door rows left to the
+host). The generated launcher also prints the boot's failure chain now: on a StartupError it lists each failed row's id, module and full error, then exits 1;
+`--check` already names every inactive row.
+
+Mounting that row hits a second, bigger collision, measured: the app's own plugins and the host's DSH driver rows use the same Cordis service names. First
+`Error: service "tools" has been registered at <ToolRuntime>` (DSH's driver `tools` row versus the app's `tools` plugin), and after isolating `tools`, `agent`,
+`settings` and `workspace` in the row's scope, `Error: service "agent" has been registered at <tools>` - a per-service `isolate()` does not separate the
+providers the way the mount needs.
+
+So the next decision is not mechanical: either the app's whole plugin set mounts in a fully isolated scope (every service it provides isolated, which Cordis
+supports but which needs the list derived from the app's registry, not hand-kept), or the host stops mounting the DSH driver rows whose names the app replaces
+(`tools`, `agent`, `settings`, `workspace`) when the app brings its own - which changes what the chat driver rows see. That is a design call for the
+coordinator, with the two exact errors above as the evidence.
+
+### 13c. Scope isolation, tried: the derived list works, the app's own composition collides under it
+
+Per the coordinator's decision (a), the mount was tried with the isolate list DERIVED from the app's own plugins (read from their sources: a Service's
+`super(ctx, 'name')` and a `provide('name')`, restricted to the blend.yaml rows the host does not provide). For the agent template the derived list is exactly
+`agent, extensions, memory, model, sandbox, tasks, tools`, and the row is generated with it. Booting then collides INSIDE the app's own composition, not with
+the host: `Error: service "model" has been registered at <tasks>` although the app's own server mounts the same rows without isolating them. So the per-name
+`isolate()` chain (one label, built by extending the context name by name) does not reproduce what the app's server does for the app's rows; the next probe is
+how Cordis expects one bounded context to be isolated as a whole (one extension with the full map, or a forked context whose group keeps the app's rows in one
+scope), with the app's own suite as the oracle: the app's rows must activate exactly as they do standalone, and only then can the host's driver rows keep their
+own copies of the same names.
+
+The row generation code is written and reverted (not landed); the derived-list scan itself is sound (it found exactly the seven services the app provides).
+
+Attempt detail for the next probe, so it is not retried: the row already mounts the app under ONE child lineage - `let scope = ctx; for (const name of
+APP_SERVICES) scope = scope.isolate(name, 'app-plugins')` - one context built once with a shared label, not a fresh label per name. That is the variant the
+decision (a) note suggested, and it is the one that produced `service "model" has been registered at <tasks>` inside the app. A different mechanism is needed,
+not a repeat of this one: either a context whose group keeps the app's rows in one scope as the app's own server does (the server mounts every row through one
+`compose()` call on one plain Context), or a separate root Context for the app with the host's shared services (router, state, webServer, nodeServer) provided
+into it explicitly.
 ## 14. Handoff at the hub-token step (2026-10-31)
 
 `55f1f673` is the landing candidate approved with the full check green (scaffolder OK, verify:ide-host 72 rows + PENDING/restore + two reloads, verify:ide-template green end to end including Settings; whole chain EXIT 0). `7c694afc` is the next step and also has the full check green: routerHttp exposes a stable per-service hub token; the door keys its socket owner and prefix claim on it; the node server refuses any upgrade that reaches the HTTP fetch path before raw HTTP routes (503 for a WebSocket upgrade, 400 for another protocol); the reject writer checks the socket so a second handler can never answer twice. Suites: node-server 553, router-http 20, web-server 7, door 168 passed / 2 skipped; lint green; full check EXIT 0.
