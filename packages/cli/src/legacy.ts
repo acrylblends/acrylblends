@@ -70,9 +70,9 @@ export function legacyScaffold(template: Template): readonly string[] {
 /** The frame row module's path inside an app: a template with it is framed by the host. */
 export const FRAME_FILE = 'src/frame.ts'
 
-/** Whether the current template carries the frame row (only the framed templates can be upgraded onto it). */
-export function carriesFrame(template: Template): boolean {
-  return existsSync(join(templateDir(template), FRAME_FILE))
+/** Whether a template carries the frame row (only the framed templates can be upgraded onto it). `dir` overrides the template folder for tests. */
+export function carriesFrame(template: Template, dir: string = templateDir(template)): boolean {
+  return existsSync(join(dir, FRAME_FILE))
 }
 
 /** A template's file as a scaffolded app of `name` has it. */

@@ -3,13 +3,15 @@
  * fixture is that release's scaffold (the `legacy/1.1.0` files) in an app the current CLI scaffolded; the upgrade replaces only the template's own files
  * (never a file the app edited) and prints exactly what it changed. A second run changes nothing.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { type Io, init, parseUpgradeOptions, upgrade } from '../src/index'
 import { legacyRoot, legacyScaffold } from '../src/legacy'
+import { readLibrary } from '../src/library'
 import type { Template } from '../src/templates'
+import { frameReport, planFrameStep } from '../src/upgrade'
 
 const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-upgrade-frame-'))
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
@@ -196,12 +198,17 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(existsSync(backups)).toBe(true)
   })
 
-  it('leaves a template without a frame row standalone, and says so', async () => {
-    const root = await preFrameApp('notes-later', 'notes')
-    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
-    const { code, out } = await runUpgrade(root)
-    expect(code).toBe(0)
-    expect(out()).toMatch(/the notes template has no src\/frame\.ts yet/u)
+  it('leaves an app of a template without a frame row standalone, and says so', async () => {
+    // Every built-in template has the frame row now, so the case is a template folder without one: the planning function decides, and the app is not touched.
+    const root = await preFrameApp('no-frame-row', 'blank')
+    const template = mkdtempSync(join(scratch, 'template-no-frame-'))
+    mkdirSync(join(template, 'src'), { recursive: true })
+    writeFileSync(join(template, 'src', 'routes.ts'), '// a template without the frame row\n')
+    const step = planFrameStep(root, readLibrary(), () => template)
+    expect(step.kind).toBe('no-frame-template')
+    expect(frameReport(step)).toMatch(
+      /the blank template has no src\/frame\.ts yet: left standalone/u,
+    )
     expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
   })
 

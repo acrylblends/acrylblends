@@ -35,7 +35,7 @@ import {
 } from './library'
 import { hashFolder, readHistory, readLock, recordLock } from './lock'
 import { appendGitignore, mergeDependencies, mergeImports, mergeTooling } from './project'
-import type { Template } from './templates'
+import { type Template, templateDir } from './templates'
 import { VERSION } from './version'
 
 export interface UpgradeOptions {
@@ -121,7 +121,7 @@ interface FrameFileWrite {
 }
 
 /** What `upgrade` does about the frame for one app: nothing (and why), or a plan computed before anything is written. */
-type FrameStep =
+export type FrameStep =
   | { readonly kind: 'unidentified' }
   | { readonly kind: 'no-frame-template'; readonly template: Template }
   | { readonly kind: 'unavailable'; readonly template: Template }
@@ -155,11 +155,15 @@ function generatedState(existing: string | undefined, text: string): FrameFileWr
  * are replaced only where the app still has the released ones. An app whose scaffold was edited is refused by the caller unless it passes --force; an app
  * of a template without a frame row yet, or one whose scaffold is not this release's, stays standalone and is told so.
  */
-function planFrameStep(appDir: string, library: ReadonlyMap<string, LibraryPlugin>): FrameStep {
+export function planFrameStep(
+  appDir: string,
+  library: ReadonlyMap<string, LibraryPlugin>,
+  templateDirFor: (template: Template) => string = templateDir,
+): FrameStep {
   const name = appNameOf(appDir)
   const layout = identifyTemplate(appDir, name)
   if (layout === undefined) return { kind: 'unidentified' }
-  if (!carriesFrame(layout.template))
+  if (!carriesFrame(layout.template, templateDirFor(layout.template)))
     return { kind: 'no-frame-template', template: layout.template }
   const specs = frameProfileForApp(appDir)
   if (specs === undefined) return { kind: 'unavailable', template: layout.template }
@@ -224,7 +228,7 @@ function planFrameStep(appDir: string, library: ReadonlyMap<string, LibraryPlugi
 }
 
 /** The `frame` line `upgrade` prints: every file it changes, or why it leaves the app alone. */
-function frameReport(frame: FrameStep): string {
+export function frameReport(frame: FrameStep): string {
   if (frame.kind === 'unidentified')
     return "not the previous release's scaffold (edited, or another version): left on the framework alone"
   if (frame.kind === 'no-frame-template')
