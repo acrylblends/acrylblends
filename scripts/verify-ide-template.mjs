@@ -342,16 +342,18 @@ async function checkTileInBrowser(url, origin, jar, page, output) {
         await sleep(300)
       }
 
-      // (a) The left panel: Projects/sessions.
-      const left = await evaluate(`(() => {
-        const side = document.querySelector('.dshWorkspaceSide')
-        return {
-          head: side?.querySelector('.dshWorkspaceSideProjectsHead') !== null,
-          rows: side?.querySelectorAll('[role=treeitem]').length ?? 0,
-        }
-      })()`)
-      if (left?.head !== true || (left.rows ?? 0) < 1)
-        fail(`the left panel has no Projects/session rows: ${JSON.stringify(left)}`)
+      // (a) The left panel: Projects/sessions. The rows arrive after the workspace host answers its projects call, so wait for them.
+      const left = await until(async () => {
+        const snapshot = await evaluate(`(() => {
+            const side = document.querySelector('.dshWorkspaceSide')
+            return {
+              head: side?.querySelector('.dshWorkspaceSideProjectsHead') !== null,
+              rows: side?.querySelectorAll('[role=treeitem]').length ?? 0,
+            }
+          })()`)
+        return snapshot?.head === true && (snapshot.rows ?? 0) >= 1 ? snapshot : undefined
+      }, 20_000)
+      if (left === undefined) fail('the left panel has no Projects/session rows')
       log(`the left panel shows Projects and ${String(left.rows)} tree rows`)
 
       // (d) DSH chat as a tab.
@@ -363,11 +365,10 @@ async function checkTileInBrowser(url, origin, jar, page, output) {
       log('the chat tab is in the tab strip')
 
       // (b) The right panel with the workspace's Files/Changes/Review views (DSH's right sidebar, which the workspace fills).
-      await click('Show right panel')
-      // The panel opens empty and fills after its tab types register: wait for the views themselves, not the first non-null snapshot.
-      const right = await until(
-        async () =>
-          await evaluate(`(() => {
+      // The panel opens empty and fills after its tab types register; the toggle button also appears a moment after the frame, so the wait
+      // presses it again until the views are there (a press on an already-open panel finds no button and does nothing).
+      const right = await until(async () => {
+        const snapshot = await evaluate(`(() => {
             const bar = document.querySelector('[data-acryl-slot=rightbar]')
             if (bar === null) return undefined
             const text = bar.innerText
@@ -376,9 +377,11 @@ async function checkTileInBrowser(url, origin, jar, page, output) {
               .map(element => element.getAttribute('aria-label') ?? element.getAttribute('title') ?? element.textContent.trim())
               .filter(Boolean)
             return { text: text.slice(0, 600), labels: labels.slice(0, 60) }
-          })()`),
-        15_000,
-      )
+          })()`)
+        if (snapshot !== undefined) return snapshot
+        await click('Show right panel')
+        return undefined
+      }, 20_000)
       if (right === undefined) fail('the right panel did not open with its views')
       const rightText = `${right.text}\n${right.labels.join('\n')}`
       for (const label of ['Changes', 'Review'])
@@ -387,30 +390,6 @@ async function checkTileInBrowser(url, origin, jar, page, output) {
       if (!rightText.includes('Files') && !rightText.includes('Code'))
         fail(`the right panel has no files view: ${JSON.stringify(right)}`)
       log('the right panel offers Files, Changes and Review')
-
-      // (c) Settings: General, Models, Plugins, Support, Shortcuts.
-      if ((await click('Settings')) !== true) fail('the frame has no Settings button')
-      const settings = await until(
-        async () =>
-          await evaluate(`(() => {
-            const text = document.body.innerText
-            const labels = [...document.querySelectorAll('button,[role=tab],[role=menuitem],a')]
-              .map(element => element.getAttribute('aria-label') ?? element.textContent.trim())
-              .filter(Boolean)
-            return { text: text.slice(-4000), labels: labels.slice(0, 120) }
-          })()`),
-        10_000,
-      )
-      if (settings === undefined) fail('Settings did not open')
-      const settingsText = `${settings.text}\n${settings.labels.join('\n')}`
-      const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
-      const missing = sections.filter((section) => !settingsText.includes(section))
-      if (missing.length > 0)
-        fail(
-          `Settings is missing ${missing.join(', ')}: ${JSON.stringify(settings).slice(0, 3000)}`,
-        )
-      log(`Settings has ${sections.join(', ')}`)
-      await pressEscape()
 
       // (f) The command palette (the same window event `acryl-shortcuts` sends when its shortcut runs).
       await evaluate(`window.dispatchEvent(new Event('acryl:toggle-command-palette')), true`)
@@ -522,6 +501,31 @@ async function checkTileInBrowser(url, origin, jar, page, output) {
           `the app's page did not load in the frame's browser tile; server said:\n${output.slice(-2500)}`,
         )
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
+
+      // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
+      // (c) Settings: General, Models, Plugins, Support, Shortcuts.
+      if ((await click('Settings')) !== true) fail('the frame has no Settings button')
+      const settings = await until(
+        async () =>
+          await evaluate(`(() => {
+            const text = document.body.innerText
+            const labels = [...document.querySelectorAll('button,[role=tab],[role=menuitem],a')]
+              .map(element => element.getAttribute('aria-label') ?? element.textContent.trim())
+              .filter(Boolean)
+            return { text: text.slice(-4000), labels: labels.slice(0, 120) }
+          })()`),
+        10_000,
+      )
+      if (settings === undefined) fail('Settings did not open')
+      const settingsText = `${settings.text}\n${settings.labels.join('\n')}`
+      const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
+      const missing = sections.filter((section) => !settingsText.includes(section))
+      if (missing.length > 0)
+        fail(
+          `Settings is missing ${missing.join(', ')}: ${JSON.stringify(settings).slice(0, 3000)}`,
+        )
+      log(`Settings has ${sections.join(', ')}`)
+      await pressEscape()
     } finally {
       cdp.close()
     }
