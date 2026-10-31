@@ -4,13 +4,16 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { Context } from '@deepseek-ai/cordis'
 import type {} from '../plugins/acryl-db/src/cordis.ts'
 import type { Db } from '../plugins/acryl-db/src/index.ts'
+import * as router from '../plugins/acryl-router/src/index.ts'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
 import { chatAccess } from '../src/access.ts'
 import { createApp as boot } from '../src/app.ts'
 import { createApp } from '../src/chat-app.ts'
 import type { Llm } from '../src/llm.ts'
+import { FRAME_MOUNT_PREFIX } from '../src/routes.ts'
 
 /** Throwaway homes and databases live inside the project (`.acrylblends/` is ignored by git), because a sandboxed agent may not write to the system temp folder. */
 const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
@@ -24,11 +27,12 @@ const projectRoot = fileURLToPath(new URL('..', import.meta.url))
  */
 const stops: (() => Promise<void>)[] = []
 after(() => Promise.all(stops.map((stop) => stop())))
-async function booted() {
+async function booted(options: { prefix?: string } = {}) {
   const home = await mkdtemp(join(scratch, 'chat-test-'))
   const app = await boot(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
     database: join(home, 'test.sqlite'),
     listen: false,
+    ...options,
   })
   stops.push(async () => {
     await app.stop()
@@ -260,4 +264,45 @@ test('ACRYL_PRODUCTION_KEEP=chat makes the chat public with a loud WARNING and a
   assert.equal(asked.length, 2)
   // Other routes are not counted.
   assert.equal((await app.request('/api/conversations')).status, 200)
+})
+
+test('the frame mounts the chat at /app: the page, the streaming API and the client follow the prefix', async () => {
+  const running = await booted({ prefix: FRAME_MOUNT_PREFIX })
+  const page = await running.root.router.request(FRAME_MOUNT_PREFIX)
+  assert.equal(page.status, 200)
+  const html = await page.text()
+  assert.match(html, /<h1>Chat<\/h1>/u)
+  assert.match(html, /data-base="\/app"/u)
+  assert.match(html, /src="\/app\/client\/chat\.tsx"/u)
+  assert.equal((await running.root.router.request(`${FRAME_MOUNT_PREFIX}/health`)).status, 200)
+  // The streaming API answers at the prefix, with a local model.
+  const { llm } = mock(['Hel', 'lo'])
+  const root = new Context()
+  try {
+    await root.plugin(router)
+    root.router.route(
+      FRAME_MOUNT_PREFIX,
+      createApp(running.root.db, llm, undefined, { prefix: FRAME_MOUNT_PREFIX }),
+    )
+    const res = await root.router.request(`${FRAME_MOUNT_PREFIX}/api/chat`, post({ message: 'hi' }))
+    assert.equal(res.status, 200)
+    const got = events(await res.text())
+    assert.deepEqual(
+      got.map(([e]) => e),
+      ['meta', 'token', 'token', 'done'],
+    )
+    // The app's own URLs are not mounted in the frame; its own server keeps them (the tests above).
+    assert.equal((await root.router.request('/health')).status, 404)
+  } finally {
+    await root.fiber.dispose()
+  }
+  // The client component is compiled and served below the app's prefix.
+  const module = await running.root.router.request(`${FRAME_MOUNT_PREFIX}/client/chat.tsx`)
+  assert.equal(module.status, 200)
+  assert.match(module.headers.get('content-type') ?? '', /javascript/u)
+  assert.equal(
+    (await running.root.router.request(`${FRAME_MOUNT_PREFIX}/client/@acrylblends/jsx-dom.js`))
+      .status,
+    200,
+  )
 })

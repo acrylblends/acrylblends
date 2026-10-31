@@ -47,7 +47,7 @@ const Chat = ({ start }: { start: number | undefined }) => {
     setBusy(true)
     controller.current = new AbortController()
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch(`${base}/api/chat`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message, conversation: conversation.current }),
@@ -65,7 +65,7 @@ const Chat = ({ start }: { start: number | undefined }) => {
       await readEvents(response.body, (name, data) => {
         if (name === 'meta') {
           conversation.current = (JSON.parse(data) as { conversation: number }).conversation
-          history.replaceState(null, '', `/?c=${conversation.current}`)
+          history.replaceState(null, '', `${base}/?c=${conversation.current}`)
         } else if (name === 'token') {
           soFar += JSON.parse(data) as string
           setAnswer(soFar)
@@ -111,5 +111,7 @@ const Chat = ({ start }: { start: number | undefined }) => {
 }
 
 const root = document.getElementById('chat')!
+/** The path the app is mounted at: '' on its own server, `/app` in the ACRYL frame. The page writes it on the element. */
+const base = root.dataset.base ?? ''
 const start = root.dataset.conversation ? Number(root.dataset.conversation) : undefined
 render(<Chat start={start} />, root)
