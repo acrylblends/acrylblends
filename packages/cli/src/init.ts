@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { applyIdeProfile } from './ide-profile'
+import { applyIdeProfile, FRAME_PACKAGES } from './ide-profile'
 import type { Io } from './io'
 import { closure, copyPlugin, readLibrary } from './library'
 import {
@@ -193,11 +193,15 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
         'note: the ACRYL frame is not published yet; this app runs on the framework alone (docs/plans/ide-port-status.md)\n',
       )
     } else {
+      // The generator asks for a spec by Loader row id; the app's dependencies are keyed by package name (the brand row is the one that differs).
+      const packageOf = new Map(
+        FRAME_PACKAGES.map((entry) => [entry.row ?? entry.name, entry.name]),
+      )
       const wrote = applyIdeProfile(directory, {
         appName: name,
         dshVersion: frame.dshVersion,
         frameworkVersion: frame.frameworkVersion,
-        spec: (packageName) => frame.packages[packageName],
+        spec: (row) => frame.packages[packageOf.get(row) ?? row],
         dependencies: frame.packages,
         rows: frameRow,
       })

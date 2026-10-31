@@ -23,6 +23,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyIdeProfile, FRAME_PACKAGES } from '../packages/cli/src/ide-profile.ts'
 import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
+import { frameSpecs as frameSpecsOf } from './lib/ide-specs.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const log = (message) => console.log(`verify-ide-profile: ${message}`)
@@ -42,34 +43,13 @@ async function until(fn, ms, every = 300) {
 const DSH_VERSION = process.env.IDE_PROFILE_DSH_VERSION ?? '0.2.0-rc.2'
 const FRAMEWORK_VERSION = process.env.IDE_PROFILE_FRAMEWORK_VERSION ?? '^1.0.10'
 
-/**
- * The `ide/` packages as a published release would present them: every package in the closure of the frame's rows, as `file:` specs pointing at this
- * checkout, so `npm install` puts them (and their workspace dependencies, which npm does not resolve from `workspace:*`) into the app's node_modules.
- */
+/** The frame's packages as `file:` specs from this checkout (shared with the per-template gate). */
 function frameSpecs() {
-  const folders = new Map()
-  for (const name of readdirSync(join(root, 'ide'))) {
-    const folder = join(root, 'ide', name)
-    const manifest = join(folder, 'package.json')
-    if (!existsSync(manifest)) continue
-    const parsed = JSON.parse(readFileSync(manifest, 'utf8'))
-    if (!existsSync(join(folder, 'lib')))
-      fail(`${parsed.name} is not built; run pnpm run build first`)
-    folders.set(parsed.name, folder)
+  try {
+    return frameSpecsOf(root)
+  } catch (error) {
+    fail(error.message)
   }
-  const closure = []
-  const seen = new Set()
-  const need = (name) => {
-    if (seen.has(name) || !folders.has(name)) return
-    seen.add(name)
-    const parsed = JSON.parse(readFileSync(join(folders.get(name), 'package.json'), 'utf8'))
-    for (const field of ['dependencies', 'peerDependencies'])
-      for (const [dependency, range] of Object.entries(parsed[field] ?? {}))
-        if (String(range).startsWith('workspace:')) need(dependency)
-    closure.push(name)
-  }
-  for (const entry of FRAME_PACKAGES) if (entry.installed !== true) need(entry.name)
-  return Object.fromEntries(closure.map((name) => [name, `file:${folders.get(name)}`]))
 }
 
 /** The framework packages the door's source imports (acryl-router, acryl-node-server, ...), as `file:` specs from this checkout's `plugins/`. */

@@ -38,10 +38,9 @@ test('one profile per app, named from the app and safe for a DSH profile', () =>
   assert.equal(profileNameFor('My App'), 'acrylblends-my-app')
   assert.equal(profileNameFor('notes'), 'acrylblends-notes')
   assert.notEqual(profileNameFor('a'), profileNameFor('b'))
-  assert.match(
-    ideProfilePlan(input).packageJson,
-    /"dev": "dsh --profile acrylblends-my-app --patch cordis.patch.yml --no-open"/u,
-  )
+  assert.match(ideProfilePlan(input).packageJson, /"dev": "node scripts\/ide-dev\.mjs"/u)
+  assert.match(ideProfilePlan(input).devScript, /"acrylblends-my-app"/u)
+  assert.match(ideProfilePlan(input).devScript, /'--import'/u)
 })
 
 test("the overlay mounts the frame rows and leaves DSH's own brand row out", () => {
@@ -78,6 +77,12 @@ test("the overlay turns DSH's API-key first-run dialog off, so it cannot cover t
   )
 })
 
+test("the dev script passes the app's own port preference to DSH's web app, so two frames never fight over 3080", () => {
+  const plan = ideProfilePlan(input)
+  assert.match(plan.devScript, /ACRYLBLENDS_PORT \? \['--port', process\.env\.ACRYLBLENDS_PORT\]/u)
+  assert.doesNotMatch(plan.overlay, /- id: webserver/u)
+})
+
 test("the manifest carries the DSH pin, the framework, the frame packages, and keeps the app's own keys", () => {
   const existing = JSON.stringify({
     name: 'my-app',
@@ -99,12 +104,14 @@ test('applying twice changes nothing the second time', () => {
     'app/runtime.mjs',
     'cordis.patch.yml',
     'package.json',
+    'scripts/ide-dev.mjs',
     'scripts/ide-profile.mjs',
   ])
   const bytes = [
     'app/runtime.mjs',
     'cordis.patch.yml',
     'package.json',
+    'scripts/ide-dev.mjs',
     'scripts/ide-profile.mjs',
   ].map((file) => readFileSync(join(root, file), 'utf8'))
   const second = applyIdeProfile(root, input)
@@ -113,13 +120,18 @@ test('applying twice changes nothing the second time', () => {
     'app/runtime.mjs',
     'cordis.patch.yml',
     'package.json',
+    'scripts/ide-dev.mjs',
     'scripts/ide-profile.mjs',
   ])
   assert.deepEqual(
     bytes,
-    ['app/runtime.mjs', 'cordis.patch.yml', 'package.json', 'scripts/ide-profile.mjs'].map((file) =>
-      readFileSync(join(root, file), 'utf8'),
-    ),
+    [
+      'app/runtime.mjs',
+      'cordis.patch.yml',
+      'package.json',
+      'scripts/ide-dev.mjs',
+      'scripts/ide-profile.mjs',
+    ].map((file) => readFileSync(join(root, file), 'utf8')),
   )
 })
 

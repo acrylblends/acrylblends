@@ -18,6 +18,7 @@
     "src/client/settings/locales.ts": "slice 3: the Models section label, so the card's Settings action can reach Settings > Models",
     "src/client/projects/sidebar-model.ts": "slice 3: a chat restored from the Host's list without a cwd yet is listed under the worktree whose tab set holds its open tab",
     "tests/projects/sidebar-model.spec.ts": "slice 3: one test for that restored-session placement",
+    "tests/pty/spawn-dirs.spec.ts": "slice 6: the non-blocking registry construction bound is 200 ms instead of 100 (the fake login shell takes 400 ms; a blocking build would take that long, so the bound still fails one but leaves a loaded machine, where this gate runs beside others, room for ordinary event-loop work)",
     "src/client/styles.ts": "slice 3: the connect card's styles",
     "src/client/models/model-connect.ts": "new in slice 3: readiness for the first-run step and the one key write, through DSH's own credentials Remote; no ACRYL counterpart. Slice 5 extends readiness with the Models page's account join: a live deepseek-account model group (remote.session.modelCatalog, the same fact ProviderRow.accountAvailable reads) keeps the API-key card away",
     "src/client/models/ModelConnect.tsx": "new in slice 3: the non-modal connect card; no ACRYL counterpart",
@@ -27,5 +28,5 @@
   "supportPackages": {
     "acryl-loopback-http": "The plan marks ACRYL's runtime/acryl-loopback-http as replaced by acrylblends/loopback-only. The framework's loopback-only provides the guard (loopbackOnly, loopbackAuthority) but not the private-route composition the workspace's routes are built with (privateApi, ownPage, ownPageSocket, jsonBody, readJson, INVALID_JSON, ReportError). To keep this package's source and tests byte-identical, the same source commit's runtime package is ported beside it under ide/acryl-loopback-http and declared as a workspace dependency. It is not a row of the frame."
   },
-  "notes": "The original suite still runs unchanged: 96 spec files (100 files under tests/, including its fixtures and helpers). Slice 3 adds 2 spec files with 14 tests; the package now runs 98 spec files, 817 passed and 1 skipped."
+  "notes": "The original suite still runs unchanged: 96 spec files (100 files under tests/, including its fixtures and helpers). Slice 3 adds 2 spec files with 14 tests; the package now runs 98 spec files, 819 passed and 1 skipped."
 }

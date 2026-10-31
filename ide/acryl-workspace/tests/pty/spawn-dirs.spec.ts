@@ -46,7 +46,9 @@ describe.skipIf(process.platform === 'win32')('the terminal search path', () => 
     const shell = loginShell({ delay: 0.4 })
     const built = performance.now()
     const registry = new WorkspacePtyRegistry({ spawn: fakeProcess, env: shell.env, platform: 'darwin' })
-    expect(performance.now() - built).toBeLessThan(100)
+    // A construction that waited for the shell would take its 400 ms; the bound is half that, which still fails a blocking build but leaves a loaded
+    // machine (this gate runs beside others) room for the ordinary event-loop work.
+    expect(performance.now() - built).toBeLessThan(200)
     let ticks = 0
     const timer = setInterval(() => { ticks += 1 }, 20)
     try {

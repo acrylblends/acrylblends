@@ -33,6 +33,8 @@ const FRAME_SPECS = JSON.stringify({
   packages: {
     'acryl-app-shell': 'file:/checkout/ide/acryl-app-shell',
     'acryl-web': 'file:/checkout/ide/acryl-web',
+    // The brand row's Loader id (`ui-brand-acryl`) is not its package name: a spec keyed by package must still reach it.
+    'dsh-client-ui-brand-acryl': 'file:/checkout/ide/dsh-client-ui-brand-acryl',
   },
 })
 
@@ -61,11 +63,18 @@ describe('scaffolding a template into the frame', () => {
     // The frame's rows are there too.
     expect(overlay).toContain('name: acryl-app-shell')
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-    expect(String(manifest.scripts.dev)).toMatch(
-      /^dsh --profile acrylblends-framed --patch cordis\.patch\.yml/u,
+    expect(String(manifest.scripts.dev)).toBe('node scripts/ide-dev.mjs')
+    expect(existsSync(join(root, 'scripts', 'ide-dev.mjs'))).toBe(true)
+    expect(readFileSync(join(root, 'scripts', 'ide-dev.mjs'), 'utf8')).toContain(
+      'acrylblends-framed',
     )
     expect(manifest.scripts.profile).toBe('node scripts/ide-profile.mjs')
     expect(manifest.dependencies['acryl-app-shell']).toBe('file:/checkout/ide/acryl-app-shell')
+    expect(manifest.dependencies['dsh-client-ui-brand-acryl']).toBe(
+      'file:/checkout/ide/dsh-client-ui-brand-acryl',
+    )
+    // The blank app carries the door for the frame (`acryl-door` in its template.json); the overlay mounts it.
+    expect(overlay).toContain('name: ./plugins/acryl-door/src/index.ts')
     expect(existsSync(join(root, 'app', 'runtime.mjs'))).toBe(true)
   })
 

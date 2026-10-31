@@ -29,9 +29,24 @@ Uncommitted work from the previous worker, adopted:
 
 Landed: the scaffolder (`acrylblends init`) calls the generator for a template with `src/frame.ts`: it writes the profile, the overlay (app row `app-routes` -> `./src/frame.ts` plus the frame rows and the door row) and the `dev`/`profile` scripts; the frame package specs come from `ACRYLBLENDS_FRAME_PACKAGES` (JSON) while the ide packages are unpublished, and without it the app stays framework-only with a printed note. Two tests cover both paths (packages/cli/test/init-frame.test.ts). The blank template's routes take one mount prefix (`FRAME_MOUNT_PREFIX = '/app'`), its frame row mounts them there through the same `makeApp()` builder, and its test proves the standalone URLs do not move. The scaffolder gate is green for every template; the full repository check is green on 1f306a62.
 
-Not yet done, in this order: (1) a per-template boot gate: scaffold with the frame specs, install, run `npm run profile`, `npm run dev`, assert the profile's rows are active and the app's page answers at `/app` inside the frame; (2) the remaining templates one at a time: todo, notes, chat, agent (its own panel stays inside the tile, per the decision above), nodejs, each with the same gate; (3) `acrylblends upgrade` for pre-frame apps; (4) Windows (mbpi9win) for the template gate. Publishing the ide packages (owner decision: npm names) is the blocker for a real attendee app to install the frame at all, and the `ACRYLBLENDS_FRAME_PACKAGES` bridge is a checkout-only stopgap. The tile at `/app` is reachable (ACRYL's canvas has a browser tile kind, `BrowserPane`, and the tab strip offers it) but is not yet asserted in a gate.
+Not yet done, in this order: (1) the remaining templates one at a time: todo, notes, chat, agent (its own panel stays inside the tile, per the decision above), nodejs, each with the same gate; (2) `acrylblends upgrade` for pre-frame apps (DS_Fork3, branch 106-ide-slice6-upgrade); (3) Windows (mbpi9win) for the template gate. Publishing the ide packages (owner decision: npm names) is the blocker for a real attendee app to install the frame at all, and the `ACRYLBLENDS_FRAME_PACKAGES` bridge is a checkout-only stopgap.
 
-**Open question to settle first:** the browser tile is DSH's `ui-sidebar-browser`, enabled only in the desktop profile (the documented `right-panel-open@1024` difference). Whether a web-hosted frame can show the app's page at `/app` in a tile, or needs its own tab kind, decides how a template's page reaches the main surface. Do not assume; check `packages/bundle/web-app/cordis.patch.yml` and ACRYL's canvas tab kinds.
+## Slice 6, step 2: the blank boot gate (branch `106-ide-slice6-boot`)
+
+`scripts/verify-ide-template.mjs <template>` (in `pnpm run check` as `verify:blank-frame`) does what a person does, then asserts what they see:
+
+1. `acrylblends init <dir> --template blank` through the built CLI with `ACRYLBLENDS_FRAME_PACKAGES` pointing at this checkout's `ide/` packages as `file:` specs; a second init must refuse.
+2. `npm install`, `npm run profile` (the app's own profile, from nothing), `npm run dev`.
+3. Every overlay row must be active (no "did not activate", "pending" or "failed"): `app-instance, acryl-door, app-routes, acryl-router, acryl-router-http, acryl-web, acryl-settings, acryl-shortcuts, acryl-app-shell, acryl-workspace, acryl-plugin-admin, acryl-support, acryl-sign-in, ui-brand-acryl`.
+4. The page loads the workspace client and carries the door script once; `/app` answers with the app's own body (`{"app":"blank-app","ok":true}`); a door call (`.acryl/bin/acryl brief --json`) answers; `/app/about` answers with the template's page.
+5. Headless Chrome: the ACRYL frame renders; the app's page is opened in the workspace's own browser tile (tab strip -> "Choose what to open" -> "New Browser Tab", type the absolute URL, Go) and the tile's document shows `About`.
+6. The blank app's own `npm run check` (tsc) and `npm test` (6 tests) pass in the same scaffolded folder.
+
+The frame row now declares `inject: ['router', 'routerHttp']` and claims `/app` on the frame's web server as well as routing it (without the claim the row activates and `/app` is 404). The generated `dev` script (`scripts/ide-dev.mjs`) starts DSH through the app's own JSX register (a `.tsx` page must compile in the host) and passes `ACRYLBLENDS_PORT` as `--port`; the gate sets 0, so it never collides with a running frame. The template's `src/frame.ts` row is the same shape each template will carry.
+
+**Tile decision:** ACRYL's own canvas browser tile, not DSH's `ui-sidebar-browser`: that package registers a tab type for DSH's **right sidebar**, while the requirement is the main surface; DSH's row would add a second, different surface. Recorded in `ide-port.md` with the frame and prefix decisions.
+
+**Not yet done:** the other templates (todo, notes, chat, agent with its panel, nodejs) and their gates; Electron window for a template; Windows.
 
 ## Next steps, in order
 
