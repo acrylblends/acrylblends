@@ -484,3 +484,33 @@ the app's overlay carries a composition patch for `ui-settings-general.welcomeNo
 a correct order keeps the notice dismissed across the restart. A unit test in `packages/cli/test/upgrade-frame.test.ts` proves `init` and `upgrade` leave an
 existing `settings.patch.yml` byte-identical and never report it. The existing checks (composition active, PENDING/restore, two reloads clean) keep proving the
 recomposition itself.
+
+## 21. Handoff: the workshop guide (branch 114-workshop-guide)
+
+The attendee guide is `docs/framework/workshop/README.md` (with `facilitator.md` beside it); the registry repository `github.com/acryldev/workshop-2026-11-20`
+(cloned read-only during the rehearsal) carries no guide, only the registry README, `CONTRIBUTING.md`, `index.json` and the entries, so the guide's publish block
+must stay consistent with that README.
+
+Target flow (the coordinator's outline): create an app; it opens in the ACRYL frame with sessions, the right panel and Settings; add the model key in Settings >
+Models; chat; run claude/codex/pi in a PTY tab; edit the app and see it at /app; upgrade an older app.
+
+Rehearsal setup measured on this Mac (2026-10-31): the packed `acrylblends` tarball (`scripts-pack.mjs copy`, `npm pack --ignore-scripts`, `scripts-pack.mjs
+remove`) installed with a prefix into an isolated HOME; the app scaffolded by the packed CLI with `ACRYLBLENDS_FRAME_PACKAGES` through the checkout bridge (the
+frame packages are unpublished; their tarball pipeline is `verify:frame-publish`); `npm install` with an isolated cache; `npm run dev` with `ACRYLBLENDS_HOME`
+and `DSH_HOME` under the app and `ACRYLBLENDS_PORT=0`, never 3080. `npm create` cannot be rehearsed from a tarball because `create-acrylblends` resolves its
+`acrylblends` dependency from the registry; use the packed CLI (`acrylblends init`).
+
+Frame UI measured: left Projects/sessions with the app as a project and `New session`/`New chat on <app>`; the right panel with Files/Changes/Review/Checks/
+Comments/Terminal; Settings sections General/Models/Built-in plugins/Agents/Tabs/Command palette/Shortcuts/Support; the tab menu opens New Terminal, New Browser
+Tab, New File, New Diff, New Board, New Doc, Workspace brief, AcrylDSH Chat and coding-agent tabs (Claude, Codex, Pi, ...); a terminal tab starts in the app folder;
+a browser tab reaches `/app`; `.acryl/door.json` appears in the app.
+
+State carried into 114: 115 gives the host a real DSH profile, and the fresh-app page gates (agent and blank) are green on the day-one path: Settings > Models
+loads and takes the key, the Preview Notice is dismissed and stays dismissed after a restart, the chat needs no key card after a settings reload (the reload is
+what makes a saved key effective in the running page) and answers against the mock, and the key text is confined to DSH's `.credentials.yaml`. The upgrade gate's
+page run on the upgraded fixture is still red after that reload (the chat area reports "Select a worktree first" and the New-chat fallback finds no composer);
+fix that before landing 115.
+
+Remaining for 114: rewrite the guide's blocks to the frame flow (day-one frame; Settings > Models; chat; a coding agent in a PTY tab; edit the app and see it at
+/app; upgrade an older app), rehearse end to end exactly as an attendee would from the packed CLI in an isolated HOME, fix every failure at the cause, commit to
+`114-workshop-guide`, and push nothing to the registry repository without the coordinator's approval.
