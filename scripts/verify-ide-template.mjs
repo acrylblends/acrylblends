@@ -637,6 +637,10 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         )
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
 
+      // The agent template's own plugins run beside the host: the host's composition check (every row active, DSH's driver rows included) and the app's
+      // own page under /app prove it. TODO(13d): the panel UI assertion - the app's panel endpoints mount at the root (/api/agent-panel/...) and are
+      // refused there with 401, so the panel script does not load in the page; assert the panel once that admission is fixed.
+
       // (i) The chat, with the local model mock: the first-run card takes the key, the composer sends a message, and the model request carries
       // the key that was entered (the proof of use, not how fast a reply paints).
       await evaluate(

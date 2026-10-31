@@ -78,7 +78,11 @@ export interface IdeProfileInput {
   /** Further packages the app installs (an unpublished frame package's own dependencies, in a checkout). */
   readonly dependencies?: Readonly<Record<string, string>>
   /** The app's own rows in the overlay (the file that mounts its routes at the frame prefix), in order; none for an app without one. */
-  readonly rows?: readonly { readonly id: string; readonly name: string }[]
+  readonly rows?: readonly {
+    readonly id: string
+    readonly name: string
+    readonly isolate?: Readonly<Record<string, true>>
+  }[]
   /** Whether the app carries the door at `plugins/acryl-door/src/index.ts`: a row then mounts it, and an app without one simply has no door. */
   readonly door?: boolean
 }
@@ -345,7 +349,12 @@ const yamlName = (name: string): string => (name.startsWith('@') ? `'${name}'` :
 function overlayOf(
   packages: readonly IdeProfilePackage[],
   door = false,
-  appRows: readonly { readonly id: string; readonly name: string }[] = [],
+  appRows: readonly {
+    readonly id: string
+    readonly name: string
+    /** The Loader entry option: services this row's whole subtree provides in its own realm instead of the host's. */
+    readonly isolate?: Readonly<Record<string, true>>
+  }[] = [],
 ): string {
   const rows = packages
   const disabled = new Set(packages.flatMap((entry) => entry.disables ?? []))
@@ -355,7 +364,11 @@ function overlayOf(
     '    - id: app-instance',
     '      name: ./app/runtime.mjs',
     ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts'] : []),
-    ...appRows.flatMap((row) => [`    - id: ${row.id}`, `      name: ${row.name}`]),
+    ...appRows.flatMap((row) => [
+      `    - id: ${row.id}`,
+      `      name: ${row.name}`,
+      ...(row.isolate === undefined ? [] : [`      isolate: ${JSON.stringify(row.isolate)}`]),
+    ]),
   ]
   for (const entry of rows) {
     lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${yamlName(entry.name)}`)
