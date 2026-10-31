@@ -231,7 +231,9 @@ describe('WebSocket', () => {
     const { server, address } = await startServer(app)
 
     try {
-      const statusLine = await new Promise<string>((resolve, reject) => {
+      // The refusal can reach the client as the 400 response or as a reset of the aborted connection, depending on how the two sides' close
+      // orders land; both are refusals, and this test's subject is the leaked request, not which shape the refusal takes.
+      const refusal = await new Promise<{ statusLine?: string; errorCode?: string }>((resolve) => {
         const socket = connect(address.port, '127.0.0.1', () => {
           socket.write(
             'GET /ws HTTP/1.1\r\n' +
@@ -245,11 +247,14 @@ describe('WebSocket', () => {
         })
         socket.once('data', (chunk) => {
           socket.destroy()
-          resolve(chunk.toString('utf-8').split('\r\n')[0])
+          resolve({ statusLine: chunk.toString('utf-8').split('\r\n')[0] })
         })
-        socket.once('error', reject)
+        socket.once('error', (error: NodeJS.ErrnoException) => {
+          resolve({ errorCode: error.code })
+        })
       })
-      expect(statusLine).toContain('400')
+      if (refusal.statusLine !== undefined) expect(refusal.statusLine).toContain('400')
+      else expect(refusal.errorCode).toBe('ECONNRESET')
 
       for (let i = 0; i < 20 && liveCount > 0; i++) {
         global.gc?.()
