@@ -201,11 +201,21 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   // its prefix claimed) whenever the host composes it, the node server's hub otherwise. A service change re-runs the choice, so a provider removed
   // or restored moves the route to the live hub without a duplicate: the previous owner's fiber is disposed before the next mounts.
   let socketOwner: { allow: UpgradeWebSocket; fiber: Fiber } | undefined
-  let prefixRemove: (() => void) | undefined
+  /**
+   * The routerHttp prefix claim, by identity: a release always releases the claim object it was made for, so a release from an older owner
+   * generation can never undo a newer claim (the service events that drive the choice can overlap a teardown with the next claim).
+   */
+  let prefixClaim: { readonly remove: () => void } | undefined
+  const releasePrefix = (claim: { readonly remove: () => void } | undefined = prefixClaim): void => {
+    if (claim === undefined || prefixClaim !== claim) return
+    prefixClaim = undefined
+    claim.remove()
+  }
   /** One choice at a time: the disposals are asynchronous, and two overlapping choices could mount two owners. */
   let choosing = false
   let chooseAgain = false
   const chooseSocket = async (): Promise<void> => {
+    let claimedHere: { readonly remove: () => void } | undefined
     try {
       const http = ctx.get('routerHttp') as
         | { upgrades?: () => UpgradeWebSocket; mount?: (prefix: string, options: { upgrade: string[] }) => () => void }
@@ -216,10 +226,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
       const wantHttp = httpAllow !== undefined && http !== undefined && typeof http.mount === 'function'
       // Order keeps one owner: leaving routerHttp removes its upgrade claim before its route goes; entering it mounts the route first and
       // claims the prefix after. No window has a claim whose hub has no route (an upgrade there is answered twice or never).
-      if (!wantHttp && prefixRemove !== undefined) {
-        prefixRemove()
-        prefixRemove = undefined
-      }
+      if (!wantHttp) releasePrefix()
       if (socketOwner?.allow !== allow) {
         const previous = socketOwner
         socketOwner = undefined
@@ -236,15 +243,19 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
           }
         }
       }
-      if (wantHttp && prefixRemove === undefined) {
+      if (wantHttp && prefixClaim === undefined) {
         try {
-        prefixRemove = (http as { mount: (prefix: string, options: { upgrade: string[] }) => () => void }).mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
-        } catch (cause) { reportError('open the page channel over a WebSocket (the pages use the event stream)', cause) }
+          const remove = (http as { mount: (prefix: string, options: { upgrade: string[] }) => () => void }).mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
+          claimedHere = { remove }
+          prefixClaim = claimedHere
+        } catch (cause) {
+          // The mount cleans up after itself when it fails; nothing of this attempt owns a claim.
+          reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
+        }
       }
     } catch (cause) {
-      // A service being torn down answers with an inactive context: drop what this attempt claimed and choose again on the next event.
-      prefixRemove?.()
-      prefixRemove = undefined
+      // A service being torn down answers with an inactive context: drop this attempt's owner and choose again on the next event.
+      releasePrefix(claimedHere)
       const stale = socketOwner
       socketOwner = undefined
       if (stale !== undefined) void stale.fiber.dispose()
@@ -270,8 +281,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     const off = ctx.on('internal/service' as never, scheduleChoose as never) as unknown as (() => void) | undefined
     return () => {
       off?.()
-      prefixRemove?.()
-      prefixRemove = undefined
+      releasePrefix()
       const owner = socketOwner
       socketOwner = undefined
       if (owner !== undefined) void owner.fiber.dispose()
