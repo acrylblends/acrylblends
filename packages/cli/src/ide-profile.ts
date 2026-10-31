@@ -257,7 +257,7 @@ function hostScriptOf(profile: string): string {
     "const server = ctx.get('nodeServer')",
     "const connection = ctx.get('connection')",
     "// The chat's remote RPC is token-authenticated: the printed URL carries the launch token, and the page exchange turns it into a cookie.",
-    "const url = server === undefined ? undefined : connection === undefined ? server.url : connection.authenticatedUrl(server.url)",
+    'const url = server === undefined ? undefined : connection === undefined ? server.url : connection.authenticatedUrl(server.url)',
     "console.log(`acrylblends host: ${url ?? 'no node server'}`)",
     'if (check) {',
     "  const loader = ctx.get('loader')",
