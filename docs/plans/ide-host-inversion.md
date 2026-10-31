@@ -266,3 +266,10 @@ scope), with the app's own suite as the oracle: the app's rows must activate exa
 own copies of the same names.
 
 The row generation code is written and reverted (not landed); the derived-list scan itself is sound (it found exactly the seven services the app provides).
+
+Attempt detail for the next probe, so it is not retried: the row already mounts the app under ONE child lineage - `let scope = ctx; for (const name of
+APP_SERVICES) scope = scope.isolate(name, 'app-plugins')` - one context built once with a shared label, not a fresh label per name. That is the variant the
+decision (a) note suggested, and it is the one that produced `service "model" has been registered at <tasks>` inside the app. A different mechanism is needed,
+not a repeat of this one: either a context whose group keeps the app's rows in one scope as the app's own server does (the server mounts every row through one
+`compose()` call on one plain Context), or a separate root Context for the app with the host's shared services (router, state, webServer, nodeServer) provided
+into it explicitly.
