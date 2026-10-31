@@ -236,3 +236,20 @@ load and apply, and two further needs surfaced, which are the next step:
   `--check` should fail naming them.
 
 Both are prerequisites for re-mounting the app rows and for the agent template's panel assertion in the page gate.
+
+### 13b. The composition row, landed, and the service-name collision it hits
+
+`composeInto(ctx, chosen, options)` is now exported by the agent template's `src/app.ts`: `createApp` calls it (same rows, same order, same config as before; its
+own suite is 15/15), and a generated `frame/app-plugins.mjs` row can call it with `{ host: true }` (no server config, and the server and door rows left to the
+host). The generated launcher also prints the boot's failure chain now: on a StartupError it lists each failed row's id, module and full error, then exits 1;
+`--check` already names every inactive row.
+
+Mounting that row hits a second, bigger collision, measured: the app's own plugins and the host's DSH driver rows use the same Cordis service names. First
+`Error: service "tools" has been registered at <ToolRuntime>` (DSH's driver `tools` row versus the app's `tools` plugin), and after isolating `tools`, `agent`,
+`settings` and `workspace` in the row's scope, `Error: service "agent" has been registered at <tools>` - a per-service `isolate()` does not separate the
+providers the way the mount needs.
+
+So the next decision is not mechanical: either the app's whole plugin set mounts in a fully isolated scope (every service it provides isolated, which Cordis
+supports but which needs the list derived from the app's registry, not hand-kept), or the host stops mounting the DSH driver rows whose names the app replaces
+(`tools`, `agent`, `settings`, `workspace`) when the app brings its own - which changes what the chat driver rows see. That is a design call for the
+coordinator, with the two exact errors above as the evidence.
