@@ -216,11 +216,18 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     }
   })
   ctx.inject(['nodeServer'], inner => {
-    try {
-      attachSocket((inner.get('nodeServer') as unknown as NodeServerLike | undefined)?.upgrades?.())
-    } catch (cause) {
-      reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
-    }
+    // Two hosts: the DSH-style one has `routerHttp` (the Web adapter) and its own upgrade hub, the plain one has only the node server's hub. Both
+    // inject callbacks can run in either order, and the route may attach to only one hub; prefer routerHttp, so wait one tick and use the node
+    // server's hub only when there is no routerHttp (a route attached to the wrong hub answers the other hub's upgrade with a 500).
+    const timer = setTimeout(() => {
+      if (inner.get('routerHttp') !== undefined) return
+      try {
+        attachSocket((inner.get('nodeServer') as unknown as NodeServerLike | undefined)?.upgrades?.())
+      } catch (cause) {
+        reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
+      }
+    }, 0)
+    return () => { clearTimeout(timer) }
   })
   ctx.router.route('/', privateApi(
     DOOR_PREFIX,
