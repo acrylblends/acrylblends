@@ -333,10 +333,13 @@ ${composition.stdout}`)
     await until(async () => (server.exitCode !== null ? true : undefined), 15_000)
     if (server.exitCode === null) server.kill('SIGKILL')
     const port = new URL(serverUrl).port
-    const holder = () =>
-      spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], {
+    // Windows has no lsof: the process ended is the check that matters there, and the helper must not crash on a missing tool.
+    const holder = () => {
+      const found = spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], {
         encoding: 'utf8',
-      }).stdout.trim()
+      })
+      return typeof found.stdout === 'string' ? found.stdout.trim() : ''
+    }
     if (holder() !== '') process.kill(Number(holder()), 'SIGKILL')
     const freed = await until(async () => (holder() === '' ? true : undefined), 15_000)
     if (freed !== true) fail(`port ${port} stayed held after stopping the host`)
@@ -726,6 +729,20 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         const detail = await evaluate(`document.body.innerText.slice(0, 400)`)
         fail(`Settings did not open a dialog: ${JSON.stringify(detail)}`)
       }
+      // The dialog remembers a section (a runner's agent home opened it on General); the Models page is chosen explicitly instead of assumed.
+      const modelsSection = await until(
+        async () =>
+          await evaluate(`(() => {
+            const dialog = document.querySelector('[role=dialog]')
+            if (dialog === null) return false
+            const item = [...dialog.querySelectorAll('button,[role=tab],[role=menuitem],a')].find((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Models')
+            if (item === undefined) return false
+            item.click()
+            return true
+          })()`),
+        10_000,
+      )
+      if (modelsSection !== true) fail('the Settings dialog has no Models section')
       const models = await until(
         async () =>
           await evaluate(`(() => {

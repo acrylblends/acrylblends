@@ -549,3 +549,11 @@ failure, names the iframe's `src`, title and text instead of only the server out
 20-second loop, with Chrome's output discarded; the launch now waits up to 60 seconds, ends early when Chrome exits, and names the exit code and Chrome's last
 lines. Product note: a host restart issues a new token, so a frame left open with the old token is expected to be re-opened through the browser with the new
 printed URL; the gate follows the new token rather than requiring an old tab to survive the restart. The frame jobs on `118-ci-after-115` are the evidence.
+
+### The rerun on 118 (`ba180b23`, run 41249023980)
+
+Ubuntu green; the two others named their next causes. macOS: the Go re-press let the blank tile pass; the agent gate then failed at Settings > Models because the dialog opened on General (a remembered section) while the gate assumed Models - the gate now presses the Models section explicitly. Windows: `stopServer`'s port check ran `lsof`, which does not exist there, and crashed the restart (`Cannot read properties of undefined (reading 'trim')`); the holder is guarded now, so a missing tool reads as "no holder" and the ended process is the evidence. The notice Chrome's own diagnostics did not trigger.
+
+**Open cause (product): the first Go press on a freshly loaded frame.** The re-press is a gate mitigation, not a cause fixed: if the first Go does nothing, an attendee who clicks once sees nothing happen. Likely the tile's Go handler is not attached when the page first paints (hydration), or Go fires before the address is committed. The product fix is that Go works on the first press, or stays disabled (visibly) until it can; the gate then presses once.
+
+**Open owner decision: a frame surviving a dev restart.** A host restart mints a new connection token (same port, new token); a frame left open with the old token has to be re-opened through the new printed URL. Whether an open frame should survive a dev restart (persisting the connection token in the profile) is the owner's call, not decided here.
