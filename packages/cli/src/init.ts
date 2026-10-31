@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { applyIdeProfile } from './ide-profile'
+import { APP_PLUGINS_FILE, appFrameRows } from './frame-rows'
+import { applyIdeProfile, frameProfileFromEnv } from './ide-profile'
 import type { Io } from './io'
 import { closure, copyPlugin, readLibrary } from './library'
 import {
@@ -115,29 +116,6 @@ async function askTemplate(ask: (question: string) => Promise<string>): Promise<
   throw new UsageError(`unknown template "${answer}" (${TEMPLATES.join(', ')})`)
 }
 
-/** The frame packages' specs for a scaffolded app while the ide packages are unpublished (see the note in `init`). Unset or malformed: undefined. */
-function frameProfileFromEnv():
-  | { dshVersion: string; frameworkVersion: string; packages: Record<string, string> }
-  | undefined {
-  const raw = process.env.ACRYLBLENDS_FRAME_PACKAGES
-  if (raw === undefined || raw.trim() === '') return undefined
-  try {
-    const parsed = JSON.parse(raw) as {
-      dshVersion?: unknown
-      frameworkVersion?: unknown
-      packages?: unknown
-    }
-    if (typeof parsed.dshVersion !== 'string' || typeof parsed.frameworkVersion !== 'string')
-      return undefined
-    const packages: Record<string, string> = {}
-    for (const [key, value] of Object.entries((parsed.packages ?? {}) as Record<string, unknown>))
-      if (typeof value === 'string') packages[key] = value
-    return { dshVersion: parsed.dshVersion, frameworkVersion: parsed.frameworkVersion, packages }
-  } catch {
-    return undefined
-  }
-}
-
 /** Scaffold a Cordis app. Returns the exit code: 0 done, 1 refused or failed. Never overwrites anything. */
 export async function init(options: InitOptions, io: Io): Promise<number> {
   const relative = options.directory ?? '.'
@@ -183,99 +161,28 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
   // `npm run dev` opens it inside the frame with its page at /app. The frame's client packages are not published yet, so the specs come from
   // ACRYLBLENDS_FRAME_PACKAGES (JSON: {dshVersion, frameworkVersion, packages: {name: spec}}); without it the app keeps the framework-only script
   // and says so, instead of writing a profile that cannot install.
-  // The app's own plugins mount in the frame's layer through ONE generated row, which calls the app's own composition (`composeInto` in src/app.ts): the
-  // same rows, order and config the app's own server uses. The app is one bounded context: the services its own plugins provide (read from their sources,
-  // never a hand list) are isolated through the Loader's own entry option, so the host's DSH rows keep their copies of the same names.
-  const HOST_PROVIDED_IDS = new Set([
-    'instance',
-    'acryl-router',
-    'acryl-node-server',
-    'acryl-web-server',
-    'acryl-page',
-    'manifest',
-    'save',
-    'acryl-door',
-  ])
-  // Only a template whose app.ts exports the composition gets the row; the others keep their own server composition untouched.
-  const carriesAppPlugins =
-    existsSync(join(directory, 'src', 'app.ts')) &&
-    readFileSync(join(directory, 'src', 'app.ts'), 'utf8').includes(
-      'export async function composeInto',
-    )
-  let appIsolate: Record<string, true> | undefined
-  if (carriesAppPlugins) {
-    const own: string[] = []
-    const blend = join(directory, 'blend.yaml')
-    if (existsSync(blend))
-      for (const match of readFileSync(blend, 'utf8').matchAll(/^\s*- id:\s*(\S+)\s*$/gmu))
-        if (!HOST_PROVIDED_IDS.has(match[1] as string)) own.push(match[1] as string)
-    const provided = new Set<string>()
-    const walk = (folder: string): void => {
-      if (!existsSync(folder)) return
-      for (const entry of readdirSync(folder, { withFileTypes: true })) {
-        const path = join(folder, entry.name)
-        if (entry.isDirectory()) {
-          walk(path)
-          continue
-        }
-        if (!/\.(ts|tsx|mjs)$/u.test(entry.name)) continue
-        const text = readFileSync(path, 'utf8')
-        for (const match of text.matchAll(/super\(\s*ctx\s*,\s*['"]([\w.-]+)['"]/gu))
-          provided.add(match[1] as string)
-        for (const match of text.matchAll(/reflect\.provide\(\s*['"]([\w.-]+)['"]/gu))
-          provided.add(match[1] as string)
-        for (const match of text.matchAll(/ctx\.provide\(\s*['"]([\w.-]+)['"]/gu))
-          provided.add(match[1] as string)
-      }
-    }
-    for (const row of own) walk(join(directory, 'plugins', row))
-    appIsolate = Object.fromEntries([...provided].sort().map((name) => [name, true as const]))
+  // The ACRYL frame's layer needs two rows for the app itself: its routes row (src/frame.ts), and the one composition row that runs the app's own plugins
+  // beside the host through composeInto (frame/app-plugins.mjs), with the services they provide isolated through the Loader's entry option. appFrameRows is
+  // the one home for those rows, their isolate rule and the generated file; `upgrade` writes the same ones for an app made before the frame.
+  const frame = appFrameRows(directory)
+  if (frame.appPlugins !== undefined) {
     mkdirSync(join(directory, 'frame'), { recursive: true })
-    writeFileSync(
-      join(directory, 'frame', 'app-plugins.mjs'),
-      [
-        "// Generated by acrylblends: the app's own plugins, composed as the app's server composes them (src/app.ts composeInto). The layer row isolates the",
-        "// services this app provides (the Loader entry option), so the host's driver rows keep their own.",
-        "import { composeInto } from '../src/app.ts'",
-        '',
-        "export const name = 'app-plugins'",
-        "export const inject = ['appInstance']",
-        '',
-        'export async function apply(ctx) {',
-        '  const fibers = await composeInto(ctx, ctx.appInstance, { host: true })',
-        "  ctx.effect(() => () => { for (const fiber of [...fibers].reverse()) void fiber.dispose() }, 'app-plugins: dispose')",
-        '}',
-        '',
-      ].join('\n'),
-    )
+    writeFileSync(join(directory, APP_PLUGINS_FILE), frame.appPlugins)
   }
-  const frameRow = existsSync(join(directory, 'src', 'frame.ts'))
-    ? [
-        ...(carriesAppPlugins
-          ? [
-              {
-                id: 'app-plugins',
-                name: './frame/app-plugins.mjs',
-                ...(appIsolate === undefined ? {} : { isolate: appIsolate }),
-              },
-            ]
-          : []),
-        { id: 'app-routes', name: './src/frame.ts' },
-      ]
-    : []
+  const frameRow = frame.rows
   if (frameRow.length > 0) {
-    const frame = frameProfileFromEnv()
-    if (frame === undefined) {
+    const specs = frameProfileFromEnv()
+    if (specs === undefined) {
       io.stdout.write(
         'note: the ACRYL frame is not published yet; this app runs on the framework alone (docs/plans/ide-port-status.md)\n',
       )
     } else {
       const wrote = applyIdeProfile(directory, {
         appName: name,
-        dshVersion: frame.dshVersion,
-        frameworkVersion: frame.frameworkVersion,
-        spec: (packageName) => frame.packages[packageName],
-        dependencies: frame.packages,
+        dshVersion: specs.dshVersion,
+        frameworkVersion: specs.frameworkVersion,
+        spec: (packageName) => specs.packages[packageName],
+        dependencies: specs.packages,
         rows: frameRow,
       })
       io.stdout.write(`frame: wrote ${wrote.written.join(', ') || 'nothing (already right)'}\n`)
