@@ -20,7 +20,7 @@ import type { TerminalDriver, TerminalSession } from '../agent-panel/drivers.ts'
 import { onPath } from '../agent-panel/headless.ts'
 import { mountedPrefix } from '../agent-panel/mount.ts'
 import type {} from '../agent-panel/registry.ts'
-import { loadNodePty, type PtySpawn } from './spawn.ts'
+import { loadNodePty, type PtySpawn, resolveProgram } from './spawn.ts'
 import { terminalDriver } from './terminal.ts'
 
 export const name = 'driver-pty'
@@ -91,7 +91,8 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
   for (const [program, args] of Object.entries(programs))
     ctx.effect(() =>
       ctx.drivers.register(
-        terminalDriver(`pty:${program}`, program, args, spawn, {
+        // The name stays the program the app configured; the PTY runs its full path (Windows does not search PATH itself).
+        terminalDriver(`pty:${program}`, resolveProgram(program), args, spawn, {
           module: `${PREFIX}/client/terminal.ts`,
           prefix: PREFIX,
         }),
