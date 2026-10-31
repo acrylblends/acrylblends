@@ -294,6 +294,23 @@ describe('upgrading a pre-frame app to the host layout', () => {
     }
   }, 180_000)
 
+  it("touches neither the app home nor its settings document: the profile is the host's, the settings are the user's", async () => {
+    const root = await preFrameApp('settings-kept', 'agent')
+    // init leaves the app home to the host: nothing there yet, and the gitignore already covers it.
+    expect(existsSync(join(root, '.acrylblends'))).toBe(false)
+    expect(read(root, '.gitignore')).toContain('.acrylblends/')
+    const settingsFile = join(root, '.acrylblends', 'settings.patch.yml')
+    const document =
+      "- id: ui-settings-general\n  config:\n    welcomeNoticeVersion: 'kept-by-the-user'\n"
+    mkdirSync(join(root, '.acrylblends'), { recursive: true })
+    writeFileSync(settingsFile, document)
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    expect(readFileSync(settingsFile, 'utf8')).toBe(document)
+    expect(out()).not.toMatch(/settings\.patch\.yml/u)
+  })
+
   it('removes the DSH-profile script of the older layout when the host launcher replaces it', async () => {
     const root = await preFrameApp('old-profile')
     writeFileSync(

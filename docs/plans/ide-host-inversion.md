@@ -420,3 +420,121 @@ The driver-pty suite's real-PTY resize test failed on mbpi9win (Windows 10 Pro `
 Cause: the ConPTY console is resized by `pty.resize` in every case (the client repaints at 35 rows, and the console API reports the new size); Node's tty learns of the change through its console input handling, so a child that never reads its console input never sees it. The real programs the driver starts read stdin in raw mode, so the framed terminal is not limited on Windows 10; the test's ECHO program was the one that never read stdin. It now reads stdin in raw mode on Windows, like a real program, and keeps its POSIX behavior (SIGWINCH reaches Node there). If a Windows host ever again delivers no resize to the child, the test skips with this section as the reason rather than passing silently.
 
 The suite keeps the platform's evidence as it is: the new size where `resize` fires, or the console's `ESC [ 8 ; rows ; cols t` report where it appears.
+
+## 21. The host owns a real profile: durable Settings (design, 2026-10-31)
+
+The workshop rehearsal found the first user-facing defect of the host inversion: in the frame, Settings > Models answered "Loading the provider directory failed: dsh:
+failed to read profile manifest <app home>/.acrylblends/package.json", and once that file existed, the DSH "Preview Notice" modal appeared and could not be dismissed
+("The acknowledgement could not be saved"). Both come from one fact: DSH's Settings, config editor and plugin manager are written against a launcher-owned profile
+(manifest, patch document, reconcile), and our host only fabricates a `profileContext` object. This slice gives the app a real profile in its own DSH home, so every
+Settings write persists and survives a restart.
+
+### 1. What DSH reads and writes
+
+- `ProfileContext` (`deepseek-harness/packages/boot/app-boot/src/profile-context.ts:21-40`) is the launcher's contract: `name`, `dir` (the profile directory),
+  `patchPath` (the settings document), `installAnchor` (the app's `package.json`), `cwd`, `home`, `startedBundles`, `overlays`, `telemetryDisabledEnv`.
+- `readProfilePatches` (`profile-context.ts:64-76`) is the one composition reader: `loadProfileDirectory(dir, installAnchor)` bundle layers (none for us),
+  then the `patchPath` file, then `<dir>/cordis.patch.yml` (`PROFILE_PATCH_FILENAME`, `profile.ts:40`), then the launch overlays, then a telemetry patch when the
+  composition carries that row. The order is significant: the config editor re-applies exactly this list.
+- `loadProfileDirectory` (`profile.ts:655-689`) reads `<dir>/package.json` (the profile manifest) and, per `dsh.profile.bundles`, each bundle's patch files; it also
+  parses `<dir>/cordis.patch.yml` as the profile's own patch layer.
+- `ConfigEditor.edit` (`packages/boot/config-editor/src/index.ts:95-160`) does, under a file lock: reconcile the current `readProfilePatches` list; read the entry's
+  live config; compute the next config; read and update `patchPath` as a YAML sequence (one `{ id, name, config }` patch per edited row); verify through
+  `composeEntries` that the document produces exactly the next config (else "overridden by a home patch or command-line overlay"); write the document atomically
+  (mode 0o600); reconcile again with the document replacing the `patchPath` file in the list; and on failure restore the previous document and reconcile again.
+- `reconcileProfilePatches` (`packages/boot/app-boot/src/index.ts:273-303`) replaces the root Include entry's `patches` with the given list, awaits the Loader,
+  and rejects on newly introduced inactive entries (or on any failure of a required id). It requires the boot's Include entry, which `boot()` records.
+- The plugin manager (`packages/boot/plugin-manager/src/index.ts:281-330`) reads the same manifest and `installAnchor` to list bundles; a missing manifest is the
+  Models error above.
+
+### 2. Who owns the profile files
+
+The host owns the app's DSH home and writes its generated files there on every boot:
+
+- `package.json`: the profile manifest, `{ name, private: true, dependencies: { "acrylblends-frame": "0.0.0" }, dsh: { profile: { bundles: ["acrylblends-frame"] } } }`.
+- `node_modules/acrylblends-frame/package.json`: the composition bundle's manifest (`dsh.bundle.patch: cordis.patch.yml`), so DSH resolves the composition the
+  way it resolves any installed bundle (from the profile directory).
+- `node_modules/acrylblends-frame/cordis.patch.yml`: the composition (the driver rows selected from the base and web bundles, the host rows, the app's frame
+  layer), with a "generated, do not edit, rewritten on every boot" header, written with the include's `!!js` tag so it round-trips to the identical patch list.
+
+One file is the user's and the host only creates it when missing: `settings.patch.yml`, the profile patch document `ProfileContext.patchPath` points at. It is
+never rewritten by a boot, an init or an upgrade; only DSH's config editor writes it (atomically). The app's own `cordis.patch.yml` (the frame overlay at the app
+root) stays the app's generated overlay, a different file in a different folder.
+
+The composition is a BUNDLE, not the profile's own home patch (`<dir>/cordis.patch.yml`), because of precedence, measured: with the composition as the home patch,
+DSH's config editor refused every Settings save with "Configuration for ... is overridden by a home patch or command-line overlay". `readProfilePatches`
+orders bundle layers, then the patch document, then the home patch; only a bundle layer puts the user's Settings edit after the composition. All three files live
+under `.acrylblends/`, which every template's `.gitignore` already ignores.
+
+### 3. Boot and reconcile use the same list
+
+The launcher passes the composition bundle's patches and then the settings document to `boot`, exactly `readProfilePatches`' order and content with no home
+patch and no overlays. Without that equality the first settings edit would reconcile the include to a different composition (the editor calls reconcile before and
+after its write); with it, the first reconcile is a no-op recomposition and later ones differ only by the edited patch. The gate proves the precedence with one
+key set in both places: the composition carries `ui-settings-general.welcomeNoticeVersion` and the user's dismissal writes the same key; the notice stays
+dismissed after a host restart only if the document wins.
+
+### 4. PENDING and reload
+
+`reconcileProfilePatches` applies the list through the Include entry, so an edited row follows Cordis' ordinary update path: unchanged rows keep their fibers, a
+changed config reloads its fiber, a row whose new config no longer satisfies its dependencies becomes PENDING until the dependency returns, and the editor's
+required-id set turns a new failure into a rejected save (the editor then restores the document and recommits the previous list). The settings form's namespace
+values come from the same document through `SettingsForms.describe`, and its revision counter is driven by the reload event, so the client sees the new value
+without a page reload.
+
+### 5. What stays fabricated, and what is out of scope
+
+`startedBundles` stays as it is (our start is the launcher, not a DSH plugin install), `overlays` stays empty, and the plugin manager's install/remove operations
+(for profile bundles) remain out of scope: the app's plugins are upgraded by `acrylblends upgrade`, not by DSH's manager. What this slice fixes is the contract
+the Settings screens themselves exercise: the manifest read, the document read/write, and the reconcile.
+
+### 6. Verification
+
+The page gate (`scripts/verify-ide-template.mjs`) gains the workshop's day-one path: open Settings > Models and assert no error text and the provider rows; dismiss
+the Preview Notice and assert it closes; restart the host with the same app home and assert the notice does not return (the acknowledgement persisted); add the
+model key in Settings > Models and save; and chat with it against the local mock. It also asserts the secrets rule: after saving, the key text appears in no
+`package.json` and in neither patch file (the settings document or the composition), only in DSH's credentials store. The precedence fixture is the notice itself:
+the app's overlay carries a composition patch for `ui-settings-general.welcomeNoticeVersion`, the dismissal writes the same key in the settings document, and only
+a correct order keeps the notice dismissed across the restart. A unit test in `packages/cli/test/upgrade-frame.test.ts` proves `init` and `upgrade` leave an
+existing `settings.patch.yml` byte-identical and never report it. The existing checks (composition active, PENDING/restore, two reloads clean) keep proving the
+recomposition itself.
+
+## 22. Handoff: the workshop guide (branch 114-workshop-guide)
+
+The attendee guide is `docs/framework/workshop/README.md` (with `facilitator.md` beside it); the registry repository `github.com/acryldev/workshop-2026-11-20`
+(cloned read-only during the rehearsal) carries no guide, only the registry README, `CONTRIBUTING.md`, `index.json` and the entries, so the guide's publish block
+must stay consistent with that README.
+
+Target flow (the coordinator's outline): create an app; it opens in the ACRYL frame with sessions, the right panel and Settings; add the model key in Settings >
+Models; chat; run claude/codex/pi in a PTY tab; edit the app and see it at /app; upgrade an older app.
+
+Rehearsal setup measured on this Mac (2026-10-31): the packed `acrylblends` tarball (`scripts-pack.mjs copy`, `npm pack --ignore-scripts`, `scripts-pack.mjs
+remove`) installed with a prefix into an isolated HOME; the app scaffolded by the packed CLI with `ACRYLBLENDS_FRAME_PACKAGES` through the checkout bridge (the
+frame packages are unpublished; their tarball pipeline is `verify:frame-publish`); `npm install` with an isolated cache; `npm run dev` with `ACRYLBLENDS_HOME`
+and `DSH_HOME` under the app and `ACRYLBLENDS_PORT=0`, never 3080. `npm create` cannot be rehearsed from a tarball because `create-acrylblends` resolves its
+`acrylblends` dependency from the registry; use the packed CLI (`acrylblends init`).
+
+Frame UI measured: left Projects/sessions with the app as a project and `New session`/`New chat on <app>`; the right panel with Files/Changes/Review/Checks/
+Comments/Terminal; Settings sections General/Models/Built-in plugins/Agents/Tabs/Command palette/Shortcuts/Support; the tab menu opens New Terminal, New Browser
+Tab, New File, New Diff, New Board, New Doc, Workspace brief, AcrylDSH Chat and coding-agent tabs (Claude, Codex, Pi, ...); a terminal tab starts in the app folder;
+a browser tab reaches `/app`; `.acryl/door.json` appears in the app.
+
+State carried into 114: 115 gives the host a real DSH profile, and the fresh-app page gates (agent and blank) are green on the day-one path: Settings > Models
+loads and takes the key, the Preview Notice is dismissed and stays dismissed after a restart, the chat needs no key card after a settings reload (the reload is
+what makes a saved key effective in the running page) and answers against the mock, and the key text is confined to DSH's `.credentials.yaml`. The upgrade gate's
+page run on the upgraded fixture is green after that reload, and the reload's window is a product rule now, not a gate workaround. The frame restores the shown
+chat's worktree asynchronously after a reload (the session list arrives, then the tree follows the chat's folder; `relocateShown` documents the
+startup-before-discovery case), and a reload can also come back with no shown chat at all. A new chat asked in that window used to open with no selected
+worktree, which the canvas answered with "Select a worktree first." and no composer. In the ported `ide/acryl-workspace` package, `WorkspaceShellState` now
+exposes `restoring()` and `waitForSelection()` (8 s bound; a selection settles waiting callers, a restore that ends without one settles them with undefined,
+and disposal settles them too), and `WorkspaceCanvas.openChat`, with no selected worktree, shows "Restoring the worktree of the open chat…" and opens the chat
+on the worktree once the selection resolves; when no restore picks one (a reload with no shown chat), it falls back to the first worktree the sidebar lists
+(the app's project) and selects it. Only a workspace with no worktree keeps "Select a worktree first.", and a chat is never opened with no worktree. The page
+gate now asks for the new chat as soon as the frame is back - inside the window - with no fallback or worktree retry (it retries only the tab menu's own press
+when the menu did not open), and its Settings step waits for the dialog instead of accepting an immediate snapshot. The upgraded app itself was complete
+(profile manifest, composition bundle with the `workspace-controller` `documentsDirectory` config, `storages/workspace.json`); the persistence design is
+unchanged.
+
+Remaining for 114: rewrite the guide's blocks to the frame flow (day-one frame; Settings > Models; chat; a coding agent in a PTY tab; edit the app and see it at
+/app; upgrade an older app), rehearse end to end exactly as an attendee would from the packed CLI in an isolated HOME, fix every failure at the cause, commit to
+`114-workshop-guide`, and push nothing to the registry repository without the coordinator's approval.

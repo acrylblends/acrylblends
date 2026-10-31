@@ -206,11 +206,34 @@ export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, a
   // A new AcrylDSH Chat from the "+" menu: a brand new session, opened in this worktree. Once it becomes
   // current, ChatSelection gives it its own tab - never the existing one.
   const openChat = useCallback(async () => {
-    if (groupKey === GLOBAL_GROUP) { setChatNotice('Select a worktree first.'); return }
-    setChatNotice(null)
-    const result = await projects.newChat(groupKey)
-    if (!result.ok) setChatNotice(result.reason)
-  }, [projects, groupKey])
+    const start = async (worktree: string): Promise<void> => {
+      setChatNotice(null)
+      const result = await projects.newChat(worktree)
+      if (!result.ok) setChatNotice(result.reason)
+    }
+    if (groupKey !== GLOBAL_GROUP) {
+      await start(groupKey)
+      return
+    }
+    // A reload restores the shown chat's worktree asynchronously (the session list arrives, then the tree follows the chat's folder), and the tree can
+    // already list the project before that happens, so "no selection" does not mean "no worktree is coming". The new chat waits for the selection with a
+    // visible state and opens on it; only a workspace that offers none within the wait gets the notice. A chat is never opened with no worktree.
+    setChatNotice('Restoring the worktree of the open chat…')
+    const worktree = await shell.waitForSelection()
+    if (worktree !== undefined) {
+      await start(worktree)
+      return
+    }
+    // No restore picked one (a reload can come back with no shown chat at all): a workspace with projects still has a worktree for a new chat - the first
+    // one the sidebar lists (the app's own project). Select it so the chat and the tree agree; only a workspace with no worktree keeps the notice.
+    const first = shell.getSnapshot().repos.flatMap((repo) => repo.worktrees)[0]?.path
+    if (first === undefined) {
+      setChatNotice('Select a worktree first.')
+      return
+    }
+    shell.select(first)
+    await start(first)
+  }, [projects, groupKey, shell])
 
   const openTarget = useCallback((target: ToastTarget): void => {
     const show = (): void => {
