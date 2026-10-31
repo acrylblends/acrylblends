@@ -33,8 +33,16 @@ const ChatSchema: StandardSchema<ChatInput> = {
   },
 }
 
-/** `access` is who may use the chat (default: anyone, as in development and in the tests); see `src/access.ts`. */
-export function createApp(db: Db, llm: Llm = openAiCompatible, access: Access = { kind: 'open' }) {
+/**
+ * `access` is who may use the chat (default: anyone, as in development and in the tests); see `src/access.ts`. `prefix` is the path the app is mounted at:
+ * '' on its own server, `/app` in the ACRYL frame. Every URL the page writes is derived from it.
+ */
+export function createApp(
+  db: Db,
+  llm: Llm = openAiCompatible,
+  access: Access = { kind: 'open' },
+  { prefix = '' }: { prefix?: string } = {},
+) {
   const store = chatStore(db)
   const app = new Acryl()
   const gate = accessGate(access)
@@ -50,6 +58,7 @@ export function createApp(db: Db, llm: Llm = openAiCompatible, access: Access = 
         await store.conversations(),
         current,
         current ? await store.messages(current.id) : [],
+        prefix,
       ),
     )
   })

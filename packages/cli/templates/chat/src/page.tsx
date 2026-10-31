@@ -1,10 +1,12 @@
 import type { Conversation, Message } from './db.ts'
 import { doorEnabled } from './door.ts'
 
+/** `base` is the path the app is mounted at ('' on its own server, `/app` in the ACRYL frame): every URL here, and the client's own, starts there. */
 export const chatPage = (
   conversations: Conversation[],
   current: Conversation | undefined,
   messages: Message[],
+  base = '',
 ): string =>
   (
     <html lang="en">
@@ -22,9 +24,9 @@ export const chatPage = (
       <body>
         <h1>Chat</h1>
         <nav>
-          <a href="/">New chat</a>
+          <a href={`${base}/`}>New chat</a>
           {conversations.map((c) => (
-            <a href={`/?c=${c.id}`}>{c.title}</a>
+            <a href={`${base}/?c=${c.id}`}>{c.title}</a>
           ))}
         </nav>
         <div id="log">
@@ -32,8 +34,8 @@ export const chatPage = (
             <p class={`row ${m.role}`}>{m.content}</p>
           ))}
         </div>
-        <div id="chat" data-conversation={current ? String(current.id) : ''} />
-        <script type="module" src="/client/chat.tsx" />
+        <div id="chat" data-conversation={current ? String(current.id) : ''} data-base={base} />
+        <script type="module" src={`${base}/client/chat.tsx`} />
         {doorEnabled() ? <script type="module" src="/api/acryl-door/page.js" /> : null}
       </body>
     </html>
