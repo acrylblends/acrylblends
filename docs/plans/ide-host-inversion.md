@@ -406,3 +406,71 @@ composition, `/app`, the panel run, the PTY under the mount, the chat and Settin
 
 Known boundary: an app whose scaffold was edited (or made by a release other than 1.1.0) is identified only through its other template files; when none
 matches, the upgrade leaves it standalone and says so. `--force` covers a recognized template with edited files, never an unidentified one.
+
+## 20. The host owns a real profile: durable Settings (design, 2026-10-31)
+
+The workshop rehearsal found the first user-facing defect of the host inversion: in the frame, Settings > Models answered "Loading the provider directory failed: dsh:
+failed to read profile manifest <app home>/.acrylblends/package.json", and once that file existed, the DSH "Preview Notice" modal appeared and could not be dismissed
+("The acknowledgement could not be saved"). Both come from one fact: DSH's Settings, config editor and plugin manager are written against a launcher-owned profile
+(manifest, patch document, reconcile), and our host only fabricates a `profileContext` object. This slice gives the app a real profile in its own DSH home, so every
+Settings write persists and survives a restart.
+
+### 1. What DSH reads and writes
+
+- `ProfileContext` (`deepseek-harness/packages/boot/app-boot/src/profile-context.ts:21-40`) is the launcher's contract: `name`, `dir` (the profile directory),
+  `patchPath` (the settings document), `installAnchor` (the app's `package.json`), `cwd`, `home`, `startedBundles`, `overlays`, `telemetryDisabledEnv`.
+- `readProfilePatches` (`profile-context.ts:64-76`) is the one composition reader: `loadProfileDirectory(dir, installAnchor)` bundle layers (none for us),
+  then the `patchPath` file, then `<dir>/cordis.patch.yml` (`PROFILE_PATCH_FILENAME`, `profile.ts:40`), then the launch overlays, then a telemetry patch when the
+  composition carries that row. The order is significant: the config editor re-applies exactly this list.
+- `loadProfileDirectory` (`profile.ts:655-689`) reads `<dir>/package.json` (the profile manifest) and, per `dsh.profile.bundles`, each bundle's patch files; it also
+  parses `<dir>/cordis.patch.yml` as the profile's own patch layer.
+- `ConfigEditor.edit` (`packages/boot/config-editor/src/index.ts:95-160`) does, under a file lock: reconcile the current `readProfilePatches` list; read the entry's
+  live config; compute the next config; read and update `patchPath` as a YAML sequence (one `{ id, name, config }` patch per edited row); verify through
+  `composeEntries` that the document produces exactly the next config (else "overridden by a home patch or command-line overlay"); write the document atomically
+  (mode 0o600); reconcile again with the document replacing the `patchPath` file in the list; and on failure restore the previous document and reconcile again.
+- `reconcileProfilePatches` (`packages/boot/app-boot/src/index.ts:273-303`) replaces the root Include entry's `patches` with the given list, awaits the Loader,
+  and rejects on newly introduced inactive entries (or on any failure of a required id). It requires the boot's Include entry, which `boot()` records.
+- The plugin manager (`packages/boot/plugin-manager/src/index.ts:281-330`) reads the same manifest and `installAnchor` to list bundles; a missing manifest is the
+  Models error above.
+
+### 2. Who owns the profile files
+
+The host owns the app's DSH home and writes three files there, deterministically, before the Loader boots:
+
+- `package.json`: the profile manifest, `{ name, private: true, dsh: { profile: { bundles: [] } } }`, created only when the app has none. No bundles, because the
+  composition is ours (the driver-row selection and the host and frame layers), not DSH's; the manifest exists so the plugin manager and the config editor can
+  read the profile it addresses.
+- `cordis.patch.yml`: the composition, written by the launcher on every boot (the list it used to pass in memory): the selected base and web bundle patches, then
+  the host rows, then the frame layer. It is written with the same `!!js` tag the Cordis include declares, so the file round-trips to the identical patch list.
+- `settings.patch.yml`: the user document the config editor edits (`ProfileContext.patchPath`), created as `[]` when missing. It is never written by the host
+  after creation; only the config editor writes it, atomically.
+
+The app's own `cordis.patch.yml` (the generated frame overlay at the app root) and the profile's composition file are different files in different folders; the
+launcher reads the former as a layer and writes the latter.
+
+### 3. Boot and reconcile use the same list
+
+The launcher passes `[...readProfilePatches-equivalent]` to `boot`: the settings document first, then the composition, which is exactly `readProfilePatches`'
+output with no bundles and no overlays. Without that equality, the first settings edit would reconcile the include to a different composition (the editor calls
+reconcile before and after its write); with it, the first reconcile is a no-op recomposition and later ones differ only by the edited patch.
+
+### 4. PENDING and reload
+
+`reconcileProfilePatches` applies the list through the Include entry, so an edited row follows Cordis' ordinary update path: unchanged rows keep their fibers, a
+changed config reloads its fiber, a row whose new config no longer satisfies its dependencies becomes PENDING until the dependency returns, and the editor's
+required-id set turns a new failure into a rejected save (the editor then restores the document and recommits the previous list). The settings form's namespace
+values come from the same document through `SettingsForms.describe`, and its revision counter is driven by the reload event, so the client sees the new value
+without a page reload.
+
+### 5. What stays fabricated, and what is out of scope
+
+`startedBundles` stays as it is (our start is the launcher, not a DSH plugin install), `overlays` stays empty, and the plugin manager's install/remove operations
+(for profile bundles) remain out of scope: the app's plugins are upgraded by `acrylblends upgrade`, not by DSH's manager. What this slice fixes is the contract
+the Settings screens themselves exercise: the manifest read, the document read/write, and the reconcile.
+
+### 6. Verification
+
+The page gate (`scripts/verify-ide-template.mjs`) gains the workshop's day-one path: open Settings > Models and assert no error text and the provider rows; dismiss
+the Preview Notice and assert it closes; restart the host with the same app home and assert the notice does not return (the acknowledgement persisted); add a model
+key in Settings > Models; and chat with it against the local mock, with the key never in the page or the app folder. The existing checks (composition active,
+PENDING/restore, two reloads clean) keep proving the recomposition itself.
