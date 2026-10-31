@@ -7,6 +7,9 @@ import type {} from '../plugins/tasks/index.ts'
 
 export const APP_NAME = '__APP_NAME__'
 
+/** The only place the app's mount prefix is named: the root on its own server (`npm start`), `/app` when the ACRYL frame hosts it (`npm run dev`). */
+export const FRAME_MOUNT_PREFIX = '/app'
+
 /** The door's page script (`.acryl/bin/acryl look` and `act`), in development only: `src/app.ts` leaves the door out in production and with ACRYL_DOOR=off. */
 const DOOR_TAG =
   process.env.NODE_ENV !== 'production' && process.env.ACRYL_DOOR !== 'off'
@@ -50,15 +53,46 @@ const APPEARANCE_JS = `(function () {
 /** The home and settings pages' own layout; their colours come from /appearance.js. */
 const APPEARANCE_STYLE =
   '<style>body{font:16px system-ui,sans-serif;margin:2rem auto;max-width:42rem;padding:0 1rem}a{color:inherit}</style>'
-const APPEARANCE_SCRIPT = '<script src="/appearance.js"></script>'
+const appearanceScript = (prefix: string) => `<script src="${prefix}/appearance.js"></script>`
 
 /** `/settings`: the one setting the template has, the appearance. The desktop app's Settings menu item opens this page. */
-const settingsPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Settings - ${APP_NAME}</title>${APPEARANCE_STYLE}${APPEARANCE_SCRIPT}</head><body><h1>Settings</h1><p><label for="theme">Appearance</label> <select id="theme" name="theme"><option value="system">Match the system</option><option value="light">Light</option><option value="dark">Dark</option></select></p><p id="saved" role="status"></p><p><a href="/">Back to ${APP_NAME}</a></p><script>(function(){var select=document.getElementById('theme'),saved=document.getElementById('saved');try{select.value=localStorage.getItem('theme')||'system'}catch(e){}select.addEventListener('change',function(){var value=select.value;try{if(value==='system'){localStorage.removeItem('theme');delete document.documentElement.dataset.theme}else{localStorage.setItem('theme',value);document.documentElement.dataset.theme=value}saved.textContent='Saved: '+select.options[select.selectedIndex].text}catch(e){saved.textContent='This browser would not keep the setting.'}})})()</script></body></html>`
+const settingsPage = (prefix: string) =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Settings - ${APP_NAME}</title>${APPEARANCE_STYLE}${appearanceScript(prefix)}</head><body><h1>Settings</h1><p><label for="theme">Appearance</label> <select id="theme" name="theme"><option value="system">Match the system</option><option value="light">Light</option><option value="dark">Dark</option></select></p><p id="saved" role="status"></p><p><a href="${prefix}/">Back to ${APP_NAME}</a></p><script>(function(){var select=document.getElementById('theme'),saved=document.getElementById('saved');try{select.value=localStorage.getItem('theme')||'system'}catch(e){}select.addEventListener('change',function(){var value=select.value;try{if(value==='system'){localStorage.removeItem('theme');delete document.documentElement.dataset.theme}else{localStorage.setItem('theme',value);document.documentElement.dataset.theme=value}saved.textContent='Saved: '+select.options[select.selectedIndex].text}catch(e){saved.textContent='This browser would not keep the setting.'}})})()</script></body></html>`
 
+/**
+ * The app's own pages and routes, mountable at any prefix: the standalone server mounts it at the root, the frame row at {@link FRAME_MOUNT_PREFIX}.
+ * Every absolute URL a page writes is derived from the prefix it is mounted at.
+ */
+export function makeApp(prefix = ''): Acryl {
+  const limit = bodyLimit({ maxSize: 64 * 1024 })
+  return (
+    new Acryl()
+      .use(limit)
+      // A browser gets a page (the door's and the agent panel's script tags are added where they are mounted); everything else gets the JSON.
+      .get('/', (c) =>
+        (c.req.header('accept') ?? '').includes('text/html')
+          ? c.html(
+              `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${APP_NAME}</title>${APPEARANCE_STYLE}${appearanceScript(prefix)}</head><body><h1>${APP_NAME}</h1><p>This app runs an agent unless it is switched off (production switches it off, see ACRYL_PRODUCTION_KEEP in AGENTS.md). Ask it for a feature in the agent panel on this page (or with <code>POST /ask</code>).</p>${DOOR_TAG}</body></html>`,
+            )
+          : c.json({ app: APP_NAME, ok: true }),
+      )
+      .get('/health', (c) => c.json({ ok: true }))
+      .get('/settings', (c) => c.html(settingsPage(prefix)))
+      .get('/appearance.js', (c) =>
+        c.body(APPEARANCE_JS, 200, {
+          'content-type': 'text/javascript; charset=utf-8',
+          'cache-control': 'no-cache',
+        }),
+      )
+  )
+}
+
+/** The app's own routes: an `App` mounted on the router at `options.prefix` (empty or absent: the root). */
 export const routes = {
   name: 'routes',
   inject: ['router'],
-  apply(ctx: Context) {
+  apply(ctx: Context, options: { readonly prefix?: string } = {}) {
+    const prefix = options.prefix ?? ''
     // A body here is a name, an id or a question; anything bigger is refused before it is read.
     const json = async (c: {
       req: { json(): Promise<unknown> }
@@ -67,25 +101,8 @@ export const routes = {
       return typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {}
     }
     const limit = bodyLimit({ maxSize: 64 * 1024 })
-    const base = new Acryl()
-      .use(limit)
-      // A browser gets a page (the door's and the agent panel's script tags are added where they are mounted); everything else gets the JSON.
-      .get('/', (c) =>
-        (c.req.header('accept') ?? '').includes('text/html')
-          ? c.html(
-              `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${APP_NAME}</title>${APPEARANCE_STYLE}${APPEARANCE_SCRIPT}</head><body><h1>${APP_NAME}</h1><p>This app runs an agent unless it is switched off (production switches it off, see ACRYL_PRODUCTION_KEEP in AGENTS.md). Ask it for a feature in the agent panel on this page (or with <code>POST /ask</code>).</p>${DOOR_TAG}</body></html>`,
-            )
-          : c.json({ app: APP_NAME, ok: true }),
-      )
-      .get('/health', (c) => c.json({ ok: true }))
-      .get('/settings', (c) => c.html(settingsPage))
-      .get('/appearance.js', (c) =>
-        c.body(APPEARANCE_JS, 200, {
-          'content-type': 'text/javascript; charset=utf-8',
-          'cache-control': 'no-cache',
-        }),
-      )
-    ctx.router.route('/', base)
+    // The app's own page and routes at the one prefix; the agent routes below mount at the same prefix.
+    ctx.router.route(prefix === '' ? '/' : prefix, makeApp(prefix))
     // The routes that give a visitor the agent: mounted only while the agent, the extensions and the tasks run (see the header).
     ctx.inject(['agent', 'extensions', 'tasks'], (inner) => {
       const app = new Acryl().use(limit).get('/extensions', (c) =>
@@ -120,7 +137,7 @@ export const routes = {
             return c.json({ error: 'question must be a string' }, 400)
           return c.json(await inner.agent.run(question))
         })
-      inner.router.route('/', app)
+      inner.router.route(prefix === '' ? '/' : prefix, app)
     })
   },
 }

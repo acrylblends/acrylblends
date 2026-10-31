@@ -200,3 +200,30 @@ test('the app has a /settings page with the appearance setting, and the home pag
     for (const listener of listeners) listener({ key: null })
     assert.equal(dataset.theme, undefined)
   }))
+
+test('the frame row mounts the same routes under /app; the app on its own server keeps its old URLs', () =>
+  inEnvironment({ NODE_ENV: 'test', ACRYL_PRODUCTION_KEEP: undefined }, async (app) => {
+    // The frame row requires the frame's router and web adapter; the app's routes mount at the one prefix the app names.
+    const frame = await import('../src/frame.ts')
+    assert.deepEqual([...frame.inject].sort(), ['router', 'routerHttp'])
+    const { FRAME_MOUNT_PREFIX, routes } = await import('../src/routes.ts')
+    routes.apply(app.root, { prefix: FRAME_MOUNT_PREFIX })
+    for (const path of ['', '/health', '/settings', '/appearance.js']) {
+      const response = await app.root.router.request(`${FRAME_MOUNT_PREFIX}${path}`, {
+        headers: { accept: 'text/html' },
+      })
+      assert.equal(response.status, 200, path)
+      await response.body?.cancel()
+    }
+    // The page under the prefix writes its own URLs from it.
+    const page = await (
+      await app.root.router.request(`${FRAME_MOUNT_PREFIX}/settings`, {
+        headers: { accept: 'text/html' },
+      })
+    ).text()
+    assert.match(page, new RegExp(`src="${FRAME_MOUNT_PREFIX}/appearance.js"`, 'u'))
+    assert.match(page, new RegExp(`href="${FRAME_MOUNT_PREFIX}/"`, 'u'))
+    const missing = await app.root.router.request(`${FRAME_MOUNT_PREFIX}/nope`)
+    assert.equal(missing.status, 404)
+    await missing.body?.cancel()
+  }))

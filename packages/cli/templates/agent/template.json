@@ -4,6 +4,8 @@
     "acryl-router",
     "acryl-state",
     "acryl-node-server",
+    "acryl-page",
+    "acryl-web-server",
     "tasks",
     "agent",
     "openai",
