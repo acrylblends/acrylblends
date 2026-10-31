@@ -6,6 +6,8 @@
     "manifest",
     "save",
     "extensions",
-    "acryl-door"
+    "acryl-door",
+    "acryl-web-server",
+    "acryl-page"
   ]
 }
