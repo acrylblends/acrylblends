@@ -49,7 +49,7 @@ Not covered by this step: the agent template's own panel does not load inside it
 
 ## Next steps, in order
 
-1. `acrylblends upgrade` for pre-frame apps: write the generated profile and layer into an existing app without touching its source.
+1. `acrylblends upgrade` for pre-frame apps (DS_Fork3's slice, branch `112-upgrade`): write the generated profile and layer into an existing app without touching its source.
 2. Windows: the template gate on mbpi9win (arrange with the owner; do not fake).
 3. The agent template's own panel under the frame host (decision 3, section 13d of ide-host-inversion.md).
 4. Publishing the ide packages: the `ACRYLBLENDS_FRAME_PACKAGES` bridge is a checkout-only stopgap, and a real attendee app cannot install the frame until the `@acrylblends/*` names are published.
