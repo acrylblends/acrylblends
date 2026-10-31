@@ -164,9 +164,14 @@ export async function composeInto(
         ],
       },
       builder: { dir: extensionsDir },
-      // The plugins that serve routes of their own mount them under the app's prefix, as makeApp does. On the app's own server that prefix is the root (the
-      // row's default); the frame host serves the app at FRAME_MOUNT_PREFIX, and its own `/api` routes would answer for a panel left at the root.
-      ...(options.host === true ? { 'agent-panel': { mount: FRAME_MOUNT_PREFIX } } : {}),
+      // The rows that serve routes of their own mount them under the app's prefix, as makeApp does. On the app's own server that prefix is the root (the
+      // row's default); the frame host serves the app at FRAME_MOUNT_PREFIX, and its own `/api` routes would answer for a row left at the root.
+      ...(options.host === true
+        ? {
+            'agent-panel': { mount: FRAME_MOUNT_PREFIX },
+            'driver-pty': { mount: FRAME_MOUNT_PREFIX },
+          }
+        : {}),
       // The frame host runs the server itself and its app instance carries no port; only the app's own server configures one.
       ...(options.host === true
         ? {}

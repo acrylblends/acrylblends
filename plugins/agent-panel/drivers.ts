@@ -34,6 +34,11 @@ export interface TerminalSession {
 export interface TerminalDriver {
   readonly kind: 'terminal'
   readonly name: string
+  /**
+   * Where the panel loads the terminal view from: the browser module that draws it, and the URL prefix the view's endpoints live under. The driver
+   * plugin serves both, so the view follows wherever the app is mounted (the root of its own server, or the prefix the ACRYL frame serves it at).
+   */
+  readonly view: { readonly module: string; readonly prefix: string }
   start(options: {
     cwd: string
     env: NodeJS.ProcessEnv
