@@ -247,7 +247,13 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
   const frameRow = existsSync(join(directory, 'src', 'frame.ts'))
     ? [
         ...(carriesAppPlugins
-          ? [{ id: 'app-plugins', name: './frame/app-plugins.mjs', isolate: appIsolate }]
+          ? [
+              {
+                id: 'app-plugins',
+                name: './frame/app-plugins.mjs',
+                ...(appIsolate === undefined ? {} : { isolate: appIsolate }),
+              },
+            ]
           : []),
         { id: 'app-routes', name: './src/frame.ts' },
       ]
