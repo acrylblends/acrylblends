@@ -200,13 +200,16 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   // upgrades, the pages use the stream. The route has ONE owner, chosen by service presence: routerHttp's hub (the Web adapter, which also needs
   // its prefix claimed) whenever the host composes it, the node server's hub otherwise. A service change re-runs the choice, so a provider removed
   // or restored moves the route to the live hub without a duplicate: the previous owner's fiber is disposed before the next mounts.
-  let socketOwner: { allow: UpgradeWebSocket; fiber: Fiber } | undefined
+  const nodeHubToken = { node: true }
+  let socketOwner: { hub: object; allow: UpgradeWebSocket; fiber: Fiber } | undefined
   /**
    * The routerHttp prefix claim, by identity: a release always releases the claim object it was made for, so a release from an older owner
    * generation can never undo a newer claim (the service events that drive the choice can overlap a teardown with the next claim).
    */
-  let prefixClaim: { readonly remove: () => void } | undefined
-  const releasePrefix = (claim: { readonly remove: () => void } | undefined = prefixClaim): void => {
+  let prefixClaim: { readonly remove: () => void; readonly hub: object } | undefined
+  const releasePrefix = (
+    claim: { readonly remove: () => void; readonly hub: object } | undefined = prefixClaim,
+  ): void => {
     if (claim === undefined || prefixClaim !== claim) return
     prefixClaim = undefined
     claim.remove()
@@ -215,7 +218,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   let choosing = false
   let chooseAgain = false
   const chooseSocket = async (): Promise<void> => {
-    let claimedHere: { readonly remove: () => void } | undefined
+    let claimedHere: { readonly remove: () => void; readonly hub: object } | undefined
     try {
       const http = ctx.get('routerHttp') as
         | { upgrades?: () => UpgradeWebSocket; mount?: (prefix: string, options: { upgrade: string[] }) => () => void }
@@ -224,15 +227,26 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
       // The node server's hub attaches to the transport when asked, so it is only touched when routerHttp is not the owner.
       const allow = httpAllow ?? (ctx.get('nodeServer') as unknown as NodeServerLike | undefined)?.upgrades?.()
       const wantHttp = httpAllow !== undefined && http !== undefined && typeof http.mount === 'function'
+      // The claim stores the hub handle it was made for (the memoized upgrade helper): a restored service yields a new one, so the old claim is
+      // released and the prefix is claimed again for the new hub in the order below. A claim left over from the old hub would answer through a
+      // hub whose bindings the new route does not share.
+      // The hub handle, not the helper or the service proxy: a stable per-service token, so a service event is not an owner change but a
+      // restored adapter is.
+      const hub =
+        httpAllow !== undefined
+          ? ((http as { hubToken?: () => object } | undefined)?.hubToken?.() ?? httpAllow)
+          : nodeHubToken
+      if (prefixClaim !== undefined && prefixClaim.hub !== hub) releasePrefix()
       // Order keeps one owner: leaving routerHttp removes its upgrade claim before its route goes; entering it mounts the route first and
       // claims the prefix after. No window has a claim whose hub has no route (an upgrade there is answered twice or never).
       if (!wantHttp) releasePrefix()
-      if (socketOwner?.allow !== allow) {
+      if (socketOwner?.hub !== hub) {
         const previous = socketOwner
         socketOwner = undefined
         if (previous !== undefined) await previous.fiber.dispose()
         if (allow !== undefined) {
           socketOwner = {
+            hub,
             allow,
             fiber: ctx.plugin({
               name: 'acryl-door-page-socket',
@@ -243,10 +257,10 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
           }
         }
       }
-      if (wantHttp && prefixClaim === undefined) {
+      if (wantHttp && prefixClaim === undefined && allow !== undefined) {
         try {
           const remove = (http as { mount: (prefix: string, options: { upgrade: string[] }) => () => void }).mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
-          claimedHere = { remove }
+          claimedHere = { remove, hub }
           prefixClaim = claimedHere
         } catch (cause) {
           // The mount cleans up after itself when it fails; nothing of this attempt owns a claim.
