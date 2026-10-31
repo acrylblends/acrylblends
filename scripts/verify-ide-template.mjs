@@ -163,6 +163,9 @@ function startMockLlm() {
         requests,
         close: () =>
           new Promise((closed) => {
+            // A keep-alive socket from the driver can outlive the last answer; closing only the listener would wait for it forever, and the gate
+            // would print OK and never exit.
+            mock.closeAllConnections()
             mock.close(() => {
               closed()
             })
