@@ -140,6 +140,14 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
       await serveFile(assets, pathname.slice('/assets'.length), res, req.method ?? 'GET')
     },
   })
+  // Browsers ask for /favicon.ico unconditionally; the built light icon answers it.
+  ctx.webServer.register({
+    kind: 'exact',
+    path: '/favicon.ico',
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      await serveFile(dist, 'favicon.svg', res, req.method ?? 'GET')
+    },
+  })
   for (const file of ['favicon.svg', 'favicon-dark.svg', 'manifest.webmanifest']) {
     ctx.webServer.register({
       kind: 'exact',
