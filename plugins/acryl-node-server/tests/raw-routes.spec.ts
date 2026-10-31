@@ -73,6 +73,24 @@ describe('raw node routes', () => {
     expect(await response.text()).toBe('internal error')
   })
 
+  it('refuses an unclaimed upgrade cleanly (503 and close) instead of letting it reach the HTTP routes', async () => {
+    const ctx = await boot()
+    const server = ctx.nodeServer
+    // No hub and no raw claim: nobody owns this upgrade. The transport refuses it; the HTTP fetch path never writes a second answer.
+    const answer = await new Promise<string>((resolve, reject) => {
+      const client = connect(Number(new URL(server.url).port), '127.0.0.1', () => {
+        client.write('GET /nothing HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n')
+      })
+      let data = ''
+      client.on('data', (chunk) => { data += chunk.toString() })
+      client.once('error', reject)
+      client.once('close', () => { resolve(data) })
+      setTimeout(() => { client.destroy(); resolve(data) }, 3_000)
+    })
+    expect(answer).toContain('503 Service Unavailable')
+    expect(answer).toMatch(/connection: close/iu)
+  })
+
   it('hands a claimed upgrade to the raw handler and never to the router', async () => {
     const ctx = await boot()
     const server = ctx.nodeServer
