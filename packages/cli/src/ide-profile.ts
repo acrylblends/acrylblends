@@ -155,6 +155,9 @@ export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string 
   { id: 'ui-renderer', name: '@deepseek-ai/dsh-client-ui-renderer' },
   { id: 'ui-theme', name: '@deepseek-ai/dsh-client-ui-theme' },
   { id: 'ui-settings', name: '@deepseek-ai/dsh-client-ui-settings' },
+  // The settings surface itself (the dialog, its sections list and the trigger). Without this row the page has no Settings trigger or dialog at all:
+  // ui-settings and ui-settings-models only contribute pages into it.
+  { id: 'ui-settings-general', name: '@deepseek-ai/dsh-client-ui-settings-general' },
   { id: 'ui-settings-models', name: '@deepseek-ai/dsh-client-ui-settings-models' },
   { id: 'ui-session', name: '@deepseek-ai/dsh-client-ui-session' },
   { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
