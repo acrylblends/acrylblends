@@ -10,7 +10,7 @@
  */
 
 import { join } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { Acryl } from 'acryl-router'
 import type { UpgradeWebSocket } from 'acryl-router/helpers'
@@ -196,32 +196,87 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
       })
     }, 'acryl-door: the page script in the host index')
   })
-  // The page channel also runs over a WebSocket, which is not one of the browser's six connections per host. Without the `ws` package or an adapter that upgrades, the pages use the stream.
-  // The socket upgrade is attached when a host provides one: DSH's `routerHttp` claims the path on its mount (spec 048 T007's shape), the plain node-server
-  // host's `nodeServer.upgrades()` sees every upgrade itself. Whichever arrives first wins, once; without either the pages use the event stream.
-  let socketRoutesAdded = false
-  const attachSocket = (allow: UpgradeWebSocket | undefined): void => {
-    if (socketRoutesAdded || allow === undefined) return
-    socketRoutesAdded = true
-    ctx.router.route('/', pageSocketRoutes(channel, { prefix: DOOR_PREFIX, upgrade: allow }))
+  // The page channel also runs over a WebSocket, which is not one of the browser's six connections per host. Without `ws` or an adapter that
+  // upgrades, the pages use the stream. The route has ONE owner, chosen by service presence: routerHttp's hub (the Web adapter, which also needs
+  // its prefix claimed) whenever the host composes it, the node server's hub otherwise. A service change re-runs the choice, so a provider removed
+  // or restored moves the route to the live hub without a duplicate: the previous owner's fiber is disposed before the next mounts.
+  let socketOwner: { allow: UpgradeWebSocket; fiber: Fiber } | undefined
+  let prefixRemove: (() => void) | undefined
+  /** One choice at a time: the disposals are asynchronous, and two overlapping choices could mount two owners. */
+  let choosing = false
+  let chooseAgain = false
+  const chooseSocket = async (): Promise<void> => {
+    try {
+      const http = ctx.get('routerHttp') as
+        | { upgrades?: () => UpgradeWebSocket; mount?: (prefix: string, options: { upgrade: string[] }) => () => void }
+        | undefined
+      const httpAllow = http?.upgrades?.()
+      // The node server's hub attaches to the transport when asked, so it is only touched when routerHttp is not the owner.
+      const allow = httpAllow ?? (ctx.get('nodeServer') as unknown as NodeServerLike | undefined)?.upgrades?.()
+      const wantHttp = httpAllow !== undefined && http !== undefined && typeof http.mount === 'function'
+      // Order keeps one owner: leaving routerHttp removes its upgrade claim before its route goes; entering it mounts the route first and
+      // claims the prefix after. No window has a claim whose hub has no route (an upgrade there is answered twice or never).
+      if (!wantHttp && prefixRemove !== undefined) {
+        prefixRemove()
+        prefixRemove = undefined
+      }
+      if (socketOwner?.allow !== allow) {
+        const previous = socketOwner
+        socketOwner = undefined
+        if (previous !== undefined) await previous.fiber.dispose()
+        if (allow !== undefined) {
+          socketOwner = {
+            allow,
+            fiber: ctx.plugin({
+              name: 'acryl-door-page-socket',
+              apply(inner) {
+                inner.router.route('/', pageSocketRoutes(channel, { prefix: DOOR_PREFIX, upgrade: allow }))
+              },
+            }),
+          }
+        }
+      }
+      if (wantHttp && prefixRemove === undefined) {
+        try {
+        prefixRemove = (http as { mount: (prefix: string, options: { upgrade: string[] }) => () => void }).mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
+        } catch (cause) { reportError('open the page channel over a WebSocket (the pages use the event stream)', cause) }
+      }
+    } catch (cause) {
+      // A service being torn down answers with an inactive context: drop what this attempt claimed and choose again on the next event.
+      prefixRemove?.()
+      prefixRemove = undefined
+      const stale = socketOwner
+      socketOwner = undefined
+      if (stale !== undefined) void stale.fiber.dispose()
+      reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
+    }
   }
-  ctx.inject(['routerHttp'], inner => {
-    const http = inner.get('routerHttp') as unknown as { upgrades?: () => UpgradeWebSocket; mount?: (prefix: string, options: { upgrade: string[] }) => unknown } | undefined
-    try {
-      const allow = http?.upgrades?.()
-      if (allow !== undefined && typeof http?.mount === 'function') http.mount(DOOR_PREFIX, { upgrade: [`${DOOR_PREFIX}/channel/ws`] })
-      attachSocket(allow)
-    } catch (cause) {
-      reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
+  const scheduleChoose = (): void => {
+    if (choosing) {
+      chooseAgain = true
+      return
     }
-  })
-  ctx.inject(['nodeServer'], inner => {
-    try {
-      attachSocket((inner.get('nodeServer') as unknown as NodeServerLike | undefined)?.upgrades?.())
-    } catch (cause) {
-      reportError('open the page channel over a WebSocket (the pages use the event stream)', cause)
+    choosing = true
+    void chooseSocket().finally(() => {
+      choosing = false
+      if (chooseAgain) {
+        chooseAgain = false
+        scheduleChoose()
+      }
+    })
+  }
+  ctx.effect(() => {
+    scheduleChoose()
+    const off = ctx.on('internal/service' as never, scheduleChoose as never) as unknown as (() => void) | undefined
+    return () => {
+      off?.()
+      prefixRemove?.()
+      prefixRemove = undefined
+      const owner = socketOwner
+      socketOwner = undefined
+      if (owner !== undefined) void owner.fiber.dispose()
     }
-  })
+  }, 'acryl-door: the page socket owner')
   ctx.router.route('/', privateApi(
     DOOR_PREFIX,
     pageModule,

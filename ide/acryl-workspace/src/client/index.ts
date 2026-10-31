@@ -16,7 +16,7 @@ import { createAgentBridge } from './sessions/agent-bridge.ts'
 import { ChatSelection } from './chat/chat-selection.ts'
 import type { MainViewNavigation } from './sessions/main-session.ts'
 import { ModelConnectControl, type ModelCredentialsPort, type ModelLlmPort, type ModelSessionPort } from './models/model-connect.ts'
-import { openSettingsSection } from './settings/open-settings.ts'
+import { openSettingsSection, setSettingsPanelOpener } from './settings/open-settings.ts'
 import { createWorkspaceFilesApi } from './files/files-api.ts'
 import { filesTabPlugin } from './files/files-tab.ts'
 import { changesTabPlugin } from './changes/changes-tab.ts'
@@ -104,6 +104,19 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => startReviewPersistence(review, storage), 'acryl-workspace: save review comments')
   const comments = new CommentStore(parseSavedComments(storage?.getItem(COMMENTS_STORAGE_KEY) ?? null))
   ctx.effect(() => startCommentPersistence(comments, storage), 'acryl-workspace: save line comments')
+  // The frame's page has no DSH sidebar trigger: Settings opens through the layout service's keyed panel instead (the same panel).
+  ctx.inject(['layout'], (inner) => {
+    const layout = inner.get('layout') as unknown as { selectPanel?: (id: string) => void } | undefined
+    if (layout?.selectPanel === undefined) return () => {}
+    setSettingsPanelOpener(() => {
+      try {
+        layout.selectPanel?.('settings')
+      } catch {
+        // The settings panel row is not registered in this host yet; the caller's notice covers it.
+      }
+    })
+    return () => { setSettingsPanelOpener(undefined) }
+  })
   const agent = createAgentBridge(() => ctx.get('sessions'))
   // DSH's session navigation (`dsh-client-ui-workspace`), looked up when a chat is opened: ACRYL does not import that package (the
   // frame facade stays as it is), so the service is read by name through the narrow port `main-session.ts` declares.

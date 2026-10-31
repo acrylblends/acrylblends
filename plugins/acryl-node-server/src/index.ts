@@ -200,7 +200,7 @@ export class NodeServer extends Service {
   upgrades(): UpgradeWebSocket<WebSocketLike> {
     if (!this.hub) {
       this.hub = new UpgradeHub(this.config.websocket)
-      this.hub.attach(this.server, this.ctx.router)
+      this.hub.attach(this.server, this.ctx.router, { skipWhenRawUpgrade: true })
     }
     return this.hub.upgradeWebSocketFor(this.ctx)
   }
