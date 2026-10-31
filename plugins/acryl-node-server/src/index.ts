@@ -94,6 +94,8 @@ export class NodeServer extends Service {
   private readonly rawPrefix = new Map<string, RawRoute['handler']>()
   private readonly rawUpgrades = new Map<string, RawUpgradeRoute['handler']>()
   private rawUpgradeListener: ((req: IncomingMessage, socket: Duplex, head: Buffer) => void) | undefined
+  /** One raw dispatch per upgrade request: a second listener (or a re-added one) must never emit the same request again. */
+  private readonly rawUpgradeSeen = new WeakSet<IncomingMessage>()
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'nodeServer')
@@ -192,8 +194,10 @@ export class NodeServer extends Service {
   private ensureRawUpgradeListener(): void {
     if (this.rawUpgradeListener !== undefined) return
     const listener = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
+      if (this.rawUpgradeSeen.has(request)) return
       const handler = this.rawUpgrades.get(pathnameOf(request.url))
       if (handler === undefined) return
+      this.rawUpgradeSeen.add(request)
       ;(request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] = true
       Promise.resolve(handler(request, socket, head)).catch(() => socket.destroy())
     }
