@@ -1,0 +1,20 @@
+{
+  "//": "The names the frame's packages publish under. The owner's naming decision is this one value: change `scope` and every package, overlay row, dependency and pack moves with it. `packages` maps a package folder to its short name under the scope.",
+  "scope": "@acrylblends",
+  "packages": {
+    "acryl-ui": "ui",
+    "acryl-brand": "brand",
+    "dsh-client-ui-brand-acryl": "brand-client",
+    "acryl-app-shell": "app-shell",
+    "acryl-workspace": "workspace",
+    "acryl-settings": "settings",
+    "acryl-shortcuts": "shortcuts",
+    "acryl-sign-in": "sign-in",
+    "acryl-control": "control",
+    "acryl-diagnostics": "diagnostics",
+    "acryl-plugin-admin": "plugin-admin",
+    "acryl-support": "support",
+    "acryl-loopback-http": "loopback-http",
+    "acryl-web": "web"
+  }
+}

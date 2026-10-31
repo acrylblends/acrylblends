@@ -58,7 +58,7 @@
     "check": "pnpm run build && pnpm run typecheck && pnpm run test"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.4"
+    "@deepseek-ai/cordis": "^4.0.4"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",

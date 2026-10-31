@@ -316,6 +316,9 @@ export function profileNameFor(appName: string): string {
   return `acrylblends-${slug === '' ? 'app' : slug}`
 }
 
+/** A package name as a YAML scalar: a scoped name starts with `@`, which YAML reserves at the start of a scalar, so it is quoted. */
+const yamlName = (name: string): string => (name.startsWith('@') ? `'${name}'` : name)
+
 function overlayOf(
   packages: readonly IdeProfilePackage[],
   door = false,
@@ -332,7 +335,7 @@ function overlayOf(
     ...appRows.flatMap((row) => [`    - id: ${row.id}`, `      name: ${row.name}`]),
   ]
   for (const entry of rows) {
-    lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${entry.name}`)
+    lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${yamlName(entry.name)}`)
   }
   // The chat driver's connection registers node routes on the framework's webServer port; it needs no DSH web runtime, so the row's
   // webRuntime inject and its expression are replaced by the one fact it needs here: which hosts the remote may trust.
