@@ -158,6 +158,8 @@ export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string 
   // The settings surface itself (the dialog, its sections list and the trigger). Without this row the page has no Settings trigger or dialog at all:
   // ui-settings and ui-settings-models only contribute pages into it.
   { id: 'ui-settings-general', name: '@deepseek-ai/dsh-client-ui-settings-general' },
+  // The Settings Plugins section (the plugin list and the inventory page): a settings section of its own, so it mounts with the surface.
+  { id: 'ui-settings-plugins', name: '@deepseek-ai/dsh-client-ui-settings-plugins' },
   { id: 'ui-settings-models', name: '@deepseek-ai/dsh-client-ui-settings-models' },
   { id: 'ui-session', name: '@deepseek-ai/dsh-client-ui-session' },
   { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
