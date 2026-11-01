@@ -47,9 +47,12 @@ function startRepository(directory: string): void {
     spawnSync('git', args, { cwd: directory, stdio: 'ignore', windowsHide: true }).status === 0
   if (!run(['init', '-q'])) return
   if (!run(['add', '-A'])) return
-  // A machine without a git identity still gets the first commit: this one is the scaffolder's, and later commits use the person's own identity.
-  const identity = run(['config', 'user.email']) ? [] : ['-c', 'user.name=acrylblends', '-c', 'user.email=scaffold@acrylblends.invalid']
-  run(['commit', '-q', '-m', 'Initial commit from acrylblends', ...identity])
+  // A machine without a git identity still gets the first commit: this one is the scaffolder's, and later commits use the person's own identity. The `-c`
+  // options are git's own and must precede the command.
+  const identity = run(['config', 'user.email'])
+    ? []
+    : ['-c', 'user.name=acrylblends', '-c', 'user.email=scaffold@acrylblends.invalid']
+  run([...identity, 'commit', '-q', '-m', 'Initial commit from acrylblends'])
 }
 
 /** What `init` was asked for. Anything left undefined is asked for on a terminal, or defaulted. */

@@ -5,7 +5,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
@@ -59,29 +59,43 @@ describe('scaffolding a template into the frame', () => {
     }
   })
 
-  it('a new app is a git repository with the scaffold as its first commit, so Files works and Changes starts from your edits', async () => {
-    const { io } = fakeIo(scratch)
-    const code = await init(
-      {
-        directory: 'versioned',
-        template: 'blank',
-        yes: true,
-        name: 'versioned',
-        install: false,
-        desktop: false,
-        quietNext: true,
-      },
-      io,
-    )
-    expect(code).toBe(0)
-    // A machine without git is left alone; every workshop machine has it (the preflight checks it).
-    if (spawnSync('git', ['--version'], { stdio: 'ignore' }).status === 0) {
-      expect(existsSync(join(scratch, 'versioned', '.git'))).toBe(true)
-      const log = spawnSync('git', ['log', '-1', '--format=%s'], {
-        cwd: join(scratch, 'versioned'),
-        encoding: 'utf8',
-      })
-      expect(log.stdout.trim()).toBe('Initial commit from acrylblends')
+  it('a new app is a git repository with the scaffold as its first commit, even where git has no identity, so Files works and Changes starts from your edits', async () => {
+    // A machine without a configured git identity must still get the first commit: point git at empty global and system configs for the scaffold.
+    const empty = join(scratch, 'empty-gitconfig')
+    writeFileSync(empty, '')
+    const before = { global: process.env.GIT_CONFIG_GLOBAL, system: process.env.GIT_CONFIG_SYSTEM }
+    process.env.GIT_CONFIG_GLOBAL = empty
+    process.env.GIT_CONFIG_SYSTEM = empty
+    try {
+      const { io } = fakeIo(scratch)
+      const code = await init(
+        {
+          directory: 'versioned',
+          template: 'blank',
+          yes: true,
+          name: 'versioned',
+          install: false,
+          desktop: false,
+          quietNext: true,
+        },
+        io,
+      )
+      expect(code).toBe(0)
+      // A machine without git is left alone; every workshop machine has it (the preflight checks it).
+      if (spawnSync('git', ['--version'], { stdio: 'ignore' }).status === 0) {
+        expect(existsSync(join(scratch, 'versioned', '.git'))).toBe(true)
+        const log = spawnSync('git', ['log', '-1', '--format=%s'], {
+          cwd: join(scratch, 'versioned'),
+          encoding: 'utf8',
+          env: process.env,
+        })
+        expect(log.stdout.trim()).toBe('Initial commit from acrylblends')
+      }
+    } finally {
+      if (before.global === undefined) delete process.env.GIT_CONFIG_GLOBAL
+      else process.env.GIT_CONFIG_GLOBAL = before.global
+      if (before.system === undefined) delete process.env.GIT_CONFIG_SYSTEM
+      else process.env.GIT_CONFIG_SYSTEM = before.system
     }
   })
 

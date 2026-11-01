@@ -107,7 +107,10 @@ export function apply(ctx: ClientContext): void {
     ctx.effect(() => {
       let cancelled = false
       let stop: (() => void) | undefined
-      let timer: ReturnType<typeof setTimeout> | undefined
+      let interacted = false
+      const markInteraction = () => {
+        interacted = true
+      }
       void capabilitiesLoaded.then((loaded) => {
         if (cancelled || loaded.appPage === undefined) return
         let url: string
@@ -122,13 +125,16 @@ export function apply(ctx: ClientContext): void {
         const tile = state.addTile('browser', { url, ...(loaded.appName === undefined ? {} : { title: loaded.appName }) })
         if (tile === undefined) return
         // The chat binds its session a moment later and focuses its tab. On first run the app's page keeps the focus, so the person starts at the app; the
-        // chat stays open in the same tab set, one click away. Only a chat that takes the focus from the app's page is taken back, and only during the
-        // first seconds of the run.
+        // chat stays open in the same tab set, one click away. Only the bootstrap's focus, before the person has touched the page, is taken back: a chat
+        // the person opens or selects keeps the focus.
+        window.addEventListener('pointerdown', markInteraction, { capture: true, once: true })
+        window.addEventListener('keydown', markInteraction, { capture: true, once: true })
         let lastActive = state.getSnapshot().activeId
         stop = state.subscribe(() => {
           const snapshot = state.getSnapshot()
           const active = snapshot.activeId
           const stole =
+            !interacted &&
             lastActive === tile.id &&
             snapshot.tiles.some((entry) => entry.id === active && entry.kind === 'chat')
           lastActive = active
@@ -137,15 +143,12 @@ export function apply(ctx: ClientContext): void {
             lastActive = tile.id
           }
         })
-        timer = setTimeout(() => {
-          stop?.()
-          stop = undefined
-        }, 6000)
       })
       return () => {
         cancelled = true
         stop?.()
-        clearTimeout(timer)
+        window.removeEventListener('pointerdown', markInteraction, { capture: true })
+        window.removeEventListener('keydown', markInteraction, { capture: true })
       }
     }, 'acryl-workspace: the app page on first run')
   }
