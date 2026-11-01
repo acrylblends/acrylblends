@@ -3,11 +3,13 @@
  * opens the app inside the ACRYL frame with its page at /app. The frame's client packages are unpublished, so the specs come from
  * ACRYLBLENDS_FRAME_PACKAGES; without it the app stays on the framework only and the CLI says why instead of writing a profile that cannot install.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { FRAME_PAGE_PREFIX } from '../src/ide-profile.ts'
 import { type Io, init } from '../src/index'
+import { TEMPLATES, templatesRoot } from '../src/templates.ts'
 
 const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-init-frame-'))
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
@@ -37,6 +39,24 @@ const FRAME_SPECS = JSON.stringify({
 })
 
 describe('scaffolding a template into the frame', () => {
+  it('every template mounts its page at the path the overlay advertises, so the first tile opens it', () => {
+    const root = templatesRoot()
+    for (const template of TEMPLATES) {
+      const folder = join(root, template, 'src')
+      if (!existsSync(join(folder, 'frame.ts'))) continue
+      const prefixes = readdirSync(folder)
+        .filter((name) => name.endsWith('.ts'))
+        .flatMap((name) =>
+          [
+            ...readFileSync(join(folder, name), 'utf8').matchAll(
+              /FRAME_MOUNT_PREFIX = '([^']+)'/gu,
+            ),
+          ].map((match) => match[1]),
+        )
+      expect(prefixes, template).toContain(FRAME_PAGE_PREFIX)
+    }
+  })
+
   it('writes the profile and overlay with the app row and the frame rows, and points dev at the profile', async () => {
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { io } = fakeIo(scratch)

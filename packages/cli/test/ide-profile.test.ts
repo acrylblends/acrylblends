@@ -45,6 +45,13 @@ test('one profile per app, named from the app and safe for a DSH profile', () =>
   )
 })
 
+test("the workspace row is told the app's page, so the frame opens it on first run", () => {
+  assert.match(
+    ideProfilePlan(input).overlay,
+    /- id: acryl-workspace\n {6}name: acryl-workspace\n {6}config:\n {8}appPage: \/app/u,
+  )
+})
+
 test("the overlay mounts the frame rows and leaves DSH's own brand row out", () => {
   const overlay = ideProfilePlan(input).overlay
   for (const entry of FRAME_PACKAGES)

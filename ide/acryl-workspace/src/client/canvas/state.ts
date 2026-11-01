@@ -81,6 +81,8 @@ export interface AddTileOptions {
   readonly diffFile?: string
   readonly docWorktree?: string
   readonly docRel?: string
+  /** browser tile: the page it opens (defaults to the blank starter address). */
+  readonly url?: string
   /** A plugin tab: its registered kind. */
   readonly customType?: string
 }
@@ -426,7 +428,7 @@ export class WorkspaceState {
         ? { fileWorktree: options.fileWorktree, fileRel: options.fileRel }
         : {}),
       ...(kind === 'file' && options.fileRel === undefined ? { path: '', content: '' } : {}),
-      ...(kind === 'browser' ? { url: 'https://example.com' } : {}),
+      ...(kind === 'browser' ? { url: options.url ?? 'https://example.com' } : {}),
       ...(kind === 'diff' && options.diffFile !== undefined && options.diffWorktree !== undefined
         ? { diffWorktree: options.diffWorktree, diffFile: options.diffFile }
         : {}),

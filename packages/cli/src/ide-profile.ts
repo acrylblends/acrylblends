@@ -64,6 +64,12 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
   },
 ]
 
+/**
+ * Where every template's frame row mounts the app (`FRAME_MOUNT_PREFIX` in the template's own source, `/app`). The overlay tells the workspace row, so
+ * the frame opens the app's page in a browser tile on first run; `init-frame` asserts the templates still agree with this constant.
+ */
+export const FRAME_PAGE_PREFIX = '/app'
+
 export interface IdeProfileInput {
   /** The app's name: its folder name, and the profile's suffix. */
   readonly appName: string
@@ -402,6 +408,9 @@ function overlayOf(
   ]
   for (const entry of rows) {
     lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${yamlName(entry.name)}`)
+    // The app's page, so the frame opens it in a browser tile on first run instead of an empty canvas.
+    if ((entry.row ?? entry.name) === 'acryl-workspace')
+      lines.push('      config:', `        appPage: ${FRAME_PAGE_PREFIX}`)
   }
   // The chat driver's connection registers node routes on the framework's webServer port; it needs no DSH web runtime, so the row's
   // webRuntime inject and its expression are replaced by the one fact it needs here: which hosts the remote may trust.
