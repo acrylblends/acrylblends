@@ -601,9 +601,14 @@ requests, then `closeAllConnections()` and `close()`, with a test that an in-fli
 runs.
 
 **The Settings press.** The last step used the generic `click('Settings')`, which takes the first control with that exact name anywhere in the page,
-and one press of a wrong one, or of the right one before its dialog was wired, was lost. It now presses the frame's own Settings in the left pane's
-foot (the product's `openSettings` path) and repeats until the dialog's nav answers, naming the candidates on failure. The notes gate and the chat
-gate pass locally with it, together with the single Go.
+and one press of a wrong one, or of the right one before its dialog was wired, was lost. The first replacement pressed the frame's foot button on
+every poll and then checked, and `41352589158` exposed its flaw: a poll could press while the dialog was already opening and stop on a dialog that was
+closing (the new wait returned true), and the old snapshot check right after it then failed with the very same "Settings did not open" dump, on ubuntu
+notes and macOS blank alike. The gate now looks first and presses only when no visible Settings dialog is up: every Settings-labelled button in the
+left pane is pressed (the visible foot button goes through the product's `openSettings` path, and the hidden upstream shell's own trigger sits beside
+it), the plain DSH trigger is the fallback when the pane offers none, and only a visible dialog whose nav carries a real section (Models) counts, so a
+stale or hidden dialog cannot be mistaken for Settings. The candidates are still named on failure. The notes, blank and upgraded-agent gates pass
+locally with it, together with the single Go.
 
 **The SQLite bound.** The ten open/close cycles measured 1.2 to 1.4 s in three runs on Windows 10 (mbpi9win, Node 24.18), so the 5-second default is
 honest cost under a loaded windows-latest runner, not a hang. The test carries the same 20-second bound as the kv-db ten-cycle test.

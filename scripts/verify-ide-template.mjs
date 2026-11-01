@@ -1310,26 +1310,35 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       else {
         // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
         // (c) Settings: General, Models, Plugins, Support, Shortcuts.
-        // Press the frame's own Settings, in the left pane's foot. Not the generic `click('Settings')`: this page carries more than one control
-        // with that exact name (the hidden upstream shell keeps DSH's trigger, and an app shown on the canvas can have its own link in its page),
-        // and one press of a wrong one, or of the right one before its dialog is wired, is simply lost. The foot button goes through the
-        // product's own openSettings path, and the press repeats until the dialog's nav answers, as the Models step above does.
+        // Open it the way the Models step above does, and the way a person does: look first, and press only when no Settings dialog is up. Every
+        // Settings-labelled button in the left pane is pressed (the visible foot button goes through the product's own openSettings path, and the
+        // hidden upstream shell's own trigger sits in the same pane); the plain DSH trigger is the fallback. One generic click is lost when it lands
+        // on another control with that name or on a trigger that is not wired yet, and pressing while the dialog is already up can toggle it closed.
+        // Only a visible dialog whose nav carries a real section counts, so a stale or hidden dialog cannot be mistaken for Settings.
         const opened = await until(
-          async () => {
-            const pressed = await evaluate(`(() => {
-              const button = [...document.querySelectorAll('.dshWorkspaceSideFoot button')]
-                .find((candidate) => candidate.textContent.trim() === 'Settings')
-              if (button === undefined) return false
-              button.click()
-              return true
-            })()`)
-            if (pressed !== true) return undefined
-            return (await evaluate(
-              `[...document.querySelectorAll('[role=dialog]')].some((dialog) => dialog.querySelector('nav') !== null)`,
-            )) === true
-              ? true
-              : undefined
-          },
+          async () =>
+            await evaluate(`(() => {
+              const sectionLabels = ['Models', '模型']
+              const isSection = (button) => {
+                const label = (button.getAttribute('aria-label') ?? '').trim()
+                const text = (button.textContent ?? '').replace(/\\s+/g, ' ').trim()
+                return sectionLabels.includes(label === '' ? text : label)
+              }
+              const open = [...document.querySelectorAll('[role=dialog]')].some((dialog) =>
+                dialog.getClientRects().length > 0 &&
+                dialog.querySelector('nav') !== null &&
+                [...dialog.querySelectorAll('nav button')].some(isSection))
+              if (open) return true
+              const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
+                (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
+              for (const button of buttons) button.click()
+              if (buttons.length === 0) {
+                const trigger = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
+                  .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))
+                trigger?.click()
+              }
+              return false
+            })()`),
           20_000,
           500,
         )
