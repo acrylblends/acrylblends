@@ -118,7 +118,9 @@ describe('acryl-db-sqlite through a real Loader', () => {
     const other = await openNodeSqliteDatabase(join(root, 'data.sqlite'), { busyTimeoutMs: 0 })
     await other.transaction(async tx => { await tx.run('INSERT INTO counter (n) VALUES (?)', 99) })
     await other.close()
-  })
+    // Ten open/close cycles of a real SQLite database measured 1.2 to 1.4 s in three runs on a Windows 10 machine (2026-11-01, Node 24.18) and
+    // crossed the 5 s default on a loaded windows-latest runner, together with this file's other work. The bound allows the load; a hang still fails it.
+  }, 20_000)
 
   it('fails the row, and closes the file, when a migration fails', async () => {
     const root = app()

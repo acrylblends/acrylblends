@@ -999,22 +999,19 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           `the browser tile has no address input: ${JSON.stringify(diagnostics)} (screenshot /tmp/verify-ide-template-tile.png)`,
         )
       }
-      // The first press can land while the fresh page (a host restart makes a new one) is still wiring its tile; the address stays typed, so a second
-      // press navigates the same place. The failure names the iframe's state, not only the server output.
-      let shown
-      for (let attempt = 0; attempt < 3 && shown === undefined; attempt += 1) {
-        if ((await click('Go')) !== true) fail('the browser tile has no Go button')
-        shown = await until(
-          async () =>
-            await evaluate(`(() => {
-              const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-              if (frame === null) return undefined
-              const text = frame.contentDocument?.body?.innerText ?? ''
-              return text.includes(${JSON.stringify(page.text)}) ? text.slice(0, 200) : undefined
-            })()`),
-          attempt === 0 ? 30_000 : 10_000,
-        )
-      }
+      // One press of Go must load the page (the product reads the address field itself and remounts the frame on every press, and retries a
+      // same-origin load the browser replaced with its error page once). A second press here would prove nothing about what an attendee sees.
+      if ((await click('Go')) !== true) fail('the browser tile has no Go button')
+      const shown = await until(
+        async () =>
+          await evaluate(`(() => {
+            const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            if (frame === null) return undefined
+            const text = frame.contentDocument?.body?.innerText ?? ''
+            return text.includes(${JSON.stringify(page.text)}) ? text.slice(0, 200) : undefined
+          })()`),
+        30_000,
+      )
       if (shown === undefined) {
         const diagnostics = await evaluate(`(() => {
           const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
@@ -1022,11 +1019,14 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
             src: frame?.getAttribute('src') ?? null,
             title: frame?.contentDocument?.title ?? null,
             text: frame?.contentDocument?.body?.innerText?.slice(0, 300) ?? null,
+            // A null document with a src is the browser's own error page (a same-origin page always exposes its document), so the failure
+            // says a request died rather than that the tile rendered nothing.
+            documentReadable: frame === null ? null : frame.contentDocument !== null,
             browserPane: document.querySelectorAll('.dshWorkspaceBrowser').length,
           }
         })()`)
         fail(
-          `the app's page did not load in the frame's browser tile: ${JSON.stringify(diagnostics)}; server said:\n${output.slice(-1500)}`,
+          `the app's page did not load in the frame's browser tile after one Go: ${JSON.stringify(diagnostics)}; server said:\n${output.slice(-1500)}`,
         )
       }
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
@@ -1304,8 +1304,44 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       else {
         // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
         // (c) Settings: General, Models, Plugins, Support, Shortcuts.
-        const opened = await until(async () => (await click('Settings')) === true, 10_000)
-        if (opened !== true) fail('the frame has no Settings button')
+        // Press the frame's own Settings, in the left pane's foot. Not the generic `click('Settings')`: this page carries more than one control
+        // with that exact name (the hidden upstream shell keeps DSH's trigger, and an app shown on the canvas can have its own link in its page),
+        // and one press of a wrong one, or of the right one before its dialog is wired, is simply lost. The foot button goes through the
+        // product's own openSettings path, and the press repeats until the dialog's nav answers, as the Models step above does.
+        const opened = await until(
+          async () => {
+            const pressed = await evaluate(`(() => {
+              const button = [...document.querySelectorAll('.dshWorkspaceSideFoot button')]
+                .find((candidate) => candidate.textContent.trim() === 'Settings')
+              if (button === undefined) return false
+              button.click()
+              return true
+            })()`)
+            if (pressed !== true) return undefined
+            return (await evaluate(
+              `[...document.querySelectorAll('[role=dialog]')].some((dialog) => dialog.querySelector('nav') !== null)`,
+            )) === true
+              ? true
+              : undefined
+          },
+          20_000,
+          500,
+        )
+        if (opened !== true) {
+          const detail = await evaluate(`(() => {
+            const candidates = [...document.querySelectorAll('button,[role=button],[role=menuitem],a')]
+              .filter((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
+              .map((candidate) => ({
+                tag: candidate.tagName,
+                className: String(candidate.className).slice(0, 80),
+                inFoot: candidate.closest('.dshWorkspaceSideFoot') !== null,
+                inUpstreamHost: candidate.closest('.dshWorkspaceUpstreamHost') !== null,
+                inDialog: candidate.closest('[role=dialog]') !== null,
+              }))
+            return JSON.stringify({ body: document.body.innerText.slice(-1200), candidates })
+          })()`)
+          fail(`Settings did not open: ${String(detail)}`)
+        }
         // Wait for the dialog itself: a snapshot taken immediately is always truthy, so the old wait accepted a frame whose Settings had not rendered yet.
         const settings = await until(async () => {
           const snapshot = await evaluate(`(() => {
