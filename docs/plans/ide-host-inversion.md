@@ -561,3 +561,34 @@ Ubuntu green; the two others named their next causes. macOS: the Go re-press let
 ### The real Settings causes (`b0139d49`'s red, found with a local dialog dump)
 
 The "no Models section" error on every frame job and on the check jobs was two things, neither of them the nav selector. The page opens DSH's first-run "Add an API key to get started" dialog on a profile without a key, and the gate accepted any dialog as Settings (its wait returned on the first `[role=dialog]`), so it looked for the section list in a dialog that was not open. The gate now dismisses that first-run dialog with "Configure later" - the user's own path - before pressing Settings. And the real Models page saves a provider key with **Apply** (the first-run card's button was "Save and continue"), so the gate tries Apply first and the card's button second. With those, the agent gate runs end to end: Settings > Models takes the key, the chat needs no card and answers against the mock; the blank and upgrade gates pass in the full check. The real DOM was read once, as asked: the only dialog at the failure was the first-run card, and the Models page's buttons are Cancel / Apply.
+
+## 24. The workshop flow rehearsed (2026-11-01, branch 119-workshop-guide)
+
+The handout was rewritten to the frame flow (create; the frame opens on the app; Settings > Models; chat; a coding agent in a terminal tab; edit and
+see it at /app; upgrade an older app; publish as take-home), and then walked on this Mac from the packed CLI in an isolated HOME, never on port 3080.
+Every stopping point in that walk was a product cause, not a guide step:
+
+- **The frame opened on an empty canvas (fixed, `8d2615b1`).** The app was only reachable by pressing +, choosing New Browser Tab and pasting a full
+  address with `/app`. The overlay now tells the workspace row where the app's page is (`appPage: /app`, `FRAME_PAGE_PREFIX` in the CLI, with a test
+  that every template's `FRAME_MOUNT_PREFIX` still agrees), the workspace Host advertises the page, the app folder and the app's name through its
+  capabilities route, and on a first run (no saved tabs) the client selects the app's folder and opens the page in a tile titled with the app's name.
+  The chat binds a moment later and takes the focus; the app's page takes it back once, within the first six seconds, and never after. A Host without
+  an app (ACRYL Web, Desktop) advertises no page and keeps its empty canvas. Measured: first run shows the app's page in the tile with no click.
+- **A restart changed the frame's address (fixed, `9f23b3a4`).** The launcher listened on `ACRYLBLENDS_PORT` or 0, so every `npm run dev` minted a new
+  origin; the frame's auth cookie is bound to the origin, so the page could never come back. The launcher now selects the app's own instance (the
+  folder's stable port, the same one the app's own server uses) and listens there; the gates still pass 0 for any free port. Measured with the cookie
+  durable: a restart with the page open reconnects by itself within a few seconds, on the same address, with the app's tile and the chat's session
+  still there.
+- **The app was not a git repository (fixed in this commit).** The frame's Files and Changes views answer only for a git worktree; without one,
+  Files said "file request failed" and the left pane said "detached". `acrylblends init` now runs `git init` and makes the scaffold the first commit
+  (`Initial commit from acrylblends`, the person's own identity when git has one), so Files opens the app's source and Changes starts from the
+  person's edits instead of "421 files changed". Measured: Files failed before, listed and opened `src/routes.ts` after.
+
+**The reconnect's one open case (browser, not the app).** Chrome persists cookies to disk lazily (about half a minute). If the host dies within that
+window of the frame's first load, the browser's auth cookie can be lost with the page's network state; every retry then answers 401 and the page
+stays on `Reconnecting...`, and no page-side code can re-mint it without the launch token (which DSH deliberately keeps out of the page). After the
+cookie is durable, the same restart reconnects on its own. The facilitator notes carry this as a known edge; the guide's recovery is a tab reload,
+and the stable port means the printed address stays valid.
+
+Still to do in this branch: `verify-ide-template.mjs`'s day-one path must assert the first-run tile (no +, no typed address) once `120-ci-stable`
+lands on main; the guide is re-walked after that gate change. The publish block is the take-home, unchanged from the registry's own README.
