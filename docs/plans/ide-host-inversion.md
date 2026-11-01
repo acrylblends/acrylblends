@@ -610,6 +610,11 @@ it), the plain DSH trigger is the fallback when the pane offers none, and only a
 stale or hidden dialog cannot be mistaken for Settings. The candidates are still named on failure. The notes, blank and upgraded-agent gates pass
 locally with it, together with the single Go.
 
+**The notice check's profile cleanup.** Run `41352593171` (check, Linux Node 22) failed with `ENOTEMPTY: directory not empty, rmdir
+'/tmp/ide-template-notice-...'`: the notice check killed its Chrome and removed the profile in the same breath, while Chrome was still writing it.
+The cleanup now waits for the process to be gone (bounded at five seconds) before removing with the tile block's retries, and the outer cleanup
+waits for a SIGKILLed host to exit before removing the scratch. A passed check no longer dies on its own cleanup.
+
 **The SQLite bound.** The ten open/close cycles measured 1.2 to 1.4 s in three runs on Windows 10 (mbpi9win, Node 24.18), so the 5-second default is
 honest cost under a loaded windows-latest runner, not a hang. The test carries the same 20-second bound as the kv-db ten-cycle test.
 

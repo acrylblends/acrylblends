@@ -437,7 +437,19 @@ ${composition.stdout}`)
     } finally {
       cdp?.close()
       child.kill('SIGKILL')
-      rmSync(profile, { recursive: true, force: true, maxRetries: 5 })
+      // Chrome keeps writing its own profile for a moment after the kill, and removing it then is a flake with a name: ENOTEMPTY: directory not
+      // empty, rmdir '/tmp/ide-template-notice-...' (run 41352593171, check on Linux Node 22). Wait for the process to be gone first, then remove
+      // with the retries the tile block below already uses.
+      await new Promise((done) => {
+        if (child.exitCode !== null) return done()
+        child.once('exit', done)
+        setTimeout(done, 5_000)
+      })
+      try {
+        rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
+      } catch {
+        // Windows can still hold a file of the closed browser for a moment; the folder sits in the temp directory, and a passed check stays passed.
+      }
     }
     const settingsFile = join(app, '.acrylblends', 'settings.patch.yml')
     if (!existsSync(settingsFile))
@@ -568,7 +580,10 @@ ${composition.stdout}`)
   if (server) {
     server.kill('SIGTERM')
     await until(async () => (server.exitCode !== null ? true : undefined), 15_000)
-    if (server.exitCode === null) server.kill('SIGKILL')
+    if (server.exitCode === null) {
+      server.kill('SIGKILL')
+      await until(async () => (server.exitCode !== null ? true : undefined), 5_000)
+    }
   }
   if (keep) console.error(`verify-ide-template: kept ${scratch}`)
   else rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
