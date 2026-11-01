@@ -3,6 +3,8 @@
  * opens the app inside the ACRYL frame with its page at /app. The frame's client packages are unpublished, so the specs come from
  * ACRYLBLENDS_FRAME_PACKAGES; without it the app stays on the framework only and the CLI says why instead of writing a profile that cannot install.
  */
+
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -54,6 +56,32 @@ describe('scaffolding a template into the frame', () => {
           ].map((match) => match[1]),
         )
       expect(prefixes, template).toContain(FRAME_PAGE_PREFIX)
+    }
+  })
+
+  it('a new app is a git repository with the scaffold as its first commit, so Files works and Changes starts from your edits', async () => {
+    const { io } = fakeIo(scratch)
+    const code = await init(
+      {
+        directory: 'versioned',
+        template: 'blank',
+        yes: true,
+        name: 'versioned',
+        install: false,
+        desktop: false,
+        quietNext: true,
+      },
+      io,
+    )
+    expect(code).toBe(0)
+    // A machine without git is left alone; every workshop machine has it (the preflight checks it).
+    if (spawnSync('git', ['--version'], { stdio: 'ignore' }).status === 0) {
+      expect(existsSync(join(scratch, 'versioned', '.git'))).toBe(true)
+      const log = spawnSync('git', ['log', '-1', '--format=%s'], {
+        cwd: join(scratch, 'versioned'),
+        encoding: 'utf8',
+      })
+      expect(log.stdout.trim()).toBe('Initial commit from acrylblends')
     }
   })
 
