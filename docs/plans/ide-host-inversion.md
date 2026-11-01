@@ -615,6 +615,11 @@ locally with it, together with the single Go.
 The cleanup now waits for the process to be gone (bounded at five seconds) before removing with the tile block's retries, and the outer cleanup
 waits for a SIGKILLed host to exit before removing the scratch. A passed check no longer dies on its own cleanup.
 
+**The agent panel's answer wait.** Run `41358355702`'s macOS agent step then failed at the in-app panel: "the panel's run did not start and stop in the
+app's page: undefined", with the panel, its synchronous submit wiring and the template unchanged from `98355d28`, where the same step had passed. The
+offline agent answers in well under a second on a quiet machine, so the tight part was the 30 s bound on a loaded runner; the wait is 60 s now, and a
+failure carries the panel's own log, button states and driver list instead of only `undefined`.
+
 **The SQLite bound.** The ten open/close cycles measured 1.2 to 1.4 s in three runs on Windows 10 (mbpi9win, Node 24.18), so the 5-second default is
 honest cost under a loaded windows-latest runner, not a hang. The test carries the same 20-second bound as the kv-db ten-cycle test.
 

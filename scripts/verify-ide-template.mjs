@@ -1079,6 +1079,8 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           fail(
             `the agent panel did not appear in the app's page, or its session did not load; server said:\n${output.slice(-2500)}`,
           )
+        // The offline agent answers in well under a second on a quiet machine; a loaded macOS runner once took longer than the old 30 s bound
+        // (run 41358355702) with the panel unchanged, so the wait is 60 s and a failure carries the panel's own log instead of only `undefined`.
         const answered = await until(
           async () =>
             await evaluate(`(() => {
@@ -1092,12 +1094,23 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
               stopped: root.querySelector('.stop').disabled === true,
             }
           })()`),
-          30_000,
+          60_000,
         )
-        if (answered === undefined || answered.send !== true || answered.stopped !== true)
+        if (answered === undefined || answered.send !== true || answered.stopped !== true) {
+          const detail = await evaluate(`(() => {
+            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
+            return {
+              log: root?.querySelector('#log')?.innerText?.slice(-600) ?? null,
+              send: root === undefined || root === null ? null : root.querySelector('.send')?.disabled,
+              stop: root === undefined || root === null ? null : root.querySelector('.stop')?.disabled,
+              drivers: root === undefined || root === null ? null : [...(root.querySelector('select')?.options ?? [])].map(option => option.value),
+            }
+          })()`)
           fail(
-            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}`,
+            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}; panel: ${JSON.stringify(detail)}`,
           )
+        }
         log(
           "the panel opens in the app, asks the app's own agent, and shows the answer (run started and stopped)",
         )
