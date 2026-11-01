@@ -561,3 +561,39 @@ Ubuntu green; the two others named their next causes. macOS: the Go re-press let
 ### The real Settings causes (`b0139d49`'s red, found with a local dialog dump)
 
 The "no Models section" error on every frame job and on the check jobs was two things, neither of them the nav selector. The page opens DSH's first-run "Add an API key to get started" dialog on a profile without a key, and the gate accepted any dialog as Settings (its wait returned on the first `[role=dialog]`), so it looked for the section list in a dialog that was not open. The gate now dismisses that first-run dialog with "Configure later" - the user's own path - before pressing Settings. And the real Models page saves a provider key with **Apply** (the first-run card's button was "Save and continue"), so the gate tries Apply first and the card's button second. With those, the agent gate runs end to end: Settings > Models takes the key, the chat needs no card and answers against the mock; the blank and upgrade gates pass in the full check. The real DOM was read once, as asked: the only dialog at the failure was the first-run card, and the Models page's buttons are Cancel / Apply.
+## 24. CI stability on one tree: the tile's press, the Settings press, a refusal's body (2026-11-01)
+
+Run 41258550752 on `94548f5d` (the merge of the green 118 tip) was red in three jobs on a tree that had just passed: the notes frame gate on ubuntu
+("Settings did not open"), the chat frame gate on macOS (the tile's iframe had `src` and no readable document), and `packages` on Windows Node 22
+(acryl-db-sqlite's ten-cycle loader test at the 5-second default). Each had its own cause, and each is fixed at the cause on `120-ci-stable`.
+
+**The tile's first Go, and a failed load no press could recover.** The browser tab submitted `draft`, the React copy of the address, so a press that
+arrived before the input's state had committed submitted nothing or the previous address. It now reads the address field itself (`name="address"`),
+which is what the person sees. The address bar is uncontrolled for the same reason: nothing rewrites the typed text under React's tracker. A press of
+the address already loaded was a no-op too, because `updateTile` with the same `url` changes no state and the iframe never reloads; every accepted
+press now remounts the frame through a key. And a finished load whose same-origin address has no readable document, Chrome's error page after a reset
+or refused connection (a real same-origin page always exposes its document; a cross-origin page also hides it, and is never retried), is retried once
+by itself. That is the macOS failure: the request died, and none of the gate's three presses could reload it. The gate now presses Go once, as an
+attendee does, and names whether the iframe's document was readable when it fails. Tests: a submit with the field's value ahead of React's state (the
+old code did nothing), a same-address press remounting the frame, and the retry rule.
+
+**The Settings press.** The last step used the generic `click('Settings')`, which takes the first control with that exact name anywhere in the page,
+and one press of a wrong one, or of the right one before its dialog was wired, was lost. It now presses the frame's own Settings in the left pane's
+foot (the product's `openSettings` path) and repeats until the dialog's nav answers, naming the candidates on failure. The notes gate and the chat
+gate pass locally with it, together with the single Go.
+
+**The SQLite bound.** The ten open/close cycles measured 1.2 to 1.4 s in three runs on Windows 10 (mbpi9win, Node 24.18), so the 5-second default is
+honest cost under a loaded windows-latest runner, not a hang. The test carries the same 20-second bound as the kv-db ten-cycle test.
+
+**A refusal answered before the request body (the queued ECONNRESET ticket).** The adapter (`acryl-router-http`'s `serve`) wrote the answer and ended,
+leaving a request body the handler never read (a guard's 403, a 415, a body over its limit). Node then closes the socket with data pending, and the
+peer sees a reset instead of the answer: read ECONNRESET in the workspace git worktree test on Windows, and reproducible on macOS with a client that
+writes half a body and waits. `serve` now settles an unread body (bounded: one second, resumed not buffered) before writing the answer, so the client
+can finish sending and read it. The test writes half a body, asserts no answer arrives yet, finishes the body, and reads the 403; the old adapter fails
+the first assertion on every OS, the fixed one passes.
+
+**The composer after a reload (product).** A reload mounts the chat surface before DSH's composer and nothing moves focus into the message box, so the
+page lands on the body and an attendee clicks before the first word; the same happens when the worktree restore re-renders the surface and replaces the
+focused node. `focusChatComposer` watches while a chat is the shown tab (bounded at 30 s) and focuses the composer only when focus is on the page
+itself, never from a field, a dialog, a menu or a control the person is using. Tests cover the late composer, the field and the dialog, the replaced
+composer and the deadline.

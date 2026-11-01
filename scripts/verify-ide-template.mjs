@@ -189,7 +189,6 @@ const frameworkVersion = `^${cliVersion}`
 
 const scratch = mkdtempSync(join(tmpdir(), `ide-template-${template}-`))
 const app = existing === undefined ? join(scratch, `${template}-app`) : resolve(existing)
-const home = join(scratch, 'home')
 let server
 let mock
 try {

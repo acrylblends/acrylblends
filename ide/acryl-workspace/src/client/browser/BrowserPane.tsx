@@ -34,7 +34,6 @@ export function BrowserPane({
   tile: WorkspaceTile
   workspace: WorkspaceState
 }) {
-  const [draft, setDraft] = useState(tile.url ?? '')
   // A press of Go remounts the frame through this counter. The same address is not a state change the iframe would follow, so without it
   // a second Go after a failed load did nothing at all, and an attendee saw the error page stay no matter how often they pressed.
   const [attempt, setAttempt] = useState(0)
@@ -42,11 +41,12 @@ export function BrowserPane({
   const href = tile.url ?? ''
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
-    // Read the field itself, not the React copy of it: a submit can arrive in the same tick as the input event (a fast Enter, a pasted
-    // or restored address, a script that fills the bar), and a state value that has not committed yet silently submits nothing or the
-    // previous address. That was the first-Go failure: the press was lost, not the navigation.
+    // Read the field itself, never a React copy of it. The bar is uncontrolled for the same reason: a submit can arrive in the same tick as
+    // the input event (a fast Enter, a pasted or restored address, a script that fills the bar), and state that has not committed yet made Go
+    // submit nothing or the previous address. That was the first-Go failure: the press was lost, not the navigation.
     const field = event.currentTarget.elements.namedItem('address')
-    const next = normalizeBrowserUrl(field instanceof HTMLInputElement ? field.value : draft)
+    if (!(field instanceof HTMLInputElement)) return
+    const next = normalizeBrowserUrl(field.value)
     if (next === undefined) return
     // Each accepted press gets its own automatic retry (below), and a new address is loaded as a fresh navigation.
     retried.current = undefined
@@ -71,12 +71,7 @@ export function BrowserPane({
   return (
     <div className="dshWorkspaceBrowser">
       <form className="dshWorkspaceBrowserBar" onSubmit={submit}>
-        <input
-          aria-label="Browser address"
-          name="address"
-          value={draft}
-          onChange={(event) => { setDraft(event.target.value) }}
-        />
+        <input aria-label="Browser address" name="address" defaultValue={href} />
         <button type="submit">Go</button>
       </form>
       {href.length > 0 && (
