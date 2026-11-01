@@ -561,6 +561,9 @@ Ubuntu green; the two others named their next causes. macOS: the Go re-press let
 ### The real Settings causes (`b0139d49`'s red, found with a local dialog dump)
 
 The "no Models section" error on every frame job and on the check jobs was two things, neither of them the nav selector. The page opens DSH's first-run "Add an API key to get started" dialog on a profile without a key, and the gate accepted any dialog as Settings (its wait returned on the first `[role=dialog]`), so it looked for the section list in a dialog that was not open. The gate now dismisses that first-run dialog with "Configure later" - the user's own path - before pressing Settings. And the real Models page saves a provider key with **Apply** (the first-run card's button was "Save and continue"), so the gate tries Apply first and the card's button second. With those, the agent gate runs end to end: Settings > Models takes the key, the chat needs no card and answers against the mock; the blank and upgrade gates pass in the full check. The real DOM was read once, as asked: the only dialog at the failure was the first-run card, and the Models page's buttons are Cancel / Apply.
+
+**Resolved in section 24:** the first Go press (the address field is read directly and every press reloads, with a bounded automatic-reload net for a transport error), and the frame gate's Settings press (the frame's own foot button, pressed until its dialog opens). Readiness is ruled out as the cause of the tile's error page by that run's own timeline.
+
 ## 24. CI stability on one tree: the tile's press, the Settings press, a refusal's body (2026-11-01)
 
 Run 41258550752 on `94548f5d` (the merge of the green 118 tip) was red in three jobs on a tree that had just passed: the notes frame gate on ubuntu
@@ -571,11 +574,31 @@ Run 41258550752 on `94548f5d` (the merge of the green 118 tip) was red in three 
 arrived before the input's state had committed submitted nothing or the previous address. It now reads the address field itself (`name="address"`),
 which is what the person sees. The address bar is uncontrolled for the same reason: nothing rewrites the typed text under React's tracker. A press of
 the address already loaded was a no-op too, because `updateTile` with the same `url` changes no state and the iframe never reloads; every accepted
-press now remounts the frame through a key. And a finished load whose same-origin address has no readable document, Chrome's error page after a reset
-or refused connection (a real same-origin page always exposes its document; a cross-origin page also hides it, and is never retried), is retried once
-by itself. That is the macOS failure: the request died, and none of the gate's three presses could reload it. The gate now presses Go once, as an
-attendee does, and names whether the iframe's document was readable when it fails. Tests: a submit with the field's value ahead of React's state (the
-old code did nothing), a same-address press remounting the frame, and the retry rule.
+press now remounts the frame through a key. The gate presses Go once, as an attendee does, and names whether the iframe's document was readable when it
+fails. Tests: a submit with the field's value ahead of React's state (the old code did nothing), a same-address press remounting the frame, and the
+attempt rule.
+
+**Cause fixes and safety net.** The live field read and the remount on every press are the cause fixes: a press is never lost, and a failed page can
+always be reloaded. A finished load whose same-origin address has no readable document is the browser's error page (a real same-origin page always
+exposes its document; a cross-origin page also hides it, and is never retried): the tile loads it again, at most three attempts per press with 250 ms
+between them, then settles on the error page. That net is deliberately not offered as the cause fix.
+
+**Neither readiness nor a socket from before the restart is the cause.** In the failing macOS chat step /app answered at 01:00:35.965, the host
+restarted at 01:00:40.143, the new page rendered at 01:00:41.922, Settings > Models saved at 01:00:43.783, a PTY ran at 01:00:44.795, and the tile's
+GET /app at about 01:00:45 had no readable document, while every request around it succeeded against the same server. An app route that is not mounted
+answers a readable 404; only a transport failure produces the browser's error page. The tile-check browser is fresh: the notice check runs its own
+Chrome and kills it before the tile check starts, so no socket from before the restart can be in its pool. node-server's disposer does close
+connections on stop (`hub.close()`, `closeAllConnections()`, `close()`), and the generated launcher disposes the fiber on SIGINT/SIGTERM.
+
+The mechanism therefore stays open until a net log names it: the tile check's Chrome now writes `--log-net-log` to the runner's temp folder, the
+failure message prints the path, and the frame job uploads `frame-netlog-*.json` as an artifact only when a gate fails. The error code
+(ERR_CONNECTION_RESET, ERR_EMPTY_RESPONSE or ERR_ABORTED) then decides between a kernel-level reset on a pooled connection and a cancelled subframe
+navigation.
+
+**Queued: a graceful node-server stop.** The disposer closes all connections immediately (`closeAllConnections()` before `close()`), so an in-flight
+request at stop time is cut, for example a save while the app restarts. Requested: `closeIdleConnections()` first, a short bounded grace for in-flight
+requests, then `closeAllConnections()` and `close()`, with a test that an in-flight request completes when stop begins. Queued after the three green CI
+runs.
 
 **The Settings press.** The last step used the generic `click('Settings')`, which takes the first control with that exact name anywhere in the page,
 and one press of a wrong one, or of the right one before its dialog was wired, was lost. It now presses the frame's own Settings in the left pane's

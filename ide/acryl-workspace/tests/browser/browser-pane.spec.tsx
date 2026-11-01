@@ -57,12 +57,13 @@ describe('shouldRetryBrowserLoad', () => {
       src: sameOrigin,
       topOrigin: 'http://127.0.0.1:4000',
       documentReadable: false,
-      lastRetried: undefined,
+      retries: 0,
       ...options,
     })
 
-  it('retries an unreadable document at one of this page own addresses (the browser error page)', () => {
+  it('reloads an unreadable document at one of this page own addresses (the browser error page)', () => {
     expect(retry({})).toBe(true)
+    expect(retry({ retries: 1 })).toBe(true)
   })
 
   it('leaves a readable document alone, and never retries an external page, which also hides its document', () => {
@@ -70,8 +71,8 @@ describe('shouldRetryBrowserLoad', () => {
     expect(retry({ src: 'https://example.com/' })).toBe(false)
   })
 
-  it('retries once per press, and nothing for an address it cannot parse or does not have', () => {
-    expect(retry({ lastRetried: sameOrigin })).toBe(false)
+  it('stops at the attempt budget per press, and does nothing for an address it cannot parse or does not have', () => {
+    expect(retry({ retries: 2 })).toBe(false)
     expect(retry({ src: 'not a url' })).toBe(false)
     expect(retry({ src: null })).toBe(false)
   })

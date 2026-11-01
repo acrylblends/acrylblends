@@ -615,9 +615,16 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
   // Chrome's own output is the only clue when it does not come up, so it is kept and printed if the endpoint never answers. The wait is 30 s: a loaded CI
   // runner can take several seconds, and the old ten-second wait then fell through to a bare ECONNREFUSED from the DevTools call.
   let chromeOutput = ''
-  const child = spawn(chrome, [...chromeFlags(profile, port), '--hide-scrollbars'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  // When the tile's request dies (the iframe shows the browser's error page), its net log names why: ERR_CONNECTION_RESET, ERR_EMPTY_RESPONSE or
+  // ERR_ABORTED. CI uploads the file as an artifact only when a gate fails, and the failure message carries its path.
+  const netLog = join(tmpdir(), `acryl-frame-netlog-${template}.json`)
+  const child = spawn(
+    chrome,
+    [...chromeFlags(profile, port), '--hide-scrollbars', `--log-net-log=${netLog}`],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
   const collect = (chunk) => {
     chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
   }
@@ -1025,7 +1032,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           }
         })()`)
         fail(
-          `the app's page did not load in the frame's browser tile after one Go: ${JSON.stringify(diagnostics)}; server said:\n${output.slice(-1500)}`,
+          `the app's page did not load in the frame's browser tile after one Go: ${JSON.stringify(diagnostics)}; Chrome's net log: ${netLog}; server said:\n${output.slice(-1500)}`,
         )
       }
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
