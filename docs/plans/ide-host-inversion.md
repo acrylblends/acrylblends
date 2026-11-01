@@ -538,3 +538,26 @@ unchanged.
 Remaining for 114: rewrite the guide's blocks to the frame flow (day-one frame; Settings > Models; chat; a coding agent in a PTY tab; edit the app and see it at
 /app; upgrade an older app), rehearse end to end exactly as an attendee would from the packed CLI in an isolated HOME, fix every failure at the cause, commit to
 `114-workshop-guide`, and push nothing to the registry repository without the coordinator's approval.
+
+## 23. CI after 115: the restarted host's token, and the notice check's Chrome (2026-10-31)
+
+The first CI run after 115 landed (`797c8215`, run 41247560397) failed only in the two frame jobs. macOS, `blank`: after the settings restart the tile check
+failed. The restart mints a new connection token - the log shows the same port with two different tokens - and the gate does refresh `url`, `origin` and the
+cookie jar through the new token (the frame rendered after the restart), so the failure was the tile itself: its one-shot "Go" press landed on a fresh page
+whose tile was still wiring, and the app's page never loaded in the iframe. The tile check now presses Go up to three times (the address stays typed) and, on
+failure, names the iframe's `src`, title and text instead of only the server output. Windows: the notice check's own headless Chrome did not open within its
+20-second loop, with Chrome's output discarded; the launch now waits up to 60 seconds, ends early when Chrome exits, and names the exit code and Chrome's last
+lines. Product note: a host restart issues a new token, so a frame left open with the old token is expected to be re-opened through the browser with the new
+printed URL; the gate follows the new token rather than requiring an old tab to survive the restart. The frame jobs on `118-ci-after-115` are the evidence.
+
+### The rerun on 118 (`ba180b23`, run 41249023980)
+
+Ubuntu green; the two others named their next causes. macOS: the Go re-press let the blank tile pass; the agent gate then failed at Settings > Models because the dialog opened on General (a remembered section) while the gate assumed Models - the gate now presses the Models section explicitly. Windows: `stopServer`'s port check ran `lsof`, which does not exist there, and crashed the restart (`Cannot read properties of undefined (reading 'trim')`); the holder is guarded now, so a missing tool reads as "no holder" and the ended process is the evidence. The notice Chrome's own diagnostics did not trigger.
+
+**Open cause (product): the first Go press on a freshly loaded frame.** The re-press is a gate mitigation, not a cause fixed: if the first Go does nothing, an attendee who clicks once sees nothing happen. Likely the tile's Go handler is not attached when the page first paints (hydration), or Go fires before the address is committed. The product fix is that Go works on the first press, or stays disabled (visibly) until it can; the gate then presses once.
+
+**Open owner decision: a frame surviving a dev restart.** A host restart mints a new connection token (same port, new token); a frame left open with the old token has to be re-opened through the new printed URL. Whether an open frame should survive a dev restart (persisting the connection token in the profile) is the owner's call, not decided here.
+
+### The real Settings causes (`b0139d49`'s red, found with a local dialog dump)
+
+The "no Models section" error on every frame job and on the check jobs was two things, neither of them the nav selector. The page opens DSH's first-run "Add an API key to get started" dialog on a profile without a key, and the gate accepted any dialog as Settings (its wait returned on the first `[role=dialog]`), so it looked for the section list in a dialog that was not open. The gate now dismisses that first-run dialog with "Configure later" - the user's own path - before pressing Settings. And the real Models page saves a provider key with **Apply** (the first-run card's button was "Save and continue"), so the gate tries Apply first and the card's button second. With those, the agent gate runs end to end: Settings > Models takes the key, the chat needs no card and answers against the mock; the blank and upgrade gates pass in the full check. The real DOM was read once, as asked: the only dialog at the failure was the first-run card, and the Models page's buttons are Cancel / Apply.

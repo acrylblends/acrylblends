@@ -333,10 +333,13 @@ ${composition.stdout}`)
     await until(async () => (server.exitCode !== null ? true : undefined), 15_000)
     if (server.exitCode === null) server.kill('SIGKILL')
     const port = new URL(serverUrl).port
-    const holder = () =>
-      spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], {
+    // Windows has no lsof: the process ended is the check that matters there, and the helper must not crash on a missing tool.
+    const holder = () => {
+      const found = spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], {
         encoding: 'utf8',
-      }).stdout.trim()
+      })
+      return typeof found.stdout === 'string' ? found.stdout.trim() : ''
+    }
     if (holder() !== '') process.kill(Number(holder()), 'SIGKILL')
     const freed = await until(async () => (holder() === '' ? true : undefined), 15_000)
     if (freed !== true) fail(`port ${port} stayed held after stopping the host`)
@@ -361,13 +364,25 @@ ${composition.stdout}`)
     const child = spawn(chrome, [...chromeFlags(profile, devPort), '--hide-scrollbars'], {
       stdio: 'ignore',
     })
+    let chromeOutput = ''
+    const collect = (chunk) => {
+      chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
+    }
+    child.stdout?.on('data', collect)
+    child.stderr?.on('data', collect)
     let cdp
     try {
-      for (let i = 0; i < 200 && cdp === undefined; i += 1) {
+      let ready = false
+      for (let i = 0; i < 600 && !ready; i += 1) {
+        if (child.exitCode !== null) break
         cdp = await devtools(devPort).catch(() => undefined)
-        if (cdp === undefined) await sleep(100)
+        if (cdp !== undefined) ready = true
+        else await sleep(100)
       }
-      if (cdp === undefined) fail('headless Chrome did not open for the notice check')
+      if (!ready)
+        fail(
+          `headless Chrome did not open for the notice check (exit ${String(child.exitCode)}):\n${chromeOutput}`,
+        )
       await cdp.send('Page.enable')
       await cdp.send('Runtime.enable')
       for (const cookie of cookiesOf(jar))
@@ -687,6 +702,33 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       log('the Preview Notice stays dismissed after the host restart')
 
       // (i) The Settings day-one path: Models loads with no provider-directory error, takes the model key, and the chat then needs no key card.
+      // A profile without a key opens DSH's first-run "Add an API key" dialog over the frame; the guide's path is Settings > Models, so it is dismissed the
+      // way a user can ("Configure later") before Settings is opened. (Found on the frame jobs: the only dialog there was this one, with no settings nav.)
+      const firstRun = await until(async () => {
+        const state = await evaluate(`(() => {
+          const dialog = [...document.querySelectorAll('[role=dialog]')].find((candidate) => candidate.querySelector('input[aria-label="API key"]') !== null)
+          if (dialog === undefined) return 'none'
+          const later = [...dialog.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Configure later')
+          if (later === undefined) return 'no-later'
+          later.click()
+          return 'dismissed'
+        })()`)
+        return state === 'none' ? undefined : state
+      }, 15_000)
+      if (firstRun === 'no-later') fail('the first-run key dialog has no "Configure later" button')
+      if (firstRun === 'dismissed') {
+        const closed = await until(
+          async () =>
+            (await evaluate(
+              `[...document.querySelectorAll('[role=dialog]')].some((candidate) => candidate.querySelector('input[aria-label="API key"]') !== null)`,
+            )) === false,
+          10_000,
+        )
+        if (closed !== true) fail('the first-run key dialog did not close after "Configure later"')
+        log(
+          'the first-run key dialog is dismissed (Configure later), so the key is entered in Settings > Models',
+        )
+      }
       // Close any palette or menu left open (a command named Settings lives in the palette too), then press the frame's own Settings button.
       for (const type of ['keyDown', 'keyUp'])
         await cdp.send('Input.dispatchKeyEvent', {
@@ -701,7 +743,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       const settingsOpen = await until(
         async () =>
           await evaluate(`(() => {
-            if (document.querySelector('[role=dialog]') !== null) return true
+            if ([...document.querySelectorAll('[role=dialog]')].some((candidate) => candidate.querySelector('nav') !== null)) return true
             const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
               (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
             for (const button of buttons) button.click()
@@ -714,15 +756,39 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         const detail = await evaluate(`document.body.innerText.slice(0, 400)`)
         fail(`Settings did not open a dialog: ${JSON.stringify(detail)}`)
       }
+      // The dialog remembers a section (a runner's agent home opened it on General); the Models page is chosen the way the product's own
+      // openSettingsSection does it: a button in the dialog's nav, by its accessible name in either shipped language.
+      const modelsSection = await until(
+        async () =>
+          await evaluate(`(() => {
+            const item = [...document.querySelectorAll('[role=dialog] nav button')].find((candidate) => {
+              const label = (candidate.getAttribute('aria-label') ?? '').trim()
+              const text = (candidate.textContent ?? '').replace(/\\s+/g, ' ').trim()
+              return ['Models', '模型'].includes(label === '' ? text : label)
+            })
+            if (item === undefined) return false
+            item.click()
+            return true
+          })()`),
+        10_000,
+      )
+      if (modelsSection !== true) {
+        const dump = await evaluate(
+          `JSON.stringify([...document.querySelectorAll('[role=dialog]')].map((dialog) => ({ label: dialog.getAttribute('aria-label'), html: dialog.outerHTML.slice(0, 1400) })))`,
+        )
+        fail(`the Settings dialog has no Models section: ${String(dump).slice(0, 4000)}`)
+      }
       const models = await until(
         async () =>
           await evaluate(`(() => {
-            const dialog = document.querySelector('[role=dialog]')
-            if (dialog === null) return undefined
-            const text = dialog.innerText
-            if (text.includes('Loading the provider directory failed')) return { failed: text.slice(0, 400) }
-            const input = dialog.querySelector('input[type=password]') ?? dialog.querySelector('input[aria-label="API key"]')
-            return input === null ? undefined : { text: text.slice(0, 200) }
+            const dialogs = [...document.querySelectorAll('[role=dialog]')]
+            for (const dialog of dialogs) {
+              const text = dialog.innerText
+              if (text.includes('Loading the provider directory failed')) return { failed: text.slice(0, 400) }
+              const input = dialog.querySelector('input[type=password]') ?? dialog.querySelector('input[aria-label="API key"]')
+              if (input !== null) return { text: text.slice(0, 200) }
+            }
+            return undefined
           })()`),
         20_000,
       )
@@ -742,7 +808,13 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       })()`)
       await cdp.send('Input.insertText', { text: GATE_KEY })
       await sleep(250)
-      if ((await click('Save and continue')) !== true) fail('Settings > Models has no save action')
+      // The Models page saves a provider key with Apply (the first-run card used Save and continue); both are tried, the page one first.
+      if ((await click('Apply')) !== true && (await click('Save and continue')) !== true) {
+        const dump = await evaluate(
+          `JSON.stringify([...document.querySelectorAll('[role=dialog]')].map((dialog) => ({ label: dialog.getAttribute('aria-label'), text: dialog.innerText.slice(0, 400), buttons: [...dialog.querySelectorAll('button')].map((button) => button.textContent.trim()) })))`,
+        )
+        fail(`Settings > Models has no save action: ${String(dump).slice(0, 2500)}`)
+      }
       const saved = await until(
         async () =>
           await evaluate(`(() => {
@@ -927,21 +999,36 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           `the browser tile has no address input: ${JSON.stringify(diagnostics)} (screenshot /tmp/verify-ide-template-tile.png)`,
         )
       }
-      if ((await click('Go')) !== true) fail('the browser tile has no Go button')
-      const shown = await until(
-        async () =>
-          await evaluate(`(() => {
-            const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-            if (frame === null) return undefined
-            const text = frame.contentDocument?.body?.innerText ?? ''
-            return text.includes(${JSON.stringify(page.text)}) ? text.slice(0, 200) : undefined
-          })()`),
-        30_000,
-      )
-      if (shown === undefined)
-        fail(
-          `the app's page did not load in the frame's browser tile; server said:\n${output.slice(-2500)}`,
+      // The first press can land while the fresh page (a host restart makes a new one) is still wiring its tile; the address stays typed, so a second
+      // press navigates the same place. The failure names the iframe's state, not only the server output.
+      let shown
+      for (let attempt = 0; attempt < 3 && shown === undefined; attempt += 1) {
+        if ((await click('Go')) !== true) fail('the browser tile has no Go button')
+        shown = await until(
+          async () =>
+            await evaluate(`(() => {
+              const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+              if (frame === null) return undefined
+              const text = frame.contentDocument?.body?.innerText ?? ''
+              return text.includes(${JSON.stringify(page.text)}) ? text.slice(0, 200) : undefined
+            })()`),
+          attempt === 0 ? 30_000 : 10_000,
         )
+      }
+      if (shown === undefined) {
+        const diagnostics = await evaluate(`(() => {
+          const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+          return {
+            src: frame?.getAttribute('src') ?? null,
+            title: frame?.contentDocument?.title ?? null,
+            text: frame?.contentDocument?.body?.innerText?.slice(0, 300) ?? null,
+            browserPane: document.querySelectorAll('.dshWorkspaceBrowser').length,
+          }
+        })()`)
+        fail(
+          `the app's page did not load in the frame's browser tile: ${JSON.stringify(diagnostics)}; server said:\n${output.slice(-1500)}`,
+        )
+      }
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
 
       // The agent template's own plugins run beside the host (the composition check above proves every row active), and the panel's routes belong under
@@ -1158,11 +1245,24 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           const detail = await evaluate(`document.body.innerText.slice(0, 500)`)
           fail(`the chat has no composer after the settings reload: ${JSON.stringify(detail)}`)
         }
-        await evaluate(
-          `document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.focus()`,
-        )
-        await cdp.send('Input.insertText', { text: GATE_MESSAGE })
-        await sleep(250)
+        // The composer takes the text through the focused contenteditable; a re-render can drop the focus before the insert, so the text is verified and the
+        // insert repeated. The send control is then waited for, and a failure names the buttons that are there.
+        let typed = false
+        for (let attempt = 0; attempt < 3 && !typed; attempt += 1) {
+          await evaluate(
+            `document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.focus()`,
+          )
+          await cdp.send('Input.insertText', { text: GATE_MESSAGE })
+          await sleep(250)
+          typed = await until(
+            async () =>
+              (await evaluate(
+                `(document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.textContent ?? '').includes(${JSON.stringify(GATE_MESSAGE)})`,
+              )) === true,
+            5_000,
+          )
+        }
+        if (typed !== true) fail('the chat composer did not take the message text')
         const sendEnabled = await until(
           async () =>
             await evaluate(`(() => {
@@ -1172,7 +1272,11 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           15_000,
         )
         if (sendEnabled !== true) {
-          const detail = await evaluate(`document.body.innerText.slice(0, 500)`)
+          const detail = await evaluate(`JSON.stringify({
+            text: document.body.innerText.slice(0, 400),
+            buttons: [...document.querySelectorAll('button')].map((candidate) => candidate.getAttribute('aria-label') ?? candidate.textContent.trim()).filter(Boolean).slice(0, 40),
+            composer: (document.querySelector('[contenteditable=true][aria-label^="Describe"]')?.textContent ?? '').slice(0, 120),
+          })`)
           fail(`the chat has no send control: ${JSON.stringify(detail)}`)
         }
         await evaluate(
