@@ -103,6 +103,15 @@ test("the manifest carries the DSH pin, the framework, the frame packages, and k
   assert.equal(manifest.scripts.start, 'node src/main.ts')
 })
 
+test("the launcher listens on the app's own stable port, so a restart keeps the frame's origin and its cookie", () => {
+  const plan = ideProfilePlan(input)
+  assert.match(
+    plan.hostScript,
+    /selectInstance\(\{ projectRoot: appRoot, env: process\.env \}\)\.port\.start/u,
+  )
+  assert.doesNotMatch(plan.hostScript, /ACRYLBLENDS_PORT \?\? '0'/u)
+})
+
 test('applying twice changes nothing the second time', () => {
   const root = folder()
   const first = applyIdeProfile(root, input)
