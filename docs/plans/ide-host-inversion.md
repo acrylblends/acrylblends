@@ -787,6 +787,41 @@ placement and the card list's scroll region), 4 and 8; then the frame-compare wi
 every shot compared with ACRYL before reporting. The kit's app folder is removed and its port free; the kit itself (tarballs, prefix, home, cache,
 screenshots) is ready.
 
+### Handoff 3 (2026-11-02, after the stylesheet root cause)
+
+The kit's dialog defect and the Start view's misplacement had one cause, found by reading the live page rather than the code's intent: `clientAssetTags`
+in `plugins/acryl-page/src/index.ts` copied the frontend's `<script ... src>` opening tag without its closing `</script>`. The browser then parsed the
+vendor modulepreload and both stylesheet links as that script's text, so DSH's whole component stylesheet (primitives: Modal, Button, Input, Menu, ...)
+never loaded and every surface drawn by it fell back to browser defaults. The theme tokens still worked because the theme plugin injects its CSS inline,
+which is why only primitives-drawn surfaces looked wrong. Fixed at the cause in `49417c57`: the page closes the tag it owns, the test pins the copied
+tags, and the gate asserts it twice - the served page's script tags are closed, and in real Chrome the document carries a stylesheet link while the
+entry script element holds no text. With the stylesheet loaded, the three symptom patches from `ffd55b5f`/`6cd7a585` were re-measured and removed:
+DSH's base CSS sets body font-family, its Modal root is fixed/centered/z-index 1000, and the notice, Settings and banner scroll assertions pass without
+`html, body { overflow: hidden }`. Defects 3 and 4 are gone with the same cause (the Start header sits like ACRYL's, the card list ends above the dock,
+and "Open configuration file" is a proper outline button with ACRYL's spacing). Defect 6 was a shot-order issue, fixed in the kit scenario.
+
+Defect 8 is a ticket, not a 119 fix: the Settings nav truncates "Command pale..." in ACRYL and in the frame alike (ACRYL's own settings-models
+reference shows the same ellipsis), so it is an ACRYL + frame UI ticket - widen the nav or let labels wrap in both.
+
+Frame-compare is now wired with the coordinator's conditions. `scripts/frame-views-frame.json` holds the frame's three day-one states (first-run,
+Settings > Models, the right panel) at one fixed viewport, 1440x900, with masks only for what changes every run (the app's port inside the address
+field, the terminal dock's text). `verify-ide-template` captures those states for the agent template after the notice check and, when `FRAME_VISUAL=1`
+on Linux, compares them with `scripts/frame-reference-frame` at 2% (`FRAME_VISUAL_CAPTURE` writes the states instead, for regenerating the baseline);
+macOS and Windows keep the structural assertions. `.github/workflows/frame-baseline.yml` regenerates the baseline on the Ubuntu runner (Node 24) and
+uploads the PNGs for review. `frame-compare compare` now honors `--views`, and `check --against acryl` reads `scripts/frame-reference` and never
+fails: that set is ACRYL Desktop with no project and ACRYL's own plugins, so content differs by design (measured on the fixed build: settings-models
+3.67% at 1440x900 and 4.95% at 1024x768, right-panel-open 37%, frame 72.4%/64.6%; the diff image shows the dialog chrome itself aligned). The baseline
+is captured on the Linux runner and approved by the coordinator before it is committed; until then the frame job does not set `FRAME_VISUAL`.
+
+Kit: rebuilt in `acryldev/_testfield/acrylblends-test-kit-1.2.0-rc` from `49417c57` (CLI 1.2.0, 13 frame tarballs), a fresh app installed through
+`try.sh`, and the five shots retaken at 1280x800 into `screenshots/`: the Preview Notice as a centered card with a scrim, the frame with the app open,
+the right panel with the Start header and its list above the dock, Settings > Models with its real surface, and the terminal. The app folder is removed
+after the run so the owner's `try.sh` starts clean.
+
+State: branch 119-workshop-guide; `49417c57` (root cause) and `9f57d0fd` (visual gate wiring) on top of the green `7c7b5e40`; the full check has not
+been run since `49417c57`. Next: the Linux baseline capture and the coordinator's review of the five kit shots; commit the baseline and set
+`FRAME_VISUAL=1` on the frame job once approved; run the full check and push; CI.
+
 ## 27. The desktop window opens the frame (design, branch 122, 2026-11-02)
 
 `npm run desktop` opened only the app's page: it ran the bare `src/app.ts` `createApp`, or attached to a running dev server and loaded its root. The

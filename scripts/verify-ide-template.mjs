@@ -565,6 +565,55 @@ ${composition.stdout}`)
   url = afterNotice.url
   origin = afterNotice.origin
 
+  // The frame's look, for the workshop's agent template: three day-one states at one fixed viewport, captured here and compared with the committed
+  // baseline at 2%. The compare runs only on Linux CI, where the runner's fonts are fixed; macOS and Windows keep the structural assertions (a cross-OS
+  // pixel gate would fail on font rendering, not on the product). FRAME_VISUAL_CAPTURE names a folder to write the states into instead: the baseline is
+  // regenerated that way on the Linux runner and approved before it is committed.
+  if (template === 'agent') {
+    const views = 'frame,settings-models,right-panel-open'
+    const viewsFile = join(root, 'scripts', 'frame-views-frame.json')
+    const captureTo = process.env.FRAME_VISUAL_CAPTURE
+    if (captureTo !== undefined && captureTo !== '') {
+      const shot = spawnSync(
+        process.execPath,
+        [join(root, 'scripts', 'frame-compare.mjs'), 'capture', serverUrl, captureTo, '--views', views, '--views-file', viewsFile],
+        { encoding: 'utf8' },
+      )
+      if (shot.status !== 0)
+        fail(
+          `the frame's visual states did not capture (exit ${String(shot.status)}):\n${shot.stdout ?? ''}${shot.stderr ?? ''}`,
+        )
+      log(`the frame's visual states are captured in ${captureTo}`)
+    }
+    if (process.env.FRAME_VISUAL === '1' && process.platform === 'linux') {
+      const baseline = join(root, 'scripts', 'frame-reference-frame')
+      if (!existsSync(baseline))
+        fail(
+          'the frame visual baseline is missing (scripts/frame-reference-frame); capture it on this runner first',
+        )
+      const looks = spawnSync(
+        process.execPath,
+        [
+          join(root, 'scripts', 'frame-compare.mjs'),
+          'check',
+          baseline,
+          serverUrl,
+          join(scratch, 'frame-visual'),
+          '--views',
+          views,
+          '--views-file',
+          viewsFile,
+        ],
+        { encoding: 'utf8' },
+      )
+      if (looks.status !== 0)
+        fail(
+          `the frame does not match its visual baseline (exit ${String(looks.status)}):\n${looks.stdout ?? ''}${looks.stderr ?? ''}`,
+        )
+      log('the frame matches its visual baseline at 1440x900 within 2%')
+    }
+  }
+
   // The session banner check needs the same host back on the same origin: the page's cookie is gone, the connection cannot recover, and the frame
   // must say so instead of spinning.
   const restartSamePort = async () => {
