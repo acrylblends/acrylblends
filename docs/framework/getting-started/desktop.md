@@ -42,7 +42,8 @@ same frame the browser shows; the desktop builds nothing of its own.
    `.acrylblends/frame-url.json` (owner-only, with the launch token) and opens it. Closing the window leaves that host running.
 2. Otherwise the window starts the host itself, exactly as `npm run dev` does (the same npm and Node that ran `npm run desktop`; the host never runs inside
    Electron), and opens the address it prints. Closing the window stops that host and everything it started, including its terminals, so its port is free
-   again.
+   again. Ctrl-C in the terminal does the same: Electron runs in a process group of its own, and `npm run desktop` passes it exactly one signal (a second
+   one would end Electron before it could stop the host).
 3. Navigation follows ACRYL Desktop's rule: the frame's own address stays in the window, and its tiles (the app's page in an iframe) load freely. A link to any
    other `http(s)` or `mailto` address opens in the system browser, and nothing else opens at all.
 4. The door's `window list` shows each window's address without the launch token.

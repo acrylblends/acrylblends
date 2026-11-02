@@ -633,6 +633,28 @@ try {
       fail(`the frame host the window started still listens at ${served} after the window closed`)
     log(`closing the window stopped the frame host it started (${new URL(served).port} is free)`)
 
+    // (c) Ctrl-C in the terminal (SIGINT to npm's whole process group, which npm passes on once more) stops the desktop app and the frame host it started.
+    // macOS and Linux with a display: without one, the group would also hold xvfb-run's X server, which a real Ctrl-C never reaches.
+    if (!isWindows && !(process.platform === 'linux' && !process.env.DISPLAY)) {
+      const interrupted = start('desktop', { ACRYLBLENDS_PORT: '0' }, { cwd: frameApp })
+      const interruptedUrl = await until(
+        async () => /the frame host serves (http:\/\/[\d.]+:\d+)/u.exec(interrupted.output)?.[1],
+        120_000,
+      )
+      if (!interruptedUrl)
+        fail(`the desktop app did not start the frame host:\n${interrupted.output.slice(-3000)}`)
+      await onlyWindow()
+      process.kill(-interrupted.child.pid, 'SIGINT')
+      if (!(await ended(interrupted))) fail('the frame desktop app did not end on Ctrl-C')
+      if (!(await until(async () => !(await listening(interruptedUrl)), 15_000)))
+        fail(
+          `Ctrl-C ended the desktop app, but the frame host it started still listens at ${interruptedUrl}`,
+        )
+      log(
+        `Ctrl-C stopped the desktop app and the frame host it started (${new URL(interruptedUrl).port} is free)`,
+      )
+    }
+
     // (b) npm run dev runs the frame: the window attaches to it, and closing the window leaves it running.
     const dev = start('dev', { ACRYLBLENDS_PORT: '0' }, { cwd: frameApp })
     const devUrl = await until(

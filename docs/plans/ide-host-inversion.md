@@ -841,7 +841,9 @@ build a second one: the host is the one `npm run dev` runs, and the window is on
    `npm run desktop` (`npm_execpath`, `npm_node_execpath`), never by Electron's Node: node-pty and DSH's rows are built for Node's ABI, not
    Electron's. On shutdown, the order is: the door shell stops, then the child tree gets SIGTERM (its process group on macOS and Linux,
    `taskkill /T` on Windows), and the window ends once the child is gone (bounded wait, then a forced kill). A host the window attached to is
-   never stopped; closing the window leaves it running, as before. A host that exits before it prints its address ends the desktop run with its
+   never stopped; closing the window leaves it running, as before. Ctrl-C reaches the same quit: the launcher starts Electron as the leader of its own
+   process group (macOS, Linux) and passes on exactly one SIGINT, SIGTERM or SIGHUP, because Electron is killed outright by a second one before its quit
+   code runs, and a terminal's Ctrl-C reaches both the launcher's group and, through npm, the launcher a second time. A host that exits before it prints its address ends the desktop run with its
    output and exit code.
 4. **Configuration and composition.** No new Loader row and no change to the host's composition or row ids. The frame mode is chosen by one fact:
    `scripts/ide-host.mjs` exists in the app. The window keeps ACRYL Desktop's secure options and its navigation rules: only a main-frame
@@ -857,5 +859,5 @@ build a second one: the host is the one `npm run dev` runs, and the window is on
    Electron in `verify:desktop`: a framed app, `npm run desktop`, then through the window's DevTools port, the left panel (Projects), the right
    panel (Files/Changes/Review), Settings with its sections, the menu's `Settings...` opening that same dialog, and the app's page in the browser
    tile. It also checks that closing the window stops
-   the host it started (the port is free), and that a window attached to a running `npm run dev` leaves that host running. The desktop CI job
+   the host it started (the port is free), that Ctrl-C (SIGINT to `npm run desktop`'s process group) does too, and that a window attached to a running `npm run dev` leaves that host running. The desktop CI job
    runs on macOS, Windows and Linux (xvfb).
