@@ -719,9 +719,11 @@ upstream sidebar's Settings trigger and the frame's foot Settings both present, 
 (Models, before the chat step) passes.
 
 Open hypothesis to test next: the DSH chat run from the gate's chat step may still be streaming when the final Settings open starts (either Settings does not open while a
-run is active, or the dialog is closed by the chat surface). Next diagnostic, before any change: poll and record every dialog over the 20 s plus the two Settings triggers'
-disabled and aria-expanded state; if the active run is the condition, the gate waits for the chat to go idle before the Settings step, and the product question is whether
-blocking Settings during a run is acceptable.
+run is active, or the dialog is closed by the chat surface). The product answer is fixed, not open: Settings MUST open while a run streams - a user changes models or keys
+mid-run - so the gate must not paper over it by waiting for idle. Test it deterministically on this Mac instead of waiting for CI: make the mock model stream slowly (about
+10 s), start a chat run, press the frame's Settings while it streams, and poll for dialogs plus both Settings triggers' disabled and aria-expanded state. If Settings does not
+open during a run, that is a product defect in the frame (or a DSH behaviour to report), to fix at the cause; if it does open, the cause of the gate failure is elsewhere and
+the dialog polling names it.
 
 What is in the branch: `d0e0561c` (121: node-server graceful stop, router drain, whole-root tests, every package's typecheck in the gate); `3318719a` (startChrome: own port
 from DevToolsActivePort, `--enable-logging=stderr` captured, bounded named failure, launch log artifact, whole-tree kill; parser test); `d18a3b40` (panel guards,
