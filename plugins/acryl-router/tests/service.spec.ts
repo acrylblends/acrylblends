@@ -255,9 +255,37 @@ describe('acryl-router lifecycle through Cordis', () => {
     expect((await get(router, '/cycle/0')).status).toBe(404)
   })
 
-  it('aborts an in-flight request and waits for it when the router is disposed, then answers 503', async () => {
+  it('lets a request in flight finish inside the grace, untouched by disposal', async () => {
     const ctx = root()
     const fiber = ctx.plugin(provider, config)
+    await settle()
+    const router = ctx.router
+    let aborted = false
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => { release = resolve })
+    router.route('/', new Acryl().get('/save', async c => {
+      c.req.raw.signal.addEventListener('abort', () => { aborted = true }, { once: true })
+      await gate
+      return c.text('saved')
+    }))
+    const pending = get(router, '/save')
+    await settle()
+    const startedAt = Date.now()
+    const disposal = fiber.dispose()
+    await new Promise(resolve => setTimeout(resolve, 50))
+    release()
+    const answered = await pending
+    expect(answered.status).toBe(200)
+    expect(await answered.text()).toBe('saved')
+    await disposal
+    expect(aborted).toBe(false)
+    // Disposal waited for the request, not for the grace: well inside the grace plus the short abort settle.
+    expect(Date.now() - startedAt).toBeLessThan(config.disposeGraceMs + 300)
+  })
+
+  it('aborts what is still in flight after the grace, answers 503 with Connection: close, and never lets a new request in', async () => {
+    const ctx = root()
+    const fiber = ctx.plugin(provider, { ...config, disposeGraceMs: 100 })
     await settle()
     const router = ctx.router
     let aborted = false
@@ -268,11 +296,15 @@ describe('acryl-router lifecycle through Cordis', () => {
     const pending = get(router, '/slow')
     await settle()
 
+    const startedAt = Date.now()
     await fiber.dispose()
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(100)
     await settle()
     expect(aborted).toBe(true)
     expect((await pending).status).toBe(499)
-    expect((await get(router, '/slow')).status).toBe(503)
+    const refused = await get(router, '/slow')
+    expect(refused.status).toBe(503)
+    expect(refused.headers.get('connection')).toBe('close')
   })
 
   it('forwards the caller\'s own abort to the handler signal', async () => {
@@ -357,6 +389,10 @@ describe('acryl-router lifecycle through Cordis', () => {
     let guardAborted = false
     let handlerAborted = false
     let release!: () => void
+    // The held request is inside the guard's middleware before the guard unloads: without this the removal can run first under load, when the
+    // request has not reached the middleware yet, and the test then checks an abort that was never owed.
+    let heldStarted!: () => void
+    const heldInGuard = new Promise<void>(resolve => { heldStarted = resolve })
     const guard = ctx.plugin({
       name: 'guard',
       inject: ['router'],
@@ -364,7 +400,9 @@ describe('acryl-router lifecycle through Cordis', () => {
         inner.router.route('/', new Acryl()
           .use('/held/*', async (c, next) => {
             c.req.raw.signal.addEventListener('abort', () => { guardAborted = true }, { once: true })
-            await new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { reject(new Error('aborted')) }, { once: true }) })
+            const held = new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { reject(new Error('aborted')) }, { once: true }) })
+            heldStarted()
+            await held
             await next()
           })
           .use('/passed/*', async (_c, next) => { await next() }))
@@ -385,6 +423,7 @@ describe('acryl-router lifecycle through Cordis', () => {
     })
     await settle()
     const held = get(router, '/held/x')
+    await heldInGuard
     const passed = await get(router, '/passed/x')
     const reader = passed.body!.getReader()
     await reader.read()

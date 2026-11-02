@@ -21,6 +21,9 @@ import type { ErrorHandler, H, NotFoundHandler } from './core/types.ts'
 
 const DEFAULT_DISPOSE_GRACE_MS = 2000
 
+/** How long disposal waits for the flights it had to abort after the drain, before it continues without them. */
+const ABORT_SETTLE_MS = 300
+
 /** How a trailing slash is read: `strict` keeps `/a` and `/a/` distinct, `ignore` treats them as one path. */
 export type TrailingSlash = 'strict' | 'ignore'
 
@@ -150,8 +153,8 @@ export class Router extends Service {
     }
     ctx.effect(() => async () => {
       this.state.closing = true
-      await this.end([...this.flights], 'disposal')
-    }, 'acryl-router: abort and settle in-flight requests')
+      await this.drain()
+    }, 'acryl-router: drain in-flight requests, then abort what is left')
   }
 
   /** Registrations currently held (mounts, and the router-wide error and not-found handlers); a leak check for reload tests. */
@@ -168,12 +171,16 @@ export class Router extends Service {
     const mount = this.snapshot(path, app)
     this.state.mounts.add(mount)
     this.state.composed = undefined
-    // Removing a mount ends the requests its code is still serving: their signals abort, a body it produced is cancelled, and the
-    // plugin's unload waits for them (bounded by `disposeGraceMs`), so nothing a plugin started outlives it.
+    // Removing a mount ends the requests its code is still serving: they get the grace to finish first (a save being written when its plugin unloads,
+    // or when the whole app stops and every plugin unloads together, must not be cut), and only then are their signals aborted, their bodies cancelled
+    // and their settle awaited, so nothing a plugin started outlives it by more than that bounded grace.
     const remove = (): Promise<void> => {
       if (!this.state.mounts.delete(mount)) return Promise.resolve()
       this.state.composed = undefined
-      return this.end([...this.flights].filter(flight => (flight.running.get(mount) ?? 0) > 0 || flight.producer === mount), `removing ${path}`)
+      return this.drainFlights(
+        [...this.flights].filter(flight => (flight.running.get(mount) ?? 0) > 0 || flight.producer === mount),
+        `removing ${path}`,
+      )
     }
     // Each route the mount serves is a child effect of it, labeled on its own, so the inspector can report routes without asking the
     // router and no label grows with the size of the app (`ALL` is middleware or `all`). The children hold nothing: the mount does.
@@ -234,18 +241,41 @@ export class Router extends Service {
     return mount
   }
 
-  /** Abort `flights`, cut their bodies short and wait for them to settle, at most `disposeGraceMs`. */
-  private async end(flights: readonly Flight[], why: string): Promise<void> {
+  /**
+   * The router's own disposal: let the flights already in flight finish within `disposeGraceMs` - a save being written when the app stops must not be cut
+   * by the router beneath it - then abort what is left and settle it for a moment, so disposal does not wait a second full grace on code that ignores
+   * its abort signal.
+   */
+  private async drain(): Promise<void> {
+    await this.drainFlights([...this.flights], 'disposal')
+  }
+
+  /** The one draining rule: let `flights` finish inside the grace, then abort and settle what is left. */
+  private async drainFlights(flights: readonly Flight[], why: string): Promise<void> {
+    if (flights.length === 0) return
+    if (await this.settledWithin(flights, this.graceMs)) return
+    const left = flights.filter(flight => this.flights.has(flight))
+    if (left.length > 0) await this.end(left, why, ABORT_SETTLE_MS)
+  }
+
+  /** Resolve true when every flight settled inside `ms`, false at the deadline. */
+  private async settledWithin(flights: readonly Flight[], ms: number): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const gaveUp = new Promise<false>(resolve => { timer = setTimeout(() => { resolve(false) }, ms) })
+    const outcome = await Promise.race([Promise.allSettled(flights.map(flight => flight.settled)).then(() => true as const), gaveUp])
+    clearTimeout(timer)
+    return outcome
+  }
+
+  /** Abort `flights`, cut their bodies short and wait for them to settle, at most `settleMs`. */
+  private async end(flights: readonly Flight[], why: string, settleMs: number = this.graceMs): Promise<void> {
     if (flights.length === 0) return
     for (const flight of flights) {
       flight.controller.abort()
       flight.endBody()
     }
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const gaveUp = new Promise<'gave-up'>(resolve => { timer = setTimeout(() => { resolve('gave-up') }, this.graceMs) })
-    const outcome = await Promise.race([Promise.allSettled(flights.map(flight => flight.settled)).then(() => 'settled' as const), gaveUp])
-    clearTimeout(timer)
-    if (outcome === 'gave-up') this.ctx.logger.warn(`acryl-router: ${String(flights.length)} request(s) did not finish ${String(this.graceMs)} ms after abort (${why}); continued without them`)
+    if (await this.settledWithin(flights, settleMs)) return
+    this.ctx.logger.warn(`acryl-router: ${String(flights.length)} request(s) did not finish ${String(settleMs)} ms after abort (${why}); continued without them`)
   }
 
   /** Turn errors no mounted app handled into responses. One handler per router; the calling plugin owns it. */
@@ -292,7 +322,7 @@ export class Router extends Service {
    * `bindings` is an object an adapter hands to the handler as `c.env` (an upgrade request's socket hooks, for `upgradeWebSocket`); `connection` is added to it.
    */
   fetch(request: Request, connection: ConnectionInfo = {}, bindings?: object): Promise<Response> {
-    if (this.state.closing) return Promise.resolve(new Response('Service Unavailable', { status: 503 }))
+    if (this.state.closing) return Promise.resolve(new Response('Service Unavailable', { status: 503, headers: { connection: 'close' } }))
     const controller = new AbortController()
     const forward = (): void => controller.abort()
     if (request.signal.aborted) controller.abort()
