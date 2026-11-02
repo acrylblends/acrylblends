@@ -125,47 +125,59 @@ async function pageAndSocket(url) {
   return { status: response.status, cookie: cookie !== '', socket }
 }
 
-step('boot 1: starting')
-const first = await boot()
-step(`boot 1: address printed at ${first.url.replace(/token=.*/u, 'token=<redacted>')}`)
-const firstCheck = { ...(await pageAndSocket(first.url)), record: record(first.url) }
-step(
-  `boot 1: page ${String(firstCheck.status)}, cookie ${String(firstCheck.cookie)}, socket ${String(firstCheck.socket.open)}`,
-)
-step(
-  `FIRST ${JSON.stringify({ url: first.url.replace(/token=.*/u, 'token=<redacted>'), ...firstCheck })}`,
-)
-step('boot 1: stopping')
-await stop(first.child)
-step('boot 1: stopped')
-await sleep(1200)
-step('boot 2: starting')
-const second = await boot()
-step(`boot 2: address printed at ${second.url.replace(/token=.*/u, 'token=<redacted>')}`)
-const secondCheck = { ...(await pageAndSocket(second.url)), record: record(second.url) }
-step(
-  `boot 2: page ${String(secondCheck.status)}, cookie ${String(secondCheck.cookie)}, socket ${String(secondCheck.socket.open)}`,
-)
-step(
-  `SECOND ${JSON.stringify({ url: second.url.replace(/token=.*/u, 'token=<redacted>'), ...secondCheck })}`,
-)
-step(`STABLE ${String(first.url === second.url)}`)
-const ok =
-  first.url === second.url &&
-  firstCheck.status === 303 &&
-  firstCheck.cookie === true &&
-  firstCheck.socket.open === true &&
-  firstCheck.record.mode === 0o600 &&
-  firstCheck.record.url === true &&
-  firstCheck.record.token === true &&
-  secondCheck.status === 303 &&
-  secondCheck.cookie === true &&
-  secondCheck.socket.open === true &&
-  secondCheck.record.mode === 0o600 &&
-  secondCheck.record.url === true &&
-  secondCheck.record.token === true
-await stop(second.child)
-step(ok ? 'verify-frame-token: OK' : 'verify-frame-token: FAILED')
+/** The app that is booted right now; a failure must stop it before the script leaves - a thrown read once left a server on its port for hours. */
+let current
+let ok = false
+
+try {
+  step('boot 1: starting')
+  current = await boot()
+  const first = current
+  step(`boot 1: address printed at ${first.url.replace(/token=.*/u, 'token=<redacted>')}`)
+  const firstCheck = { ...(await pageAndSocket(first.url)), record: record(first.url) }
+  step(
+    `boot 1: page ${String(firstCheck.status)}, cookie ${String(firstCheck.cookie)}, socket ${String(firstCheck.socket.open)}`,
+  )
+  step(
+    `FIRST ${JSON.stringify({ url: first.url.replace(/token=.*/u, 'token=<redacted>'), ...firstCheck })}`,
+  )
+  step('boot 1: stopping')
+  await stop(first.child)
+  current = undefined
+  step('boot 1: stopped')
+  await sleep(1200)
+  step('boot 2: starting')
+  current = await boot()
+  const second = current
+  step(`boot 2: address printed at ${second.url.replace(/token=.*/u, 'token=<redacted>')}`)
+  const secondCheck = { ...(await pageAndSocket(second.url)), record: record(second.url) }
+  step(
+    `boot 2: page ${String(secondCheck.status)}, cookie ${String(secondCheck.cookie)}, socket ${String(secondCheck.socket.open)}`,
+  )
+  step(
+    `SECOND ${JSON.stringify({ url: second.url.replace(/token=.*/u, 'token=<redacted>'), ...secondCheck })}`,
+  )
+  step(`STABLE ${String(first.url === second.url)}`)
+  ok =
+    first.url === second.url &&
+    firstCheck.status === 303 &&
+    firstCheck.cookie === true &&
+    firstCheck.socket.open === true &&
+    firstCheck.record.mode === 0o600 &&
+    firstCheck.record.url === true &&
+    firstCheck.record.token === true &&
+    secondCheck.status === 303 &&
+    secondCheck.cookie === true &&
+    secondCheck.socket.open === true &&
+    secondCheck.record.mode === 0o600 &&
+    secondCheck.record.url === true &&
+    secondCheck.record.token === true
+  await stop(second.child)
+  current = undefined
+  step(ok ? 'verify-frame-token: OK' : 'verify-frame-token: FAILED')
+} finally {
+  if (current !== undefined) await stop(current.child)
+}
 // An explicit exit: a lingering pipe or socket would otherwise keep the process alive while the caller waits for it (the watchdog then turned a
 // finished run into a ten-minute failure on the Ubuntu runner). Every line above is a synchronous write, so nothing is lost.
 process.exit(ok ? 0 : 1)
