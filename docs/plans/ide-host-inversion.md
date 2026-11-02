@@ -614,10 +614,19 @@ ended. Open the address the terminal printed, or run `npx acrylblends open` in t
 polling once the connection recovers, and a composition without a connection service renders nothing. Unit tests (fake connection, fake probe, fake
 timers) cover quiet-when-connected, no polling at all, the one-401 race, the two-401 verdict with the exact message, non-401 answers and network
 failures staying quiet, recovery, dispose, and the probe's request shape. Measured live: with the cookie deleted and the host restarted inside the
-window, the banner appeared on the second poll cycle with the exact text and the page scrolled nowhere (the first-run card had pulled the page to its
-input; dismissing it and scrolling to the top showed the banner at the top of the canvas, over the tab strip). Still to do: the gate assertion (the
+window, the banner appeared on the second poll cycle with the exact text and the page scrolled nowhere. Still to do: the gate assertion (the
 banner after a cookie-less restart) waits for `120-ci-stable`, together with the first-run tile assertion and wiring `verify-frame-token` into the
 check; the guide's reconnecting step already names the command. The publish block is the take-home, unchanged from the registry's own README.
+
+**The document must never scroll (coordinator's finding from the banner screenshot).** The frame's page scrolled to 256px when DSH's first-run key
+card appeared: the card is a body-level root appended after `#root` in normal flow (`div._root_...`, 256px tall below the 800px shell), so the document
+grew to 1056px, and the card's autofocused input scrolled the whole page down - the tab strip and the sidebar's content went off-screen. The probe
+that found it (computed overflow, body children, rects) is recorded above in the measurements. Fixed in the app shell's advanced styles (`acryl-app-
+shell`): `html, body { overflow: hidden; }` so the frame owns the viewport and only its panes scroll, and `body > div:not(#root) { position: fixed;
+inset: auto 0 0 0; z-index: 60; }` so DSH's own body-level overlay roots (the key card, the notice) are layers over the frame instead of flow content.
+Measured after: `scrollTop` 0 with the card shown, after blur and after a reload; `scrollHeight` 800; the card visible as a bottom sheet over the
+intact frame; Settings > Models still opens; the banner still appears with scroll 0. The page gate assertion (scrollTop stays 0 through the first-run
+card, Settings and the banner) joins the post-120 gate work with the other assertions.
 
 ### The reused token's guards (2026-11-02)
 
