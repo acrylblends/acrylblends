@@ -605,10 +605,19 @@ asserted to read, reuse, write and rotate. Measured live with the packed CLI: a 
 rotated it (old 401, new 303) and the rotated address survived the next restart with the app's page rendering from it. The workshop release is
 **1.2.0** by the owner's decision, and the guide says so.
 
-Still to do in this branch: `verify-ide-template.mjs`'s day-one path must assert the first-run tile (no +, no typed address) once `120-ci-stable`
-lands on main; the frame-side reconnecting banner (poll an admitted endpoint, on 401 replace "Reconnecting..." with the `npx acrylblends open`
-instruction) goes with that gate change; the guide is re-walked after both. The publish block is the take-home, unchanged from the registry's own
-README.
+**The session banner (coordinator's request, 2026-11-02).** The frame's client watches DSH's client connection recovery state (`ctx.connection.state`)
+and, while it is not `connected`, polls one small admitted Remote (`POST /api/settings/describe`) every three seconds; the workspace's own routes sit
+on a longer router prefix and are not behind the browser session, so they could not answer. Only statuses are read: any admitted answer (200, 400,
+404, 500) proves the session, a network failure is the connection's own retry, and a 401 that holds for two consecutive polls means the browser
+session is gone - the banner then replaces the endless "Reconnecting..." at the top of the canvas, over the tab strip, with: "This frame's session
+ended. Open the address the terminal printed, or run `npx acrylblends open` in the app folder and open the address it prints." The watcher stops
+polling once the connection recovers, and a composition without a connection service renders nothing. Unit tests (fake connection, fake probe, fake
+timers) cover quiet-when-connected, no polling at all, the one-401 race, the two-401 verdict with the exact message, non-401 answers and network
+failures staying quiet, recovery, dispose, and the probe's request shape. Measured live: with the cookie deleted and the host restarted inside the
+window, the banner appeared on the second poll cycle with the exact text and the page scrolled nowhere (the first-run card had pulled the page to its
+input; dismissing it and scrolling to the top showed the banner at the top of the canvas, over the tab strip). Still to do: the gate assertion (the
+banner after a cookie-less restart) waits for `120-ci-stable`, together with the first-run tile assertion and wiring `verify-frame-token` into the
+check; the guide's reconnecting step already names the command. The publish block is the take-home, unchanged from the registry's own README.
 
 ### The reused token's guards (2026-11-02)
 

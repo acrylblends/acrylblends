@@ -50,6 +50,7 @@ import type { PaletteConfigState } from '../palette/palette-config.ts'
 import { useWorkspacePalette } from '../palette/use-workspace-palette.ts'
 import type { TabTypesState } from '../tabs/tab-types-state.ts'
 import { BrowserPane } from '../browser/BrowserPane.tsx'
+import { type FrameSessionBanner, FRAME_SESSION_ENDED_MESSAGE } from '../connection/session-banner.ts'
 import { ScratchFilePane } from '../files/ScratchFilePane.tsx'
 import { createWorkspacePtyApi, type WorkspacePtyApi } from '../terminal/pty-api.ts'
 import type { ProjectsControl } from '../projects/projects-control.ts'
@@ -98,6 +99,8 @@ export type WorkspaceCanvasProps = Omit<PropsRuntime<'root'>, 'useSessions'> & {
   readonly projects: ProjectsControl
   /** First-run setup: shown inside the chat surface while no model can serve a request. */
   readonly connectModel?: ModelConnectControl
+  /** The frame's own session: its banner names the way back in when the browser session ended, instead of an endless reconnect. */
+  readonly frameSession: FrameSessionBanner
 }
 
 /**
@@ -106,7 +109,7 @@ export type WorkspaceCanvasProps = Omit<PropsRuntime<'root'>, 'useSessions'> & {
  * Diff/Kanban/Doc (new, spec 040).
  * @param props.renderConversation - upstream Chat slot, rendered by the Chat tile.
  */
-export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, agentStatus, agents: agentsState, tabTypes, tabRegistry, paletteConfig, toasts, notices, useSessions, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel }: WorkspaceCanvasProps) {
+export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, agentStatus, agents: agentsState, tabTypes, tabRegistry, paletteConfig, toasts, notices, useSessions, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel, frameSession }: WorkspaceCanvasProps) {
   // One tab workspace per selected worktree: picking a branch swaps the whole set of tabs, and the
   // tabs of the branch you left (terminals, agents) keep running until they are closed.
   // Subscribe to primitives, not the whole shell snapshot: git polling updates that snapshot often,
@@ -121,6 +124,8 @@ export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, a
   const api = useMemo(() => ptyApi ?? createWorkspacePtyApi(), [ptyApi])
   const subscribe = useCallback((listener: () => void) => workspace.subscribe(listener), [workspace])
   const snapshot = useSyncExternalStore(subscribe, () => workspace.getSnapshot())
+  const subscribeSession = useCallback((listener: () => void) => frameSession.subscribe(listener), [frameSession])
+  const sessionState = useSyncExternalStore(subscribeSession, () => frameSession.getSnapshot())
   const sessions = useSessions(state => state)
   const stageRef = useRef<HTMLDivElement>(null)
   const [splitRatio, setSplitRatio] = useState(() => readSplitRatio(safeStorage()))
@@ -326,6 +331,9 @@ export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, a
 
   return (
     <div className="dshWorkspace" data-acryl-workspace="true" data-workspace-mode="tabs">
+      {sessionState === 'ended' && (
+        <p className="dshWorkspaceSessionBanner" role="alert">{FRAME_SESSION_ENDED_MESSAGE}</p>
+      )}
       <TabStrip
         snapshot={snapshot}
         workspace={workspace}

@@ -29,6 +29,7 @@ import { listTerminalTargets } from './comments/terminal-targets.ts'
 import { browserClipboard } from './comments/use-comments.ts'
 import { WorkspaceState } from './canvas/state.ts'
 import { GLOBAL_GROUP, WorkspaceGroups } from './canvas/groups.ts'
+import { frameSessionBannerFrom, probeAdmittedSession } from './connection/session-banner.ts'
 import { browserStorage, parseSavedWorkspace, STORAGE_KEY } from './canvas/persistence.ts'
 import { startWorkspacePersistence } from './canvas/persist.ts'
 import { createWebFolderPicker } from './projects/web-folder-picker.ts'
@@ -94,6 +95,9 @@ export function apply(ctx: ClientContext): void {
   // page shows the stock frame for the instant it takes, and an unreachable Host means "everything", as before.
   let capabilities = DEFAULT_WORKSPACE_CAPABILITIES
   const capabilitiesLoaded = loadWorkspaceCapabilities().then((loaded) => { capabilities = loaded; return loaded })
+  // The session banner: if the browser's session ends, the retry loop cannot recover it, so the page names the way back in instead of spinning.
+  const frameSession = frameSessionBannerFrom(ctx, signal => probeAdmittedSession(signal))
+  ctx.effect(() => () => frameSession.dispose(), 'acryl-workspace: the frame session banner')
   const groups = new WorkspaceGroups(() => new WorkspaceState({ chat: capabilities.chat }), saved?.groups)
   if (saved !== undefined) shell.setMode(saved.mode)
   // The terminals and the dock are shared by the frame (which places the dock) and the canvas (its terminal tabs).
@@ -297,7 +301,7 @@ export function apply(ctx: ClientContext): void {
           removeSlot = ctx.slots.register({
             name: 'desktop.main',
             priority: WORKSPACE_MAIN_PRIORITY,
-            inject: () => ({ ptyApi: ptyClient, terminals, dock, agentStatus, agents, tabTypes, tabRegistry, paletteConfig, toasts, notices, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel }),
+            inject: () => ({ ptyApi: ptyClient, terminals, dock, agentStatus, agents, tabTypes, tabRegistry, paletteConfig, toasts, notices, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel, frameSession }),
           }, WorkspaceCanvas)
         } catch (cause) {
           // A registration conflict must not take the left pane and the Changes tab down with it.
