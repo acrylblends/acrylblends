@@ -289,17 +289,26 @@ describe('acryl-router lifecycle through Cordis', () => {
     await settle()
     const router = ctx.router
     let aborted = false
+    let listening!: () => void
+    const listenerAttached = new Promise<void>(resolve => { listening = resolve })
+    let abortSeen!: () => void
+    const abortedEvent = new Promise<void>(resolve => { abortSeen = resolve })
     router.route('/', new Acryl().get('/slow', async c => {
-      await new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { aborted = true; reject(new Error('aborted')) }, { once: true }) })
+      c.req.raw.signal.addEventListener('abort', () => { aborted = true; abortSeen() }, { once: true })
+      listening()
+      await new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { reject(new Error('aborted')) }, { once: true }) })
       return c.text('late')
     }))
     const pending = get(router, '/slow')
-    await settle()
+    // The handler is running and listening before the stop begins: otherwise the grace can abort a signal whose listener is attached later, which the
+    // signal never replays, and the test would be observing a race it never meant to test (seen on the CI check under load).
+    await listenerAttached
 
     const startedAt = Date.now()
     await fiber.dispose()
     expect(Date.now() - startedAt).toBeGreaterThanOrEqual(100)
-    await settle()
+    // Await the abort itself, not a timer: the event is the observable fact this test is about.
+    await Promise.race([abortedEvent, new Promise<void>(resolve => { setTimeout(resolve, 1_000) })])
     expect(aborted).toBe(true)
     expect((await pending).status).toBe(499)
     const refused = await get(router, '/slow')
