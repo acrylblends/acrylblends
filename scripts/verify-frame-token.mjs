@@ -7,7 +7,7 @@
 //
 // It boots the app twice (npm run dev, the address the launcher prints), and never uses a fixed port: the app's own stable port is the point.
 import { spawn } from 'node:child_process'
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync, writeSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { npmSpawn } from './lib/platform.mjs'
@@ -18,6 +18,11 @@ const require = createRequire(join(app, 'package.json'))
 const WebSocket = require('ws')
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+/**
+ * Progress written synchronously: a watchdog exit truncates buffered `console.log` lines, and the step a hang reached is exactly what its caller
+ * needs in the failure message (the Ubuntu runner hung once and the message carried no progress at all, 2026-11-02).
+ */
+const step = (line) => writeSync(1, `${line}\n`)
 // A watchdog: whatever the wait, the script names itself and exits instead of leaving a gate hanging. Unref'd so a clean run still exits on its own.
 setTimeout(() => {
   console.error('verify-frame-token: gave up after 10 minutes')
@@ -100,21 +105,31 @@ async function pageAndSocket(url) {
   return { status: response.status, cookie: cookie !== '', socket }
 }
 
+step('boot 1: starting')
 const first = await boot()
+step(`boot 1: address printed at ${first.url.replace(/token=.*/u, 'token=<redacted>')}`)
 const firstCheck = { ...(await pageAndSocket(first.url)), record: record(first.url) }
-console.log(
-  'FIRST',
-  JSON.stringify({ url: first.url.replace(/token=.*/u, 'token=<redacted>'), ...firstCheck }),
+step(
+  `boot 1: page ${String(firstCheck.status)}, cookie ${String(firstCheck.cookie)}, socket ${String(firstCheck.socket.open)}`,
 )
+step(
+  `FIRST ${JSON.stringify({ url: first.url.replace(/token=.*/u, 'token=<redacted>'), ...firstCheck })}`,
+)
+step('boot 1: stopping')
 await stop(first.child)
+step('boot 1: stopped')
 await sleep(1200)
+step('boot 2: starting')
 const second = await boot()
+step(`boot 2: address printed at ${second.url.replace(/token=.*/u, 'token=<redacted>')}`)
 const secondCheck = { ...(await pageAndSocket(second.url)), record: record(second.url) }
-console.log(
-  'SECOND',
-  JSON.stringify({ url: second.url.replace(/token=.*/u, 'token=<redacted>'), ...secondCheck }),
+step(
+  `boot 2: page ${String(secondCheck.status)}, cookie ${String(secondCheck.cookie)}, socket ${String(secondCheck.socket.open)}`,
 )
-console.log('STABLE', first.url === second.url)
+step(
+  `SECOND ${JSON.stringify({ url: second.url.replace(/token=.*/u, 'token=<redacted>'), ...secondCheck })}`,
+)
+step(`STABLE ${String(first.url === second.url)}`)
 const ok =
   first.url === second.url &&
   firstCheck.status === 303 &&
@@ -130,5 +145,5 @@ const ok =
   secondCheck.record.url === true &&
   secondCheck.record.token === true
 await stop(second.child)
-console.log(ok ? 'verify-frame-token: OK' : 'verify-frame-token: FAILED')
+step(ok ? 'verify-frame-token: OK' : 'verify-frame-token: FAILED')
 process.exitCode = ok ? 0 : 1
