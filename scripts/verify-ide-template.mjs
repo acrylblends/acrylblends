@@ -1060,12 +1060,18 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
             if (setter !== undefined) setter.call(textarea, message)
             else textarea.value = message
             textarea.dispatchEvent(new Event('input', { bubbles: true }))
+            // Keep the very nodes this submit used: a failure then says whether they were still the panel's own (a remount or reload between typing and
+            // submit leaves them disconnected, and a stale data-ready mark on a reused host would let the gate act before the new form is wired).
+            window.__acrylPanelGate = { host, root, textarea, form: root.querySelector('form'), typedAt: Date.now() }
             root.querySelector('form').requestSubmit()
             return {
               drivers,
               value: textarea.value,
               ready: host.dataset.ready ?? null,
               following: host.dataset.following ?? null,
+              textareaConnected: textarea.isConnected,
+              textareaIsCurrent: textarea === root.querySelector('textarea'),
+              status: root.querySelector('#log')?.innerText?.slice(-300) ?? '',
             }
           })()`),
           30_000,
@@ -1096,6 +1102,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
             const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
             const host = iframe?.contentDocument?.querySelector('#agent-panel')
             const root = host?.shadowRoot
+            const gate = window.__acrylPanelGate
             return {
               log: root?.querySelector('#log')?.innerText?.slice(-600) ?? null,
               send: root === undefined || root === null ? null : root.querySelector('.send')?.disabled,
@@ -1104,6 +1111,13 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
               value: root?.querySelector('textarea')?.value ?? null,
               ready: host?.dataset.ready ?? null,
               following: host?.dataset.following ?? null,
+              // The nodes the submit used, against the panel that is there now: a disconnected textarea or form (or a different host) means the panel was
+              // remounted or the page reloaded between typing and submit; a current textarea with an empty log and no run means the form was not wired.
+              typedAt: gate?.typedAt ?? null,
+              typedTextareaConnected: gate === undefined ? null : gate.textarea.isConnected,
+              typedTextareaIsCurrent: gate === undefined || root === undefined || root === null ? null : gate.textarea === root.querySelector('textarea'),
+              typedFormConnected: gate === undefined ? null : gate.form.isConnected,
+              typedHostIsCurrent: gate === undefined ? null : gate.host === host,
             }
           })()`)
           fail(

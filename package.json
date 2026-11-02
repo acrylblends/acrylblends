@@ -40,6 +40,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
+    "jsdom": "29.1.1",
     "actionlint": "2.0.6",
     "@deepseek-ai/cordis": "4.0.4",
     "@deepseek-ai/schemastery": "3.18.4",

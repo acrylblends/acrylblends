@@ -5,6 +5,8 @@ import { describeTool } from './describe.ts'
 import { renderMarkdown } from './markdown.ts'
 
 let PREFIX = '/api/agent-panel'
+/** Where the composer's draft is kept across a page reload or a remount. */
+const DRAFT_KEY = 'agent-panel-draft'
 
 /**
  * Why a submit does not send: nothing typed, or a run still going. The panel says it in its log instead of returning silently - a Send that does nothing and
@@ -182,6 +184,12 @@ textarea { width: 100%; min-height: 64px; resize: vertical; padding: 8px; border
 /** Start the panel against the app served at `prefix` (`/api/agent-panel` at the root, `/app/api/agent-panel` in the frame). */
 export async function start(prefix: string = '/api/agent-panel'): Promise<void> {
   PREFIX = prefix
+  // A panel that is mounted again replaces the previous one: one live host, and the readiness mark then belongs to the instance being wired now. A
+  // duplicated or reused host once let a submit reach a form that no live instance was listening to (the frame gate's empty-log failure, 2026-11-02).
+  // The previous instance's run socket goes with it, so its watch ends instead of writing into a detached log.
+  activeSocket?.close()
+  activeSocket = undefined
+  document.getElementById('agent-panel')?.remove()
   const reply = await fetch(`${PREFIX}/session`)
   if (!reply.ok) return
   let session = (await reply.json()) as Session
@@ -206,6 +214,20 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   const panel = $<HTMLElement>('section')
   const log = $<HTMLElement>('#log')
   const input = $<HTMLTextAreaElement>('textarea')
+  // The composer survives the page being replaced (a run that changes files reloads the page, and a mount replaces this panel): the draft is kept
+  // beside the page, restored into this textarea before the form is wired, and cleared when a submit sends it.
+  try {
+    input.value = sessionStorage.getItem(DRAFT_KEY) ?? ''
+  } catch {
+    // No storage: the draft lives as long as this document.
+  }
+  input.addEventListener('input', () => {
+    try {
+      sessionStorage.setItem(DRAFT_KEY, input.value)
+    } catch {
+      // No storage: the draft lives as long as this document.
+    }
+  })
   const send = $<HTMLButtonElement>('.send')
   const stop = $<HTMLButtonElement>('.stop')
   const driver = $<HTMLSelectElement>('select')
@@ -483,6 +505,11 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
     }
     const message = input.value.trim()
     input.value = ''
+    try {
+      sessionStorage.removeItem(DRAFT_KEY)
+    } catch {
+      // No storage.
+    }
     line(message, 'me')
     try {
       const run = await openRun({ t: 'ask', message, driver: driver.value, ...doorPage() })
@@ -499,10 +526,18 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   // The form is wired: a script (the frame gate included) waits for this instead of guessing that the panel can be submitted, and a panel that never got
   // this far says so by the mark's absence - together with the visible guards above, no submit can vanish without a trace.
   host.dataset.ready = '1'
-  // The latest run, if there is one: shown again after a reload (its question, its events), and followed if it is still going.
+  // The latest run, if there is one: shown again after a reload (its question, its events), and followed if it is still going. A reload can land in the
+  // moment between the server recording a run and this page asking for it, so the question is repeated briefly instead of showing an empty panel for a
+  // run that exists (a page replaced right after a submit came back blank in the frame gate, 2026-11-02).
   try {
-    const latest = await openRun({ t: 'follow' })
-    if (latest !== undefined && !('error' in latest)) void watch(latest, false)
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const latest = await openRun({ t: 'follow' })
+      if (latest !== undefined && !('error' in latest)) {
+        void watch(latest, false)
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    }
   } catch {
     // No run to show.
   }

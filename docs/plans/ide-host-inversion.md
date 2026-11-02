@@ -747,3 +747,29 @@ trigger, both moving the same panel, so a second press in the same tick can togg
 dialog's own text, re-presses only when the dialog has vanished, and presses one trigger per attempt: the product's foot button first (its `openSettings`
 path activates the DSH trigger itself), the hidden trigger as the fallback. Blank and agent gates pass on the final code; the three-run count restarts on
 this push.
+
+## 29. The agent panel in a page that is replaced (branch 124, 2026-11-03)
+
+The frame gate's macOS agent job failed on main (run 41536717281) at the panel step: the submit state had an empty composer, no "me" line and no refusal, and
+the surviving panel was a fresh one (ready `1`, Send enabled, Stop disabled). Two candidates were checked, as the coordinator framed them.
+
+**The submit does not navigate the page.** The submit handler's first statement is `preventDefault()` (it has been since the visible-guards change), and
+the form names no action. A jsdom test now pins both: the submit event is `defaultPrevented` and the form has no `action`, so a missed guard could only
+submit to this page, never leave it.
+
+**The page is replaced under the panel.** A run that changes files reloads the page (the panel's own post-run reload), and a mount replaces the panel; a
+page that comes back must show the run it lost and keep the composer's draft. The old restore asked for the latest run once, so a reload that raced the
+server's record came back blank. Three changes in `plugins/agent-panel/client/main.ts`: `start()` closes the previous instance's run socket and removes the
+previous `#agent-panel` host, so one live panel exists and the readiness mark belongs to the instance being wired now; the composer's draft lives in
+`sessionStorage`, is restored before the form is wired and cleared when a submit sends it; and the latest-run follow is retried for about three seconds
+before the panel accepts that there is no run to show.
+
+The gate's panel step now records what it submitted with: `typedAt`, the typed textarea's and form's `isConnected`, whether that textarea is still the
+panel's current one, whether the host is the current `#agent-panel`, and the panel's log at submit and at failure. A recurrence then names a replaced page
+or an unwired form instead of leaving an empty dump.
+
+Tests: `plugins/agent-panel/test/panel-client.test.ts` (node:test with jsdom, pinned as a root devDependency at the lockfile's version). A submit is
+prevented and says "Type a message first."; a remount leaves one host and keeps the draft; a page replaced mid-run shows the question and the answer again,
+with the first two follow answers a 404 so the late record is retried.
+
+State: branch `124-panel-reload` from `542cfaf2`; the full check and the three-run count follow.
