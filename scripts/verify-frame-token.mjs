@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process'
 import { readFileSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { npmSpawn } from './lib/platform.mjs'
 
 const app = process.argv[2]
 if (app === undefined) throw new Error('usage: node scripts/verify-frame-token.mjs <app-dir>')
@@ -24,18 +25,33 @@ if (env.ACRYLBLENDS_HOME === undefined || env.ACRYLBLENDS_HOME === '')
 delete env.ACRYLBLENDS_PORT
 
 async function boot() {
-  const child = spawn('npm', ['run', 'dev'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] })
+  // Windows cannot start npm's .cmd shim directly; the repo's helper names it the way each platform can.
+  const npm = npmSpawn()
+  const child = spawn(npm.command, ['run', 'dev'], {
+    ...npm.options,
+    cwd: app,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
   let output = ''
+  let spawnError
   child.stdout.on('data', (chunk) => (output += chunk))
   child.stderr.on('data', (chunk) => (output += chunk))
-  for (let i = 0; i < 240; i += 1) {
+  // A child that never starts (a missing shim, a bad path) names itself instead of hanging until the address timeout.
+  child.on('error', (error) => {
+    spawnError = error
+    output += `\nspawn failed: ${error.message}`
+  })
+  for (let i = 0; i < 240 && spawnError === undefined; i += 1) {
     const match = /acrylblends host: (http:\/\/127\.0\.0\.1:\d+\/\?token=[A-Za-z0-9_-]+)/u.exec(
       output,
     )
     if (match !== null) return { child, url: match[1], output: () => output }
     await sleep(250)
   }
-  throw new Error(`the frame did not print its address:\n${output.slice(-800)}`)
+  throw new Error(
+    `the frame did not print its address${spawnError === undefined ? '' : ` (${spawnError.message})`}:\n${output.slice(-800)}`,
+  )
 }
 
 /** The address record the launcher writes: owner-only, the same address, its own token. */
