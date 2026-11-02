@@ -822,6 +822,48 @@ State: branch 119-workshop-guide; `49417c57` (root cause) and `9f57d0fd` (visual
 been run since `49417c57`. Next: the Linux baseline capture and the coordinator's review of the five kit shots; commit the baseline and set
 `FRAME_VISUAL=1` on the frame job once approved; run the full check and push; CI.
 
+### Handoff 4 (2026-11-02, owner kit review round two)
+
+(9) Settings > Models said "Use your Claude, ChatGPT or DeepSeek subscription" but listed only DeepSeek. The sign-in rows come from the harness
+authorization catalog, and the frame's driver rows composed `llm-deepseek-account` without `llm-pi-ai` - the multi-provider twin whose flows register
+Claude, ChatGPT and the rest of the catalog. Fixed in `7b6b307d` by adding `llm-pi-ai` to `DRIVER_ROWS`, mounted dormant exactly as DSH's base mounts
+it: zero model routes until a sign-in supplies a provider profile, which is what the Models page does. The page gate now fails if those two rows are
+absent (the workshop guide tells attendees a subscription works); the agent gate is green with every row active and both rows shown. Changing the copy
+was never the fix, as the coordinator said.
+
+(10) The gear icons in the Settings nav are parity, not a defect: ACRYL's own settings-models reference shows the same generic gear for Agents, Tabs,
+Command palette, Shortcuts and Agent Control. DSH's settings dialog maps icons only for `account`, `models`, `agent-presets`, `plugins` and
+`archived-sessions`; every other id falls back to the gear. Our frame renders exactly that, and our own Support section gets the same fallback. No
+change; noted with the item 8 ticket (Settings nav truncation, ACRYL + frame).
+
+Lint: the `b093fe2d` Linux check jobs failed on one formatter error in `scripts/verify-ide-template.mjs`, introduced by the visual-gate commit after
+the last local full check on `7c7b5e40`. The two unused imports (`tokenOfFrameUrl` in the frame-url test, `mkdtempSync` in
+`scripts/build-legacy-layouts.mjs`) were warnings: `biome check .` reports them and still exits 0, so the local full check was not skipping lint - it
+simply predated the formatter error. Both imports are removed in `7b6b307d`, and lint exits 0 with warnings only.
+
+Kit: rebuilt again from `7b6b307d` (CLI tarball repacked; the 13 frame tarballs are unchanged since the stylesheet fix) with a fresh app; the
+settings-models shot now shows the Claude, ChatGPT and DeepSeek sign-in rows. The visual baseline is requested again from this push, since fix 9
+changes the settings-models state; the three PNGs are reviewed and approved before they are committed, and `FRAME_VISUAL` stays off until then.
+
+A second gap in (9) showed up only in the rebuilt kit: composing `llm-pi-ai` brought Claude but not ChatGPT. DSH 0.2.0-rc.2's pi-ai catalog gives
+`llm-pi-ai/openai` an API key only; the ChatGPT subscription flow lives on its legacy `llm-pi-ai/openai-codex` route ("OpenAI (ChatGPT Plus/Pro)"),
+which the card kept under Other providers. Fixed in `3ba045be`: the featured ChatGPT row takes whichever of the two routes the catalog actually offers
+with an OAuth flow (preferring `openai`, falling back to `openai-codex`), and a promoted route is not listed twice. The gate assertion was reading the
+section text, which always contains "Claude, ChatGPT or DeepSeek" whether the rows exist or not; it now reads the card's row names. The agent gate
+shows all three rows and the sign-in package's 32 tests pass, including the legacy-route case.
+
+The Ubuntu page gate then stalled for forty minutes after its banner line, and the guards added for it (`f6d78142`'s predecessors) turned the stall
+into a named failure instead of silence: `verify-frame-token: gave up after 10 minutes`, with no progress because the watchdog's `process.exit`
+truncated buffered stdout. Synchronous progress lines (`71bcfada`) then named the failure in two lines: boot 1 passed every check and "stopped", but
+boot 2 printed port **3705** instead of 3704 and `STABLE` was false. Signalling `npm run dev` alone leaves the app process (npm -> sh -> node) alive
+holding the stable port on Linux, so the next boot scans to another port - the guarantee this check exists for breaks - and the leftover child kept
+the script's event loop alive, which is why the watchdog fired after the work was already done.
+
+Fixed in `f6d78142`: the app starts as its own POSIX process group and `stop()` signals the group (taskkill `/T` on Windows), so the port is free
+when the second boot starts; the script exits explicitly after its final synchronous line. This was a harness path, not a product flow - a person's
+Ctrl-C reaches the script child through npm, but a bare SIGTERM to npm does not. The agent gate passes end to end locally; the Ubuntu job is the
+proof, and the visual baseline is requested again from this push.
+
 ## 27. The desktop window opens the frame (design, branch 122, 2026-11-02)
 
 `npm run desktop` opened only the app's page: it ran the bare `src/app.ts` `createApp`, or attached to a running dev server and loaded its root. The

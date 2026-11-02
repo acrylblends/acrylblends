@@ -21,7 +21,6 @@ import {
   openFrame,
   readFrameUrl,
   removeFrameUrl,
-  tokenOfFrameUrl,
   writeFrameUrl,
 } from '../src/frame-url'
 import { ideProfilePlan } from '../src/ide-profile'

@@ -641,11 +641,14 @@ ${composition.stdout}`)
     {
       encoding: 'utf8',
       env: { ...process.env, ...bootEnv, ACRYLBLENDS_PORT: '' },
+      // The step boots two apps and has its own watchdog; a child that still hangs must fail this gate with a name instead of holding the job until
+      // its timeout (the Ubuntu runner once sat here for over forty minutes, 2026-11-02).
+      timeout: 720_000,
     },
   )
   if (frameToken.status !== 0)
     fail(
-      `verify-frame-token failed (exit ${String(frameToken.status)}):\n${frameToken.stdout ?? ''}${frameToken.stderr ?? ''}`,
+      `verify-frame-token failed (exit ${String(frameToken.status)}${frameToken.error === undefined ? '' : `: ${frameToken.error.message}`}):\n${frameToken.stdout ?? ''}${frameToken.stderr ?? ''}`,
     )
   log('verify-frame-token: the same address after a restart admits the page and its WebSocket')
   // The owner's rule: the key lives only in DSH's own store, never in the page or the app folder.
@@ -964,6 +967,24 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       }
       if (models.failed !== undefined)
         fail(`Settings > Models failed: ${JSON.stringify(models.failed)}`)
+      // The workshop guide tells attendees a Claude or ChatGPT subscription works through this page: the sign-in rows come from the harness
+      // authorization catalog (llm-pi-ai's flows), so a frame composed without that row silently offers DeepSeek alone - the owner's item 9.
+      // The rows, not the intro sentence: the sentence already says "Claude, ChatGPT or DeepSeek" whatever is listed.
+      const signIn = await until(async () => {
+        const rows = await evaluate(`(() => {
+          const names = [...document.querySelectorAll('[role=dialog] .acrylSignInName strong')]
+            .map((element) => element.textContent.trim())
+          return { names }
+        })()`)
+        return rows?.names.includes('Claude') === true && rows?.names.includes('ChatGPT') === true
+          ? rows
+          : undefined
+      }, 20_000)
+      if (signIn === undefined)
+        fail(
+          'Settings > Models does not offer the Claude and ChatGPT sign-in rows the workshop guide names',
+        )
+      log('Settings > Models offers the Claude and ChatGPT sign-in rows the guide names')
       await evaluate(`(() => {
         const dialog = document.querySelector('[role=dialog]')
         const input = dialog.querySelector('input[type=password]') ?? dialog.querySelector('input[aria-label="API key"]')

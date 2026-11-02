@@ -131,6 +131,10 @@ export const DRIVER_ROWS: readonly string[] = [
   'llm-retry',
   'llm-deepseek',
   'llm-deepseek-account',
+  // The multi-provider twin, mounted dormant: its OAuth flows (Claude, ChatGPT and the rest of the catalog) are what the
+  // Models page's "Sign in with an account" rows list, and a sign-in there supplies its provider profiles - the workshop
+  // guide tells attendees a subscription works, so the catalog has to be composed, not only the DeepSeek account.
+  'llm-pi-ai',
   'deepseek-account',
   'credentials',
   'authorization',
