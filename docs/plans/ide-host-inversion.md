@@ -796,3 +796,12 @@ marker); a change event with an idle, empty composer records the marker before r
 template's own `npm run dev` for a standalone app runs `node --watch`, where a run that edits a watched file would restart the server and kill the
 in-memory run; the panel would come back with no run to follow. That is a ticket for the standalone path (a durable run log, or the run in a process the
 watcher does not restart), not this branch.
+
+**State (2026-11-03, survives a compact).** Branch `124-panel-reload` from `542cfaf2`; commits `44d51a99` (draft, single host, diagnostics),
+`efa29230` (restore once, no retry, causes checked), `749b35b3` (reload decided when it happens, marker + tests), `f70c9c96` (jsdom types). Proven:
+the submit cannot navigate (preventDefault first, no form action, tested); the server records a run before answering the ask (no follow race); no
+second `start()` caller exists (one tag per HTML response, one module execution per document - host removal is defence); the frame's generated dev
+script has no watcher, so the frame's app server does not restart under a run; the panel's check-then-reload race is fixed and its tests pass (typing
+during the change window leaves the page and text alone; an idle empty composer records the marker before reloading). Left: the full check on the
+branch head (running), then push, then three consecutive green CI runs on one sha, then report. The gate's panel step (on this branch) records the
+typed nodes' liveness and the reload marker, so a recurrence names a replaced page or an unwired form.
