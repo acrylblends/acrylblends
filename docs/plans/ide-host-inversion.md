@@ -758,18 +758,24 @@ the form names no action. A jsdom test now pins both: the submit event is `defau
 submit to this page, never leave it.
 
 **The page is replaced under the panel.** A run that changes files reloads the page (the panel's own post-run reload), and a mount replaces the panel; a
-page that comes back must show the run it lost and keep the composer's draft. The old restore asked for the latest run once, so a reload that raced the
-server's record came back blank. Three changes in `plugins/agent-panel/client/main.ts`: `start()` closes the previous instance's run socket and removes the
-previous `#agent-panel` host, so one live panel exists and the readiness mark belongs to the instance being wired now; the composer's draft lives in
-`sessionStorage`, is restored before the form is wired and cleared when a submit sends it; and the latest-run follow is retried for about three seconds
-before the panel accepts that there is no run to show.
+page that comes back must show the run it lost and keep the composer's draft. Two changes in `plugins/agent-panel/client/main.ts`: `start()` closes the
+previous instance's run socket and removes the previous `#agent-panel` host, so one live panel exists and the readiness mark belongs to the instance being
+wired now; and the composer's draft lives in `sessionStorage`, is restored before the form is wired and cleared when a submit sends it.
+
+The two causes behind those guards were checked, as the coordinator asked. **A second `start()` on one page was not found**: the panel script is one tag per
+HTML response (the middleware inserts it only when the response does not already carry `${PREFIX}/panel.js`), a module executes once per document, and
+neither the router wrap, the door, nor the agent template names the script again - so the host removal stays as a defence, not a fix for a named caller.
+**The follow does not race the record**: the server creates the run and its `current` before the ask response answers (`startRun`, then `follow` in
+`plugins/agent-panel/index.ts`), so a page that reloads after that response always finds it in one question; the client's timed retry was removed rather
+than kept. What a follow genuinely cannot recover is a run the app server restarted away - a file change the run made kills the in-memory run with the
+process - and the answer then lives only in the page that was replaced; that is recorded as a known property, not papered over.
 
 The gate's panel step now records what it submitted with: `typedAt`, the typed textarea's and form's `isConnected`, whether that textarea is still the
 panel's current one, whether the host is the current `#agent-panel`, and the panel's log at submit and at failure. A recurrence then names a replaced page
 or an unwired form instead of leaving an empty dump.
 
 Tests: `plugins/agent-panel/test/panel-client.test.ts` (node:test with jsdom, pinned as a root devDependency at the lockfile's version). A submit is
-prevented and says "Type a message first."; a remount leaves one host and keeps the draft; a page replaced mid-run shows the question and the answer again,
-with the first two follow answers a 404 so the late record is retried.
+prevented and says "Type a message first."; a remount leaves one host and keeps the draft; a page replaced mid-run shows the question and the answer again
+from the one follow the server can answer.
 
 State: branch `124-panel-reload` from `542cfaf2`; the full check and the three-run count follow.

@@ -95,19 +95,14 @@ test('a remount replaces the one host and keeps the draft', async () => {
   )
 })
 
-test('a page replaced mid-run shows the run it lost, retrying while the record arrives', async () => {
-  let calls = 0
-  // The first two answers are "no run yet": a reload can ask before the server has recorded the run, and the panel must retry instead of showing an
-  // empty log for a run that exists.
-  mountPage(() => {
-    calls += 1
-    return calls <= 2
-      ? new Response('', { status: 404 })
-      : runStream([
-          'event: run\ndata: {"message":"add 2 3","startedAt":1,"ended":false}\n\n',
-          'event: text\ndata: {"text":"The answer is 5."}\n\n',
-        ])
-  })
+test('a page replaced mid-run shows the run it lost', async () => {
+  // The server records a run before it answers the ask that started it, so the follow after a reload finds it in one question (no client poll).
+  mountPage(() =>
+    runStream([
+      'event: run\ndata: {"message":"add 2 3","startedAt":1,"ended":false}\n\n',
+      'event: text\ndata: {"text":"The answer is 5."}\n\n',
+    ]),
+  )
   await start('/api/agent-panel')
   const { root } = panel()
   await waitFor(() => (root.querySelector('#log')!.textContent ?? '').includes('The answer is 5.'))

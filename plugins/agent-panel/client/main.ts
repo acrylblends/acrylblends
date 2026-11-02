@@ -526,18 +526,12 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   // The form is wired: a script (the frame gate included) waits for this instead of guessing that the panel can be submitted, and a panel that never got
   // this far says so by the mark's absence - together with the visible guards above, no submit can vanish without a trace.
   host.dataset.ready = '1'
-  // The latest run, if there is one: shown again after a reload (its question, its events), and followed if it is still going. A reload can land in the
-  // moment between the server recording a run and this page asking for it, so the question is repeated briefly instead of showing an empty panel for a
-  // run that exists (a page replaced right after a submit came back blank in the frame gate, 2026-11-02).
+  // The latest run, if there is one: shown again after a reload (its question, its events), and followed if it is still going. The server records a run
+  // before it answers the ask that started it (startRun sets the current run, then follow answers), so a page that asks after that answer always finds
+  // it - no client poll is needed. A run the app server itself restarted away (a file change the run made) no longer exists for that server to show.
   try {
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      const latest = await openRun({ t: 'follow' })
-      if (latest !== undefined && !('error' in latest)) {
-        void watch(latest, false)
-        break
-      }
-      await new Promise((resolve) => setTimeout(resolve, 300))
-    }
+    const latest = await openRun({ t: 'follow' })
+    if (latest !== undefined && !('error' in latest)) void watch(latest, false)
   } catch {
     // No run to show.
   }
