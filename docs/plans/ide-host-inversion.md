@@ -754,3 +754,24 @@ Open items and next steps, in order: push this branch and watch CI on macOS, Ubu
 that run's net-log artifact and report the cause before any rerun (do not call it a flake); ask the coordinator to approve landing; after landing,
 walk the handout end to end once as an attendee with the packed CLI in an isolated HOME; the upstream request for a supported launch-token seam in
 this section is drafted, not posted (the owner's to post); nothing goes to the workshop registry without the coordinator's approval.
+
+### Handoff 2 (2026-11-02, after the owner test kit)
+
+The owner kit lives at `~/acrylblends-test-kit-1.2.0-rc` (`sh ~/acrylblends-test-kit-1.2.0-rc/try.sh`; README.txt; five screenshots in
+`screenshots/`). It packs the CLI and the 13 frame packages from the branch's working tree as tarballs, installs the CLI from the kit, creates the
+agent app inside the kit, uses an isolated HOME, never the registry's acrylblends (`^1.0.0` peers require a non-prerelease version, so the kit's CLI
+tarball is version 1.2.0). A run of the kit found six visual defects; three are fixed in `ffd55b5f`: (1) the frame never applied the theme font
+(`--dsw-font-family` was on the root but no rule used it), so every DSH-drawn surface rendered in Times - html/body now take that one inherited
+value; (2) the Preview Notice and the key card were a bottom sheet - a body-level root hosting a `[role=dialog]` is now a full-viewport centered
+modal layer, like ACRYL; (5) `npm install` writes `package-lock.json` after the scaffold's first commit, so a fresh app said "1 file changed" - every
+template gitignores it. Re-measured in the rebuilt kit: sans typography everywhere, both dialogs centered, a fresh app clean, five distinct shots.
+
+Still open from that review: (3) the right panel's "Start" card list runs under its own Terminal dock (the Comments card is clipped by the dock's tab
+strip); (4) "Open configuration file" sits close to the close X in Settings; (6) the left-panel screenshot should show a listed session (it was
+taken before one existed). Gate gap: `verify-ide-template` checks structure, not look - wire `scripts/frame-compare.mjs` (the 2% threshold against the
+ACRYL reference shots) for the first-run screen, Settings > Models and the right panel so this class fails CI.
+
+State: branch 119-workshop-guide at `ffd55b5f`; typecheck green, the full check has NOT been run since `ffd55b5f` (the last green check was
+`9a63850c`; the earlier gate additions were green on the agent template). Next: full check + push + CI on `ffd55b5f`, then defects 3, 4 and 6, then
+the frame-compare wiring, then the owner's kit run. The kit's app folder is removed and its port free; the kit itself (tarballs, prefix, home, cache,
+screenshots) is ready.
