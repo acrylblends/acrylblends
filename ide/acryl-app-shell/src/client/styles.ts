@@ -13,9 +13,10 @@ html, body, #root { width: 100%; height: 100%; }
 /* The frame owns the viewport: only its panes scroll. The document itself never does - a focused input below the shell (DSH's first-run key card is a
    body-level root in normal flow) used to scroll the whole page and hide the frame's own chrome. */
 html, body { overflow: hidden; }
-/* Every body-level root that is not the app (DSH's own overlay portals) is a layer over the frame, not flow content: a fixed bottom sheet of its own
-   height, above the shell, so it is visible and adds nothing to the document's height. */
-body > div:not(#root) { position: fixed; inset: auto 0 0 0; z-index: 60; }
+/* Only DSH's first-run key card is a body-level root in normal flow (it is appended after #root with no positioning of its own, so it sat below the
+   shell and grew the document). That one root becomes a fixed bottom sheet above the shell, recognised by the card's own API-key field; every other
+   body-level root (menus, tooltips, the palette, popovers, toasts) positions itself and is left alone. */
+body > div:not(#root):has(input[aria-label="API key"]) { position: fixed; inset: auto 0 0 0; z-index: 60; }
 body[data-dsh-desktop-mode="advanced"] { margin: 0; background: transparent !important; }
 .dshDesktopFrame { position: relative; display: grid; grid-template-rows: 100%; width: 100%; height: 100%; overflow: hidden; overflow: clip; background: transparent; transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out); }
 .dshDesktopSidebarSurface { --dsw-specific-sidebar-fill: transparent; position: relative; grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; background: transparent; border-right: 1px solid var(--dsw-alias-border-l1); }

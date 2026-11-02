@@ -622,11 +622,18 @@ check; the guide's reconnecting step already names the command. The publish bloc
 card appeared: the card is a body-level root appended after `#root` in normal flow (`div._root_...`, 256px tall below the 800px shell), so the document
 grew to 1056px, and the card's autofocused input scrolled the whole page down - the tab strip and the sidebar's content went off-screen. The probe
 that found it (computed overflow, body children, rects) is recorded above in the measurements. Fixed in the app shell's advanced styles (`acryl-app-
-shell`): `html, body { overflow: hidden; }` so the frame owns the viewport and only its panes scroll, and `body > div:not(#root) { position: fixed;
-inset: auto 0 0 0; z-index: 60; }` so DSH's own body-level overlay roots (the key card, the notice) are layers over the frame instead of flow content.
-Measured after: `scrollTop` 0 with the card shown, after blur and after a reload; `scrollHeight` 800; the card visible as a bottom sheet over the
-intact frame; Settings > Models still opens; the banner still appears with scroll 0. The page gate assertion (scrollTop stays 0 through the first-run
-card, Settings and the banner) joins the post-120 gate work with the other assertions.
+shell`): `html, body { overflow: hidden; }` so the frame owns the viewport and only its panes scroll, and - narrowed, after the coordinator's review,
+from "every body-level root" to the cause itself - `body > div:not(#root):has(input[aria-label="API key"]) { position: fixed; inset: auto 0 0 0;
+z-index: 60; }`, which matches only the first-run key card's root and leaves every other portal (menus, tooltips, the palette, popovers, toasts) to
+position itself. Measured after: `scrollTop` 0 with the card shown (input focused), after blur and after a reload; `scrollHeight` 800; the card
+visible as a bottom sheet over the intact frame; the card's root `fixed` at top 644; Settings > Models still opens; the banner still appears with
+scroll 0. The narrowed rule's reach was verified in the live frame: the tab strip's `+` menu, the command palette and the Settings dropdown all live
+inside `#root` (body root `#root`, position static) and not in a body-level root, so the rule cannot touch them; the menu's rect with and without
+the rule is identical (top 40, left 1106, 254x534) and removing the rule only returns the key card to flow (body root static, top 900). The
+product's tooltips are native `title` attributes drawn by the browser, not DOM elements, and the workspace's toasts render inside `.dshWorkspace`
+(that is, inside `#root`); automation could not make Pi or Claude exit their TUI to raise one, but by construction neither can be reached by a
+body-level rule. Screenshots of the menu, palette and dropdown with the rule and after removing it are in the rehearsal record. The page gate
+assertion (scrollTop stays 0 through the first-run card, Settings and the banner) joins the post-120 gate work with the other assertions.
 
 ### The reused token's guards (2026-11-02)
 
