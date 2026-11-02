@@ -681,3 +681,22 @@ sockets (the client saw 1006) and the frame does not use it.
 The Windows frame timings from the three green runs on `af583d6c` (measure only, for the record): blank 4m53 / 5m40 / 8m58, agent 5m12 / 6m15 / 6m51, todo
 4m44 / 5m07 / 6m49, notes 4m16 / 5m05 / 7m09, chat 4m34 / 5m33 / 7m07, nodejs 4m16 / 5m41 / 6m29. Every step grows roughly together rather than one path
 growing, which reads as runner and install/network slowness (each step scaffolds and installs from scratch), not a gate code regression; not fixed here.
+
+## 28. The Windows notice-check Chrome launch (branch 123, 2026-11-02)
+
+Run 41440407757 on `d0e0561c` failed frame (windows-latest) at the blank gate: "headless Chrome did not open for the notice check (exit null)" after about two
+minutes, with nothing after the colon. The cause was in the gate, in two parts. The notice check spawned Chrome with `stdio: 'ignore'` and attached its output
+listeners to the resulting null streams, so the captured output was always empty - the diagnostics that claimed to show Chrome's last lines never could. And
+the launch waited on a guessed port (9300 + random(300)) with a 600-iteration loop and no named bound, so a browser that never opened DevTools on that port
+spun with a live child and no evidence.
+
+Both launches (the notice check and the tile check) now go through `scripts/lib/door-probe.mjs`'s `startChrome`: a unique profile per launch,
+`--remote-debugging-port=0` with the port read from the profile's `DevToolsActivePort` file (never a guess), `--enable-logging=stderr` with stderr captured,
+and a bounded 60 s wait whose failure names the exit code, the DevToolsActivePort state and the last 8 KB of the browser's output, appends that to
+`<tmp>/acryl-chrome-launch.log` (the frame job's failure artifact step uploads it with the net logs, only when a gate fails), and kills the whole process
+tree (`taskkill /T /F` on Windows, the process group elsewhere) before failing. A parser test covers the DevToolsActivePort read; the blank gate passes locally
+through the new launcher and the full check is exit 0.
+
+Handoff: the full check is green on branch 123; the next step is the branch CI and, on the Windows frame job, either a green run or the captured browser output
+naming whether it is Defender, a first-run dialog or a profile lock - the message and the artifact now exist for that answer. Three consecutive green CI runs
+on one sha are the bar before reporting 123 green.

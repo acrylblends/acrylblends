@@ -139,7 +139,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frame-netlog-${{ matrix.os }}
-          path: ${{ runner.temp }}/acryl-frame-netlog-*.json
+          path: |
+            ${{ runner.temp }}/acryl-frame-netlog-*.json
+            ${{ runner.temp }}/acryl-chrome-launch.log
           if-no-files-found: ignore
 
   # The desktop door in a real Electron (windows and menu as door verbs, a window attached to a dev server, the guards on Quit and the last window). Its own job, not in `check`:

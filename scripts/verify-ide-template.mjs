@@ -26,7 +26,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
+import { devtools, startChrome, stopChrome } from './lib/door-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
 import { doorSpawn, npmSpawn } from './lib/platform.mjs'
 
@@ -355,33 +355,17 @@ ${composition.stdout}`)
    * on the same port and refreshes the cookie jar through the new launch token.
    */
   const dismissNoticeAndRestart = async () => {
-    const chrome = findChrome()
-    if (chrome === undefined)
-      fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the notice check')
     const profile = mkdtempSync(join(tmpdir(), 'ide-template-notice-'))
-    const devPort = 9300 + Math.floor(Math.random() * 300)
-    const child = spawn(chrome, [...chromeFlags(profile, devPort), '--hide-scrollbars'], {
-      stdio: 'ignore',
-    })
-    let chromeOutput = ''
-    const collect = (chunk) => {
-      chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
-    }
-    child.stdout?.on('data', collect)
-    child.stderr?.on('data', collect)
+    // A unique profile and Chrome's own port (from DevToolsActivePort), never a guessed one; a browser that will not start says why (its stderr and
+    // --enable-logging output travel in the error), and its whole process tree is killed before this function fails.
+    const launched = await startChrome(profile).catch((error) =>
+      fail(
+        `the notice check could not start headless Chrome: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    )
     let cdp
     try {
-      let ready = false
-      for (let i = 0; i < 600 && !ready; i += 1) {
-        if (child.exitCode !== null) break
-        cdp = await devtools(devPort).catch(() => undefined)
-        if (cdp !== undefined) ready = true
-        else await sleep(100)
-      }
-      if (!ready)
-        fail(
-          `headless Chrome did not open for the notice check (exit ${String(child.exitCode)}):\n${chromeOutput}`,
-        )
+      cdp = await devtools(launched.port)
       await cdp.send('Page.enable')
       await cdp.send('Runtime.enable')
       for (const cookie of cookiesOf(jar))
@@ -436,15 +420,9 @@ ${composition.stdout}`)
       log('the Preview Notice is dismissed once and its acknowledgement saves')
     } finally {
       cdp?.close()
-      child.kill('SIGKILL')
-      // Chrome keeps writing its own profile for a moment after the kill, and removing it then is a flake with a name: ENOTEMPTY: directory not
-      // empty, rmdir '/tmp/ide-template-notice-...' (run 41352593171, check on Linux Node 22). Wait for the process to be gone first, then remove
-      // with the retries the tile block below already uses.
-      await new Promise((done) => {
-        if (child.exitCode !== null) return done()
-        child.once('exit', done)
-        setTimeout(done, 5_000)
-      })
+      // The whole tree, not only the browser process: on Windows renderers and crashpad outlive a killed browser and hold the profile. Chrome keeps
+      // writing its profile for a moment after the kill, and removing it then is ENOTEMPTY (run 41352593171), so the removal below keeps its retries.
+      await launched.stop()
       try {
         rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
       } catch {
@@ -622,49 +600,18 @@ function setInputValue(selector, value) {
  * that package registers a tab type for DSH's right sidebar, while the owner's requirement is the main surface, which is the workspace canvas.
  */
 async function checkTileInBrowser(url, origin, jar, page, output, mock) {
-  const chrome = findChrome()
-  if (chrome === undefined)
-    fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the tile check')
   const profile = mkdtempSync(join(tmpdir(), 'ide-template-tile-'))
-  const port = 9600 + Math.floor(Math.random() * 300)
-  // Chrome's own output is the only clue when it does not come up, so it is kept and printed if the endpoint never answers. The wait is 30 s: a loaded CI
-  // runner can take several seconds, and the old ten-second wait then fell through to a bare ECONNREFUSED from the DevTools call.
-  let chromeOutput = ''
   // When the tile's request dies (the iframe shows the browser's error page), its net log names why: ERR_CONNECTION_RESET, ERR_EMPTY_RESPONSE or
   // ERR_ABORTED. CI uploads the file as an artifact only when a gate fails, and the failure message carries its path.
   const netLog = join(tmpdir(), `acryl-frame-netlog-${template}.json`)
-  const child = spawn(
-    chrome,
-    [...chromeFlags(profile, port), '--hide-scrollbars', `--log-net-log=${netLog}`],
-    {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  )
-  const collect = (chunk) => {
-    chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
-  }
-  child.stdout?.on('data', collect)
-  child.stderr?.on('data', collect)
+  let launched
   try {
-    let ready = false
-    for (let i = 0; i < 600; i += 1) {
-      if (child.exitCode !== null) break
-      if (
-        await fetch(`http://127.0.0.1:${port}/json/version`).then(
-          (r) => r.ok,
-          () => false,
-        )
-      ) {
-        ready = true
-        break
-      }
-      await sleep(50)
-    }
-    if (!ready)
+    launched = await startChrome(profile, { args: [`--log-net-log=${netLog}`] }).catch((error) =>
       fail(
-        `Chrome did not open its DevTools endpoint on port ${String(port)} within 30 s (exit ${String(child.exitCode)}):\n${chromeOutput}`,
-      )
-    const cdp = await devtools(port)
+        `the tile check could not start headless Chrome: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    )
+    const cdp = await devtools(launched.port)
     // What the page itself reported (uncaught exceptions, console errors, the tile iframe's included: it runs in the same target), printed on any
     // failure below - a panel or a tile that fails silently must say why, not only that its expected text was missing.
     const pageReported = () =>
@@ -1452,12 +1399,8 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       cdp.close()
     }
   } finally {
-    child.kill('SIGKILL')
-    await new Promise((done) => {
-      if (child.exitCode !== null) return done()
-      child.once('exit', done)
-      setTimeout(done, 5_000)
-    })
+    // The whole tree, not only the browser process: on Windows renderers and crashpad outlive a killed browser and hold the profile.
+    await stopChrome(launched?.child)
     try {
       rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
     } catch {
