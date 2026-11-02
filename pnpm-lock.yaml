@@ -190,6 +190,9 @@ importers:
       '@whatwg-node/fetch':
         specifier: 0.9.23
         version: 0.9.23
+      actionlint:
+        specifier: 2.0.6
+        version: 2.0.6
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
@@ -3095,6 +3098,9 @@ packages:
   abab@2.0.6:
     resolution: {integrity: sha512-j2afSsaIENvHZN2B8GOpF566vZ5WVk5opAiMTvWgaQT8DkbOqsTfvNAvHoRGU2zzP8cPoqys+xHTRDWW8L+/BA==}
     deprecated: Use your platform's native atob() and btoa() methods instead
+
+  actionlint@2.0.6:
+    resolution: {integrity: sha512-tNx8f48yJNSLXTIygGntu5dSZlIZblDt8sR7pIs7EEmmb2PkEF87d+3UKZV2GUgCuN9Awj7k4ZPrwdAxFWEqgw==}
 
   adm-zip@0.6.1:
     resolution: {integrity: sha512-Xwrja8nx9e5o2N1my4DsKCeKpdrnACyr1wtbPxBDgGzKzKyE9kRtBFA8mWldI+RVlD7CBZNWY/wQ2+ydwOR6kQ==}
@@ -6092,6 +6098,8 @@ snapshots:
   '@yuku-toolchain/types@0.10.2': {}
 
   abab@2.0.6: {}
+
+  actionlint@2.0.6: {}
 
   adm-zip@0.6.1: {}
 

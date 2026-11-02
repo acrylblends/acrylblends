@@ -170,7 +170,7 @@ jobs:
       # Chrome is installed on all three images (Google Chrome: /usr/bin on ubuntu, the app bundle on macOS, Program Files on Windows); scripts/lib/platform.mjs finds
       # each, and CHROME_BIN overrides it. A runner without a browser fails the gate's tile step with that message rather than skipping it.
       - name: frame gate (${{ matrix.template }})
-        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs ${ matrix.template }
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs ${{ matrix.template }}
       # The tile check's Chrome writes a net log to the runner's temp folder; when a gate fails, its failed request's error code (a reset, an empty
       # response, an abort) decides between a transport race and a cancelled navigation instead of leaving it to inference.
       - name: the tile's Chrome net log (only when a gate fails)
@@ -206,7 +206,7 @@ jobs:
       # Chrome is installed on all three images (Google Chrome: /usr/bin on ubuntu, the app bundle on macOS, Program Files on Windows); scripts/lib/platform.mjs finds
       # each, and CHROME_BIN overrides it. A runner without a browser fails the gate's tile step with that message rather than skipping it.
       - name: frame gate (${{ matrix.template }})
-        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs ${ matrix.template }
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs ${{ matrix.template }}
       # The tile check's Chrome writes a net log to the runner's temp folder; when a gate fails, its failed request's error code (a reset, an empty
       # response, an abort) decides between a transport race and a cancelled navigation instead of leaving it to inference.
       - name: the tile's Chrome net log (only when a gate fails)
@@ -240,7 +240,7 @@ jobs:
       # Chrome is installed on all three images (Google Chrome: /usr/bin on ubuntu, the app bundle on macOS, Program Files on Windows); scripts/lib/platform.mjs finds
       # each, and CHROME_BIN overrides it. A runner without a browser fails the gate's tile step with that message rather than skipping it.
       - name: frame gate (${{ matrix.template }})
-        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs ${ matrix.template }
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs ${{ matrix.template }}
       # The tile check's Chrome writes a net log to the runner's temp folder; when a gate fails, its failed request's error code (a reset, an empty
       # response, an abort) decides between a transport race and a cancelled navigation instead of leaving it to inference.
       - name: the tile's Chrome net log (only when a gate fails)
