@@ -547,6 +547,9 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
     } catch {
       // No storage.
     }
+    // The message is sent: the composer is empty and the person is not typing, so it gives the focus back. A run that installs a plugin reloads the page
+    // afterwards, and that reload must not be refused for a focus nobody is using.
+    input.blur()
     line(message, 'me')
     try {
       const run = await openRun({ t: 'ask', message, driver: driver.value, ...doorPage() })
