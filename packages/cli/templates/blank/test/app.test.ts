@@ -29,11 +29,20 @@ async function withApp(run: (app: App) => Promise<void>) {
   }
 }
 
-test('serves the index route', () =>
+test('serves the index route: the first screen to a browser, the JSON hello to an API client', () =>
   withApp(async (app) => {
-    const response = await app.root.router.request(`/`)
-    assert.equal(response.status, 200)
-    assert.deepEqual(await response.json(), { app: APP_NAME, ok: true })
+    const api = await app.root.router.request(`/`)
+    assert.equal(api.status, 200)
+    assert.deepEqual(await api.json(), { app: APP_NAME, ok: true })
+    const page = await app.root.router.request(`/`, {
+      headers: { accept: 'text/html,application/xhtml+xml,*/*;q=0.8' },
+    })
+    assert.equal(page.status, 200)
+    assert.match(page.headers.get('content-type') ?? '', /text\/html/)
+    const html = await page.text()
+    // The ACRYL frame's first tile asks for a page: the root must never hand it JSON (Chrome's viewer is nearly invisible in the dark frame).
+    assert.ok(html.includes(`<h1>${APP_NAME}</h1>`), 'the page names the app')
+    assert.ok(html.includes('href="./about"'), 'the page links to About relatively')
   }))
 
 test('renders a .tsx page, and an error in it names the .tsx line', () =>

@@ -90,6 +90,7 @@ async function until(fn, ms, every = 300) {
  * page; its /settings page is the one that always renders. `notes` has no unauthenticated JSON route at the prefix, so its page is the proof.
  */
 const PAGES = {
+  // The blank app's root answers a page to a browser (the first tile) and JSON to an API client, like the agent template.
   blank: { path: '/app/about', text: 'About', api: { path: '/app' } },
   agent: { path: '/app/settings', text: 'Settings', panel: true, api: { path: '/app' } },
   todo: { path: '/app', text: 'Todo', api: { path: '/app/api', list: true } },
