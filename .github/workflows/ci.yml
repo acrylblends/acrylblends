@@ -103,7 +103,9 @@ jobs:
   frame:
     name: frame (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # Six templates, each scaffolding and installing from scratch on a shared runner: measured on Windows at 4-9 minutes per template plus the build, so
+    # 60 minutes no longer fits a loaded runner - run 41500065965 lost the job mid-install of the sixth template with the other five green (2026-11-02).
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
