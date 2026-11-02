@@ -39,6 +39,12 @@ export async function devtools(port, tab) {
     ws.addEventListener('error', () => reject(new Error('the DevTools connection failed')))
   })
   let id = 0
+  // Events (messages without an id) are kept for diagnostics: a failure can print what the page itself reported (uncaught exceptions, console errors).
+  const events = []
+  ws.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data)
+    if (message.id === undefined) events.push(message)
+  })
   // A call that never gets its answer (the browser died, the connection closed) rejects instead of leaving the script waiting with nothing pending.
   const send = (method, params = {}, ms = 30_000) =>
     new Promise((resolve, reject) => {
@@ -63,7 +69,7 @@ export async function devtools(port, tab) {
       ws.addEventListener('close', onClose)
       ws.send(JSON.stringify({ id: mine, method, params }))
     })
-  return { send, close: () => ws.close() }
+  return { send, close: () => ws.close(), events: () => events.slice() }
 }
 
 /** The flags a headless Chrome needs; on a CI runner (a container, a sandboxed user namespace) its own sandbox cannot start. */

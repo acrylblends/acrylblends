@@ -768,9 +768,37 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         `Chrome did not open its DevTools endpoint on port ${String(port)} within 30 s (exit ${String(child.exitCode)}):\n${chromeOutput}`,
       )
     const cdp = await devtools(port)
+    // What the page itself reported (uncaught exceptions, console errors, the tile iframe's included: it runs in the same target), printed on any
+    // failure below - a panel or a tile that fails silently must say why, not only that its expected text was missing.
+    const pageReported = () =>
+      cdp
+        .events()
+        .flatMap((message) => {
+          if (message.method === 'Runtime.exceptionThrown') {
+            const details = message.params?.exceptionDetails ?? {}
+            const text = details.exception?.description ?? details.text ?? 'exception'
+            return [
+              `exception: ${String(text).split('\n')[0]} (${String(details.url ?? '')}:${String(details.lineNumber ?? 0)})`,
+            ]
+          }
+          if (message.method === 'Runtime.consoleAPICalled' && message.params?.type === 'error')
+            return [
+              `console.error: ${(message.params.args ?? []).map((argument) => argument.value ?? argument.description ?? '').join(' ')}`,
+            ]
+          if (
+            message.method === 'Log.entryAdded' &&
+            (message.params?.entry?.level === 'error' || message.params?.entry?.level === 'warning')
+          )
+            return [
+              `${String(message.params.entry.level)}: ${String(message.params.entry.text ?? '')}`,
+            ]
+          return []
+        })
+        .slice(-12)
     try {
       await cdp.send('Page.enable')
       await cdp.send('Runtime.enable')
+      await cdp.send('Log.enable')
       await cdp.send('Network.enable')
       for (const cookie of cookiesOf(jar))
         await cdp.send('Network.setCookie', { ...cookie, url: `${origin}/` })
@@ -1615,6 +1643,13 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       log(
         'the session banner names `npx acrylblends open` after the browser session ended, with the page unscrolled',
       )
+    } catch (error) {
+      const reported = pageReported()
+      if (reported.length > 0)
+        console.error(
+          `verify-ide-template(${template}): the page reported:\n${reported.join('\n')}`,
+        )
+      throw error
     } finally {
       cdp.close()
     }

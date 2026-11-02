@@ -875,3 +875,49 @@ The blank template's first tile showed Chrome's JSON viewer: its root answered J
 surface. Fixed in `9f04ced9`: the root negotiates like the agent template - a browser gets a minimal first page naming the app with a relative About
 link, an API client still gets the JSON hello - so the scaffolder gate's `GET /` contract does not move. The blank frame gate shows the tile with the
 page ("blank-app"), and the scaffolder gate over every template is green.
+
+## 26. A graceful node-server stop (branch 121, 2026-11-02)
+
+The disposer closed all connections immediately (`closeAllConnections()` before `close()`), so a request in flight when the app stopped was cut. Requested
+behavior: close idle connections first, let in-flight requests finish within a short bounded grace, then close all connections and close; and since an
+upgraded socket (the PTY and door WebSockets) is never an HTTP connection, track those too and let their owner close each with a proper close frame inside
+the same grace.
+
+Measured first, on Node 24 (the platform the apps require): `server.close()` does not end a keep-alive socket that becomes idle after its request finished
+(it stays until the server cuts it), and neither `close()` nor `closeAllConnections()` reaches an upgraded socket - in a probe with one open raw upgrade, the
+`close()` callback never fired, even after `closeAllConnections()`.
+
+The implementation: the adapter counts requests whose response has not finished (the response's `finish`/`close` events), the upgrade listener tracks every
+upgraded socket until it closes, and `NodeServer.stop()` - idempotent, public, and what the disposer calls - runs the hub's close beside the request grace.
+It stops new connections, sweeps idle keep-alive sockets on every pass (one that goes idle after its request finished is not caught by the single sweep
+`close()` does), waits up to `STOP_GRACE_MS` (2 s) for the active requests and the tracked sockets, then ends the finished sockets gracefully (a `FIN` behind
+the buffered body, not a destroy: destroying there answered the client with a reset and an empty body, which the first version of the test caught), gives
+them a 300 ms flush window, and forces `closeAllConnections()` plus destroys any upgraded socket still left, so the server's own `close()` can finish. A
+socket owned by another hub (the router-http adapter's) is closed by that owner's disposer, with its 1001 frame; if it is still open when the grace ends, the
+stop destroys it rather than hang. Tests: an in-flight request finishes and its answer arrives while `stop()` is under way, the port is free, and a second
+stop or the disposer is a no-op; disposal with an open event stream gets an explicit bound for the grace it now waits; and stopping with a WebSocket open
+resolves while the socket gets its 1001 close frame.
+
+**D: the router drains, and the mount removal that cut a second time.** The first whole-root dispose still answered the save with a 200 and
+`content-length: 0`: Cordis runs every disposer together, and the router's own disposal refused new requests, aborted in-flight flights and ended their
+bodies at once. The coordinator chose D - the router's disposer drains instead of aborting - and first asked whether Cordis awaits async disposers. It
+does: a probe with one 100 ms and one 500 ms disposer starts both on the same tick and resolves the root dispose at 636 ms, after the slow one. D is
+implemented: while closing, the router answers new requests 503 with `Connection: close`; disposal waits up to `disposeGraceMs` for the flights in hand,
+then aborts what is left and settles it for 300 ms. Implementing it exposed a second cut: removing a mount also aborted its flights at once, and on a whole
+root dispose every plugin unloads together, so a route-owning plugin's removal cut the save even when the router drained. Mount removal now follows the
+same rule (drain first, then abort). The launcher is unchanged: it keeps disposing the root directly, and both drains run in that window.
+
+**The gate gap that let a type error hide.** The root typecheck ran three aggregate tsconfigs, not each package's own script, so a package's own test configs
+(the router's `tsconfig.jsx-tests.json` among them) were never exercised by the gate: the compress test's `Blob` parts failed TypeScript 6 there while every
+gate stayed green. The check now also runs `pnpm -r --if-present run typecheck` - every package's own script, test configs included - right after the
+aggregate, and the whole tree passes it (27 packages). That is the same class as the earlier test-timeout gaps: the gate has to run the thing that fails.
+
+Tests on a whole-root dispose, on the frame's own composition (the router, our node server, the webServer port over it, and the router-http adapter): an
+in-flight save finishes with its full body and a mounted WebSocket gets 1001, both inside the grace plus 300 ms; the router's unit tests cover the drain,
+the 503 with `Connection: close`, and that a flight finishing inside the grace is never aborted, while the node-server tests keep the `stop()` path, the
+no-op second stop, the bounded event stream, and the 1001 close frame. The DSH web server stack is not in this test: its own disposal destroys upgraded
+sockets (the client saw 1006) and the frame does not use it.
+
+The Windows frame timings from the three green runs on `af583d6c` (measure only, for the record): blank 4m53 / 5m40 / 8m58, agent 5m12 / 6m15 / 6m51, todo
+4m44 / 5m07 / 6m49, notes 4m16 / 5m05 / 7m09, chat 4m34 / 5m33 / 7m07, nodejs 4m16 / 5m41 / 6m29. Every step grows roughly together rather than one path
+growing, which reads as runner and install/network slowness (each step scaffolds and installs from scratch), not a gate code regression; not fixed here.
