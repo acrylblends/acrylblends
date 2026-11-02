@@ -24,6 +24,7 @@ const DEFAULT_DISPOSE_GRACE_MS = 2000
 /** How long disposal waits for the flights it had to abort after the drain, before it continues without them. */
 const ABORT_SETTLE_MS = 300
 
+
 /** How a trailing slash is read: `strict` keeps `/a` and `/a/` distinct, `ignore` treats them as one path. */
 export type TrailingSlash = 'strict' | 'ignore'
 

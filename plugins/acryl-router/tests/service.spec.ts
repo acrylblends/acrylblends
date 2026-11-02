@@ -314,7 +314,7 @@ describe('acryl-router lifecycle through Cordis', () => {
     const refused = await get(router, '/slow')
     expect(refused.status).toBe(503)
     expect(refused.headers.get('connection')).toBe('close')
-  })
+  }, 15_000)
 
   it('forwards the caller\'s own abort to the handler signal', async () => {
     const { router } = await mountRouter()
@@ -433,17 +433,20 @@ describe('acryl-router lifecycle through Cordis', () => {
     await settle()
     const held = get(router, '/held/x')
     await heldInGuard
+
     const passed = await get(router, '/passed/x')
     const reader = passed.body!.getReader()
     await reader.read()
 
+    const disposeStarted = Date.now()
     await guard.dispose()
+    expect(Date.now() - disposeStarted).toBeGreaterThanOrEqual(2000)
     expect(guardAborted).toBe(true)
     expect((await held).status).toBe(499)
     expect(handlerAborted).toBe(false)
     release()
     await expect(reader.read()).resolves.toMatchObject({ done: true })
-  })
+  }, 15_000)
 
   it('keeps a request in flight through waitUntil until its task settles', async () => {
     const ctx = root()
