@@ -6,7 +6,7 @@
 //   node scripts/verify-frame-token.mjs ~/acryl-workshop/my-app
 //
 // It boots the app twice (npm run dev, the address the launcher prints), and never uses a fixed port: the app's own stable port is the point.
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { readFileSync, statSync, writeSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -42,6 +42,10 @@ async function boot() {
     cwd: app,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
+    // `npm run dev` is a small tree (npm -> sh -> node). Signalling npm alone leaves the app holding the stable port on Linux, so the next boot lands
+    // on another port and the address is no longer stable (found on the Ubuntu runner, 2026-11-02). A POSIX process group lets stop() signal the tree;
+    // Windows uses taskkill /T instead.
+    detached: process.platform !== 'win32',
   })
   let output = ''
   let spawnError
@@ -73,11 +77,27 @@ function record(url) {
   return { mode, url: data.url === url, token: data.token === token }
 }
 
+/**
+ * Stop the app's whole tree, not just npm: the point of the second boot is that the first app really stopped and its port is free. On Windows the
+ * shim tree is killed with taskkill; elsewhere the child leads its own process group (see boot).
+ */
 function stop(child) {
+  const signalTree = (signal) => {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
+      return
+    }
+    try {
+      process.kill(-(child.pid ?? 0), signal)
+    } catch {
+      // The group is already gone (or the pid never started): the direct child is the best that is left.
+      child.kill(signal)
+    }
+  }
   return new Promise((done) => {
     child.once('exit', () => done())
-    child.kill('SIGTERM')
-    setTimeout(() => child.kill('SIGKILL'), 4000).unref()
+    signalTree('SIGTERM')
+    setTimeout(() => signalTree('SIGKILL'), 4000).unref()
   })
 }
 
@@ -146,4 +166,6 @@ const ok =
   secondCheck.record.token === true
 await stop(second.child)
 step(ok ? 'verify-frame-token: OK' : 'verify-frame-token: FAILED')
-process.exitCode = ok ? 0 : 1
+// An explicit exit: a lingering pipe or socket would otherwise keep the process alive while the caller waits for it (the watchdog then turned a
+// finished run into a ten-minute failure on the Ubuntu runner). Every line above is a synchronous write, so nothing is lost.
+process.exit(ok ? 0 : 1)
