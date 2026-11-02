@@ -2,7 +2,8 @@
  * What every surface of the ACRYL frame must show, asserted through a DevTools connection to the page: the left panel (Projects and its rows), the right
  * panel (Files, Changes, Review), Settings with its sections, and the app's own page in the frame's browser tile. The selectors and the way each surface is
  * opened are the frame gate's (`scripts/verify-ide-template.mjs`), which checks the same things in headless Chrome; the desktop gate checks them in the
- * Electron window. `evaluate` runs an expression in the page and returns its value.
+ * Electron window. A panel the window's width keeps closed (the left panel's rail, the right panel) is opened with its own button, as a person opens it.
+ * `evaluate` runs an expression in the page and returns its value.
  */
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -51,7 +52,10 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
       const side = document.querySelector('.dshWorkspaceSide')
       return { head: side?.querySelector('.dshWorkspaceSideProjectsHead') != null, rows: side?.querySelectorAll('[role=treeitem]').length ?? 0 }
     })()`)
-    return snapshot?.head === true && snapshot.rows >= 1 ? snapshot : undefined
+    if (snapshot?.head === true && snapshot.rows >= 1) return snapshot
+    // A narrow window (CI's 1024x768 screens) shows the left panel as a rail: a person opens it with its button.
+    await click('Open sidebar')
+    return undefined
   }, timeoutMs)
   if (left === undefined)
     throw new Error(`the left panel has no Projects/session rows: ${JSON.stringify(await body())}`)
