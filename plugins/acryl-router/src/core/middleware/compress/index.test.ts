@@ -213,7 +213,7 @@ describe('Compress Middleware', () => {
         chunks.push(value)
       }
       expect(chunks.length).toBeGreaterThan(1)
-      const decompressed = await decompressResponse(new Response(new Blob(chunks), res))
+      const decompressed = await decompressResponse(new Response(new Blob(chunks.map(chunk => chunk.slice())), res))
       expect(decompressed.length).toBe(60000)
     })
 

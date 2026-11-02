@@ -235,6 +235,34 @@ describe('acryl-node-server', () => {
     expect(await portIsFree(ctx.nodeServer.port)).toBe(true)
   })
 
+  it('a whole-root dispose lets a request in flight finish with its full body, inside the grace plus a short settle', async () => {
+    const ctx = await boot()
+    let began: () => void = () => {}
+    const started = new Promise<void>(resolve => { began = resolve })
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => { release = resolve })
+    ctx.router.route('/', new Acryl().get('/save', async (c) => {
+      began()
+      await gate
+      return c.json({ saved: true })
+    }))
+    const port = ctx.nodeServer.port
+    const response = fetch(`${ctx.nodeServer.url}/save`)
+    await started
+    const startedAt = Date.now()
+    const disposal = ctx.fiber.dispose()
+    await new Promise(resolve => setTimeout(resolve, 100))
+    release()
+    const answered = await response
+    expect(answered.status).toBe(200)
+    expect(await answered.json()).toEqual({ saved: true })
+    await disposal
+    contexts.splice(contexts.indexOf(ctx), 1)
+    // Both drains (the router's and the server's) run in the same window; a request that finished early adds no grace of its own.
+    expect(Date.now() - startedAt).toBeLessThan(2000 + 300)
+    expect(await portIsFree(port)).toBe(true)
+  })
+
   it('reloads without leaking a listener', async () => {
     const ctx = await routed()
     const ports: number[] = []

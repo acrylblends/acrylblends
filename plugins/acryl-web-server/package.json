@@ -34,6 +34,9 @@
     "acryl-router": "workspace:*",
     "tsdown": "0.22.2",
     "typescript": "6.0.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "acryl-router-http": "workspace:*",
+    "ws": "8.21.3",
+    "@types/ws": "8.18.2"
   }
 }
