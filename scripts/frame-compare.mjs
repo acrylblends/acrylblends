@@ -1,12 +1,16 @@
 #!/usr/bin/env node
-// The comparison harness for the ACRYL frame: take screenshots of a running app at the views and viewports of `frame-views.json`, and put them beside the ACRYL reference set with a diff.
+// The comparison harness for the ACRYL frame: take screenshots of a running app at the views and viewports of `frame-views.json`, and put them beside a reference set with a diff.
 //
 //   node scripts/frame-compare.mjs capture <url> <out folder> [--views a,b] [--views-file <json>]
-//   node scripts/frame-compare.mjs compare <reference folder> <candidate folder> <out folder> [--max <percent>]
-//   node scripts/frame-compare.mjs check   <reference folder> <url> <out folder> [--max <percent>]   (capture, then compare)
+//   node scripts/frame-compare.mjs compare <reference folder> <candidate folder> <out folder> [--max <percent>] [--views a,b]
+//   node scripts/frame-compare.mjs check   <reference folder> <url> <out folder> [--max <percent>] [--views a,b]   (capture, then compare)
+//   node scripts/frame-compare.mjs check   --against acryl <url> <out folder> [--views a,b]                        (the ACRYL design target: report only)
+//   node scripts/frame-compare.mjs compare --against acryl <candidate folder> <out folder> [--views a,b]            (same, against a captured set)
 //
 // `compare` writes <view>@<w>x<h>.compare.png (reference | candidate | difference, red where a pixel differs by more than a small tolerance) and `report.md`; it exits 1 when a view
-// differs by more than --max percent (default 2) or a reference view has no candidate. Only headless Chrome is used (also for the diff), so there is nothing to install.
+// differs by more than --max percent (default 2) or a reference view has no candidate. `--views` limits both the capture and the comparison. `--against acryl` uses
+// scripts/frame-reference and never fails: that set is ACRYL Desktop with no project and ACRYL's own plugin set, so a frame with an app open differs in content by design, and the
+// report is a design-target reading rather than a gate. Only headless Chrome is used (also for the diff), so there is nothing to install.
 import { spawn } from 'node:child_process'
 import {
   existsSync,
@@ -30,6 +34,14 @@ const positional = process.argv
   .filter(
     (arg, index, all) => !arg.startsWith('--') && !(index > 0 && all[index - 1].startsWith('--')),
   )
+/** The design target set: ACRYL Desktop's own views. Its composition (no project, ACRYL's plugins) differs from a frame running an app, so it reports, never gates. */
+const against = flag('--against')
+if (against !== undefined && against !== 'acryl') {
+  console.error(`frame-compare: unknown reference set "${against}" (only "acryl" is built in)`)
+  process.exit(2)
+}
+const acrylReference = join(here, 'frame-reference')
+const reportOnly = against !== undefined || process.argv.includes('--report-only')
 
 async function withChrome(work) {
   const chrome = findChrome()
@@ -189,8 +201,11 @@ async function compare(referenceDir, candidateDir, out) {
     readFileSync(flag('--views-file') ?? join(here, 'frame-views.json'), 'utf8'),
   )
   const masks = new Map(spec.views.map((view) => [view.name, view.mask ?? []]))
+  // `--views` limits the comparison the same way it limits the capture: a caller that needs three views should not be told the rest are missing.
+  const only = flag('--views')?.split(',')
   const names = readdirSync(referenceDir)
     .filter((name) => name.endsWith('.png') && !name.endsWith('.compare.png'))
+    .filter((name) => only === undefined || only.includes(name.split('@')[0]))
     .sort()
   const rows = []
   await withChrome(async (cdp) => {
@@ -267,21 +282,24 @@ async function compare(referenceDir, candidateDir, out) {
   writeFileSync(join(out, 'report.md'), `${lines.join('\n')}\n`)
   console.log(lines.slice(4).join('\n'))
   console.log(
-    `${rows.length - failed} of ${rows.length} views within ${max}%; report in ${join(out, 'report.md')}`,
+    `${rows.length - failed} of ${rows.length} views within ${max}%${reportOnly ? ' (report only)' : ''}; report in ${join(out, 'report.md')}`,
   )
-  if (failed > 0) process.exitCode = 1
+  if (failed > 0 && !reportOnly) process.exitCode = 1
 }
 
 const mode = process.argv[2]
+/** The reference folder: the built-in ACRYL set under `--against acryl`, otherwise the first positional argument. */
+const reference = against === undefined ? positional[0] : acrylReference
+const rest = against === undefined ? positional.slice(1) : positional
+const enough = against === undefined ? positional.length >= 3 : positional.length >= 2
 if (mode === 'capture' && positional.length >= 2) await capture(positional[0], positional[1])
-else if (mode === 'compare' && positional.length >= 3)
-  await compare(positional[0], positional[1], positional[2])
-else if (mode === 'check' && positional.length >= 3) {
-  await capture(positional[1], join(positional[2], 'candidate'))
-  await compare(positional[0], join(positional[2], 'candidate'), join(positional[2], 'compare'))
+else if (mode === 'compare' && enough) await compare(reference, rest[0], rest[1])
+else if (mode === 'check' && enough) {
+  await capture(rest[0], join(rest[1], 'candidate'))
+  await compare(reference, join(rest[1], 'candidate'), join(rest[1], 'compare'))
 } else {
   console.error(
-    'usage: frame-compare.mjs capture <url> <out> | compare <reference> <candidate> <out> | check <reference> <url> <out>',
+    'usage: frame-compare.mjs capture <url> <out> | compare <reference> <candidate> <out> | check <reference> <url> <out> [--views a,b] [--max percent] | check --against acryl <url> <out>',
   )
   process.exit(2)
 }
