@@ -1,6 +1,7 @@
 # Desktop
 
-An Acryl app also runs as a desktop app: an Electron window opens on the app's own server. It is the same app and the same code as `npm run dev`; nothing in the app changes. This page covers a plain Acryl app (the `nodejs`
+An Acryl app also runs as a desktop app: an Electron window opens on the app's own server. It is the same app and the same code as `npm run dev`; nothing in the app changes. A Blend app that runs inside the ACRYL frame
+(it has `scripts/ide-host.mjs`) gets the whole frame in the window, the same one `npm run dev` serves to the browser: see [The frame in the window](#the-frame-in-the-window). This page covers a plain Acryl app (the `nodejs`
 template) and a Blend app (the `agent` template or any other `acrylblends init` template). It runs from source today: packaging a distributable app (dmg, exe, deb) is not part of it yet.
 
 ## Add it
@@ -26,10 +27,27 @@ In a Blend app, the same two commands (`npx acrylblends add desktop`, `npm insta
 
 ## What `npm run desktop` does
 
-1. Serves the app on `127.0.0.1` with a free port: for a plain app, `app.fetch` from `src/app.ts` (`export default app`) through `acrylblends/node-server`; for a Blend app, its own `createApp`.
+1. For a frame app, attaches to the running frame or starts its host (see [The frame in the window](#the-frame-in-the-window)). Otherwise it serves the app on `127.0.0.1` with a free port: for a plain app, `app.fetch` from `src/app.ts` (`export default app`) through `acrylblends/node-server`; for a Blend app, its own `createApp`.
 2. Takes a single-instance lock: a second launch of the same app focuses the first window and exits.
-3. Opens one window on the server's address, with a locked-down renderer (context isolation, no Node in the page, the sandbox, web security). Navigation stays on the app's own origin; any other link opens in the system browser.
-4. When the window closes (or on SIGINT or SIGTERM), stops the server and exits.
+3. Opens one window on the server's address, with a locked-down renderer (context isolation, no Node in the page, the sandbox, web security). Navigation stays on the app's own origin; a link to any other `http(s)` or `mailto` address opens in the system browser.
+4. When the window closes (or on SIGINT or SIGTERM), stops the server or frame host it started (never one it attached to) and exits.
+
+## The frame in the window
+
+A Blend app made with the frame (`npm run dev` runs `scripts/ide-host.mjs`) opens the ACRYL frame in its desktop window, not only its page: the left panel with the
+projects and sessions, the right panel with Files, Changes and Review, Settings, terminal tabs, the DSH chat, and the app's own page in a browser tile. It is the
+same frame the browser shows; the desktop builds nothing of its own.
+
+1. When the frame already runs for this folder (`npm run dev` in another terminal), the window attaches to it: it reads the address the host keeps in
+   `.acrylblends/frame-url.json` (owner-only, with the launch token) and opens it. Closing the window leaves that host running.
+2. Otherwise the window starts the host itself, exactly as `npm run dev` does (the same npm and Node that ran `npm run desktop`; the host never runs inside
+   Electron), and opens the address it prints. Closing the window stops that host and everything it started, including its terminals, so its port is free
+   again.
+3. Navigation follows ACRYL Desktop's rule: the frame's own address stays in the window, and its tiles (the app's page in an iframe) load freely. A link to any
+   other `http(s)` or `mailto` address opens in the system browser, and nothing else opens at all.
+4. The door's `window list` shows each window's address without the launch token.
+
+The frame window has no Settings item in the application menu: Settings is in the frame's left panel. `acrylblends.desktopPath` does not apply either, because the frame opens the app's page in its tile on first run.
 
 ## The first launch downloads Electron
 

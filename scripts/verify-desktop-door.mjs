@@ -7,11 +7,17 @@
 //   window resize and menu click work; the last window and Quit are refused without force; after the dev server restarts (a change of src/) the shell reconnects
 //   and the same windows are still driven; closing the last window with force ends the desktop app and leaves the dev server running.
 // Then the same without a dev server: `npm run desktop` starts the app itself, and closing the last window with force stops that server too.
+// Then a frame app (`init --template blank --desktop` with this checkout's frame packages): `npm run desktop` starts the frame host and its window shows the
+// whole frame (the left panel, the right panel, Settings and the app's page in the tile, through the window's DevTools port); closing it frees the host's port.
+// With `npm run dev` running, the window attaches to that frame instead and closing it leaves the host running. DESKTOP_FRAME_SHOTS=<dir> keeps screenshots.
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { devtools } from './lib/door-probe.mjs'
+import { assertFrame, evaluator } from './lib/frame-probe.mjs'
+import { frameSpecsEnv } from './lib/ide-specs.mjs'
 import { freePort } from './lib/port.mjs'
 import { startGroup, stopGroup } from './lib/proc.mjs'
 
@@ -108,27 +114,32 @@ try {
   mkdirSync(join(app, 'plugins', 'pages'))
   writeFileSync(join(app, 'plugins', 'pages', 'index.ts'), pages)
 
-  const acryl = (...args) => {
-    const r = spawnSync(
-      join(app, '.acryl', 'bin', process.platform === 'win32' ? 'acryl.cmd' : 'acryl'),
-      // Through cmd.exe on Windows a bare `>` (a menu path) is a redirect, and a space splits an argument: quote what needs it.
-      isWindows
-        ? args.map((arg) => (/[\s<>&|^"]/u.test(String(arg)) ? `"${String(arg)}"` : String(arg)))
-        : args,
-      {
-        cwd: app,
-        env,
-        encoding: 'utf8',
-        shell: process.platform === 'win32',
-      },
-    )
-    return { code: r.status, out: r.stdout, err: r.stderr }
-  }
-  const start = (script, extra = {}) => {
+  const acrylAt =
+    (dir) =>
+    (...args) => {
+      const r = spawnSync(
+        join(dir, '.acryl', 'bin', process.platform === 'win32' ? 'acryl.cmd' : 'acryl'),
+        // Through cmd.exe on Windows a bare `>` (a menu path) is a redirect, and a space splits an argument: quote what needs it.
+        isWindows
+          ? args.map((arg) => (/[\s<>&|^"]/u.test(String(arg)) ? `"${String(arg)}"` : String(arg)))
+          : args,
+        {
+          cwd: dir,
+          env,
+          encoding: 'utf8',
+          shell: process.platform === 'win32',
+        },
+      )
+      return { code: r.status, out: r.stdout, err: r.stderr }
+    }
+  const acryl = acrylAt(app)
+  /** `npm run <script>` in the app (or `cwd`), with `more` after `--` (Electron's switches for `desktop`). */
+  const start = (script, extra = {}, { cwd = app, more = [] } = {}) => {
     const command = process.platform === 'linux' && !process.env.DISPLAY ? 'xvfb-run' : 'npm'
-    const args = command === 'xvfb-run' ? ['-a', 'npm', 'run', script] : ['run', script]
+    const npmArgs = ['run', script, ...(more.length > 0 ? ['--', ...more] : [])]
+    const args = command === 'xvfb-run' ? ['-a', 'npm', ...npmArgs] : npmArgs
     const child = startGroup(command, args, {
-      cwd: app,
+      cwd,
       env: { ...env, ...extra },
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: isWindows,
@@ -462,7 +473,176 @@ try {
   if (existsSync(join(app, '.acryl', 'door.json')))
     fail('the server the desktop app started is still up (door.json remains)')
   log('the app that started its own server answers the same verbs, and ending it stops that server')
+
+  // 5. A frame app (docs/plans/ide-host-inversion.md, section 27): the window shows the whole ACRYL frame, from a host it starts or from `npm run dev`.
+  if (npmArg !== undefined)
+    log('the frame part is skipped with --npm: the frame packages come from this checkout')
+  else await frameDesktop()
   log('OK')
+
+  async function frameDesktop() {
+    const frameApp = join(scratch, 'frame-app')
+    const cliVersion = JSON.parse(
+      readFileSync(join(root, 'packages', 'cli', 'package.json'), 'utf8'),
+    ).version
+    const frameEnv = {
+      ...env,
+      ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, {
+        dshVersion: process.env.IDE_PROFILE_DSH_VERSION ?? '0.2.0-rc.2',
+        frameworkVersion: `^${cliVersion}`,
+      }),
+    }
+    const init = spawnSync(
+      process.execPath,
+      [
+        cli,
+        'init',
+        frameApp,
+        '--name',
+        'frame-app',
+        '--template',
+        'blank',
+        '--desktop',
+        '--yes',
+        '--no-next',
+      ],
+      { encoding: 'utf8', env: frameEnv },
+    )
+    if (init.status !== 0) fail(`init of the frame app failed:\n${init.stdout}${init.stderr}`)
+    if (!existsSync(join(frameApp, 'scripts', 'ide-host.mjs')))
+      fail('the frame app has no scripts/ide-host.mjs')
+    run('npm', ['install', '--no-audit', '--no-fund'], frameApp)
+    if (!existsSync(join(frameApp, 'node_modules', 'electron', 'dist'))) {
+      const installed = spawnSync(
+        process.execPath,
+        [join(frameApp, 'node_modules', 'electron', 'install.js')],
+        {
+          cwd: frameApp,
+          encoding: 'utf8',
+        },
+      )
+      if (installed.status !== 0)
+        fail(`Electron could not be installed in the frame app:\n${installed.stderr.slice(-300)}`)
+    }
+    const frameAcryl = acrylAt(frameApp)
+    // The blank template's page at /app answers its JSON; that text in the tile is the app's own page inside the frame.
+    const appText = '"ok":true'
+    const listening = (origin) =>
+      fetch(origin, { redirect: 'manual', signal: AbortSignal.timeout(1500) }).then(
+        () => true,
+        () => false,
+      )
+    const ended = (proc) =>
+      until(async () => proc.child.exitCode !== null || proc.child.signalCode !== null, 30_000)
+    /** The window's frame, asserted through its DevTools port; a screenshot of it goes to DESKTOP_FRAME_SHOTS when set. */
+    const inspect = async (devPort, name) => {
+      const session = await until(() => devtools(devPort), 30_000, 500)
+      if (!session) fail(`the window's DevTools port ${String(devPort)} did not answer`)
+      try {
+        const found = await assertFrame(evaluator(session), { appText, timeoutMs: 60_000 })
+        log(
+          `${name}: the window shows the frame: the left panel (${String(found.rows)} rows), the right panel (Files, Changes, Review), Settings (${found.sections.join(', ')}), and the app's page in the tile (${found.tile})`,
+        )
+        if (process.env.DESKTOP_FRAME_SHOTS) {
+          // Settings is the last thing the check opened: close it, so the picture is the frame itself.
+          for (const type of ['keyDown', 'keyUp'])
+            await session.send('Input.dispatchKeyEvent', {
+              type,
+              key: 'Escape',
+              code: 'Escape',
+              windowsVirtualKeyCode: 27,
+            })
+          await sleep(500)
+          mkdirSync(process.env.DESKTOP_FRAME_SHOTS, { recursive: true })
+          const shot = await session.send('Page.captureScreenshot', { format: 'png' })
+          const file = join(
+            process.env.DESKTOP_FRAME_SHOTS,
+            `desktop-frame-${name}-${process.platform}.png`,
+          )
+          writeFileSync(file, Buffer.from(shot.result?.data ?? '', 'base64'))
+          log(`screenshot ${file}`)
+        }
+      } finally {
+        session.close()
+      }
+    }
+    const debugSwitches = (devPort) => [
+      `--remote-debugging-port=${String(devPort)}`,
+      '--remote-debugging-address=127.0.0.1',
+    ]
+    const onlyWindow = async () => {
+      const listed = await until(async () => {
+        const out = frameAcryl('window', 'list')
+        const id = /^(\d+)\s/mu.exec(out.out)?.[1]
+        return out.code === 0 && id !== undefined && { id, out: out.out }
+      }, 60_000)
+      if (!listed)
+        fail(`the frame window did not answer window list:\n${frameAcryl('window', 'list').err}`)
+      if (/token=/u.test(listed.out))
+        fail(`window list shows the frame's launch token:\n${listed.out}`)
+      return listed.id
+    }
+
+    // (a) No host runs: the window starts the host as npm run dev does, shows the frame, and closing it stops that host (its port is free).
+    const ownPort = await freePort()
+    const own = start(
+      'desktop',
+      { ACRYLBLENDS_PORT: '0' },
+      { cwd: frameApp, more: debugSwitches(ownPort) },
+    )
+    const served = await until(
+      async () => /the frame host serves (http:\/\/[\d.]+:\d+)/u.exec(own.output)?.[1],
+      120_000,
+    )
+    if (!served) fail(`the desktop app did not start the frame host:\n${own.output.slice(-3000)}`)
+    await inspect(ownPort, 'own-host')
+    const ownWindow = await onlyWindow()
+    const closed = frameAcryl('window', 'close', '--id', ownWindow, '--force')
+    if (closed.code !== 0)
+      fail(`window close --force failed in the frame app:\n${closed.out}${closed.err}`)
+    if (!(await ended(own)))
+      fail('the frame desktop app did not end after its last window was closed')
+    if (!(await until(async () => !(await listening(served)), 15_000)))
+      fail(`the frame host the window started still listens at ${served} after the window closed`)
+    log(`closing the window stopped the frame host it started (${new URL(served).port} is free)`)
+
+    // (b) npm run dev runs the frame: the window attaches to it, and closing the window leaves it running.
+    const dev = start('dev', { ACRYLBLENDS_PORT: '0' }, { cwd: frameApp })
+    const devUrl = await until(
+      async () => /acrylblends host: (http:\/\/[\d.]+:\d+)/u.exec(dev.output)?.[1],
+      120_000,
+    )
+    if (!devUrl) fail(`npm run dev did not serve the frame:\n${dev.output.slice(-3000)}`)
+    if (
+      !(await until(
+        async () => existsSync(join(frameApp, '.acrylblends', 'frame-url.json')),
+        30_000,
+        200,
+      ))
+    )
+      fail('npm run dev serves the frame but wrote no frame-url.json')
+    const attachPort = await freePort()
+    const attached = start('desktop', {}, { cwd: frameApp, more: debugSwitches(attachPort) })
+    if (
+      !(await until(
+        async () => attached.output.includes('attached to the frame already running'),
+        60_000,
+      ))
+    )
+      fail(`the desktop app did not attach to npm run dev:\n${attached.output.slice(-3000)}`)
+    await inspect(attachPort, 'attached')
+    const attachedWindow = await onlyWindow()
+    if (frameAcryl('window', 'close', '--id', attachedWindow, '--force').code !== 0)
+      fail('window close --force failed on the attached frame window')
+    if (!(await ended(attached)))
+      fail('the attached desktop app did not end after its window was closed')
+    if (!(await listening(devUrl)))
+      fail('the frame host of npm run dev stopped with the window attached to it')
+    log('a window attached to npm run dev shows the frame, and closing it leaves that host running')
+    await stopTree(dev.child)
+    if (!(await until(async () => !(await listening(devUrl)), 15_000)))
+      fail(`the frame host of npm run dev still listens at ${devUrl} after it was stopped`)
+  }
 } finally {
   for (const { child } of processes.reverse()) await stopTree(child)
   await sleep(500)

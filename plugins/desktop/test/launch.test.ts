@@ -26,3 +26,14 @@ test('--no-sandbox is added only when the sandbox is blocked, and the notice say
   assert.match(SANDBOX_NOTICE, /apparmor_restrict_unprivileged_userns/)
   assert.match(SANDBOX_NOTICE, /AppArmor profile/)
 })
+
+test('switches given to npm run desktop go to Electron before the entry; anything else is dropped', () => {
+  assert.deepEqual(electronArgs('main.ts', false, ['--remote-debugging-port=9333']), [
+    '--remote-debugging-port=9333',
+    'main.ts',
+  ])
+  assert.deepEqual(
+    electronArgs('main.ts', true, ['--remote-debugging-port=9333', 'other.js', '-x']),
+    ['--no-sandbox', '--remote-debugging-port=9333', 'main.ts'],
+  )
+})

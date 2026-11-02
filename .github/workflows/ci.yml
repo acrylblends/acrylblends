@@ -122,16 +122,18 @@ jobs:
           path: ${{ runner.temp }}/acryl-frame-netlog-*.json
           if-no-files-found: ignore
 
-  # The desktop door in a real Electron (windows and menu as door verbs, a window attached to a dev server, the guards on Quit and the last window). Its own job, not in `check`:
-  # it downloads Electron and opens windows. Linux runs it under a virtual display; a failure here fails the build, it is not skipped.
+  # The desktop door in a real Electron (windows and menu as door verbs, a window attached to a dev server, the guards on Quit and the last window), and the
+  # frame in the desktop window (a frame app's window shows the left and right panels, Settings and the app's tile, starts and stops its own host, or attaches
+  # to npm run dev). Its own job, not in `check`: it downloads Electron and opens windows. Linux runs it under a virtual display; a failure here fails the
+  # build, it is not skipped.
   desktop:
     name: desktop (${{ matrix.os }}, Node 24)
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -147,7 +149,19 @@ jobs:
       - name: verify:desktop (Linux, virtual display)
         if: runner.os == 'Linux'
         run: xvfb-run -a pnpm run verify:desktop
+        env:
+          DESKTOP_FRAME_SHOTS: ${{ runner.temp }}/desktop-frame
       - name: verify:desktop
         if: runner.os != 'Linux'
         run: pnpm run verify:desktop
+        env:
+          DESKTOP_FRAME_SHOTS: ${{ runner.temp }}/desktop-frame
+      # What the frame looked like in the desktop window on each OS, kept whether the gate passed or not.
+      - name: the desktop frame screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-frame-${{ matrix.os }}
+          path: ${{ runner.temp }}/desktop-frame/*.png
+          if-no-files-found: ignore
 

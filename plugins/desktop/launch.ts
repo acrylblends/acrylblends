@@ -29,9 +29,17 @@ export const SANDBOX_NOTICE =
   "desktop: this Linux restricts unprivileged user namespaces (kernel.apparmor_restrict_unprivileged_userns=1), so Electron's sandbox cannot start; starting with --no-sandbox. " +
   'To keep the sandbox, give Electron an AppArmor profile that allows `userns` (the way the VS Code and Chrome packages do): see docs/framework/getting-started/desktop.md'
 
-/** The arguments for Electron: the entry file, with `--no-sandbox` first when the sandbox is blocked. */
-export function electronArgs(entry: string, blocked: boolean): string[] {
-  return blocked ? ['--no-sandbox', entry] : [entry]
+/**
+ * The arguments for Electron: the entry file, with `--no-sandbox` first when the sandbox is blocked. Chromium switches given to the script
+ * (`npm run desktop -- --remote-debugging-port=9222`) go before the entry; anything that is not a switch is dropped.
+ */
+export function electronArgs(
+  entry: string,
+  blocked: boolean,
+  extra: readonly string[] = [],
+): string[] {
+  const switches = extra.filter((arg) => /^--[a-z][a-z0-9-]*(=.*)?$/u.test(arg))
+  return [...(blocked ? ['--no-sandbox'] : []), ...switches, entry]
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -40,9 +48,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const blocked =
     process.env.ACRYLBLENDS_DESKTOP_SANDBOX !== '1' && sandboxBlocked(process.platform)
   if (blocked) console.warn(SANDBOX_NOTICE)
-  const child = spawn(electron, electronArgs(join(import.meta.dirname, 'main.ts'), blocked), {
-    stdio: 'inherit',
-  })
+  const child = spawn(
+    electron,
+    electronArgs(join(import.meta.dirname, 'main.ts'), blocked, process.argv.slice(2)),
+    {
+      stdio: 'inherit',
+    },
+  )
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => child.kill(signal))
   child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)))
 }
