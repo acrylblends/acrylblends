@@ -766,12 +766,20 @@ value; (2) the Preview Notice and the key card were a bottom sheet - a body-leve
 modal layer, like ACRYL; (5) `npm install` writes `package-lock.json` after the scaffold's first commit, so a fresh app said "1 file changed" - every
 template gitignores it. Re-measured in the rebuilt kit: sans typography everywhere, both dialogs centered, a fresh app clean, five distinct shots.
 
-Still open from that review: (3) the right panel's "Start" card list runs under its own Terminal dock (the Comments card is clipped by the dock's tab
-strip); (4) "Open configuration file" sits close to the close X in Settings; (6) the left-panel screenshot should show a listed session (it was
-taken before one existed). Gate gap: `verify-ide-template` checks structure, not look - wire `scripts/frame-compare.mjs` (the 2% threshold against the
-ACRYL reference shots) for the first-run screen, Settings > Models and the right panel so this class fails CI.
+Still open from that review, with the second pass's findings: (3) the right panel's "Start" view is misplaced - the compass icon and the "Start"
+label float at the panel's top-left with the toolbar icons stacked under them, and the card list (Files, Changes, Review, Checks, Comments) runs under
+the right panel's own Terminal dock, so the Comments card is clipped by the dock's tab strip; the view needs ACRYL's placement and a scroll region
+above the dock. (4) "Open configuration file" sits close to the close X in Settings. (6) the left-panel screenshot should show a listed session (it
+was taken before one existed). (7) The centered dialogs have no surface: the Preview Notice and the key card are bare text over the app page - no card
+background, border, shadow or backdrop scrim - and the key card's text and buttons overlap the terminal dock; the Continue button is a flat grey box.
+DSH's own dialog styles are probably missing the same way the font token was unused (the dialog element's class hashed styles exist in
+ModelsSection/OnboardingModal CSS tags, but the element may carry none of them or a wrapper's CSS is absent); find that cause and port ACRYL's dialog
+surface and backdrop rather than painting a new card. (8) The Settings nav truncates "Command pale..." - widen the nav or let labels wrap as ACRYL
+does. Gate gap: `verify-ide-template` checks structure, not look - wire `scripts/frame-compare.mjs` (the 2% threshold against the ACRYL reference
+shots) for the first-run screen, Settings > Models and the right panel so this class fails CI.
 
 State: branch 119-workshop-guide at `ffd55b5f`; typecheck green, the full check has NOT been run since `ffd55b5f` (the last green check was
-`9a63850c`; the earlier gate additions were green on the agent template). Next: full check + push + CI on `ffd55b5f`, then defects 3, 4 and 6, then
-the frame-compare wiring, then the owner's kit run. The kit's app folder is removed and its port free; the kit itself (tarballs, prefix, home, cache,
+`9a63850c`; the earlier gate additions were green on the agent template). Next, in the coordinator's order: full check + push + CI on `ffd55b5f`; then fix 7 (dialog surface and backdrop at the cause), 3 (the Start view's
+placement and the card list's scroll region), 4 and 8; then the frame-compare wiring; then rebuild the kit and re-shoot, every shot compared with ACRYL
+before reporting. The kit's app folder is removed and its port free; the kit itself (tarballs, prefix, home, cache,
 screenshots) is ready.
