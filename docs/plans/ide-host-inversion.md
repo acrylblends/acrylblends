@@ -739,3 +739,11 @@ no dialog, no exception, about forty presses in twenty seconds). The loop now pr
 allowed (six bounded attempts, about the old 20 s budget). A failure records the press count, each trigger's visible/disabled/aria-disabled/
 aria-expanded/aria-haspopup state, the dialog list and the stop/send controls; a success logs the stop controls present when the dialog opened, so the
 "opens during a run" fact is in the record of every green run.
+
+**The blank gate's dialog that closed during its sections wait (run 41491427783 on `c85973d8`).** The Linux Node 22 check failed at the blank gate after
+the open loop found a visible Settings dialog: the old 15 s sections wait found it gone, and the dump had no dialog content. The wait was reading
+`document.body` and had no way to reopen, and the press pressed every Settings-labelled button in the left pane - the visible foot and the hidden upstream
+trigger, both moving the same panel, so a second press in the same tick can toggle the just-opened dialog straight back shut. The step now reads the
+dialog's own text, re-presses only when the dialog has vanished, and presses one trigger per attempt: the product's foot button first (its `openSettings`
+path activates the DSH trigger itself), the hidden trigger as the fallback. Blank and agent gates pass on the final code; the three-run count restarts on
+this push.
