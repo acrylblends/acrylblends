@@ -4,10 +4,19 @@
  * repeated mount and reload, in-flight abort, and streams that end with the router or with the plugin that serves them. Routing itself is covered by the core's own suite.
  */
 
+import { appendFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { Context, type FiberState } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import { streamSSE } from '../src/helpers/index.ts'
 import { apply, Acryl, Config, connectionOf, HTTPException, name, type Router } from '../src/index.ts'
+
+/** ACRYL_ROUTER_TRACE=1: the handler-side half of the request-signal diagnostics (the service writes the flight-side half to the same file). */
+const tlog = (line: string): void => {
+  if (process.env.ACRYL_ROUTER_TRACE !== '1') return
+  try { appendFileSync(process.env.ACRYL_ROUTER_TRACE_FILE ?? `${tmpdir()}/acryl-router-trace.log`, `${String(Date.now())} TEST ${line}\n`) } catch { /* tracing never affects a test */ }
+}
+const tagOf = (signal: AbortSignal): string => String((signal as unknown as Record<symbol, unknown>)[Symbol.for('acryl.router.signalTag')] ?? 'untagged')
 
 const PENDING = 0 as FiberState.PENDING
 const ACTIVE = 2 as FiberState.ACTIVE
@@ -309,6 +318,7 @@ describe('acryl-router lifecycle through Cordis', () => {
     expect(Date.now() - startedAt).toBeGreaterThanOrEqual(100)
     // Await the abort itself, not a timer: the event is the observable fact this test is about.
     await Promise.race([abortedEvent, new Promise<void>(resolve => { setTimeout(resolve, 1_000) })])
+    tlog(`dispose done aborted=${String(aborted)}`)
     expect(aborted).toBe(true)
     expect((await pending).status).toBe(499)
     const refused = await get(router, '/slow')
@@ -408,8 +418,9 @@ describe('acryl-router lifecycle through Cordis', () => {
       apply(inner: Context): void {
         inner.router.route('/', new Acryl()
           .use('/held/*', async (c, next) => {
-            c.req.raw.signal.addEventListener('abort', () => { guardAborted = true }, { once: true })
-            const held = new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { reject(new Error('aborted')) }, { once: true }) })
+            tlog(`guard listener attach tag=${tagOf(c.req.raw.signal)}`)
+            c.req.raw.signal.addEventListener('abort', () => { guardAborted = true; tlog(`guard listener fired tag=${tagOf(c.req.raw.signal)}`) }, { once: true })
+            const held = new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { tlog('handler listener fired'); reject(new Error('aborted')) }, { once: true }) })
             heldStarted()
             await held
             await next()

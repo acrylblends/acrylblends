@@ -7,6 +7,8 @@
  * response body still streaming and waits for all of it to settle.
  */
 
+import { appendFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { ConnectionInfo, RouterBindings } from './connection.ts'
@@ -23,6 +25,23 @@ const DEFAULT_DISPOSE_GRACE_MS = 2000
 
 /** How long disposal waits for the flights it had to abort after the drain, before it continues without them. */
 const ABORT_SETTLE_MS = 300
+
+/** Set by ACRYL_ROUTER_TRACE=1: append request-signal lifecycle lines to ACRYL_ROUTER_TRACE_FILE (the CI artifact) - diagnostics for the abort-reaches-handler defect. */
+const traceFile = (): string => process.env.ACRYL_ROUTER_TRACE_FILE ?? `${tmpdir()}/acryl-router-trace.log`
+const trace = (line: string): void => {
+  if (process.env.ACRYL_ROUTER_TRACE !== '1') return
+  try { appendFileSync(traceFile(), `${String(Date.now())} [${String(process.pid)}] ${line}\n`) } catch { /* tracing never affects a request */ }
+}
+let flightSeq = 0
+const SIGNAL_TAG = Symbol.for('acryl.router.signalTag')
+const tagOf = (signal: AbortSignal | undefined): string => {
+  if (signal === undefined) return 'none'
+  const tag = (signal as unknown as Record<symbol, unknown>)[SIGNAL_TAG]
+  return typeof tag === 'string' ? tag : 'untagged'
+}
+const tagSignal = (signal: AbortSignal, tag: string): void => {
+  try { (signal as unknown as Record<symbol, unknown>)[SIGNAL_TAG] = tag } catch { /* a frozen signal keeps no tag */ }
+}
 
 
 /** How a trailing slash is read: `strict` keeps `/a` and `/a/` distinct, `ignore` treats them as one path. */
@@ -109,6 +128,10 @@ interface RouterState {
 
 interface Flight {
   readonly controller: AbortController
+  /** The request the handlers run on (the caller's request with the flight's signal): held strongly for the flight's lifetime, so its signal cannot be collected under a listener. */
+  readonly inner: Request
+  /** Names the flight in the ACRYL_ROUTER_TRACE diagnostics. */
+  readonly tag: string
   /** How many of each mount's handlers are running for this request right now (a middleware counts until its `next()` returns). */
   readonly running: Map<Mount, number>
   /** The mount whose handler produced the response; its body is that mount's code still running. */
@@ -223,6 +246,7 @@ export class Router extends Service {
       const handler: H = async (c, next) => {
         const flight = this.flightOf.get(c.req.raw)
         if (flight === undefined) return inner(c, next)
+        trace(`handler ${flight.tag} requestTag=${tagOf(c.req.raw.signal)} innerTag=${tagOf(flight.inner.signal)} sameSignal=${String(c.req.raw.signal === flight.inner.signal)} aborted=${String(c.req.raw.signal.aborted)}`)
         let calledNext = false
         flight.running.set(mount, (flight.running.get(mount) ?? 0) + 1)
         try {
@@ -253,9 +277,11 @@ export class Router extends Service {
 
   /** The one draining rule: let `flights` finish inside the grace, then abort and settle what is left. */
   private async drainFlights(flights: readonly Flight[], why: string): Promise<void> {
+    trace(`drain ${why} chosen=[${flights.map(flight => flight.tag).join(', ')}]`)
     if (flights.length === 0) return
-    if (await this.settledWithin(flights, this.graceMs)) return
+    if (await this.settledWithin(flights, this.graceMs)) { trace(`drain ${why} settled inside the grace`); return }
     const left = flights.filter(flight => this.flights.has(flight))
+    trace(`drain ${why} grace over left=[${left.map(flight => flight.tag).join(', ')}]`)
     if (left.length > 0) await this.end(left, why, ABORT_SETTLE_MS)
   }
 
@@ -272,7 +298,10 @@ export class Router extends Service {
   private async end(flights: readonly Flight[], why: string, settleMs: number = this.graceMs): Promise<void> {
     if (flights.length === 0) return
     for (const flight of flights) {
+      trace(`abort ${flight.tag} before=${String(flight.controller.signal.aborted)}`)
       flight.controller.abort()
+      trace(`abort ${flight.tag} after=${String(flight.controller.signal.aborted)} innerAborted=${String(flight.inner.signal.aborted)}`)
+      queueMicrotask(() => { trace(`post-abort ${flight.tag} innerAborted=${String(flight.inner.signal.aborted)}`) })
       flight.endBody()
     }
     if (await this.settledWithin(flights, settleMs)) return
@@ -339,8 +368,11 @@ export class Router extends Service {
     let bodyDone: Promise<void> = Promise.resolve()
     let endBody = (): void => {}
     let resolveSettled!: (value: Promise<unknown>) => void
-    const flight: Flight = { controller, running: new Map(), producer: undefined, endBody: () => { endBody() }, settled: new Promise(resolve => { resolveSettled = resolve }) }
+    const tag = `f${String(++flightSeq)}`
     const inner = new Request(request, { signal: controller.signal })
+    tagSignal(inner.signal, tag)
+    const flight: Flight = { controller, inner, tag, running: new Map(), producer: undefined, endBody: () => { endBody() }, settled: new Promise(resolve => { resolveSettled = resolve }) }
+    trace(`create ${tag} ${request.method} ${new URL(request.url).pathname}`)
     this.flightOf.set(inner, flight)
     // The caller gets the Response the moment the handler returns it; the flight lasts until its body ends and every waitUntil task settles.
     const response = this.dispatch(inner, env, executionCtx).then(raw => {

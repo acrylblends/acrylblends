@@ -31,6 +31,9 @@ jobs:
       fail-fast: false
       matrix:
         node: [22, 24, 26]
+    # The router's request-signal diagnostics (service plus handler halves) append to one file per run; the failure step below uploads it.
+    env:
+      ACRYL_ROUTER_TRACE: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -44,6 +47,13 @@ jobs:
           bun-version: 1.4.3
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
+      - name: the router abort trace (only when a test fails)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: router-trace-check-node${{ matrix.node }}
+          path: ${{ runner.temp }}/acryl-router-trace.log
+          if-no-files-found: ignore
 
   packages:
     name: packages (${{ matrix.os }}, Node ${{ matrix.node }})
@@ -54,6 +64,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22, 24, 26]
+    # The router's request-signal diagnostics (service plus handler halves) append to one file per run; the failure step below uploads it.
+    env:
+      ACRYL_ROUTER_TRACE: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -70,6 +83,13 @@ jobs:
       - run: pnpm run verify:framework
       - run: pnpm run typecheck
       - run: pnpm run test:packages
+      - name: the router abort trace (only when a test fails)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: router-trace-${{ matrix.os }}-node${{ matrix.node }}
+          path: ${{ runner.temp }}/acryl-router-trace.log
+          if-no-files-found: ignore
       # The real terminal (node-pty) on every OS, Windows included: a load failure fails here with its reason, it is not skipped.
       - run: pnpm run test:driver-pty
       # `npm create acrylblends my-app agent` from the packed tarballs on every OS: 1.0.4 and 1.0.5 failed on every Windows machine and nothing ran the command there.
