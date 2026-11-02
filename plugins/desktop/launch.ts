@@ -3,7 +3,7 @@
  * (Ubuntu 23.10 and later: `kernel.apparmor_restrict_unprivileged_userns=1`), Chromium's sandbox cannot start for an Electron that npm unpacked into node_modules, and Electron
  * aborts before any of our code runs. There, and only there, it starts with `--no-sandbox` and says so; everywhere else Electron starts exactly as it does with the sandbox on.
  */
-import { spawn } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -42,19 +42,42 @@ export function electronArgs(
   return [...(blocked ? ['--no-sandbox'] : []), ...switches, entry]
 }
 
+/** The signals the launcher hands to Electron: Ctrl-C, a stop, and the terminal closing. */
+export const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
+
+/**
+ * Start Electron and make it end the way it was asked to. On macOS and Linux Electron leads its own process group, so a terminal's Ctrl-C (which goes to the
+ * whole foreground group) reaches only this launcher, which hands Electron exactly one signal. Electron answers a first SIGINT, SIGTERM or SIGHUP with a
+ * graceful quit, the one that stops the frame host the window started; a second signal kills it at once, before any of that runs, and a Ctrl-C that reached
+ * both processes was two, as is one that npm passes on after the terminal sent it. Later signals are not passed on. Windows has no process groups and no such signals; there Electron starts as before. This process ends with Electron's exit code.
+ */
+export function runElectron(
+  file: string,
+  args: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): ChildProcess {
+  const child = spawn(file, args, { stdio: 'inherit', detached: platform !== 'win32' })
+  // One signal, ever: npm hands a Ctrl-C to this process a second time, and Electron's quit is bounded (DESKTOP_SHUTDOWN_TIMEOUT_MS) without another.
+  let forwarded = false
+  for (const signal of FORWARDED_SIGNALS)
+    if (platform !== 'win32' || signal !== 'SIGHUP')
+      process.on(signal, () => {
+        if (forwarded) return
+        forwarded = true
+        child.kill(signal)
+      })
+  child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)))
+  return child
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const electron = createRequire(import.meta.url)('electron') as string
   // ACRYLBLENDS_DESKTOP_SANDBOX=1: the owner has given Electron an AppArmor profile and wants the sandbox.
   const blocked =
     process.env.ACRYLBLENDS_DESKTOP_SANDBOX !== '1' && sandboxBlocked(process.platform)
   if (blocked) console.warn(SANDBOX_NOTICE)
-  const child = spawn(
+  runElectron(
     electron,
     electronArgs(join(import.meta.dirname, 'main.ts'), blocked, process.argv.slice(2)),
-    {
-      stdio: 'inherit',
-    },
   )
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => child.kill(signal))
-  child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)))
 }
