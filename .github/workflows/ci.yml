@@ -95,21 +95,23 @@ jobs:
       # `npm create acrylblends my-app agent` from the packed tarballs on every OS: 1.0.4 and 1.0.5 failed on every Windows machine and nothing ran the command there.
       - run: pnpm run verify:create
 
-  # The framed page gate for every template, on every OS a workshop attendee uses (the matrix ran by hand on our Linux and Windows hosts before this job existed; nothing
-  # else would catch a regression in the frame, its client modules or the templates). One job per OS: the six templates share one build, and each template is its own step so a
-  # failure names it and the rest still run. The gate scaffolds through the CLI, installs the framework, DSH and the frame packages from npm (the file: specs point at this
-  # checkout's build), boots the app on our host and walks it in headless Chrome: the frame's panels, Settings, a real PTY, the app's page in the browser tile, and the chat
-  # against a local Anthropic-Messages mock. No secret is involved: the only key in play is the gate's own fake one, entered through the frame.
+  # The framed page gate for every template, on every OS a workshop attendee uses (the matrix ran by hand on our Linux and Windows hosts before this job existed;
+  # nothing else would catch a regression in the frame, its client modules or the templates). One job per OS and template: they run in parallel, a failure names
+  # exactly one gate, and a slow runner cannot consume another template's budget. Each job installs and builds for itself (about two minutes); the gate scaffolds
+  # through the CLI, installs the framework, DSH and the frame packages from npm (the file: specs point at this checkout's build), boots the app on our host and
+  # walks it in headless Chrome: the frame's panels, Settings, a real PTY, the app's page in the browser tile, and the chat against a local Anthropic-Messages mock.
+  # No secret is involved: the only key in play is the gate's own fake one, entered through the frame.
   frame:
-    name: frame (${{ matrix.os }})
+    name: frame (${{ matrix.os }}, ${{ matrix.template }})
     runs-on: ${{ matrix.os }}
-    # Six templates, each scaffolding and installing from scratch on a shared runner: measured on Windows at 4-9 minutes per template plus the build, so
-    # 60 minutes no longer fits a loaded runner - run 41500065965 lost the job mid-install of the sixth template with the other five green (2026-11-02).
-    timeout-minutes: 90
+    # One template per job: measured on Windows at 4-9 minutes per template plus the install and build, so 30 minutes covers a loaded runner with room. The old
+    # single job ran six templates in sequence and outgrew its budget (run 41500065965 lost the sixth to the 60-minute timeout, 2026-11-02).
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        template: [blank, agent, todo, notes, chat, nodejs]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -122,25 +124,15 @@ jobs:
       - run: pnpm run build
       # Chrome is installed on all three images (Google Chrome: /usr/bin on ubuntu, the app bundle on macOS, Program Files on Windows); scripts/lib/platform.mjs finds
       # each, and CHROME_BIN overrides it. A runner without a browser fails the gate's tile step with that message rather than skipping it.
-      - name: frame gate (blank)
-        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs blank
-      - name: frame gate (agent)
-        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs agent
-      - name: frame gate (todo)
-        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs todo
-      - name: frame gate (notes)
-        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs notes
-      - name: frame gate (chat)
-        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs chat
-      - name: frame gate (nodejs)
-        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs nodejs
+      - name: frame gate (${{ matrix.template }})
+        run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs ${{ matrix.template }}
       # The tile check's Chrome writes a net log to the runner's temp folder; when a gate fails, its failed request's error code (a reset, an empty
       # response, an abort) decides between a transport race and a cancelled navigation instead of leaving it to inference.
       - name: the tile's Chrome net log (only when a gate fails)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: frame-netlog-${{ matrix.os }}
+          name: frame-netlog-${{ matrix.os }}-${{ matrix.template }}
           path: |
             ${{ runner.temp }}/acryl-frame-netlog-*.json
             ${{ runner.temp }}/acryl-chrome-launch.log
