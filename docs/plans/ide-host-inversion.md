@@ -757,8 +757,11 @@ this section is drafted, not posted (the owner's to post); nothing goes to the w
 
 ### Handoff 2 (2026-11-02, after the owner test kit)
 
-The owner kit lives at `~/acrylblends-test-kit-1.2.0-rc` (`sh ~/acrylblends-test-kit-1.2.0-rc/try.sh`; README.txt; five screenshots in
-`screenshots/`). It packs the CLI and the 13 frame packages from the branch's working tree as tarballs, installs the CLI from the kit, creates the
+The owner kit lives at `/Users/musichen/_projects/p11_acr_agentcontextrelay/acryldev/_testfield/acrylblends-test-kit-1.2.0-rc`
+(`sh /Users/musichen/_projects/p11_acr_agentcontextrelay/acryldev/_testfield/acrylblends-test-kit-1.2.0-rc/try.sh`; README.txt; five screenshots in
+`screenshots/`). Owner rule: nothing is ever created directly in the home folder; test material lives in `acryldev/_testfield` or the session's scratch
+directory. The kit was deliberately moved there (its regenerated prefix, home, npm cache, npmrc and install log were cleared, and frame-specs.json and
+README.txt rewritten to the new path); it is rebuilt and re-shot only in that folder. It packs the CLI and the 13 frame packages from the branch's working tree as tarballs, installs the CLI from the kit, creates the
 agent app inside the kit, uses an isolated HOME, never the registry's acrylblends (`^1.0.0` peers require a non-prerelease version, so the kit's CLI
 tarball is version 1.2.0). A run of the kit found six visual defects; three are fixed in `ffd55b5f`: (1) the frame never applied the theme font
 (`--dsw-font-family` was on the root but no rule used it), so every DSH-drawn surface rendered in Times - html/body now take that one inherited
@@ -780,6 +783,6 @@ shots) for the first-run screen, Settings > Models and the right panel so this c
 
 State: branch 119-workshop-guide at `ffd55b5f`; typecheck green, the full check has NOT been run since `ffd55b5f` (the last green check was
 `9a63850c`; the earlier gate additions were green on the agent template). Next, in the coordinator's order: full check + push + CI on `ffd55b5f`; then fix 7 (dialog surface and backdrop at the cause), 3 (the Start view's
-placement and the card list's scroll region), 4 and 8; then the frame-compare wiring; then rebuild the kit and re-shoot, every shot compared with ACRYL
-before reporting. The kit's app folder is removed and its port free; the kit itself (tarballs, prefix, home, cache,
+placement and the card list's scroll region), 4 and 8; then the frame-compare wiring; then rebuild the kit (in `acryldev/_testfield` only) and re-shoot,
+every shot compared with ACRYL before reporting. The kit's app folder is removed and its port free; the kit itself (tarballs, prefix, home, cache,
 screenshots) is ready.
