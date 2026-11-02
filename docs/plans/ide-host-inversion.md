@@ -844,3 +844,10 @@ simply predated the formatter error. Both imports are removed in `7b6b307d`, and
 Kit: rebuilt again from `7b6b307d` (CLI tarball repacked; the 13 frame tarballs are unchanged since the stylesheet fix) with a fresh app; the
 settings-models shot now shows the Claude, ChatGPT and DeepSeek sign-in rows. The visual baseline is requested again from this push, since fix 9
 changes the settings-models state; the three PNGs are reviewed and approved before they are committed, and `FRAME_VISUAL` stays off until then.
+
+A second gap in (9) showed up only in the rebuilt kit: composing `llm-pi-ai` brought Claude but not ChatGPT. DSH 0.2.0-rc.2's pi-ai catalog gives
+`llm-pi-ai/openai` an API key only; the ChatGPT subscription flow lives on its legacy `llm-pi-ai/openai-codex` route ("OpenAI (ChatGPT Plus/Pro)"),
+which the card kept under Other providers. Fixed in `3ba045be`: the featured ChatGPT row takes whichever of the two routes the catalog actually offers
+with an OAuth flow (preferring `openai`, falling back to `openai-codex`), and a promoted route is not listed twice. The gate assertion was reading the
+section text, which always contains "Claude, ChatGPT or DeepSeek" whether the rows exist or not; it now reads the card's row names. The agent gate
+shows all three rows and the sign-in package's 32 tests pass, including the legacy-route case.
