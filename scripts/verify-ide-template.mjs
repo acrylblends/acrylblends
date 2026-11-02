@@ -489,6 +489,14 @@ ${composition.stdout}`)
   if (!readFileSync(pageHtml, 'utf8').includes('__DSH_BOOT__'))
     fail('the page does not carry the client-module boot wire')
   const html = readFileSync(pageHtml, 'utf8')
+  // Every script the page copies from the frontend is closed. An unclosed entry script turns the tags after it (the stylesheet links) into its text:
+  // DSH's component stylesheet never loads, and the frame draws its dialogs and buttons with browser defaults. The string check fails here, before a
+  // browser can hide the cause.
+  for (const match of html.matchAll(/<script\b[^>]*\bsrc=[^>]*>/gu)) {
+    const after = html.slice(match.index + match[0].length)
+    if (!after.trimStart().startsWith('</script>'))
+      fail(`the page's script tag ${match[0]} is not closed; the tags after it would be swallowed as its text`)
+  }
   if (!html.includes('acryl-workspace/client.js'))
     fail(`the page does not load the workspace client; server said:\n${output.slice(-2500)}`)
   const tags = html.split('/api/acryl-door/page.js').length - 1
@@ -745,6 +753,22 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       if (frame.mode !== 'advanced' || frame.frames !== 1)
         fail(`the page is not the frame's advanced layout: ${JSON.stringify(frame)}`)
       log('the page renders the ACRYL frame')
+      // The frontend's component stylesheet is really in the document, not swallowed as the entry script's text. Without it every DSH dialog, button
+      // and input falls back to browser defaults (the owner kit's flat grey buttons and the dialog without a surface or backdrop, 2026-11-02).
+      const entry = await evaluate(`(() => {
+        const script = document.querySelector('script[src*="/assets/index-"]')
+        return {
+          links: document.querySelectorAll('link[rel=stylesheet]').length,
+          entryText: (script?.textContent ?? '').length,
+        }
+      })()`)
+      if (entry.links === 0)
+        fail('the frame document has no stylesheet link: the entry script swallowed the frontend stylesheets')
+      if (entry.entryText !== 0)
+        fail(
+          `the entry script element holds ${String(entry.entryText)} characters of text: the page's tags after it were swallowed`,
+        )
+      log('the frontend stylesheet is in the document and the entry script holds no swallowed markup')
       // Day one under the frame (119): the app the person is building is already open in a tile, with no + and no typed address, and the document
       // has not scrolled (a focused first-run card must not move the shell).
       const firstRunTile = await until(async () => {

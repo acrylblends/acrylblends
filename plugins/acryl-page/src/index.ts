@@ -56,7 +56,10 @@ export function clientAssetTags(indexHtml: string): string {
         /^<script\b[^>]*\bsrc=/u.test(tag) ||
         /^<link\b[^>]*\brel="(?:stylesheet|modulepreload)"/u.test(tag),
     )
-  return tags.join('\n    ')
+  // A copied `<script src>` without its closing tag turns every tag after it (the stylesheet links) into its text: DSH's component stylesheet then never
+  // loads, and the frame draws its dialogs, buttons and inputs with browser defaults instead of the product's. The frontend's own script tags are empty,
+  // so the closing tag is this side's to add.
+  return tags.map((tag) => (tag.startsWith('<script') ? `${tag}</script>` : tag)).join('\n    ')
 }
 
 /** Our document: minimal on purpose; the frame renders into `#root`, and the taps add the boot wire before `</head>`. */
