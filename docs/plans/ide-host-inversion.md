@@ -779,3 +779,20 @@ prevented and says "Type a message first."; a remount leaves one host and keeps 
 from the one follow the server can answer.
 
 State: branch `124-panel-reload` from `542cfaf2`; the full check and the three-run count follow.
+
+**The panel's own reload, and the check-then-reload race.** The panel reloads the app's page after a run that installed or removed a plugin, because the new
+feature is served by the running app. It decided that at the end of the run and reloaded 900 ms later, so a person (or the frame gate) who started typing in
+that window had the page replaced under their text - exactly the empty-composer dump. The panel lives inside the app's own page (it cannot refresh the
+frame's canvas from inside), so the page reload is the app's refresh; but the decision is now made at the moment of reloading, in
+`reloadDecision({ value, focused, following })`: the composer must be empty, unfocused and no run still going. Every panel-initiated reload is recorded
+before it happens - a warning the page's error report and the gate both see, and a marker in `sessionStorage` (`agent-panel-reload`, reason and time) that
+the reloaded page keeps; the gate's panel snapshot and failure dump now read that marker.
+
+Tests: `reloadDecision` is pinned for typing, focus and a running run; a change event while the composer holds text leaves the page and the text alone (no
+marker); a change event with an idle, empty composer records the marker before reloading.
+
+**Open ticket, not 124 work: the standalone app's `node --watch`.** The frame's generated dev script has no watcher
+(`packages/cli/src/ide-profile.ts`: `dev: node --import ... scripts/ide-host.mjs`), so a run's file edits do not restart the frame's app server. The
+template's own `npm run dev` for a standalone app runs `node --watch`, where a run that edits a watched file would restart the server and kill the
+in-memory run; the panel would come back with no run to follow. That is a ticket for the standalone path (a durable run log, or the run in a process the
+watcher does not restart), not this branch.

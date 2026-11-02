@@ -19,6 +19,32 @@ export function sendRefusal(message: string, following: boolean): SendRefusal | 
   return undefined
 }
 
+/**
+ * Whether the page may be replaced to show a change a run made. Asked at the moment of reloading, not earlier: text in the composer or the focus in it
+ * belongs to the person, and a run still going must not lose its page either.
+ */
+export function reloadDecision(state: {
+  readonly value: string
+  readonly focused: boolean
+  readonly following: boolean
+}): boolean {
+  return state.value.trim() === '' && !state.focused && !state.following
+}
+
+/** Where the last panel-initiated reload is recorded, for the page after it and for a gate looking at a failure. */
+export const RELOAD_MARKER = 'agent-panel-reload'
+
+/** Replace the page, saying why first: a warning the page's own error report and the frame gate both see, and a marker the reloaded page keeps. */
+function reloadPage(reason: string): void {
+  try {
+    sessionStorage.setItem(RELOAD_MARKER, JSON.stringify({ reason, at: Date.now() }))
+  } catch {
+    // No storage: the warning below still names it.
+  }
+  console.warn(`agent-panel: reloading the page (${reason})`)
+  location.reload()
+}
+
 interface Session {
   token: string
   drivers: Array<{
@@ -486,11 +512,22 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
         stop.disabled = true
       }
     }
-    // A plugin was installed or removed while this page watched: the new feature is served by the running app, so the page only needs to be loaded again (unless something is being typed).
-    // A run that ended before this page loaded was already shown after its reload, and does not reload it again.
-    if (live && changed && input.value.trim() === '') {
+    // A plugin was installed or removed while this page watched: the new feature is served by the running app, so the page only needs to be loaded again.
+    // The panel lives inside the app's own page (it cannot refresh the frame's canvas from here), so the page reload is the app's refresh - but the decision
+    // to reload is made at the moment of reloading, never on a check made a second earlier: a person (or the frame gate) can start typing in between, and a
+    // reload then replaces the page under their text (the frame gate's empty-composer dump, 2026-11-02).
+    if (live && changed) {
       line('Reloading the page to show it.', 'tool')
-      setTimeout(() => location.reload(), 900)
+      setTimeout(() => {
+        if (
+          reloadDecision({
+            value: input.value,
+            focused: host.shadowRoot?.activeElement === input,
+            following,
+          })
+        )
+          reloadPage('a plugin changed')
+      }, 900)
     }
   }
   form.addEventListener('submit', async (submitted) => {

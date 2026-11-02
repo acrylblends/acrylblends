@@ -1072,6 +1072,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
               textareaConnected: textarea.isConnected,
               textareaIsCurrent: textarea === root.querySelector('textarea'),
               status: root.querySelector('#log')?.innerText?.slice(-300) ?? '',
+              reload: iframe?.contentWindow?.sessionStorage?.getItem('agent-panel-reload') ?? null,
             }
           })()`),
           30_000,
@@ -1118,6 +1119,8 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
               typedTextareaIsCurrent: gate === undefined || root === undefined || root === null ? null : gate.textarea === root.querySelector('textarea'),
               typedFormConnected: gate === undefined ? null : gate.form.isConnected,
               typedHostIsCurrent: gate === undefined ? null : gate.host === host,
+              // A panel-initiated page reload (a run that changed a plugin) is recorded before it happens; a failure dump says whether one was involved.
+              reload: iframe?.contentWindow?.sessionStorage?.getItem('agent-panel-reload') ?? null,
             }
           })()`)
           fail(
