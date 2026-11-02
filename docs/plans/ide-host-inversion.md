@@ -851,3 +851,15 @@ which the card kept under Other providers. Fixed in `3ba045be`: the featured Cha
 with an OAuth flow (preferring `openai`, falling back to `openai-codex`), and a promoted route is not listed twice. The gate assertion was reading the
 section text, which always contains "Claude, ChatGPT or DeepSeek" whether the rows exist or not; it now reads the card's row names. The agent gate
 shows all three rows and the sign-in package's 32 tests pass, including the legacy-route case.
+
+The Ubuntu page gate then stalled for forty minutes after its banner line, and the guards added for it (`f6d78142`'s predecessors) turned the stall
+into a named failure instead of silence: `verify-frame-token: gave up after 10 minutes`, with no progress because the watchdog's `process.exit`
+truncated buffered stdout. Synchronous progress lines (`71bcfada`) then named the failure in two lines: boot 1 passed every check and "stopped", but
+boot 2 printed port **3705** instead of 3704 and `STABLE` was false. Signalling `npm run dev` alone leaves the app process (npm -> sh -> node) alive
+holding the stable port on Linux, so the next boot scans to another port - the guarantee this check exists for breaks - and the leftover child kept
+the script's event loop alive, which is why the watchdog fired after the work was already done.
+
+Fixed in `f6d78142`: the app starts as its own POSIX process group and `stop()` signals the group (taskkill `/T` on Windows), so the port is free
+when the second boot starts; the script exits explicitly after its final synchronous line. This was a harness path, not a product flow - a person's
+Ctrl-C reaches the script child through npm, but a bare SIGTERM to npm does not. The agent gate passes end to end locally; the Ubuntu job is the
+proof, and the visual baseline is requested again from this push.
