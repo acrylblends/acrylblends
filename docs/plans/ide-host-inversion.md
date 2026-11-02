@@ -921,3 +921,69 @@ sockets (the client saw 1006) and the frame does not use it.
 The Windows frame timings from the three green runs on `af583d6c` (measure only, for the record): blank 4m53 / 5m40 / 8m58, agent 5m12 / 6m15 / 6m51, todo
 4m44 / 5m07 / 6m49, notes 4m16 / 5m05 / 7m09, chat 4m34 / 5m33 / 7m07, nodejs 4m16 / 5m41 / 6m29. Every step grows roughly together rather than one path
 growing, which reads as runner and install/network slowness (each step scaffolds and installs from scratch), not a gate code regression; not fixed here.
+
+## 28. The Windows notice-check Chrome launch (branch 123, 2026-11-02)
+
+Run 41440407757 on `d0e0561c` failed frame (windows-latest) at the blank gate: "headless Chrome did not open for the notice check (exit null)" after about two
+minutes, with nothing after the colon. The cause was in the gate, in two parts. The notice check spawned Chrome with `stdio: 'ignore'` and attached its output
+listeners to the resulting null streams, so the captured output was always empty - the diagnostics that claimed to show Chrome's last lines never could. And
+the launch waited on a guessed port (9300 + random(300)) with a 600-iteration loop and no named bound, so a browser that never opened DevTools on that port
+spun with a live child and no evidence.
+
+Both launches (the notice check and the tile check) now go through `scripts/lib/door-probe.mjs`'s `startChrome`: a unique profile per launch,
+`--remote-debugging-port=0` with the port read from the profile's `DevToolsActivePort` file (never a guess), `--enable-logging=stderr` with stderr captured,
+and a bounded 60 s wait whose failure names the exit code, the DevToolsActivePort state and the last 8 KB of the browser's output, appends that to
+`<tmp>/acryl-chrome-launch.log` (the frame job's failure artifact step uploads it with the net logs, only when a gate fails), and kills the whole process
+tree (`taskkill /T /F` on Windows, the process group elsewhere) before failing. A parser test covers the DevToolsActivePort read; the blank gate passes locally
+through the new launcher and the full check is exit 0.
+
+Handoff: the full check is green on branch 123; the next step is the branch CI and, on the Windows frame job, either a green run or the captured browser output
+naming whether it is Defender, a first-run dialog or a profile lock - the message and the artifact now exist for that answer. Three consecutive green CI runs
+on one sha are the bar before reporting 123 green.
+
+### The agent panel's silent Send (branch 123, same day)
+
+Run 3's macOS agent gate failed with the panel present, drivers listed, empty log, Send enabled and Stop disabled; the gate-wide page capture added earlier showed only
+warnings (a PTY WebSocket closed before it opened, and the sandbox notices), no exception - so nothing threw, and the submit handler's two silent early returns
+(nothing typed, or a run already being followed) were the fit. The panel now says why it does not send ("Type a message first." / "A run is already going; stop it
+first."), marks itself `data-ready` once its form is wired and `data-following` while a run is going, and the gate waits for the ready mark, types with the native
+setter plus an input event, and prints the textarea value, ready and following at submit time in both the failure message and its panel detail. A guard test covers
+the two refusal reasons. The capture result is part of the record: no exception was thrown, which ruled the half-wired-by-a-throw theory out before the change.
+
+### Handoff (branch 123, 2026-11-02, at d18a3b40)
+
+Where it stands: the Chrome-launch rewrite and the agent panel's guards/readiness/diagnostics are in and green locally (full check exit 0 on d18a3b40; CI run 41466529499 on
+it passed every job except the macOS agent gate). That run reached a new failure: the panel step now passes, and the gate fails at the FINAL Settings open after the chat
+step ("Settings did not open", 20 s of the look-first press loop, no page exception) - the same class as `94548f5d`'s notes red. Evidence: the page dump shows the hidden
+upstream sidebar's Settings trigger and the frame's foot Settings both present, a chat session "Hello from the gate" in the tree, and no dialog; the first Settings open
+(Models, before the chat step) passes.
+
+Open hypothesis to test next: the DSH chat run from the gate's chat step may still be streaming when the final Settings open starts (either Settings does not open while a
+run is active, or the dialog is closed by the chat surface). The product answer is fixed, not open: Settings MUST open while a run streams - a user changes models or keys
+mid-run - so the gate must not paper over it by waiting for idle. Test it deterministically on this Mac instead of waiting for CI: make the mock model stream slowly (about
+10 s), start a chat run, press the frame's Settings while it streams, and poll for dialogs plus both Settings triggers' disabled and aria-expanded state. If Settings does not
+open during a run, that is a product defect in the frame (or a DSH behaviour to report), to fix at the cause; if it does open, the cause of the gate failure is elsewhere and
+the dialog polling names it.
+
+What is in the branch: `d0e0561c` (121: node-server graceful stop, router drain, whole-root tests, every package's typecheck in the gate); `3318719a` (startChrome: own port
+from DevToolsActivePort, `--enable-logging=stderr` captured, bounded named failure, launch log artifact, whole-tree kill; parser test); `d18a3b40` (panel guards,
+data-ready/data-following, the gate's human-style typing and submit diagnostics, client-guards test). Three consecutive green CI runs on one sha remain the bar; the count
+restarts on the next push.
+
+**Settings during a streaming run, reproduced and the livelock fixed (`73d52acf`).** The product question was settled first, with the mock's new
+`ACRYL_GATE_STREAM_MS` switch holding the answer open: with a 10 s and then a 60 s stream, the final Settings open succeeded while the chat showed
+`Stop generating` at the moment the dialog was found, so Settings does open during a run and the product answer holds. The CI failure was therefore the
+gate's own open loop: it re-pressed every Settings-labelled button every 500 ms whenever no visible dialog was up, and on a slow runner a press that
+landed before the dialog rendered toggled the just-opened panel closed again - a livelock that leaves exactly the recorded state (both triggers present,
+no dialog, no exception, about forty presses in twenty seconds). The loop now presses once and waits up to 3 s for the render before another press is
+allowed (six bounded attempts, about the old 20 s budget). A failure records the press count, each trigger's visible/disabled/aria-disabled/
+aria-expanded/aria-haspopup state, the dialog list and the stop/send controls; a success logs the stop controls present when the dialog opened, so the
+"opens during a run" fact is in the record of every green run.
+
+**The blank gate's dialog that closed during its sections wait (run 41491427783 on `c85973d8`).** The Linux Node 22 check failed at the blank gate after
+the open loop found a visible Settings dialog: the old 15 s sections wait found it gone, and the dump had no dialog content. The wait was reading
+`document.body` and had no way to reopen, and the press pressed every Settings-labelled button in the left pane - the visible foot and the hidden upstream
+trigger, both moving the same panel, so a second press in the same tick can toggle the just-opened dialog straight back shut. The step now reads the
+dialog's own text, re-presses only when the dialog has vanished, and presses one trigger per attempt: the product's foot button first (its `openSettings`
+path activates the DSH trigger itself), the hidden trigger as the fallback. Blank and agent gates pass on the final code; the three-run count restarts on
+this push.
