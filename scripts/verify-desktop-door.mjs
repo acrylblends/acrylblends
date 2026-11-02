@@ -543,8 +543,8 @@ try {
         log(
           `${name}: the window shows the frame: the left panel (${String(found.rows)} rows), the right panel (Files, Changes, Review), Settings (${found.sections.join(', ')}), and the app's page in the tile (${found.tile})`,
         )
-        if (process.env.DESKTOP_FRAME_SHOTS) {
-          // Settings is the last thing the check opened: close it, so the picture is the frame itself.
+        const evaluate = evaluator(session)
+        const escape = async () => {
           for (const type of ['keyDown', 'keyUp'])
             await session.send('Input.dispatchKeyEvent', {
               type,
@@ -552,6 +552,33 @@ try {
               code: 'Escape',
               windowsVirtualKeyCode: 27,
             })
+        }
+        const settingsOpen = () =>
+          evaluate(
+            `[...document.querySelectorAll('[role=dialog]')].some((dialog) => dialog.getClientRects().length > 0 && [...dialog.querySelectorAll('nav button')].some((button) => /Models|模型/u.test(button.textContent ?? '')))`,
+          )
+        // Settings is the last thing the frame check opened: close it, then the application menu's Settings item must open the frame's own Settings again.
+        await escape()
+        if (!(await until(async () => (await settingsOpen()) === false, 10_000)))
+          fail(`${name}: Settings did not close on Escape`)
+        const menuList = frameAcryl('menu', 'list')
+        const settingsItem = menuList.out
+          .split('\n')
+          .map((line) => line.split('  ')[0])
+          .find((path) => /Settings\.\.\.$/u.test(path))
+        if (settingsItem === undefined)
+          fail(
+            `${name}: the frame window's menu has no Settings item:\n${menuList.out}${menuList.err}`,
+          )
+        const pressed = frameAcryl('menu', 'click', '--path', settingsItem)
+        if (pressed.code !== 0)
+          fail(`${name}: menu click ${settingsItem} failed:\n${pressed.out}${pressed.err}`)
+        if (!(await until(async () => (await settingsOpen()) === true, 15_000)))
+          fail(`${name}: the menu's ${settingsItem} did not open the frame's Settings`)
+        log(`${name}: the menu's ${settingsItem} opens the frame's own Settings`)
+        await escape()
+        await until(async () => (await settingsOpen()) === false, 10_000)
+        if (process.env.DESKTOP_FRAME_SHOTS) {
           await sleep(500)
           mkdirSync(process.env.DESKTOP_FRAME_SHOTS, { recursive: true })
           const shot = await session.send('Page.captureScreenshot', { format: 'png' })

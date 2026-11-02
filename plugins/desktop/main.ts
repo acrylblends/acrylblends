@@ -27,6 +27,7 @@ import {
   frameHome,
   isFrameApp,
   navigation,
+  openFrameSettings,
   runningFrame,
   startFrameHost,
   withoutToken,
@@ -224,9 +225,9 @@ if (!app.requestSingleInstanceLock()) {
       menu: () => (Menu.getApplicationMenu()?.items ?? []).map(menuItem),
     }
     // An app that serves a /settings page gets a Settings item in the menu (Electron's own menu otherwise): it opens that page, in the window that already shows it when there is one.
-    // The frame has Settings of its own (the left panel's foot), so a frame window adds no item.
+    // A frame window's item opens the frame's own Settings (the dialog the left panel's button opens), in the window that has focus.
     const settingsServed = frame
-      ? false
+      ? true
       : await fetch(new URL('/settings', url), {
           headers: { accept: 'text/html' },
           signal: AbortSignal.timeout(2000),
@@ -242,6 +243,18 @@ if (!app.requestSingleInstanceLock()) {
     if (menu !== null && placement !== undefined) {
       const target = menu.items[placement.menu]?.submenu
       const openSettings = (): void => {
+        if (frame) {
+          const target = BrowserWindow.getFocusedWindow() ?? live()[0]
+          if (target === undefined) return
+          if (target.isMinimized()) target.restore()
+          target.focus()
+          target.webContents.executeJavaScript(openFrameSettings).catch((cause: unknown) => {
+            console.warn(
+              `desktop: Settings could not be opened in the frame: ${cause instanceof Error ? cause.message : String(cause)}`,
+            )
+          })
+          return
+        }
         const shown = live().find(
           (candidate) =>
             new URL(candidate.webContents.getURL() || 'about:blank', url).pathname === '/settings',

@@ -47,7 +47,7 @@ same frame the browser shows; the desktop builds nothing of its own.
    other `http(s)` or `mailto` address opens in the system browser, and nothing else opens at all.
 4. The door's `window list` shows each window's address without the launch token.
 
-The frame window has no Settings item in the application menu: Settings is in the frame's left panel. `acrylblends.desktopPath` does not apply either, because the frame opens the app's page in its tile on first run.
+The application menu's `Settings...` (`Cmd+,` on macOS, in the app menu; `Ctrl+,` and the File menu on Windows and Linux) opens the frame's own Settings, the dialog the left panel's Settings button opens. `acrylblends.desktopPath` does not apply to a frame app, because the frame opens the app's page in its tile on first run.
 
 ## The first launch downloads Electron
 

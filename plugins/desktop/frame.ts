@@ -101,6 +101,12 @@ export function withoutToken(href: string): string {
   }
 }
 
+/**
+ * What the Settings... menu item runs in a frame window: the window event the frame's workspace opens its own Settings on (`acryl-workspace`,
+ * `OPEN_SETTINGS_EVENT`; keep the string in step). The same dialog as the left panel's Settings button, never a second one.
+ */
+export const openFrameSettings = "window.dispatchEvent(new Event('acryl:open-settings'))"
+
 /** What the window does with a navigation: stay on the frame's origin, hand the address to the system browser, or refuse it. */
 export type Navigation = 'stay' | 'external' | 'block'
 

@@ -49,6 +49,36 @@ export function setSettingsPanelOpener(open: (() => void) | undefined): void {
 /** The accessible names DSH gives its Settings trigger. */
 const SETTINGS_TRIGGER_LABELS: readonly string[] = ['Settings', '设置']
 
+/** Window event that opens Settings (the desktop shell's application menu sends it: `Settings...`, Cmd/Ctrl+,). */
+export const OPEN_SETTINGS_EVENT = 'acryl:open-settings'
+
+/**
+ * Open the Settings panel the way its own button does: the DSH sidebar trigger, else the layout's keyed panel. Settings that is already open stays
+ * open (its trigger toggles, so it is not pressed again).
+ * @returns true when Settings is open or was opened, false when this page has no way to open it.
+ */
+export function openSettings(doc: Document = document): boolean {
+  if (doc.querySelector('[role="dialog"] nav') !== null) return true
+  const trigger = findSettingsTrigger(doc)
+  if (trigger !== null) {
+    trigger.click()
+    return true
+  }
+  if (openSettingsPanel === undefined) return false
+  openSettingsPanel()
+  return true
+}
+
+/** @returns disposer. Opens Settings whenever {@link OPEN_SETTINGS_EVENT} reaches `target`. */
+export function startOpenSettingsListener(
+  target: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>,
+  doc: Document = document,
+): () => void {
+  const handler = (): void => { openSettings(doc) }
+  target.addEventListener(OPEN_SETTINGS_EVENT, handler)
+  return () => { target.removeEventListener(OPEN_SETTINGS_EVENT, handler) }
+}
+
 /**
  * @param onSectionSettled - called once the section step resolves: `true` once its nav button was found and
  * clicked, `false` if it never appeared within {@link SECTION_TIMEOUT_MS}. The Settings dialog is open either

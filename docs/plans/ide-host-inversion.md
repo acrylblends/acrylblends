@@ -812,12 +812,15 @@ build a second one: the host is the one `npm run dev` runs, and the window is on
    `scripts/ide-host.mjs` exists in the app. The window keeps ACRYL Desktop's secure options and its navigation rules: only a main-frame
    navigation is checked, so the app tile's iframe navigates freely. The frame's own origin stays in the window; any other `http(s)` or `mailto`
    address opens in the system browser, and nothing else is opened. `window.open` is always denied in the window, and its `http(s)` and `mailto`
-   targets go to the system browser.
+   targets go to the system browser. The menu keeps `Settings...` (`CmdOrCtrl+,`; the app menu on macOS, the File menu elsewhere). In a frame
+   window it dispatches the window event `acryl:open-settings`, which the frame's workspace answers by opening its own Settings dialog, the same
+   one as the left panel's Settings button. There is no second Settings window, and `acrylblends.desktopPath` does not apply to a frame app.
 5. **Events and durability.** The one durable fact is the host's address record, which the host owns; the window only reads it. A record counts
    only while its host listens. A stale record (the host stopped) is ignored, and the window starts a host of its own. The single-instance lock
    is unchanged: a second `npm run desktop` focuses the first window.
 6. **Verification.** Unit tests for the pure parts: the frame-mode choice, the ready line, the record check and the navigation decision. Real
    Electron in `verify:desktop`: a framed app, `npm run desktop`, then through the window's DevTools port, the left panel (Projects), the right
-   panel (Files/Changes/Review), Settings with its sections, and the app's page in the browser tile. It also checks that closing the window stops
+   panel (Files/Changes/Review), Settings with its sections, the menu's `Settings...` opening that same dialog, and the app's page in the browser
+   tile. It also checks that closing the window stops
    the host it started (the port is free), and that a window attached to a running `npm run dev` leaves that host running. The desktop CI job
    runs on macOS, Windows and Linux (xvfb).

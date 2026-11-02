@@ -16,7 +16,7 @@ import { createAgentBridge } from './sessions/agent-bridge.ts'
 import { ChatSelection } from './chat/chat-selection.ts'
 import type { MainViewNavigation } from './sessions/main-session.ts'
 import { ModelConnectControl, type ModelCredentialsPort, type ModelLlmPort, type ModelSessionPort } from './models/model-connect.ts'
-import { openSettingsSection, setSettingsPanelOpener } from './settings/open-settings.ts'
+import { openSettingsSection, setSettingsPanelOpener, startOpenSettingsListener } from './settings/open-settings.ts'
 import { createWorkspaceFilesApi } from './files/files-api.ts'
 import { filesTabPlugin } from './files/files-tab.ts'
 import { changesTabPlugin } from './changes/changes-tab.ts'
@@ -160,6 +160,8 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => startReviewPersistence(review, storage), 'acryl-workspace: save review comments')
   const comments = new CommentStore(parseSavedComments(storage?.getItem(COMMENTS_STORAGE_KEY) ?? null))
   ctx.effect(() => startCommentPersistence(comments, storage), 'acryl-workspace: save line comments')
+  // The desktop shell's Settings... menu item (Cmd/Ctrl+,) sends a window event; it opens the same Settings as the left panel's button.
+  ctx.effect(() => startOpenSettingsListener(window), 'acryl-workspace: Settings from the desktop menu')
   // The frame's page has no DSH sidebar trigger: Settings opens through the layout service's keyed panel instead (the same panel).
   ctx.inject(['layout'], (inner) => {
     const layout = inner.get('layout') as unknown as { selectPanel?: (id: string) => void } | undefined
