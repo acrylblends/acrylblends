@@ -1,6 +1,7 @@
 /** Cordis Host plugin: ACRYL Workspace PTY table and loopback routes. */
 
 import { randomBytes } from 'node:crypto'
+import { basename } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from 'acryl-control'
 import type { Acryl } from 'acrylblends'
@@ -52,6 +53,14 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /**
+ * The row's config, written by the generated overlay when the frame hosts an app: where the app's own page is served (`/app`). The page opens it in a
+ * browser tile on first run, so the person starts at the app they are building rather than an empty canvas.
+ */
+export interface WorkspaceConfig {
+  readonly appPage?: string
+}
+
+/**
  * The routes, the terminal's WebSocket among them, are served by the router (`router`, `routerHttp`) under {@link WORKSPACE_API_PREFIX}. The
  * loopback Web server is still needed for its address (agent hooks report to it). The app instance says where this app keeps its data.
  */
@@ -61,10 +70,11 @@ export const inject = ['acrylWeb', 'appInstance', 'acrylSettings', 'router', 'ro
  * Activate the workspace's Host half: its services and their routes. Disabling the Loader row unmounts the routes and kills leftover PTY sessions.
  * @param ctx - Host context for this generation.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: WorkspaceConfig = {}): void {
   if (ctx.acrylWeb.host !== '127.0.0.1') {
     throw new Error('acryl-workspace: requires a loopback Web server')
   }
+  const appPage = typeof config.appPage === 'string' && config.appPage.startsWith('/') ? config.appPage : undefined
   const rendererOrigin = `http://127.0.0.1:${String(ctx.acrylWeb.port)}`
   const reportHostError = (operation: string, cause: unknown): void => {
     ctx.logger.error(
@@ -150,7 +160,11 @@ export function apply(ctx: Context): void {
         ptyRoutes(workspacePty, reportHostError),
         agentRoutes(catalog, agentSettings, reportHostError),
         agentStatusRoutes(statusToken, agentStatus, reportHostError),
-        capabilityRoutes(() => ({ chat: services.get('agents') !== undefined })),
+        capabilityRoutes(() => ({
+          chat: services.get('agents') !== undefined,
+          ...(appPage === undefined ? {} : { appPage }),
+          ...(typeof appRoot === 'string' ? { appRoot, appName: basename(appRoot) } : {}),
+        })),
         projectRoutes(projects, keepAlive, reportHostError),
         briefRoutes(shared),
         filesRoutes(workspaceFiles, reportHostError),

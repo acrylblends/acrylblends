@@ -45,6 +45,13 @@ test('one profile per app, named from the app and safe for a DSH profile', () =>
   )
 })
 
+test("the workspace row is told the app's page, so the frame opens it on first run", () => {
+  assert.match(
+    ideProfilePlan(input).overlay,
+    /- id: acryl-workspace\n {6}name: acryl-workspace\n {6}config:\n {8}appPage: \/app/u,
+  )
+})
+
 test("the overlay mounts the frame rows and leaves DSH's own brand row out", () => {
   const overlay = ideProfilePlan(input).overlay
   for (const entry of FRAME_PACKAGES)
@@ -101,6 +108,15 @@ test("the manifest carries the DSH pin, the framework, the frame packages, and k
   assert.equal(manifest.dependencies['acryl-web'], 'file:../acryl-web')
   assert.equal(manifest.dependencies.yaml, '^2.9.0')
   assert.equal(manifest.scripts.start, 'node src/main.ts')
+})
+
+test("the launcher listens on the app's own stable port, so a restart keeps the frame's origin and its cookie", () => {
+  const plan = ideProfilePlan(input)
+  assert.match(
+    plan.hostScript,
+    /selectInstance\(\{ projectRoot: appRoot, env: process\.env \}\)\.port\.start/u,
+  )
+  assert.doesNotMatch(plan.hostScript, /ACRYLBLENDS_PORT \?\? '0'/u)
 })
 
 test('applying twice changes nothing the second time', () => {

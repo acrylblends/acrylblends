@@ -1,5 +1,17 @@
 export { type AddOptions, add, listPlugins, parseAddOptions } from './add'
 export { HELP, runCli, VERSION } from './cli'
+export {
+  FRAME_URL_FILE,
+  type FrameUrlRecord,
+  frameHome,
+  frameUrlPath,
+  lookUpFrameUrl,
+  openFrame,
+  readFrameUrl,
+  removeFrameUrl,
+  tokenOfFrameUrl,
+  writeFrameUrl,
+} from './frame-url'
 export { type InitOptions, init, parseInitOptions, UsageError } from './init'
 export type { Io } from './io'
 export {

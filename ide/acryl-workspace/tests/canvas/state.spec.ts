@@ -66,6 +66,14 @@ describe('WorkspaceState', () => {
     expect(state.getSnapshot().tiles).toHaveLength(2)
   })
 
+  it('a browser tile opens at the address it is given, and keeps the title', () => {
+    const state = new WorkspaceState({ createId: counter() })
+    const tile = state.addTile('browser', { url: 'http://127.0.0.1:3489/app', title: 'my-app' })
+    expect(tile).toMatchObject({ kind: 'browser', url: 'http://127.0.0.1:3489/app', title: 'my-app' })
+    expect(state.getSnapshot().activeId).toBe(tile?.id)
+    expect(state.addTile('browser')?.url).toBe('https://example.com')
+  })
+
   it('closing the active tile focuses its left neighbor', () => {
     const state = new WorkspaceState({ createId: counter() })
     const chat = state.getSnapshot().tiles[0]

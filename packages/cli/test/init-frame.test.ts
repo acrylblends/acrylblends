@@ -3,11 +3,15 @@
  * opens the app inside the ACRYL frame with its page at /app. The frame's client packages are unpublished, so the specs come from
  * ACRYLBLENDS_FRAME_PACKAGES; without it the app stays on the framework only and the CLI says why instead of writing a profile that cannot install.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { FRAME_PAGE_PREFIX } from '../src/ide-profile.ts'
 import { type Io, init } from '../src/index'
+import { TEMPLATES, templatesRoot } from '../src/templates.ts'
 
 const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-init-frame-'))
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
@@ -37,6 +41,64 @@ const FRAME_SPECS = JSON.stringify({
 })
 
 describe('scaffolding a template into the frame', () => {
+  it('every template mounts its page at the path the overlay advertises, so the first tile opens it', () => {
+    const root = templatesRoot()
+    for (const template of TEMPLATES) {
+      const folder = join(root, template, 'src')
+      if (!existsSync(join(folder, 'frame.ts'))) continue
+      const prefixes = readdirSync(folder)
+        .filter((name) => name.endsWith('.ts'))
+        .flatMap((name) =>
+          [
+            ...readFileSync(join(folder, name), 'utf8').matchAll(
+              /FRAME_MOUNT_PREFIX = '([^']+)'/gu,
+            ),
+          ].map((match) => match[1]),
+        )
+      expect(prefixes, template).toContain(FRAME_PAGE_PREFIX)
+    }
+  })
+
+  it('a new app is a git repository with the scaffold as its first commit, even where git has no identity, so Files works and Changes starts from your edits', async () => {
+    // A machine without a configured git identity must still get the first commit: point git at empty global and system configs for the scaffold.
+    const empty = join(scratch, 'empty-gitconfig')
+    writeFileSync(empty, '')
+    const before = { global: process.env.GIT_CONFIG_GLOBAL, system: process.env.GIT_CONFIG_SYSTEM }
+    process.env.GIT_CONFIG_GLOBAL = empty
+    process.env.GIT_CONFIG_SYSTEM = empty
+    try {
+      const { io } = fakeIo(scratch)
+      const code = await init(
+        {
+          directory: 'versioned',
+          template: 'blank',
+          yes: true,
+          name: 'versioned',
+          install: false,
+          desktop: false,
+          quietNext: true,
+        },
+        io,
+      )
+      expect(code).toBe(0)
+      // A machine without git is left alone; every workshop machine has it (the preflight checks it).
+      if (spawnSync('git', ['--version'], { stdio: 'ignore' }).status === 0) {
+        expect(existsSync(join(scratch, 'versioned', '.git'))).toBe(true)
+        const log = spawnSync('git', ['log', '-1', '--format=%s'], {
+          cwd: join(scratch, 'versioned'),
+          encoding: 'utf8',
+          env: process.env,
+        })
+        expect(log.stdout.trim()).toBe('Initial commit from acrylblends')
+      }
+    } finally {
+      if (before.global === undefined) delete process.env.GIT_CONFIG_GLOBAL
+      else process.env.GIT_CONFIG_GLOBAL = before.global
+      if (before.system === undefined) delete process.env.GIT_CONFIG_SYSTEM
+      else process.env.GIT_CONFIG_SYSTEM = before.system
+    }
+  })
+
   it('writes the profile and overlay with the app row and the frame rows, and points dev at the profile', async () => {
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { io } = fakeIo(scratch)

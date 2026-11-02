@@ -28,7 +28,8 @@ import { commentsTabPlugin } from './comments/comments-tab.ts'
 import { listTerminalTargets } from './comments/terminal-targets.ts'
 import { browserClipboard } from './comments/use-comments.ts'
 import { WorkspaceState } from './canvas/state.ts'
-import { WorkspaceGroups } from './canvas/groups.ts'
+import { GLOBAL_GROUP, WorkspaceGroups } from './canvas/groups.ts'
+import { frameSessionBannerFrom, probeAdmittedSession } from './connection/session-banner.ts'
 import { browserStorage, parseSavedWorkspace, STORAGE_KEY } from './canvas/persistence.ts'
 import { startWorkspacePersistence } from './canvas/persist.ts'
 import { createWebFolderPicker } from './projects/web-folder-picker.ts'
@@ -93,13 +94,68 @@ export function apply(ctx: ClientContext): void {
   // What the Host composition offers (the DSH chat may be off). Everything that depends on it is registered once it is known; until then the
   // page shows the stock frame for the instant it takes, and an unreachable Host means "everything", as before.
   let capabilities = DEFAULT_WORKSPACE_CAPABILITIES
-  const capabilitiesLoaded = loadWorkspaceCapabilities().then((loaded) => { capabilities = loaded })
+  const capabilitiesLoaded = loadWorkspaceCapabilities().then((loaded) => { capabilities = loaded; return loaded })
+  // The session banner: if the browser's session ends, the retry loop cannot recover it, so the page names the way back in instead of spinning.
+  const frameSession = frameSessionBannerFrom(ctx, signal => probeAdmittedSession(signal))
+  ctx.effect(() => () => frameSession.dispose(), 'acryl-workspace: the frame session banner')
   const groups = new WorkspaceGroups(() => new WorkspaceState({ chat: capabilities.chat }), saved?.groups)
   if (saved !== undefined) shell.setMode(saved.mode)
   // The terminals and the dock are shared by the frame (which places the dock) and the canvas (its terminal tabs).
   const terminalStack = advanced ? createTerminalStack(ctx, storage, shell) : undefined
   const frame = advanced ? applyAdvancedShell(ctx, environment, dockShellHooks(terminalStack?.host)) : undefined
   ctx.effect(() => startWorkspacePersistence({ groups, shell, storage }), 'acryl-workspace: save tabs and view')
+  // First run under a Host that serves an app: open the app's own page in the canvas and select the app's folder, so the app and its chats share one tab
+  // set. A Host without an app (ACRYL Web, Desktop) advertises no page and keeps the empty canvas; a saved workspace means a previous run already chose
+  // its tabs, and nothing is added to them.
+  if (advanced && saved === undefined) {
+    ctx.effect(() => {
+      let cancelled = false
+      let stop: (() => void) | undefined
+      let interacted = false
+      const markInteraction = () => {
+        interacted = true
+      }
+      void capabilitiesLoaded.then((loaded) => {
+        if (cancelled || loaded.appPage === undefined) return
+        let url: string
+        try {
+          url = new URL(loaded.appPage, window.location.origin).href
+        } catch {
+          return
+        }
+        if (loaded.appRoot !== undefined) shell.select(loaded.appRoot)
+        const state = groups.stateFor(loaded.appRoot ?? GLOBAL_GROUP)
+        if (state.getSnapshot().tiles.some((tile) => tile.kind === 'browser' && tile.url === url)) return
+        const tile = state.addTile('browser', { url, ...(loaded.appName === undefined ? {} : { title: loaded.appName }) })
+        if (tile === undefined) return
+        // The chat binds its session a moment later and focuses its tab. On first run the app's page keeps the focus, so the person starts at the app; the
+        // chat stays open in the same tab set, one click away. Only the bootstrap's focus, before the person has touched the page, is taken back: a chat
+        // the person opens or selects keeps the focus.
+        window.addEventListener('pointerdown', markInteraction, { capture: true, once: true })
+        window.addEventListener('keydown', markInteraction, { capture: true, once: true })
+        let lastActive = state.getSnapshot().activeId
+        stop = state.subscribe(() => {
+          const snapshot = state.getSnapshot()
+          const active = snapshot.activeId
+          const stole =
+            !interacted &&
+            lastActive === tile.id &&
+            snapshot.tiles.some((entry) => entry.id === active && entry.kind === 'chat')
+          lastActive = active
+          if (stole) {
+            state.selectTile(tile.id)
+            lastActive = tile.id
+          }
+        })
+      })
+      return () => {
+        cancelled = true
+        stop?.()
+        window.removeEventListener('pointerdown', markInteraction, { capture: true })
+        window.removeEventListener('keydown', markInteraction, { capture: true })
+      }
+    }, 'acryl-workspace: the app page on first run')
+  }
   const review = new ReviewStore(parseSavedThreads(storage?.getItem(REVIEW_STORAGE_KEY) ?? null))
   ctx.effect(() => startReviewPersistence(review, storage), 'acryl-workspace: save review comments')
   const comments = new CommentStore(parseSavedComments(storage?.getItem(COMMENTS_STORAGE_KEY) ?? null))
@@ -245,7 +301,7 @@ export function apply(ctx: ClientContext): void {
           removeSlot = ctx.slots.register({
             name: 'desktop.main',
             priority: WORKSPACE_MAIN_PRIORITY,
-            inject: () => ({ ptyApi: ptyClient, terminals, dock, agentStatus, agents, tabTypes, tabRegistry, paletteConfig, toasts, notices, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel }),
+            inject: () => ({ ptyApi: ptyClient, terminals, dock, agentStatus, agents, tabTypes, tabRegistry, paletteConfig, toasts, notices, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel, frameSession }),
           }, WorkspaceCanvas)
         } catch (cause) {
           // A registration conflict must not take the left pane and the Changes tab down with it.
