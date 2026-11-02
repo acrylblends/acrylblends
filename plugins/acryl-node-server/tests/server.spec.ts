@@ -199,6 +199,40 @@ describe('acryl-node-server', () => {
     const ended = await reader.read().then(result => result.done, () => true)
     expect(ended).toBe(true)
     expect(await portIsFree(port)).toBe(true)
+    // The stream is not a request that can finish: the stop waits its bounded grace, then cuts it. The bound allows that grace; a hang still fails.
+  }, 10_000)
+
+  it('lets a request already in flight finish when stop() begins, then frees the port', async () => {
+    const ctx = await boot()
+    let began: () => void = () => {}
+    const started = new Promise<void>(resolve => { began = resolve })
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => { release = resolve })
+    ctx.router.route('/', new Acryl().get('/slow', async (c) => {
+      began()
+      await gate
+      return c.json({ finished: true })
+    }))
+    const port = ctx.nodeServer.port
+    const response = fetch(`${ctx.nodeServer.url}/slow`)
+    await started
+    // Calling stop() while the router and the rest of the tree are still alive: the server drains under its own grace, and only after this does an
+    // app dispose the context. The router's own disposal aborts in-flight requests by design, so this order is what keeps a save from being cut.
+    const stopping = ctx.nodeServer.stop()
+    await new Promise(resolve => setTimeout(resolve, 100))
+    release()
+    const answered = await response
+    expect(answered.status).toBe(200)
+    expect(await answered.json()).toEqual({ finished: true })
+    await stopping
+    expect(await portIsFree(port)).toBe(true)
+  })
+
+  it('stop() is idempotent, and the disposer after it is a no-op', async () => {
+    const ctx = await boot()
+    await ctx.nodeServer.stop()
+    await ctx.nodeServer.stop()
+    expect(await portIsFree(ctx.nodeServer.port)).toBe(true)
   })
 
   it('reloads without leaking a listener', async () => {

@@ -635,3 +635,38 @@ page lands on the body and an attendee clicks before the first word; the same ha
 focused node. `focusChatComposer` watches while a chat is the shown tab (bounded at 30 s) and focuses the composer only when focus is on the page
 itself, never from a field, a dialog, a menu or a control the person is using. Tests cover the late composer, the field and the dialog, the replaced
 composer and the deadline.
+
+## 25. A graceful node-server stop (branch 121, 2026-11-02)
+
+The disposer closed all connections immediately (`closeAllConnections()` before `close()`), so a request in flight when the app stopped was cut. Requested
+behavior: close idle connections first, let in-flight requests finish within a short bounded grace, then close all connections and close; and since an
+upgraded socket (the PTY and door WebSockets) is never an HTTP connection, track those too and let their owner close each with a proper close frame inside
+the same grace.
+
+Measured first, on Node 24 (the platform the apps require): `server.close()` does not end a keep-alive socket that becomes idle after its request finished
+(it stays until the server cuts it), and neither `close()` nor `closeAllConnections()` reaches an upgraded socket - in a probe with one open raw upgrade, the
+`close()` callback never fired, even after `closeAllConnections()`.
+
+The implementation: the adapter counts requests whose response has not finished (the response's `finish`/`close` events), the upgrade listener tracks every
+upgraded socket until it closes, and `NodeServer.stop()` - idempotent, public, and what the disposer calls - runs the hub's close beside the request grace.
+It stops new connections, sweeps idle keep-alive sockets on every pass (one that goes idle after its request finished is not caught by the single sweep
+`close()` does), waits up to `STOP_GRACE_MS` (2 s) for the active requests and the tracked sockets, then ends the finished sockets gracefully (a `FIN` behind
+the buffered body, not a destroy: destroying there answered the client with a reset and an empty body, which the first version of the test caught), gives
+them a 300 ms flush window, and forces `closeAllConnections()` plus destroys any upgraded socket still left, so the server's own `close()` can finish. A
+socket owned by another hub (the router-http adapter's) is closed by that owner's disposer, with its 1001 frame; if it is still open when the grace ends, the
+stop destroys it rather than hang. Tests: an in-flight request finishes and its answer arrives while `stop()` is under way, the port is free, and a second
+stop or the disposer is a no-op; disposal with an open event stream gets an explicit bound for the grace it now waits; and stopping with a WebSocket open
+resolves while the socket gets its 1001 close frame.
+
+**The whole-context dispose still cuts the request, by the router's design.** Disposing the server's own fiber (or calling `stop()`) lets the in-flight
+request finish and its body arrive. Disposing the whole root instead produced a 200 with `content-length: 0`: Cordis runs every disposer together (measured
+with two effects: both start on the same tick), and the router's own disposal refuses new requests, aborts in-flight flights and ends their bodies at once,
+so the save is cut regardless of the server's grace. The user-facing fix is ordering: stop the server first (the new public `stop()`), then dispose the tree.
+The generated launcher still calls `ctx.fiber.dispose()` directly; changing it is the open decision for this ticket, and it ties into the PTY WebSocket
+question - those sockets belong to the router-http adapter's hub, not this server's, and are closed with 1001 only when that plugin is disposed. Stopping
+the server first and disposing after would give the http request its finish, then let that hub close the sockets properly; stopping and disposing in the
+other order cuts the request, as measured.
+
+The Windows frame timings from the three green runs on `af583d6c` (measure only, for the record): blank 4m53 / 5m40 / 8m58, agent 5m12 / 6m15 / 6m51, todo
+4m44 / 5m07 / 6m49, notes 4m16 / 5m05 / 7m09, chat 4m34 / 5m33 / 7m07, nodejs 4m16 / 5m41 / 6m29. Every step grows roughly together rather than one path
+growing, which reads as runner and install/network slowness (each step scaffolds and installs from scratch), not a gate code regression; not fixed here.
