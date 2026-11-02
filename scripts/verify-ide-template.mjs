@@ -576,7 +576,16 @@ ${composition.stdout}`)
     if (captureTo !== undefined && captureTo !== '') {
       const shot = spawnSync(
         process.execPath,
-        [join(root, 'scripts', 'frame-compare.mjs'), 'capture', serverUrl, captureTo, '--views', views, '--views-file', viewsFile],
+        [
+          join(root, 'scripts', 'frame-compare.mjs'),
+          'capture',
+          serverUrl,
+          captureTo,
+          '--views',
+          views,
+          '--views-file',
+          viewsFile,
+        ],
         { encoding: 'utf8' },
       )
       if (shot.status !== 0)
