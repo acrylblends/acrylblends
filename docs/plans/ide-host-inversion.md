@@ -729,3 +729,13 @@ What is in the branch: `d0e0561c` (121: node-server graceful stop, router drain,
 from DevToolsActivePort, `--enable-logging=stderr` captured, bounded named failure, launch log artifact, whole-tree kill; parser test); `d18a3b40` (panel guards,
 data-ready/data-following, the gate's human-style typing and submit diagnostics, client-guards test). Three consecutive green CI runs on one sha remain the bar; the count
 restarts on the next push.
+
+**Settings during a streaming run, reproduced and the livelock fixed (`73d52acf`).** The product question was settled first, with the mock's new
+`ACRYL_GATE_STREAM_MS` switch holding the answer open: with a 10 s and then a 60 s stream, the final Settings open succeeded while the chat showed
+`Stop generating` at the moment the dialog was found, so Settings does open during a run and the product answer holds. The CI failure was therefore the
+gate's own open loop: it re-pressed every Settings-labelled button every 500 ms whenever no visible dialog was up, and on a slow runner a press that
+landed before the dialog rendered toggled the just-opened panel closed again - a livelock that leaves exactly the recorded state (both triggers present,
+no dialog, no exception, about forty presses in twenty seconds). The loop now presses once and waits up to 3 s for the render before another press is
+allowed (six bounded attempts, about the old 20 s budget). A failure records the press count, each trigger's visible/disabled/aria-disabled/
+aria-expanded/aria-haspopup state, the dialog list and the stop/send controls; a success logs the stop controls present when the dialog opened, so the
+"opens during a run" fact is in the record of every green run.
