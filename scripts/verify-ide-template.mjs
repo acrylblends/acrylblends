@@ -966,12 +966,16 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         fail(`Settings > Models failed: ${JSON.stringify(models.failed)}`)
       // The workshop guide tells attendees a Claude or ChatGPT subscription works through this page: the sign-in rows come from the harness
       // authorization catalog (llm-pi-ai's flows), so a frame composed without that row silently offers DeepSeek alone - the owner's item 9.
+      // The rows, not the intro sentence: the sentence already says "Claude, ChatGPT or DeepSeek" whatever is listed.
       const signIn = await until(async () => {
         const rows = await evaluate(`(() => {
-          const text = document.querySelector('[role=dialog]')?.innerText ?? ''
-          return { claude: text.includes('Claude'), chatgpt: text.includes('ChatGPT') }
+          const names = [...document.querySelectorAll('[role=dialog] .acrylSignInName strong')]
+            .map((element) => element.textContent.trim())
+          return { names }
         })()`)
-        return rows?.claude === true && rows?.chatgpt === true ? rows : undefined
+        return rows?.names.includes('Claude') === true && rows?.names.includes('ChatGPT') === true
+          ? rows
+          : undefined
       }, 20_000)
       if (signIn === undefined)
         fail(
