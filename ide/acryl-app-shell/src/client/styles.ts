@@ -13,11 +13,14 @@ html, body, #root { width: 100%; height: 100%; }
 /* The frame owns the viewport: only its panes scroll. The document itself never does - a focused input below the shell (DSH's first-run key card is a
    body-level root in normal flow) used to scroll the whole page and hide the frame's own chrome. */
 html, body { overflow: hidden; }
+/* The frame owns the document's typography: DSH publishes its font stack as --dsw-font-family on the root, and every surface drawn by it (the key card,
+   the Settings dialog, DSH's own right-panel views) inherits this one value instead of the browser's serif default. No per-element font-family. */
+html, body { font-family: var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif); }
 /* DSH's onboarding modals (the Preview Notice and the first-run key card) share one body-level root appended after #root with no positioning of its
    own: it sat below the shell, grew the document, and a focused heading or input scrolled the page programmatically even under overflow hidden. Any
    body-level root hosting a dialog is therefore a modal layer over the shell; every other body-level root (menus, tooltips, the palette, popovers,
    toasts) either positions itself or lives inside #root, and is left alone. */
-body > div:not(#root):has([role="dialog"]) { position: fixed; inset: auto 0 0 0; z-index: 60; }
+body > div:not(#root):has([role="dialog"]) { position: fixed; inset: 0; display: grid; place-items: center; z-index: 60; padding: 24px; box-sizing: border-box; }
 body[data-dsh-desktop-mode="advanced"] { margin: 0; background: transparent !important; }
 .dshDesktopFrame { position: relative; display: grid; grid-template-rows: 100%; width: 100%; height: 100%; overflow: hidden; overflow: clip; background: transparent; transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out); }
 .dshDesktopSidebarSurface { --dsw-specific-sidebar-fill: transparent; position: relative; grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; background: transparent; border-right: 1px solid var(--dsw-alias-border-l1); }
