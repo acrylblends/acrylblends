@@ -410,6 +410,13 @@ ${composition.stdout}`)
         60_000,
       )
       if (notice === undefined) fail('the Preview Notice did not appear on a fresh profile')
+      const noticeScroll = await evaluate(
+        `Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)`,
+      )
+      if (noticeScroll !== 0)
+        fail(
+          `the page scrolled to ${String(noticeScroll)} with the Preview Notice shown; the frame must never scroll at the document level`,
+        )
       const clicked = await evaluate(`(() => {
         const dialog = document.querySelector('[role=dialog]')
         if (dialog === null) return false
@@ -747,7 +754,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           const text = frame?.contentDocument?.body?.innerText ?? ''
           const tabs = [...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())
           if (!src.includes('/app') || text.length === 0) return undefined
-          return { src, text: text.slice(0, 120), tabs: tabs.slice(0, 8), scrollTop: document.scrollingElement?.scrollTop ?? null }
+          return { src, text: text.slice(0, 120), tabs: tabs.slice(0, 8), scrollTop: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) }
         })()`)
         return snapshot
       }, 20_000)
@@ -908,7 +915,9 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       log(
         'Settings > Models loads, takes the DeepSeek key, and the first-run prompt leaves once it is saved',
       )
-      const afterSettings = await evaluate(`document.scrollingElement?.scrollTop ?? null`)
+      const afterSettings = await evaluate(
+        `Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)`,
+      )
       if (afterSettings !== 0)
         fail(`the page scrolled to ${String(afterSettings)} while Settings was open`)
 
@@ -1480,7 +1489,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         return await evaluate(`(() => {
           const alert = [...document.querySelectorAll('[role=alert]')].find((element) => element.innerText.includes('session ended'))
           if (alert === undefined) return undefined
-          return { text: alert.innerText.slice(0, 300), scrollTop: document.scrollingElement?.scrollTop ?? null }
+          return { text: alert.innerText.slice(0, 300), scrollTop: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) }
         })()`)
       }, 30_000)
       if (banner === undefined) {
