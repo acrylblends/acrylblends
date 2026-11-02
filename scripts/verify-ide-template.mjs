@@ -151,14 +151,21 @@ function startMockLlm() {
         index: 0,
         delta: { type: 'text_delta', text: 'pong from the mock' },
       })
-      send('content_block_stop', { type: 'content_block_stop', index: 0 })
-      send('message_delta', {
-        type: 'message_delta',
-        delta: { stop_reason: 'end_turn', stop_sequence: null },
-        usage: { output_tokens: 4 },
-      })
-      send('message_stop', { type: 'message_stop' })
-      response.end()
+      // ACRYL_GATE_STREAM_MS holds the answer open, so a run is still streaming when the next step presses something (the Settings-during-a-run
+      // reproduction). Zero by default: the gate's own runs stay as fast as before.
+      const streamDelayMs = Number(process.env.ACRYL_GATE_STREAM_MS ?? 0)
+      const finish = () => {
+        send('content_block_stop', { type: 'content_block_stop', index: 0 })
+        send('message_delta', {
+          type: 'message_delta',
+          delta: { stop_reason: 'end_turn', stop_sequence: null },
+          usage: { output_tokens: 4 },
+        })
+        send('message_stop', { type: 'message_stop' })
+        response.end()
+      }
+      if (Number.isFinite(streamDelayMs) && streamDelayMs > 0) setTimeout(finish, streamDelayMs)
+      else finish()
     })
   })
   return new Promise((done) => {
@@ -1330,38 +1337,49 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       else {
         // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
         // (c) Settings: General, Models, Plugins, Support, Shortcuts.
-        // Open it the way the Models step above does, and the way a person does: look first, and press only when no Settings dialog is up. Every
-        // Settings-labelled button in the left pane is pressed (the visible foot button goes through the product's own openSettings path, and the
-        // hidden upstream shell's own trigger sits in the same pane); the plain DSH trigger is the fallback. One generic click is lost when it lands
-        // on another control with that name or on a trigger that is not wired yet, and pressing while the dialog is already up can toggle it closed.
-        // Only a visible dialog whose nav carries a real section counts, so a stale or hidden dialog cannot be mistaken for Settings.
-        const opened = await until(
-          async () =>
-            await evaluate(`(() => {
-              const sectionLabels = ['Models', '模型']
-              const isSection = (button) => {
-                const label = (button.getAttribute('aria-label') ?? '').trim()
-                const text = (button.textContent ?? '').replace(/\\s+/g, ' ').trim()
-                return sectionLabels.includes(label === '' ? text : label)
-              }
-              const open = [...document.querySelectorAll('[role=dialog]')].some((dialog) =>
-                dialog.getClientRects().length > 0 &&
-                dialog.querySelector('nav') !== null &&
-                [...dialog.querySelectorAll('nav button')].some(isSection))
-              if (open) return true
-              const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
-                (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
-              for (const button of buttons) button.click()
-              if (buttons.length === 0) {
-                const trigger = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
-                  .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))
-                trigger?.click()
-              }
-              return false
-            })()`),
-          20_000,
-          500,
-        )
+        // A person presses Settings once and waits for it; only a visible dialog whose nav carries a real section counts, so a stale or hidden dialog
+        // cannot be mistaken for Settings. Pressing again before the dialog has rendered toggles the open panel closed again, which is how a slow runner
+        // livelocked this step on 2026-11-02 (both triggers present, no dialog, no exception, forty presses in twenty seconds): each press here is
+        // followed by a bounded wait for the render, and only then is the next press allowed.
+        const settingsOpenExpression = `(() => {
+          const sectionLabels = ['Models', '模型']
+          const isSection = (button) => {
+            const label = (button.getAttribute('aria-label') ?? '').trim()
+            const text = (button.textContent ?? '').replace(/\\s+/g, ' ').trim()
+            return sectionLabels.includes(label === '' ? text : label)
+          }
+          return [...document.querySelectorAll('[role=dialog]')].some((dialog) =>
+            dialog.getClientRects().length > 0 &&
+            dialog.querySelector('nav') !== null &&
+            [...dialog.querySelectorAll('nav button')].some(isSection))
+        })()`
+        const pressSettingsExpression = `(() => {
+          const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
+            (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
+          for (const button of buttons) button.click()
+          if (buttons.length === 0) {
+            const trigger = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
+              .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))
+            trigger?.click()
+          }
+          return buttons.length
+        })()`
+        let opened = false
+        let presses = 0
+        for (let attempt = 0; attempt < 6 && !opened; attempt += 1) {
+          presses += 1
+          if ((await evaluate(settingsOpenExpression)) === true) {
+            opened = true
+            break
+          }
+          await evaluate(pressSettingsExpression)
+          opened =
+            (await until(
+              async () => ((await evaluate(settingsOpenExpression)) === true ? true : undefined),
+              3_000,
+              200,
+            )) === true
+        }
         if (opened !== true) {
           const detail = await evaluate(`(() => {
             const candidates = [...document.querySelectorAll('button,[role=button],[role=menuitem],a')]
@@ -1372,11 +1390,33 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
                 inFoot: candidate.closest('.dshWorkspaceSideFoot') !== null,
                 inUpstreamHost: candidate.closest('.dshWorkspaceUpstreamHost') !== null,
                 inDialog: candidate.closest('[role=dialog]') !== null,
+                visible: candidate.getClientRects().length > 0,
+                disabled: candidate.disabled === true,
+                ariaDisabled: candidate.getAttribute('aria-disabled'),
+                ariaExpanded: candidate.getAttribute('aria-expanded'),
+                ariaHaspopup: candidate.getAttribute('aria-haspopup'),
               }))
-            return JSON.stringify({ body: document.body.innerText.slice(-1200), candidates })
+            // The run state at the failure: a DSH chat that is still streaming shows its Stop control and no enabled Send.
+            const controls = [...document.querySelectorAll('button')]
+              .map((button) => button.getAttribute('aria-label') ?? button.textContent.trim())
+              .filter((label) => /stop|send|cancel|interrupt/iu.test(label))
+              .slice(0, 8)
+            const dialogs = [...document.querySelectorAll('[role=dialog]')].map((dialog) => ({
+              visible: dialog.getClientRects().length > 0,
+              label: dialog.getAttribute('aria-label'),
+              nav: dialog.querySelector('nav') !== null,
+            }))
+            return JSON.stringify({ presses: ${presses}, body: document.body.innerText.slice(-1200), candidates, controls, dialogs })
           })()`)
           fail(`Settings did not open: ${String(detail)}`)
         }
+        // The record of the product answer: Settings must open while a chat run streams. The Success log says whether one was still going at the
+        // moment the dialog was found, so a regression is visible even when this step passes.
+        const runAtOpen = await evaluate(`(() => {
+          const labels = [...document.querySelectorAll('button')].map((button) => button.getAttribute('aria-label') ?? button.textContent.trim())
+          return labels.filter((label) => /stop|interrupt|cancel/iu.test(label)).slice(0, 5)
+        })()`)
+        log(`Settings opened; stop/interrupt controls at that moment: ${JSON.stringify(runAtOpen)}`)
         // Wait for the dialog itself: a snapshot taken immediately is always truthy, so the old wait accepted a frame whose Settings had not rendered yet.
         const settings = await until(async () => {
           const snapshot = await evaluate(`(() => {
