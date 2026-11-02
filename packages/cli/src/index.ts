@@ -1,21 +1,15 @@
 export { type AddOptions, add, listPlugins, parseAddOptions } from './add'
 export { HELP, runCli, VERSION } from './cli'
 export {
-  FRAME_TOKEN_PATH,
   FRAME_URL_FILE,
-  type FrameAuthSeam,
   type FrameUrlRecord,
   frameHome,
   frameUrlPath,
   lookUpFrameUrl,
-  newFrameToken,
   openFrame,
   readFrameUrl,
   removeFrameUrl,
-  reuseFrameToken,
-  sameFrameToken,
   tokenOfFrameUrl,
-  withFrameToken,
   writeFrameUrl,
 } from './frame-url'
 export { type InitOptions, init, parseInitOptions, UsageError } from './init'

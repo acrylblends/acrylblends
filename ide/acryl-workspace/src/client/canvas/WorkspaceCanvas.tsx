@@ -14,6 +14,7 @@ import { buildReviewComment } from '../diff/comment-message.ts'
 import type { WorkspaceGitApi } from '../git/git-api.ts'
 import { SessionBoardPane } from '../board/SessionBoardPane.tsx'
 import type { ChatSelection } from '../chat/chat-selection.ts'
+import { focusChatComposer } from '../chat/composer-focus.ts'
 import { FileEditorPane } from '../files/FileEditorPane.tsx'
 import type { WorkspaceFilesApi } from '../files/files-api.ts'
 import { GitDiffPane } from '../diff/GitDiffPane.tsx'
@@ -156,6 +157,15 @@ export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, a
 
   // What the tree and the Changes, Files and Checks tabs ask of the tab sets (close a tab, open a diff, a file or a document, run a check).
   useEffect(() => routeShellRequests({ shell, groups, terminals, api }), [shell, groups, terminals, api])
+
+  // A reload mounts the chat surface before DSH's composer and nothing focuses the message box, so the page lands on the body and an attendee
+  // clicks before typing; the worktree restore can also replace the focused node. The watch runs while a chat is the shown tab and only takes
+  // focus when the page itself has it (see focusChatComposer).
+  const activeChatId = active?.kind === 'chat' ? active.id : undefined
+  useEffect(() => {
+    if (activeChatId === undefined) return
+    return focusChatComposer()
+  }, [activeChatId])
 
   /** The pane for one tile, used for both the primary pane and the split pane. */
   const renderTile = (tile: WorkspaceTile): ReactNode => {

@@ -7,6 +7,7 @@
 //
 // It boots the app twice (npm run dev, the address the launcher prints), and never uses a fixed port: the app's own stable port is the point.
 import { spawn } from 'node:child_process'
+import { readFileSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 
@@ -16,7 +17,10 @@ const require = createRequire(join(app, 'package.json'))
 const WebSocket = require('ws')
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-const env = { ...process.env, ACRYLBLENDS_HOME: join(app, '.acrylblends') }
+const env = { ...process.env }
+// The app's own home unless the caller pinned one (the page gate runs this inside its scratch home).
+if (env.ACRYLBLENDS_HOME === undefined || env.ACRYLBLENDS_HOME === '')
+  env.ACRYLBLENDS_HOME = join(app, '.acrylblends')
 delete env.ACRYLBLENDS_PORT
 
 async function boot() {
@@ -32,6 +36,15 @@ async function boot() {
     await sleep(250)
   }
   throw new Error(`the frame did not print its address:\n${output.slice(-800)}`)
+}
+
+/** The address record the launcher writes: owner-only, the same address, its own token. */
+function record(url) {
+  const path = join(env.ACRYLBLENDS_HOME, 'frame-url.json')
+  const data = JSON.parse(readFileSync(path, 'utf8'))
+  const mode = process.platform === 'win32' ? 0o600 : statSync(path).mode & 0o777
+  const token = new URL(url).searchParams.get('token') ?? ''
+  return { mode, url: data.url === url, token: data.token === token }
 }
 
 function stop(child) {
@@ -65,7 +78,7 @@ async function pageAndSocket(url) {
 }
 
 const first = await boot()
-const firstCheck = await pageAndSocket(first.url)
+const firstCheck = { ...(await pageAndSocket(first.url)), record: record(first.url) }
 console.log(
   'FIRST',
   JSON.stringify({ url: first.url.replace(/token=.*/u, 'token=<redacted>'), ...firstCheck }),
@@ -73,7 +86,7 @@ console.log(
 await stop(first.child)
 await sleep(1200)
 const second = await boot()
-const secondCheck = await pageAndSocket(second.url)
+const secondCheck = { ...(await pageAndSocket(second.url)), record: record(second.url) }
 console.log(
   'SECOND',
   JSON.stringify({ url: second.url.replace(/token=.*/u, 'token=<redacted>'), ...secondCheck }),
@@ -84,9 +97,15 @@ const ok =
   firstCheck.status === 303 &&
   firstCheck.cookie === true &&
   firstCheck.socket.open === true &&
+  firstCheck.record.mode === 0o600 &&
+  firstCheck.record.url === true &&
+  firstCheck.record.token === true &&
   secondCheck.status === 303 &&
   secondCheck.cookie === true &&
-  secondCheck.socket.open === true
+  secondCheck.socket.open === true &&
+  secondCheck.record.mode === 0o600 &&
+  secondCheck.record.url === true &&
+  secondCheck.record.token === true
 await stop(second.child)
 console.log(ok ? 'verify-frame-token: OK' : 'verify-frame-token: FAILED')
 process.exitCode = ok ? 0 : 1

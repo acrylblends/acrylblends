@@ -556,13 +556,87 @@ Ubuntu green; the two others named their next causes. macOS: the Go re-press let
 
 **Open cause (product): the first Go press on a freshly loaded frame.** The re-press is a gate mitigation, not a cause fixed: if the first Go does nothing, an attendee who clicks once sees nothing happen. Likely the tile's Go handler is not attached when the page first paints (hydration), or Go fires before the address is committed. The product fix is that Go works on the first press, or stays disabled (visibly) until it can; the gate then presses once.
 
-**The frame surviving a dev restart (decided 2026-11-02).** A host restart minted a new connection token (same port, new token); a frame left open with the old token had to be re-opened through the new printed URL. The owner decided: persist the access token in the app's git-ignored `.acrylblends` home, owner-only, written atomically at mint time, reuse it on later boots, and add a command that reprints the frame's URL (and one that asks for a fresh token); an open frame survives a restart. Implemented on branch 119 (section 24): `.acrylblends/frame-url.json` holds `{version, url, token, pid, writtenAt}`, 0600 (a restricted `icacls` ACL on Windows), a temp file renamed over the old one; the launcher writes it at mint time, and on every later boot gives the stored token back to DSH's connection through the one seam the pinned package offers (the instance field `browserAuth.launchToken` that `authorizeIndex` and `authenticatedUrl` read; nothing in the package is edited, and a package without that shape simply keeps its fresh token). The printed URL is therefore the same on every restart and an open page - even one whose cookie was lost - comes back by reloading its original URL. `acrylblends open [dir]` prints the address of the frame that is listening (a stopped or never-run frame is explained on stderr, never a dead token); `acrylblends open --new` rotates the token in the running host through a token-authenticated route the launcher mounts (`POST /api/acryl-frame/token/new`), so the old address dies at once and the new one is printed and stored.
+**The frame surviving a dev restart (decided 2026-11-02).** A host restart minted a new connection token (same port, new token); a frame left open with the old token had to be re-opened through the new printed URL. The owner decided: persist the access token in the app's git-ignored `.acrylblends` home, owner-only, written atomically at mint time, reuse it on later boots, and add a command that reprints the frame's URL (and one that asks for a fresh token); an open frame survives a restart. Implemented on branch 119 (section 25): `.acrylblends/frame-url.json` holds `{version, url, token, pid, writtenAt}`, 0600 (a restricted `icacls` ACL on Windows), a temp file renamed over the old one; the launcher writes it at mint time, and on every later boot gives the stored token back to DSH's connection through the one seam the pinned package offers (the instance field `browserAuth.launchToken` that `authorizeIndex` and `authenticatedUrl` read; nothing in the package is edited, and a package without that shape simply keeps its fresh token). The printed URL is therefore the same on every restart and an open page - even one whose cookie was lost - comes back by reloading its original URL. `acrylblends open [dir]` prints the address of the frame that is listening (a stopped or never-run frame is explained on stderr, never a dead token); `acrylblends open --new` rotates the token in the running host through a token-authenticated route the launcher mounts (`POST /api/acryl-frame/token/new`), so the old address dies at once and the new one is printed and stored.
 
 ### The real Settings causes (`b0139d49`'s red, found with a local dialog dump)
 
 The "no Models section" error on every frame job and on the check jobs was two things, neither of them the nav selector. The page opens DSH's first-run "Add an API key to get started" dialog on a profile without a key, and the gate accepted any dialog as Settings (its wait returned on the first `[role=dialog]`), so it looked for the section list in a dialog that was not open. The gate now dismisses that first-run dialog with "Configure later" - the user's own path - before pressing Settings. And the real Models page saves a provider key with **Apply** (the first-run card's button was "Save and continue"), so the gate tries Apply first and the card's button second. With those, the agent gate runs end to end: Settings > Models takes the key, the chat needs no card and answers against the mock; the blank and upgrade gates pass in the full check. The real DOM was read once, as asked: the only dialog at the failure was the first-run card, and the Models page's buttons are Cancel / Apply.
 
-## 24. The workshop flow rehearsed (2026-11-01, branch 119-workshop-guide)
+**Resolved in section 24:** the first Go press (the address field is read directly and every press reloads, with a bounded automatic-reload net for a transport error), and the frame gate's Settings press (the frame's own foot button, pressed until its dialog opens). Readiness is ruled out as the cause of the tile's error page by that run's own timeline.
+
+## 24. CI stability on one tree: the tile's press, the Settings press, a refusal's body (2026-11-01)
+
+Run 41258550752 on `94548f5d` (the merge of the green 118 tip) was red in three jobs on a tree that had just passed: the notes frame gate on ubuntu
+("Settings did not open"), the chat frame gate on macOS (the tile's iframe had `src` and no readable document), and `packages` on Windows Node 22
+(acryl-db-sqlite's ten-cycle loader test at the 5-second default). Each had its own cause, and each is fixed at the cause on `120-ci-stable`.
+
+**The tile's first Go, and a failed load no press could recover.** The browser tab submitted `draft`, the React copy of the address, so a press that
+arrived before the input's state had committed submitted nothing or the previous address. It now reads the address field itself (`name="address"`),
+which is what the person sees. The address bar is uncontrolled for the same reason: nothing rewrites the typed text under React's tracker. A press of
+the address already loaded was a no-op too, because `updateTile` with the same `url` changes no state and the iframe never reloads; every accepted
+press now remounts the frame through a key. The gate presses Go once, as an attendee does, and names whether the iframe's document was readable when it
+fails. Tests: a submit with the field's value ahead of React's state (the old code did nothing), a same-address press remounting the frame, and the
+attempt rule.
+
+**Cause fixes and safety net.** The live field read and the remount on every press are the cause fixes: a press is never lost, and a failed page can
+always be reloaded. A finished load whose same-origin address has no readable document is the browser's error page (a real same-origin page always
+exposes its document; a cross-origin page also hides it, and is never retried): the tile loads it again, at most three attempts per press with 250 ms
+between them, then settles on the error page. That net is deliberately not offered as the cause fix.
+
+**Neither readiness nor a socket from before the restart is the cause.** In the failing macOS chat step /app answered at 01:00:35.965, the host
+restarted at 01:00:40.143, the new page rendered at 01:00:41.922, Settings > Models saved at 01:00:43.783, a PTY ran at 01:00:44.795, and the tile's
+GET /app at about 01:00:45 had no readable document, while every request around it succeeded against the same server. An app route that is not mounted
+answers a readable 404; only a transport failure produces the browser's error page. The tile-check browser is fresh: the notice check runs its own
+Chrome and kills it before the tile check starts, so no socket from before the restart can be in its pool. node-server's disposer does close
+connections on stop (`hub.close()`, `closeAllConnections()`, `close()`), and the generated launcher disposes the fiber on SIGINT/SIGTERM.
+
+The mechanism therefore stays open until a net log names it: the tile check's Chrome now writes `--log-net-log` to the runner's temp folder, the
+failure message prints the path, and the frame job uploads `frame-netlog-*.json` as an artifact only when a gate fails. The error code
+(ERR_CONNECTION_RESET, ERR_EMPTY_RESPONSE or ERR_ABORTED) then decides between a kernel-level reset on a pooled connection and a cancelled subframe
+navigation.
+
+**Queued: a graceful node-server stop.** The disposer closes all connections immediately (`closeAllConnections()` before `close()`), so an in-flight
+request at stop time is cut, for example a save while the app restarts. Requested: `closeIdleConnections()` first, a short bounded grace for in-flight
+requests, then `closeAllConnections()` and `close()`, with a test that an in-flight request completes when stop begins. Queued after the three green CI
+runs.
+
+**The Settings press.** The last step used the generic `click('Settings')`, which takes the first control with that exact name anywhere in the page,
+and one press of a wrong one, or of the right one before its dialog was wired, was lost. The first replacement pressed the frame's foot button on
+every poll and then checked, and `41352589158` exposed its flaw: a poll could press while the dialog was already opening and stop on a dialog that was
+closing (the new wait returned true), and the old snapshot check right after it then failed with the very same "Settings did not open" dump, on ubuntu
+notes and macOS blank alike. The gate now looks first and presses only when no visible Settings dialog is up: every Settings-labelled button in the
+left pane is pressed (the visible foot button goes through the product's `openSettings` path, and the hidden upstream shell's own trigger sits beside
+it), the plain DSH trigger is the fallback when the pane offers none, and only a visible dialog whose nav carries a real section (Models) counts, so a
+stale or hidden dialog cannot be mistaken for Settings. The candidates are still named on failure. The notes, blank and upgraded-agent gates pass
+locally with it, together with the single Go.
+
+**The notice check's profile cleanup.** Run `41352593171` (check, Linux Node 22) failed with `ENOTEMPTY: directory not empty, rmdir
+'/tmp/ide-template-notice-...'`: the notice check killed its Chrome and removed the profile in the same breath, while Chrome was still writing it.
+The cleanup now waits for the process to be gone (bounded at five seconds) before removing with the tile block's retries, and the outer cleanup
+waits for a SIGKILLed host to exit before removing the scratch. A passed check no longer dies on its own cleanup.
+
+**The agent panel's answer wait.** Run `41358355702`'s macOS agent step then failed at the in-app panel: "the panel's run did not start and stop in the
+app's page: undefined", with the panel, its synchronous submit wiring and the template unchanged from `98355d28`, where the same step had passed. The
+offline agent answers in well under a second on a quiet machine, so the tight part was the 30 s bound on a loaded runner; the wait is 60 s now, and a
+failure carries the panel's own log, button states and driver list instead of only `undefined`.
+
+**The SQLite bound.** The ten open/close cycles measured 1.2 to 1.4 s in three runs on Windows 10 (mbpi9win, Node 24.18), so the 5-second default is
+honest cost under a loaded windows-latest runner, not a hang. The test carries the same 20-second bound as the kv-db ten-cycle test.
+
+**A refusal answered before the request body (the queued ECONNRESET ticket).** The adapter (`acryl-router-http`'s `serve`) wrote the answer and ended,
+leaving a request body the handler never read (a guard's 403, a 415, a body over its limit). Node then closes the socket with data pending, and the
+peer sees a reset instead of the answer: read ECONNRESET in the workspace git worktree test on Windows, and reproducible on macOS with a client that
+writes half a body and waits. `serve` now settles an unread body (bounded: one second, resumed not buffered) before writing the answer, so the client
+can finish sending and read it. The test writes half a body, asserts no answer arrives yet, finishes the body, and reads the 403; the old adapter fails
+the first assertion on every OS, the fixed one passes.
+
+**The composer after a reload (product).** A reload mounts the chat surface before DSH's composer and nothing moves focus into the message box, so the
+page lands on the body and an attendee clicks before the first word; the same happens when the worktree restore re-renders the surface and replaces the
+focused node. `focusChatComposer` watches while a chat is the shown tab (bounded at 30 s) and focuses the composer only when focus is on the page
+itself, never from a field, a dialog, a menu or a control the person is using. Tests cover the late composer, the field and the dialog, the replaced
+composer and the deadline.
+
+## 25. The workshop flow rehearsed (2026-11-01, branch 119-workshop-guide)
 
 The handout was rewritten to the frame flow (create; the frame opens on the app; Settings > Models; chat; a coding agent in a terminal tab; edit and
 see it at /app; upgrade an older app; publish as take-home), and then walked on this Mac from the packed CLI in an isolated HOME, never on port 3080.
@@ -590,8 +664,9 @@ stays on `Reconnecting...`, and no page-side code can re-mint it without the lau
 cookie is durable, the same restart reconnects on its own. The facilitator notes carry this as a known edge; the guide's recovery is a tab reload,
 and the stable port means the printed address stays valid.
 
-**The frame's address and token, kept so a restart changes nothing (owner decision, 2026-11-02).** The launcher writes the printed URL - the only
-thing that can re-enter a frame whose browser session ended - into the app's git-ignored home: `.acrylblends/frame-url.json`,
+**The frame's address and token, kept so a restart changes nothing (owner decision, 2026-11-02).** The launcher itself writes the printed URL - the
+only thing that can re-enter a frame whose browser session ended - into the app's git-ignored home (the record is the launcher's own bookkeeping, so an
+app whose installed framework predates `acrylblends open` still gets it; the CLI reads the same record): `.acrylblends/frame-url.json`,
 `{version, url, token, pid, writtenAt}`, created 0600 (a restricted `icacls` ACL on Windows), written as a temp file renamed over the old one, and
 left behind on a clean stop so the command can say the frame is not running instead of pretending it never ran. On every later boot the launcher
 gives the stored token to DSH's connection through the field the package reads (`browserAuth.launchToken`; the shape is guarded, and a package
@@ -614,9 +689,13 @@ ended. Open the address the terminal printed, or run `npx acrylblends open` in t
 polling once the connection recovers, and a composition without a connection service renders nothing. Unit tests (fake connection, fake probe, fake
 timers) cover quiet-when-connected, no polling at all, the one-401 race, the two-401 verdict with the exact message, non-401 answers and network
 failures staying quiet, recovery, dispose, and the probe's request shape. Measured live: with the cookie deleted and the host restarted inside the
-window, the banner appeared on the second poll cycle with the exact text and the page scrolled nowhere. Still to do: the gate assertion (the
-banner after a cookie-less restart) waits for `120-ci-stable`, together with the first-run tile assertion and wiring `verify-frame-token` into the
-check; the guide's reconnecting step already names the command. The publish block is the take-home, unchanged from the registry's own README.
+window, the banner appeared on the second poll cycle with the exact text and the page scrolled nowhere. The post-120 gate work landed with the merge of `af583d6c`: `verify-ide-template` now asserts the first-run tile (the app's page already open, no +
+and no typed address, `scrollTop` 0 with the card shown), the session banner after the browser cookie is deleted and the host restarts on the same
+port (the text names `npx acrylblends open`, `scrollTop` 0), `scrollTop` 0 while Settings is open, and it runs `scripts/verify-frame-token.mjs` on
+the app it scaffolded (the same address after a restart, page 303 + cookie, WebSocket open, record 0600 with the matching token) - all measured green
+on the agent template: "the app opens itself in a tile on first run", "the session banner names `npx acrylblends open` ... with the page unscrolled",
+"verify-frame-token: the same address after a restart admits the page and its WebSocket", OK. The guide's reconnecting step already names the
+command. The publish block is the take-home, unchanged from the registry's own README.
 
 **The document must never scroll (coordinator's finding from the banner screenshot).** The frame's page scrolled to 256px when DSH's first-run key
 card appeared: the card is a body-level root appended after `#root` in normal flow (`div._root_...`, 256px tall below the 800px shell), so the document

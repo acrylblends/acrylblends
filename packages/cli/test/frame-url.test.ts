@@ -18,14 +18,10 @@ import {
   FRAME_URL_FILE,
   frameHome,
   frameUrlPath,
-  newFrameToken,
   openFrame,
   readFrameUrl,
   removeFrameUrl,
-  reuseFrameToken,
-  sameFrameToken,
   tokenOfFrameUrl,
-  withFrameToken,
   writeFrameUrl,
 } from '../src/frame-url'
 import { ideProfilePlan } from '../src/ide-profile'
@@ -124,41 +120,6 @@ describe('the frame address record', () => {
   })
 })
 
-describe('the launch token', () => {
-  it('is read from and written into an address, in the shape DSH mints', () => {
-    assert.equal(tokenOfFrameUrl('http://127.0.0.1:1/?token=abc'), 'abc')
-    assert.equal(tokenOfFrameUrl('http://127.0.0.1:1/'), undefined)
-    assert.equal(tokenOfFrameUrl('not a url'), undefined)
-    assert.equal(
-      withFrameToken('http://127.0.0.1:1/?token=old', 'new'),
-      'http://127.0.0.1:1/?token=new',
-    )
-    const token = newFrameToken()
-    assert.match(token, /^[A-Za-z0-9_-]{43}$/u)
-    assert.notEqual(newFrameToken(), token)
-    assert.equal(sameFrameToken(token, token), true)
-    assert.equal(sameFrameToken(token, `${token}x`), false)
-  })
-
-  it('is given to the host so a restart keeps the address, and only when the connection has the field', () => {
-    const auth: { launchToken?: unknown } = { launchToken: 'fresh-process-token' }
-    const record = {
-      version: 1 as const,
-      url: 'http://127.0.0.1:3240/?token=stored',
-      token: 'stored',
-      pid: 1,
-      writtenAt: 'x',
-    }
-    assert.equal(reuseFrameToken(auth, record), true)
-    assert.equal(auth.launchToken, 'stored')
-    // No record, no token, or a connection without the field: the process keeps its own token.
-    assert.equal(reuseFrameToken({ launchToken: 'own' }, undefined), false)
-    assert.equal(reuseFrameToken({ launchToken: 'own' }, { ...record, token: '' }), false)
-    assert.equal(reuseFrameToken({}, record), false)
-    assert.equal(reuseFrameToken(undefined, record), false)
-  })
-})
-
 describe('acrylblends open', () => {
   it('prints the address of the running frame, and only the address', async () => {
     const app = folder()
@@ -212,11 +173,11 @@ describe('acrylblends open', () => {
       }
       const presented = String(request.headers['x-frame-token'] ?? '')
       seen.push(presented)
-      if (!sameFrameToken(presented, current)) {
+      if (presented !== current) {
         response.writeHead(403, { 'content-type': 'text/plain' }).end('forbidden')
         return
       }
-      current = newFrameToken()
+      current = `rotated-${String(Math.random()).slice(2)}`
       const address = server.address()
       const port = typeof address === 'object' && address !== null ? address.port : 0
       response.writeHead(200, { 'content-type': 'application/json' })
@@ -259,25 +220,20 @@ describe('acrylblends open', () => {
 })
 
 describe('the launcher', () => {
-  it('reuses the stored token, keeps the address owner-only, and mounts the rotation route', () => {
+  it('reuses the stored token, keeps the address owner-only, and mounts the rotation route without depending on the installed framework', () => {
     const plan = ideProfilePlan({
       appName: 'My App',
       dshVersion: '0.2.0-rc.2',
       frameworkVersion: '^1.2.0',
     })
-    assert.match(plan.hostScript, /await import\('acrylblends\/cli'\)/u)
-    assert.match(plan.hostScript, /typeof frameModule\.readFrameUrl === 'function'/u)
-    assert.match(plan.hostScript, /frameAddress\.readFrameUrl\(home\)/u)
-    assert.match(
-      plan.hostScript,
-      /frameAddress\.reuseFrameToken\(connectionAuth, previousAddress\)/u,
-    )
-    assert.match(plan.hostScript, /frameAddress\.writeFrameUrl\(home, url\)/u)
+    assert.match(plan.hostScript, /const frameRecordPath = join\(home, 'frame-url\.json'\)/u)
+    assert.match(plan.hostScript, /connectionAuth\.launchToken = previousAddress\.token/u)
+    assert.match(plan.hostScript, /writeFrameRecord\(url\)/u)
+    assert.match(plan.hostScript, /restrictFrameRecord\(frameRecordPath\)/u)
     assert.match(plan.hostScript, /new Acryl\(\)\.post\("\/token\/new"/u)
-    assert.match(
-      plan.hostScript,
-      /frameAddress\.sameFrameToken\(presented, connectionAuth\.launchToken\)/u,
-    )
+    assert.match(plan.hostScript, /sameToken\(presented, connectionAuth\.launchToken\)/u)
     assert.match(plan.hostScript, /frameRouterHttp\.mount\("\/api\/acryl-frame"\)/u)
+    // The launcher is self-contained: an app whose installed acrylblends predates the address helpers still gets the stable token.
+    assert.doesNotMatch(plan.hostScript, /acrylblends\/cli/u)
   })
 })

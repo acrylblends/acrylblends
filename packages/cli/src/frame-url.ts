@@ -14,7 +14,6 @@
  * lacks it simply keeps its fresh token), and sets it again on a rotation. Nothing inside the pinned package is edited.
  */
 import { spawnSync } from 'node:child_process'
-import { randomBytes, timingSafeEqual } from 'node:crypto'
 import {
   chmodSync,
   existsSync,
@@ -79,51 +78,6 @@ export function tokenOfFrameUrl(url: string): string | undefined {
   } catch {
     return undefined
   }
-}
-
-/** The same address with another token in it. */
-export function withFrameToken(url: string, token: string): string {
-  const parsed = new URL(url)
-  parsed.searchParams.set('token', token)
-  return parsed.href
-}
-
-/** A launch token of the shape DSH mints: 32 random bytes, base64url without padding. */
-export function newFrameToken(): string {
-  return randomBytes(32).toString('base64url')
-}
-
-/** Constant-time comparison of two presented tokens. */
-export function sameFrameToken(actual: string, expected: string): boolean {
-  const actualBytes = Buffer.from(actual, 'utf8')
-  const expectedBytes = Buffer.from(expected, 'utf8')
-  return (
-    actualBytes.byteLength === expectedBytes.byteLength &&
-    timingSafeEqual(actualBytes, expectedBytes)
-  )
-}
-
-/**
- * The part of DSH's browser authentication the launcher reuses state through: the field `authorizeIndex` and `authenticatedUrl` read. Absent in a
- * package that does not have that shape, which is why every use is guarded.
- */
-export interface FrameAuthSeam {
-  launchToken?: unknown
-}
-
-/**
- * Give the host the token a previous run stored, so its address and an open page survive a restart. Returns whether the stored token was adopted; a
- * record without a token, or a connection without the field, keeps the token the process minted.
- */
-export function reuseFrameToken(
-  auth: FrameAuthSeam | undefined,
-  record: FrameUrlRecord | undefined,
-): boolean {
-  if (auth === undefined || typeof auth.launchToken !== 'string') return false
-  const token = record?.token
-  if (token === undefined || token === '') return false
-  auth.launchToken = token
-  return true
 }
 
 /** Write the frame's address for `home`, owner-only and atomically. Throws when the folder or file cannot be written; the caller decides whether

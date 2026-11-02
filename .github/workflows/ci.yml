@@ -112,6 +112,15 @@ jobs:
         run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs chat
       - name: frame gate (nodejs)
         run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs nodejs
+      # The tile check's Chrome writes a net log to the runner's temp folder; when a gate fails, its failed request's error code (a reset, an empty
+      # response, an abort) decides between a transport race and a cancelled navigation instead of leaving it to inference.
+      - name: the tile's Chrome net log (only when a gate fails)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frame-netlog-${{ matrix.os }}
+          path: ${{ runner.temp }}/acryl-frame-netlog-*.json
+          if-no-files-found: ignore
 
   # The desktop door in a real Electron (windows and menu as door verbs, a window attached to a dev server, the guards on Quit and the last window). Its own job, not in `check`:
   # it downloads Electron and opens windows. Linux runs it under a virtual display; a failure here fails the build, it is not skipped.

@@ -189,7 +189,6 @@ const frameworkVersion = `^${cliVersion}`
 
 const scratch = mkdtempSync(join(tmpdir(), `ide-template-${template}-`))
 const app = existing === undefined ? join(scratch, `${template}-app`) : resolve(existing)
-const home = join(scratch, 'home')
 let server
 let mock
 try {
@@ -438,7 +437,19 @@ ${composition.stdout}`)
     } finally {
       cdp?.close()
       child.kill('SIGKILL')
-      rmSync(profile, { recursive: true, force: true, maxRetries: 5 })
+      // Chrome keeps writing its own profile for a moment after the kill, and removing it then is a flake with a name: ENOTEMPTY: directory not
+      // empty, rmdir '/tmp/ide-template-notice-...' (run 41352593171, check on Linux Node 22). Wait for the process to be gone first, then remove
+      // with the retries the tile block below already uses.
+      await new Promise((done) => {
+        if (child.exitCode !== null) return done()
+        child.once('exit', done)
+        setTimeout(done, 5_000)
+      })
+      try {
+        rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
+      } catch {
+        // Windows can still hold a file of the closed browser for a moment; the folder sits in the temp directory, and a passed check stays passed.
+      }
     }
     const settingsFile = join(app, '.acrylblends', 'settings.patch.yml')
     if (!existsSync(settingsFile))
@@ -537,7 +548,31 @@ ${composition.stdout}`)
   url = afterNotice.url
   origin = afterNotice.origin
 
-  await checkTileInBrowser(url, origin, jar, page, output, mock)
+  // The session banner check needs the same host back on the same origin: the page's cookie is gone, the connection cannot recover, and the frame
+  // must say so instead of spinning.
+  const restartSamePort = async () => {
+    const held = new URL(serverUrl).port
+    await stopServer()
+    bootEnv.ACRYLBLENDS_PORT = held
+    return await startServer()
+  }
+  await checkTileInBrowser(url, origin, jar, page, output, mock, restartSamePort)
+  // The frame's stable launch token end to end (119): verify-frame-token boots this app twice on its own port and asserts the same address after the
+  // restart, that the address admits the page (303 and the cookie) and that the cookie admits the frame's WebSocket.
+  await stopServer()
+  const frameToken = spawnSync(
+    process.execPath,
+    [join(root, 'scripts', 'verify-frame-token.mjs'), app],
+    {
+      encoding: 'utf8',
+      env: { ...process.env, ...bootEnv, ACRYLBLENDS_PORT: '' },
+    },
+  )
+  if (frameToken.status !== 0)
+    fail(
+      `verify-frame-token failed (exit ${String(frameToken.status)}):\n${frameToken.stdout ?? ''}${frameToken.stderr ?? ''}`,
+    )
+  log('verify-frame-token: the same address after a restart admits the page and its WebSocket')
   // The owner's rule: the key lives only in DSH's own store, never in the page or the app folder.
   const keyFiles = filesContaining(bootEnv.ACRYLBLENDS_HOME, GATE_KEY)
   if (keyFiles.length === 0) fail('the host did not store the key in its own home')
@@ -569,7 +604,10 @@ ${composition.stdout}`)
   if (server) {
     server.kill('SIGTERM')
     await until(async () => (server.exitCode !== null ? true : undefined), 15_000)
-    if (server.exitCode === null) server.kill('SIGKILL')
+    if (server.exitCode === null) {
+      server.kill('SIGKILL')
+      await until(async () => (server.exitCode !== null ? true : undefined), 5_000)
+    }
   }
   if (keep) console.error(`verify-ide-template: kept ${scratch}`)
   else rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
@@ -607,7 +645,7 @@ function setInputValue(selector, value) {
  * iframe's document (same origin, so the gate sees what a person sees). This is ACRYL's canvas browser tile, not DSH's right-sidebar browser row:
  * that package registers a tab type for DSH's right sidebar, while the owner's requirement is the main surface, which is the workspace canvas.
  */
-async function checkTileInBrowser(url, origin, jar, page, output, mock) {
+async function checkTileInBrowser(url, origin, jar, page, output, mock, restartHost) {
   const chrome = findChrome()
   if (chrome === undefined)
     fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the tile check')
@@ -616,9 +654,16 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
   // Chrome's own output is the only clue when it does not come up, so it is kept and printed if the endpoint never answers. The wait is 30 s: a loaded CI
   // runner can take several seconds, and the old ten-second wait then fell through to a bare ECONNREFUSED from the DevTools call.
   let chromeOutput = ''
-  const child = spawn(chrome, [...chromeFlags(profile, port), '--hide-scrollbars'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  // When the tile's request dies (the iframe shows the browser's error page), its net log names why: ERR_CONNECTION_RESET, ERR_EMPTY_RESPONSE or
+  // ERR_ABORTED. CI uploads the file as an artifact only when a gate fails, and the failure message carries its path.
+  const netLog = join(tmpdir(), `acryl-frame-netlog-${template}.json`)
+  const child = spawn(
+    chrome,
+    [...chromeFlags(profile, port), '--hide-scrollbars', `--log-net-log=${netLog}`],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
   const collect = (chunk) => {
     chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
   }
@@ -693,6 +738,30 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       if (frame.mode !== 'advanced' || frame.frames !== 1)
         fail(`the page is not the frame's advanced layout: ${JSON.stringify(frame)}`)
       log('the page renders the ACRYL frame')
+      // Day one under the frame (119): the app the person is building is already open in a tile, with no + and no typed address, and the document
+      // has not scrolled (a focused first-run card must not move the shell).
+      const firstRunTile = await until(async () => {
+        const snapshot = await evaluate(`(() => {
+          const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+          const src = frame?.getAttribute('src') ?? ''
+          const text = frame?.contentDocument?.body?.innerText ?? ''
+          const tabs = [...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())
+          if (!src.includes('/app') || text.length === 0) return undefined
+          return { src, text: text.slice(0, 120), tabs: tabs.slice(0, 8), scrollTop: document.scrollingElement?.scrollTop ?? null }
+        })()`)
+        return snapshot
+      }, 20_000)
+      if (firstRunTile === undefined)
+        fail(
+          `the app did not open itself in a tile on first run (no iframe at /app with content); tabs: ${JSON.stringify(await evaluate(`[...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())`))}`,
+        )
+      if (firstRunTile.scrollTop !== 0)
+        fail(
+          `the page scrolled to ${String(firstRunTile.scrollTop)} on first run: ${JSON.stringify(firstRunTile)}`,
+        )
+      log(
+        `the app opens itself in a tile on first run ("${firstRunTile.text.trim().split('\n')[0]}")`,
+      )
       if (
         (await evaluate(
           `document.querySelector('[role=dialog]')?.innerText.includes('Preview Notice') ?? false`,
@@ -839,6 +908,9 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       log(
         'Settings > Models loads, takes the DeepSeek key, and the first-run prompt leaves once it is saved',
       )
+      const afterSettings = await evaluate(`document.scrollingElement?.scrollTop ?? null`)
+      if (afterSettings !== 0)
+        fail(`the page scrolled to ${String(afterSettings)} while Settings was open`)
 
       const pressEscape = async () => {
         for (const type of ['keyDown', 'keyUp'])
@@ -999,22 +1071,19 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           `the browser tile has no address input: ${JSON.stringify(diagnostics)} (screenshot /tmp/verify-ide-template-tile.png)`,
         )
       }
-      // The first press can land while the fresh page (a host restart makes a new one) is still wiring its tile; the address stays typed, so a second
-      // press navigates the same place. The failure names the iframe's state, not only the server output.
-      let shown
-      for (let attempt = 0; attempt < 3 && shown === undefined; attempt += 1) {
-        if ((await click('Go')) !== true) fail('the browser tile has no Go button')
-        shown = await until(
-          async () =>
-            await evaluate(`(() => {
-              const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-              if (frame === null) return undefined
-              const text = frame.contentDocument?.body?.innerText ?? ''
-              return text.includes(${JSON.stringify(page.text)}) ? text.slice(0, 200) : undefined
-            })()`),
-          attempt === 0 ? 30_000 : 10_000,
-        )
-      }
+      // One press of Go must load the page (the product reads the address field itself and remounts the frame on every press, and retries a
+      // same-origin load the browser replaced with its error page once). A second press here would prove nothing about what an attendee sees.
+      if ((await click('Go')) !== true) fail('the browser tile has no Go button')
+      const shown = await until(
+        async () =>
+          await evaluate(`(() => {
+            const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            if (frame === null) return undefined
+            const text = frame.contentDocument?.body?.innerText ?? ''
+            return text.includes(${JSON.stringify(page.text)}) ? text.slice(0, 200) : undefined
+          })()`),
+        30_000,
+      )
       if (shown === undefined) {
         const diagnostics = await evaluate(`(() => {
           const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
@@ -1022,11 +1091,14 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
             src: frame?.getAttribute('src') ?? null,
             title: frame?.contentDocument?.title ?? null,
             text: frame?.contentDocument?.body?.innerText?.slice(0, 300) ?? null,
+            // A null document with a src is the browser's own error page (a same-origin page always exposes its document), so the failure
+            // says a request died rather than that the tile rendered nothing.
+            documentReadable: frame === null ? null : frame.contentDocument !== null,
             browserPane: document.querySelectorAll('.dshWorkspaceBrowser').length,
           }
         })()`)
         fail(
-          `the app's page did not load in the frame's browser tile: ${JSON.stringify(diagnostics)}; server said:\n${output.slice(-1500)}`,
+          `the app's page did not load in the frame's browser tile after one Go: ${JSON.stringify(diagnostics)}; Chrome's net log: ${netLog}; server said:\n${output.slice(-1500)}`,
         )
       }
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
@@ -1058,6 +1130,8 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           fail(
             `the agent panel did not appear in the app's page, or its session did not load; server said:\n${output.slice(-2500)}`,
           )
+        // The offline agent answers in well under a second on a quiet machine; a loaded macOS runner once took longer than the old 30 s bound
+        // (run 41358355702) with the panel unchanged, so the wait is 60 s and a failure carries the panel's own log instead of only `undefined`.
         const answered = await until(
           async () =>
             await evaluate(`(() => {
@@ -1071,12 +1145,23 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
               stopped: root.querySelector('.stop').disabled === true,
             }
           })()`),
-          30_000,
+          60_000,
         )
-        if (answered === undefined || answered.send !== true || answered.stopped !== true)
+        if (answered === undefined || answered.send !== true || answered.stopped !== true) {
+          const detail = await evaluate(`(() => {
+            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
+            return {
+              log: root?.querySelector('#log')?.innerText?.slice(-600) ?? null,
+              send: root === undefined || root === null ? null : root.querySelector('.send')?.disabled,
+              stop: root === undefined || root === null ? null : root.querySelector('.stop')?.disabled,
+              drivers: root === undefined || root === null ? null : [...(root.querySelector('select')?.options ?? [])].map(option => option.value),
+            }
+          })()`)
           fail(
-            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}`,
+            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}; panel: ${JSON.stringify(detail)}`,
           )
+        }
         log(
           "the panel opens in the app, asks the app's own agent, and shows the answer (run started and stopped)",
         )
@@ -1304,8 +1389,53 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       else {
         // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
         // (c) Settings: General, Models, Plugins, Support, Shortcuts.
-        const opened = await until(async () => (await click('Settings')) === true, 10_000)
-        if (opened !== true) fail('the frame has no Settings button')
+        // Open it the way the Models step above does, and the way a person does: look first, and press only when no Settings dialog is up. Every
+        // Settings-labelled button in the left pane is pressed (the visible foot button goes through the product's own openSettings path, and the
+        // hidden upstream shell's own trigger sits in the same pane); the plain DSH trigger is the fallback. One generic click is lost when it lands
+        // on another control with that name or on a trigger that is not wired yet, and pressing while the dialog is already up can toggle it closed.
+        // Only a visible dialog whose nav carries a real section counts, so a stale or hidden dialog cannot be mistaken for Settings.
+        const opened = await until(
+          async () =>
+            await evaluate(`(() => {
+              const sectionLabels = ['Models', '模型']
+              const isSection = (button) => {
+                const label = (button.getAttribute('aria-label') ?? '').trim()
+                const text = (button.textContent ?? '').replace(/\\s+/g, ' ').trim()
+                return sectionLabels.includes(label === '' ? text : label)
+              }
+              const open = [...document.querySelectorAll('[role=dialog]')].some((dialog) =>
+                dialog.getClientRects().length > 0 &&
+                dialog.querySelector('nav') !== null &&
+                [...dialog.querySelectorAll('nav button')].some(isSection))
+              if (open) return true
+              const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
+                (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
+              for (const button of buttons) button.click()
+              if (buttons.length === 0) {
+                const trigger = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
+                  .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))
+                trigger?.click()
+              }
+              return false
+            })()`),
+          20_000,
+          500,
+        )
+        if (opened !== true) {
+          const detail = await evaluate(`(() => {
+            const candidates = [...document.querySelectorAll('button,[role=button],[role=menuitem],a')]
+              .filter((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
+              .map((candidate) => ({
+                tag: candidate.tagName,
+                className: String(candidate.className).slice(0, 80),
+                inFoot: candidate.closest('.dshWorkspaceSideFoot') !== null,
+                inUpstreamHost: candidate.closest('.dshWorkspaceUpstreamHost') !== null,
+                inDialog: candidate.closest('[role=dialog]') !== null,
+              }))
+            return JSON.stringify({ body: document.body.innerText.slice(-1200), candidates })
+          })()`)
+          fail(`Settings did not open: ${String(detail)}`)
+        }
         // Wait for the dialog itself: a snapshot taken immediately is always truthy, so the old wait accepted a frame whose Settings had not rendered yet.
         const settings = await until(async () => {
           const snapshot = await evaluate(`(() => {
@@ -1334,6 +1464,38 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         log(`Settings has ${sections.join(', ')}`)
         await pressEscape()
       }
+      // The session banner (119): the browser's session is gone (its cookie is deleted, as Chrome loses it after a restart inside its flush window)
+      // and the host restarts under the open page. The connection cannot recover, so the frame must name the command instead of spinning - and the
+      // document must not scroll while it does.
+      const cookies = (await cdp.send('Network.getAllCookies')).result?.cookies ?? []
+      for (const cookie of cookies)
+        await cdp.send('Network.deleteCookies', {
+          name: cookie.name,
+          domain: cookie.domain,
+          path: cookie.path,
+        })
+      const restartedUrl = await restartHost()
+      if (restartedUrl === undefined) fail('the host did not restart for the session banner check')
+      const banner = await until(async () => {
+        return await evaluate(`(() => {
+          const alert = [...document.querySelectorAll('[role=alert]')].find((element) => element.innerText.includes('session ended'))
+          if (alert === undefined) return undefined
+          return { text: alert.innerText.slice(0, 300), scrollTop: document.scrollingElement?.scrollTop ?? null }
+        })()`)
+      }, 30_000)
+      if (banner === undefined) {
+        const detail = await evaluate(`document.body.innerText.slice(0, 400)`)
+        fail(
+          `the session banner did not appear after the host restarted without the browser's session: ${JSON.stringify(detail)}; server said:\n${output.slice(-1500)}`,
+        )
+      }
+      if (!banner.text.includes('npx acrylblends open'))
+        fail(`the session banner does not name the command: ${JSON.stringify(banner.text)}`)
+      if (banner.scrollTop !== 0)
+        fail(`the page scrolled to ${String(banner.scrollTop)} while the session banner showed`)
+      log(
+        'the session banner names `npx acrylblends open` after the browser session ended, with the page unscrolled',
+      )
     } finally {
       cdp.close()
     }
