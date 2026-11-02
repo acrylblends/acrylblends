@@ -821,3 +821,26 @@ after the run so the owner's `try.sh` starts clean.
 State: branch 119-workshop-guide; `49417c57` (root cause) and `9f57d0fd` (visual gate wiring) on top of the green `7c7b5e40`; the full check has not
 been run since `49417c57`. Next: the Linux baseline capture and the coordinator's review of the five kit shots; commit the baseline and set
 `FRAME_VISUAL=1` on the frame job once approved; run the full check and push; CI.
+
+### Handoff 4 (2026-11-02, owner kit review round two)
+
+(9) Settings > Models said "Use your Claude, ChatGPT or DeepSeek subscription" but listed only DeepSeek. The sign-in rows come from the harness
+authorization catalog, and the frame's driver rows composed `llm-deepseek-account` without `llm-pi-ai` - the multi-provider twin whose flows register
+Claude, ChatGPT and the rest of the catalog. Fixed in `7b6b307d` by adding `llm-pi-ai` to `DRIVER_ROWS`, mounted dormant exactly as DSH's base mounts
+it: zero model routes until a sign-in supplies a provider profile, which is what the Models page does. The page gate now fails if those two rows are
+absent (the workshop guide tells attendees a subscription works); the agent gate is green with every row active and both rows shown. Changing the copy
+was never the fix, as the coordinator said.
+
+(10) The gear icons in the Settings nav are parity, not a defect: ACRYL's own settings-models reference shows the same generic gear for Agents, Tabs,
+Command palette, Shortcuts and Agent Control. DSH's settings dialog maps icons only for `account`, `models`, `agent-presets`, `plugins` and
+`archived-sessions`; every other id falls back to the gear. Our frame renders exactly that, and our own Support section gets the same fallback. No
+change; noted with the item 8 ticket (Settings nav truncation, ACRYL + frame).
+
+Lint: the `b093fe2d` Linux check jobs failed on one formatter error in `scripts/verify-ide-template.mjs`, introduced by the visual-gate commit after
+the last local full check on `7c7b5e40`. The two unused imports (`tokenOfFrameUrl` in the frame-url test, `mkdtempSync` in
+`scripts/build-legacy-layouts.mjs`) were warnings: `biome check .` reports them and still exits 0, so the local full check was not skipping lint - it
+simply predated the formatter error. Both imports are removed in `7b6b307d`, and lint exits 0 with warnings only.
+
+Kit: rebuilt again from `7b6b307d` (CLI tarball repacked; the 13 frame tarballs are unchanged since the stylesheet fix) with a fresh app; the
+settings-models shot now shows the Claude, ChatGPT and DeepSeek sign-in rows. The visual baseline is requested again from this push, since fix 9
+changes the settings-models state; the three PNGs are reviewed and approved before they are committed, and `FRAME_VISUAL` stays off until then.
