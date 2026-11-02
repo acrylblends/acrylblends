@@ -495,7 +495,9 @@ ${composition.stdout}`)
   for (const match of html.matchAll(/<script\b[^>]*\bsrc=[^>]*>/gu)) {
     const after = html.slice(match.index + match[0].length)
     if (!after.trimStart().startsWith('</script>'))
-      fail(`the page's script tag ${match[0]} is not closed; the tags after it would be swallowed as its text`)
+      fail(
+        `the page's script tag ${match[0]} is not closed; the tags after it would be swallowed as its text`,
+      )
   }
   if (!html.includes('acryl-workspace/client.js'))
     fail(`the page does not load the workspace client; server said:\n${output.slice(-2500)}`)
@@ -763,12 +765,16 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         }
       })()`)
       if (entry.links === 0)
-        fail('the frame document has no stylesheet link: the entry script swallowed the frontend stylesheets')
+        fail(
+          'the frame document has no stylesheet link: the entry script swallowed the frontend stylesheets',
+        )
       if (entry.entryText !== 0)
         fail(
           `the entry script element holds ${String(entry.entryText)} characters of text: the page's tags after it were swallowed`,
         )
-      log('the frontend stylesheet is in the document and the entry script holds no swallowed markup')
+      log(
+        'the frontend stylesheet is in the document and the entry script holds no swallowed markup',
+      )
       // Day one under the frame (119): the app the person is building is already open in a tile, with no + and no typed address, and the document
       // has not scrolled (a focused first-run card must not move the shell).
       const firstRunTile = await until(async () => {

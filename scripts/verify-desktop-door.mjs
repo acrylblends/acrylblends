@@ -544,7 +544,7 @@ try {
           `${name}: the window shows the frame: the left panel (${String(found.rows)} rows), the right panel (Files, Changes, Review), Settings (${found.sections.join(', ')}), and the app's page in the tile (${found.tile})`,
         )
         const evaluate = evaluator(session)
-        const escape = async () => {
+        const pressEscape = async () => {
           for (const type of ['keyDown', 'keyUp'])
             await session.send('Input.dispatchKeyEvent', {
               type,
@@ -558,7 +558,7 @@ try {
             `[...document.querySelectorAll('[role=dialog]')].some((dialog) => dialog.getClientRects().length > 0 && [...dialog.querySelectorAll('nav button')].some((button) => /Models|模型/u.test(button.textContent ?? '')))`,
           )
         // Settings is the last thing the frame check opened: close it, then the application menu's Settings item must open the frame's own Settings again.
-        await escape()
+        await pressEscape()
         if (!(await until(async () => (await settingsOpen()) === false, 10_000)))
           fail(`${name}: Settings did not close on Escape`)
         const menuList = frameAcryl('menu', 'list')
@@ -576,7 +576,7 @@ try {
         if (!(await until(async () => (await settingsOpen()) === true, 15_000)))
           fail(`${name}: the menu's ${settingsItem} did not open the frame's Settings`)
         log(`${name}: the menu's ${settingsItem} opens the frame's own Settings`)
-        await escape()
+        await pressEscape()
         await until(async () => (await settingsOpen()) === false, 10_000)
         if (process.env.DESKTOP_FRAME_SHOTS) {
           await sleep(500)
