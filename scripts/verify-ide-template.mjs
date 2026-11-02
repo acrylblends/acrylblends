@@ -1354,9 +1354,12 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
             [...dialog.querySelectorAll('nav button')].some(isSection))
         })()`
         const pressSettingsExpression = `(() => {
-          const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
-            (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
-          for (const button of buttons) button.click()
+          // Press the product's own trigger once. The visible foot button goes through the frame's openSettings path (which activates the DSH trigger
+          // itself); pressing the hidden upstream trigger as well can toggle the just-opened dialog straight back shut, so it is only the fallback.
+          const labelOf = (element) => (element.getAttribute('aria-label') ?? element.textContent.trim())
+          const foot = [...document.querySelectorAll('.dshWorkspaceSideFoot button')].filter((candidate) => labelOf(candidate) === 'Settings')
+          const buttons = foot.length > 0 ? foot : [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) => labelOf(candidate) === 'Settings')
+          for (const button of buttons.slice(0, 1)) button.click()
           if (buttons.length === 0) {
             const trigger = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
               .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))
@@ -1417,25 +1420,50 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           return labels.filter((label) => /stop|interrupt|cancel/iu.test(label)).slice(0, 5)
         })()`)
         log(`Settings opened; stop/interrupt controls at that moment: ${JSON.stringify(runAtOpen)}`)
-        // Wait for the dialog itself: a snapshot taken immediately is always truthy, so the old wait accepted a frame whose Settings had not rendered yet.
-        const settings = await until(async () => {
+        // The dialog is up; its sections register asynchronously, and on a slow runner a layout settle can close it again right after it opens (the blank
+        // gate's Node 22 check, run 41491427783, found the dialog and then lost it during this wait). Keep reading the dialog itself; if it vanishes,
+        // press Settings once more - a person does the same - and never press while it is up, so a late render cannot be toggled shut.
+        const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
+        let settings
+        let sectionPresses = 0
+        const sectionDeadline = Date.now() + 20_000
+        while (Date.now() < sectionDeadline && settings === undefined) {
           const snapshot = await evaluate(`(() => {
-              const text = document.body.innerText
-              const labels = [...document.querySelectorAll('button,[role=tab],[role=menuitem],a')]
-                .map(element => element.getAttribute('aria-label') ?? element.textContent.trim())
-                .filter(Boolean)
-              return { text: text.slice(-4000), labels: labels.slice(0, 120) }
-            })()`)
-          return /Shortcuts/iu.test(`${snapshot.text}\n${snapshot.labels.join('\n')}`)
-            ? snapshot
-            : undefined
-        }, 15_000)
+            const dialog = [...document.querySelectorAll('[role=dialog]')]
+              .find((candidate) => candidate.getClientRects().length > 0 && candidate.querySelector('nav') !== null)
+            if (dialog === undefined) return { open: false }
+            const labels = [...dialog.querySelectorAll('button,[role=tab],[role=menuitem],a')]
+              .map((element) => element.getAttribute('aria-label') ?? element.textContent.trim())
+              .filter(Boolean)
+            return { open: true, text: dialog.innerText.slice(0, 4000), labels: labels.slice(0, 160) }
+          })()`)
+          if (snapshot?.open === true) {
+            const text = `${snapshot.text}\n${snapshot.labels.join('\n')}`
+            if (/Shortcuts/iu.test(text)) settings = { text, labels: snapshot.labels }
+            else await sleep(300)
+            continue
+          }
+          sectionPresses += 1
+          await evaluate(pressSettingsExpression)
+          await sleep(800)
+        }
         if (settings === undefined) {
-          const body = await evaluate(`document.body.innerText.slice(-1200)`)
-          fail(`Settings did not open: ${JSON.stringify(body)}`)
+          const detail = await evaluate(`(() => {
+            const dialogs = [...document.querySelectorAll('[role=dialog]')].map((dialog) => ({
+              visible: dialog.getClientRects().length > 0,
+              label: dialog.getAttribute('aria-label'),
+              nav: dialog.querySelector('nav') !== null,
+              text: dialog.innerText.slice(0, 300),
+            }))
+            const controls = [...document.querySelectorAll('button')]
+              .map((button) => button.getAttribute('aria-label') ?? button.textContent.trim())
+              .filter((label) => /stop|send|cancel|interrupt/iu.test(label))
+              .slice(0, 8)
+            return JSON.stringify({ presses: ${presses + sectionPresses}, dialogs, controls, body: document.body.innerText.slice(-1200) })
+          })()`)
+          fail(`Settings did not stay open with its sections: ${String(detail)}`)
         }
         const settingsText = `${settings.text}\n${settings.labels.join('\n')}`
-        const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
         // DSH 0.2 labels the plugins section "Built-in plugins"; the section names match case-insensitively.
         const missing = sections.filter((section) => !new RegExp(section, 'iu').test(settingsText))
         if (missing.length > 0)
