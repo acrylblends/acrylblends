@@ -495,7 +495,9 @@ ${composition.stdout}`)
   for (const match of html.matchAll(/<script\b[^>]*\bsrc=[^>]*>/gu)) {
     const after = html.slice(match.index + match[0].length)
     if (!after.trimStart().startsWith('</script>'))
-      fail(`the page's script tag ${match[0]} is not closed; the tags after it would be swallowed as its text`)
+      fail(
+        `the page's script tag ${match[0]} is not closed; the tags after it would be swallowed as its text`,
+      )
   }
   if (!html.includes('acryl-workspace/client.js'))
     fail(`the page does not load the workspace client; server said:\n${output.slice(-2500)}`)
@@ -574,7 +576,16 @@ ${composition.stdout}`)
     if (captureTo !== undefined && captureTo !== '') {
       const shot = spawnSync(
         process.execPath,
-        [join(root, 'scripts', 'frame-compare.mjs'), 'capture', serverUrl, captureTo, '--views', views, '--views-file', viewsFile],
+        [
+          join(root, 'scripts', 'frame-compare.mjs'),
+          'capture',
+          serverUrl,
+          captureTo,
+          '--views',
+          views,
+          '--views-file',
+          viewsFile,
+        ],
         { encoding: 'utf8' },
       )
       if (shot.status !== 0)
@@ -812,12 +823,16 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         }
       })()`)
       if (entry.links === 0)
-        fail('the frame document has no stylesheet link: the entry script swallowed the frontend stylesheets')
+        fail(
+          'the frame document has no stylesheet link: the entry script swallowed the frontend stylesheets',
+        )
       if (entry.entryText !== 0)
         fail(
           `the entry script element holds ${String(entry.entryText)} characters of text: the page's tags after it were swallowed`,
         )
-      log('the frontend stylesheet is in the document and the entry script holds no swallowed markup')
+      log(
+        'the frontend stylesheet is in the document and the entry script holds no swallowed markup',
+      )
       // Day one under the frame (119): the app the person is building is already open in a tile, with no + and no typed address, and the document
       // has not scrolled (a focused first-run card must not move the shell).
       const firstRunTile = await until(async () => {
@@ -949,6 +964,20 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       }
       if (models.failed !== undefined)
         fail(`Settings > Models failed: ${JSON.stringify(models.failed)}`)
+      // The workshop guide tells attendees a Claude or ChatGPT subscription works through this page: the sign-in rows come from the harness
+      // authorization catalog (llm-pi-ai's flows), so a frame composed without that row silently offers DeepSeek alone - the owner's item 9.
+      const signIn = await until(async () => {
+        const rows = await evaluate(`(() => {
+          const text = document.querySelector('[role=dialog]')?.innerText ?? ''
+          return { claude: text.includes('Claude'), chatgpt: text.includes('ChatGPT') }
+        })()`)
+        return rows?.claude === true && rows?.chatgpt === true ? rows : undefined
+      }, 20_000)
+      if (signIn === undefined)
+        fail(
+          'Settings > Models does not offer the Claude and ChatGPT sign-in rows the workshop guide names',
+        )
+      log('Settings > Models offers the Claude and ChatGPT sign-in rows the guide names')
       await evaluate(`(() => {
         const dialog = document.querySelector('[role=dialog]')
         const input = dialog.querySelector('input[type=password]') ?? dialog.querySelector('input[aria-label="API key"]')
