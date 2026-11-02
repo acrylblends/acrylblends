@@ -709,3 +709,21 @@ warnings (a PTY WebSocket closed before it opened, and the sandbox notices), no 
 first."), marks itself `data-ready` once its form is wired and `data-following` while a run is going, and the gate waits for the ready mark, types with the native
 setter plus an input event, and prints the textarea value, ready and following at submit time in both the failure message and its panel detail. A guard test covers
 the two refusal reasons. The capture result is part of the record: no exception was thrown, which ruled the half-wired-by-a-throw theory out before the change.
+
+### Handoff (branch 123, 2026-11-02, at d18a3b40)
+
+Where it stands: the Chrome-launch rewrite and the agent panel's guards/readiness/diagnostics are in and green locally (full check exit 0 on d18a3b40; CI run 41466529499 on
+it passed every job except the macOS agent gate). That run reached a new failure: the panel step now passes, and the gate fails at the FINAL Settings open after the chat
+step ("Settings did not open", 20 s of the look-first press loop, no page exception) - the same class as `94548f5d`'s notes red. Evidence: the page dump shows the hidden
+upstream sidebar's Settings trigger and the frame's foot Settings both present, a chat session "Hello from the gate" in the tree, and no dialog; the first Settings open
+(Models, before the chat step) passes.
+
+Open hypothesis to test next: the DSH chat run from the gate's chat step may still be streaming when the final Settings open starts (either Settings does not open while a
+run is active, or the dialog is closed by the chat surface). Next diagnostic, before any change: poll and record every dialog over the 20 s plus the two Settings triggers'
+disabled and aria-expanded state; if the active run is the condition, the gate waits for the chat to go idle before the Settings step, and the product question is whether
+blocking Settings during a run is acceptable.
+
+What is in the branch: `d0e0561c` (121: node-server graceful stop, router drain, whole-root tests, every package's typecheck in the gate); `3318719a` (startChrome: own port
+from DevToolsActivePort, `--enable-logging=stderr` captured, bounded named failure, launch log artifact, whole-tree kill; parser test); `d18a3b40` (panel guards,
+data-ready/data-following, the gate's human-style typing and submit diagnostics, client-guards test). Three consecutive green CI runs on one sha remain the bar; the count
+restarts on the next push.
