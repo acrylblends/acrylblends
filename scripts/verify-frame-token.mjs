@@ -18,6 +18,11 @@ const require = createRequire(join(app, 'package.json'))
 const WebSocket = require('ws')
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+// A watchdog: whatever the wait, the script names itself and exits instead of leaving a gate hanging. Unref'd so a clean run still exits on its own.
+setTimeout(() => {
+  console.error('verify-frame-token: gave up after 10 minutes')
+  process.exit(2)
+}, 600_000).unref()
 const env = { ...process.env }
 // The app's own home unless the caller pinned one (the page gate runs this inside its scratch home).
 if (env.ACRYLBLENDS_HOME === undefined || env.ACRYLBLENDS_HOME === '')
@@ -72,7 +77,9 @@ function stop(child) {
 }
 
 async function pageAndSocket(url) {
-  const response = await fetch(url, { redirect: 'manual' })
+  // A server that accepts the connection and never answers must fail with a name, not hang the caller: on the Ubuntu runner this fetch once held the
+  // whole page gate for over forty minutes (2026-11-02). The address is an exchange endpoint; thirty seconds is already a failure.
+  const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(30_000) })
   const cookie = (response.headers.get('set-cookie') ?? '').split(';')[0]
   const origin = new URL(url).origin
   const socket = await new Promise((done) => {

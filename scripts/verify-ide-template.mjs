@@ -641,11 +641,14 @@ ${composition.stdout}`)
     {
       encoding: 'utf8',
       env: { ...process.env, ...bootEnv, ACRYLBLENDS_PORT: '' },
+      // The step boots two apps and has its own watchdog; a child that still hangs must fail this gate with a name instead of holding the job until
+      // its timeout (the Ubuntu runner once sat here for over forty minutes, 2026-11-02).
+      timeout: 720_000,
     },
   )
   if (frameToken.status !== 0)
     fail(
-      `verify-frame-token failed (exit ${String(frameToken.status)}):\n${frameToken.stdout ?? ''}${frameToken.stderr ?? ''}`,
+      `verify-frame-token failed (exit ${String(frameToken.status)}${frameToken.error === undefined ? '' : `: ${frameToken.error.message}`}):\n${frameToken.stdout ?? ''}${frameToken.stderr ?? ''}`,
     )
   log('verify-frame-token: the same address after a restart admits the page and its WebSocket')
   // The owner's rule: the key lives only in DSH's own store, never in the page or the app folder.
