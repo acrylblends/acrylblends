@@ -5,7 +5,7 @@ app is created, then **opened inside ACRYL's IDE** (projects on the left, the ap
 chat model works on the app from inside the frame, and coding agents run in terminal tabs in the same folder. The data layer, the desktop window and
 the panel-first flow of the previous handout are gone.
 
-The handout is written for **acrylblends 1.2 or newer** (the release that carries the frame). A room on an older release is on the previous handout;
+The handout is written for **acrylblends 1.2.0 or newer** (the release that carries the frame). A room on an older release is on the previous handout;
 check with `npx acrylblends@latest --version` before the day.
 
 ## Before the room: put this on every machine
@@ -92,6 +92,8 @@ that home's credentials store, so a fresh copy starts without it.
 ## What is still open
 
 - The frame's chat tab takes the focus when it binds its session after a restart; the app's tab is one click away and the guide says so.
-- A host restart within the first seconds of a frame's first load can lose the browser's auth cookie (Chrome persists it lazily), leaving the page
-  on `Reconnecting...` until it is reloaded; after the first half minute a restart reconnects on its own.
+- The frame's address is stable across restarts: the launcher keeps the token in the app home (owner-only, atomic) and reuses it, so an open page
+  comes back by reloading its URL even if the browser lost its cookie. `npx acrylblends open` prints the address of the running frame;
+  `npx acrylblends open --new` rotates it (the old address stops working at once and the new one is printed). The frame-side banner that names the
+  command is still to come (after the 120 gate work).
 - The one-click WebBoxes.ai deploy and the browser-only section stay TODO(M9) until that workspace is live.

@@ -8,7 +8,7 @@ app around it: a folder of Cordis plugins with a `blend.yaml`, running on your m
 The frame is the workshop's point. You do not edit a folder and alt-tab to a browser: your app is a page inside the workspace, the agents work in
 the same folder the frame shows, and every change you or an agent makes is one restart away from the page.
 
-This guide is for **acrylblends 1.2 or newer**; `npm create acrylblends@latest` gives you that. An app you made with an older release gets the
+This guide is for **acrylblends 1.2.0 or newer**; `npm create acrylblends@latest` gives you that. An app you made with an older release gets the
 frame with the upgrade in block 6.
 
 ## 0. Before you start (10 minutes)
@@ -94,8 +94,8 @@ cache). `npm run dev` starts the app inside the frame and prints one line:
 acrylblends host: http://127.0.0.1:3489/?token=...
 ```
 
-Open that address (it is a free port on your machine; never a fixed one). The first time, DeepSeek Harness shows a **Preview Notice**: press
-**Continue**. Then the frame opens **on your app**: the page in the middle is `my-app`'s own page, in a tab named after the app.
+Open that address (it is a free port on your machine; never a fixed one). It stays the same every time you start the app, and it is the way back in
+later: `npx acrylblends open` prints it again while the frame is running. The first time, DeepSeek Harness shows a **Preview Notice**: press **Continue**. Then the frame opens **on your app**: the page in the middle is `my-app`'s own page, in a tab named after the app.
 
 ![The frame on first run: projects on the left with the app selected, the app's page in the canvas, the tab strip with the app's tab](/docs-assets/workshop/s1-frame.webp)
 
@@ -137,7 +137,8 @@ Both pass: the app is TypeScript, with tests and a type check, and the scaffold 
 edited.
 
 **Stuck?** If the page looks unchanged, the host did not restart (the terminal says `Restarting` or it is waiting on `Ctrl-C`). If the frame still
-says `Reconnecting...` after ten seconds, reload the tab (`Cmd/Ctrl+R`).
+says `Reconnecting...` after ten seconds, reload the tab: the address is the same one it was opened with. If the tab was closed, `npx acrylblends open`
+in the app's folder prints the address again.
 
 ## 3. Connect your model: Settings > Models (5 minutes)
 
@@ -259,7 +260,7 @@ the same folders. Nothing to install, nothing to keep on your machine. Until it 
 | `npm create` fails or hangs | check the network; the facilitator has prepared apps |
 | `npm install` fails building node-pty | install the C++ toolchain (block 1's **Stuck?**) and run it again |
 | A port is taken | use the address the app printed |
-| The frame says `Reconnecting...` | wait ten seconds; then reload the tab (`Cmd/Ctrl+R`) |
+| The frame says `Reconnecting...` | wait ten seconds; then `npx acrylblends open` and open the address it prints |
 | Settings > Models shows no provider | the host is not running: `Ctrl-C`, `npm run dev` |
 | The chat asks for a model | finish block 3, then reload the page |
 | The model plans and stops | reply "do it now, without asking for approval" |

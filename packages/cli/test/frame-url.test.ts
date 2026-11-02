@@ -1,0 +1,283 @@
+import assert from 'node:assert/strict'
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { createServer } from 'node:http'
+import { createServer as createNetServer } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, afterEach, beforeAll, describe, it } from 'vitest'
+import {
+  FRAME_TOKEN_PATH,
+  FRAME_URL_FILE,
+  frameHome,
+  frameUrlPath,
+  newFrameToken,
+  openFrame,
+  readFrameUrl,
+  removeFrameUrl,
+  reuseFrameToken,
+  sameFrameToken,
+  tokenOfFrameUrl,
+  withFrameToken,
+  writeFrameUrl,
+} from '../src/frame-url'
+import { ideProfilePlan } from '../src/ide-profile'
+import type { Io } from '../src/io'
+
+// `open` reads the frame home from the environment (the launcher's own rule); the tests decide it themselves and must not inherit a shell's.
+const savedFrameHome = process.env.ACRYLBLENDS_HOME
+beforeAll(() => {
+  delete process.env.ACRYLBLENDS_HOME
+})
+afterAll(() => {
+  if (savedFrameHome !== undefined) process.env.ACRYLBLENDS_HOME = savedFrameHome
+})
+
+const scratch: string[] = []
+afterEach(() => {
+  for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
+function folder(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'acrylblends-frame-url-'))
+  scratch.push(dir)
+  return dir
+}
+
+function fakeIo(cwd: string): { io: Io; out: string[]; err: string[] } {
+  const out: string[] = []
+  const err: string[] = []
+  return {
+    io: {
+      stdout: { write: (text: string) => out.push(text) },
+      stderr: { write: (text: string) => err.push(text) },
+      cwd,
+      ask: undefined,
+      install: async () => 0,
+    },
+    out,
+    err,
+  }
+}
+
+/** A port nothing listens on: bind one, note it, and close it. */
+function closedPort(): Promise<number> {
+  return new Promise((done) => {
+    const server = createNetServer()
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address !== null ? address.port : 0
+      server.close(() => done(port))
+    })
+  })
+}
+
+describe('the frame address record', () => {
+  it('round-trips the address and its token, owner-only, atomically and without temporary files', () => {
+    const home = folder()
+    writeFrameUrl(home, 'http://127.0.0.1:3240/?token=abc')
+    const record = readFrameUrl(home)
+    assert.equal(record?.url, 'http://127.0.0.1:3240/?token=abc')
+    assert.equal(record?.token, 'abc')
+    assert.equal(record?.pid, process.pid)
+    assert.equal(record?.version, 1)
+    // Owner-only: the file that carries the launch token is not readable by anyone else.
+    if (process.platform !== 'win32') assert.equal(statSync(frameUrlPath(home)).mode & 0o777, 0o600)
+    assert.deepEqual(readdirSync(home), [FRAME_URL_FILE])
+    writeFrameUrl(home, 'http://127.0.0.1:3240/?token=def')
+    assert.equal(readFrameUrl(home)?.token, 'def')
+    assert.match(readFileSync(frameUrlPath(home), 'utf8'), /"writtenAt":/u)
+  })
+
+  it('reads a record written before tokens were stored, taking the token from the address', () => {
+    const home = folder()
+    writeFileSync(
+      frameUrlPath(home),
+      `${JSON.stringify({ version: 1, url: 'http://127.0.0.1:3240/?token=old', pid: 7, writtenAt: 'x' })}\n`,
+    )
+    assert.equal(readFrameUrl(home)?.token, 'old')
+  })
+
+  it('follows ACRYLBLENDS_HOME, the same rule the launcher uses', () => {
+    const app = folder()
+    assert.equal(frameHome(app, {}), join(app, '.acrylblends'))
+    const pinned = folder()
+    assert.equal(frameHome(app, { ACRYLBLENDS_HOME: pinned }), pinned)
+  })
+
+  it('reads nothing from a malformed or foreign record, and removes only its own', () => {
+    const home = folder()
+    writeFileSync(frameUrlPath(home), 'not json')
+    assert.equal(readFrameUrl(home), undefined)
+    writeFrameUrl(home, 'http://127.0.0.1:1/?token=x', 4242)
+    // A host that is stopping must not erase the address of a newer one that already started.
+    removeFrameUrl(home, 4343)
+    assert.equal(readFrameUrl(home)?.pid, 4242)
+    removeFrameUrl(home, 4242)
+    assert.equal(readFrameUrl(home), undefined)
+  })
+})
+
+describe('the launch token', () => {
+  it('is read from and written into an address, in the shape DSH mints', () => {
+    assert.equal(tokenOfFrameUrl('http://127.0.0.1:1/?token=abc'), 'abc')
+    assert.equal(tokenOfFrameUrl('http://127.0.0.1:1/'), undefined)
+    assert.equal(tokenOfFrameUrl('not a url'), undefined)
+    assert.equal(
+      withFrameToken('http://127.0.0.1:1/?token=old', 'new'),
+      'http://127.0.0.1:1/?token=new',
+    )
+    const token = newFrameToken()
+    assert.match(token, /^[A-Za-z0-9_-]{43}$/u)
+    assert.notEqual(newFrameToken(), token)
+    assert.equal(sameFrameToken(token, token), true)
+    assert.equal(sameFrameToken(token, `${token}x`), false)
+  })
+
+  it('is given to the host so a restart keeps the address, and only when the connection has the field', () => {
+    const auth: { launchToken?: unknown } = { launchToken: 'fresh-process-token' }
+    const record = {
+      version: 1 as const,
+      url: 'http://127.0.0.1:3240/?token=stored',
+      token: 'stored',
+      pid: 1,
+      writtenAt: 'x',
+    }
+    assert.equal(reuseFrameToken(auth, record), true)
+    assert.equal(auth.launchToken, 'stored')
+    // No record, no token, or a connection without the field: the process keeps its own token.
+    assert.equal(reuseFrameToken({ launchToken: 'own' }, undefined), false)
+    assert.equal(reuseFrameToken({ launchToken: 'own' }, { ...record, token: '' }), false)
+    assert.equal(reuseFrameToken({}, record), false)
+    assert.equal(reuseFrameToken(undefined, record), false)
+  })
+})
+
+describe('acrylblends open', () => {
+  it('prints the address of the running frame, and only the address', async () => {
+    const app = folder()
+    const home = join(app, '.acrylblends')
+    const server = createNetServer()
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+    const address = server.address()
+    const port = typeof address === 'object' && address !== null ? address.port : 0
+    const url = `http://127.0.0.1:${String(port)}/?token=running`
+    writeFrameUrl(home, url)
+    const { io, out, err } = fakeIo(app)
+    try {
+      assert.equal(await openFrame([], io), 0)
+    } finally {
+      server.close()
+    }
+    assert.equal(out.join(''), `${url}\n`)
+    assert.equal(err.join(''), '')
+  })
+
+  it('explains a stopped frame instead of handing out a dead token', async () => {
+    const app = folder()
+    const home = join(app, '.acrylblends')
+    const port = await closedPort()
+    writeFrameUrl(home, `http://127.0.0.1:${String(port)}/?token=gone`)
+    const { io, out, err } = fakeIo(app)
+    assert.equal(await openFrame([], io), 1)
+    assert.equal(out.join(''), '')
+    assert.match(err.join(''), /is not running/u)
+    assert.match(err.join(''), /npm run dev/u)
+    assert.doesNotMatch(err.join(''), /token=gone/u)
+  })
+
+  it('says a folder never ran a frame', async () => {
+    const home = folder()
+    const { io, out, err } = fakeIo(home)
+    assert.equal(await openFrame([], io), 1)
+    assert.equal(out.join(''), '')
+    assert.match(err.join(''), /no frame has run/u)
+  })
+
+  it('--new rotates the token in the running host and keeps the new address', async () => {
+    const app = folder()
+    const home = join(app, '.acrylblends')
+    let current = 'stored-token'
+    const seen: string[] = []
+    const server = createServer((request, response) => {
+      if (request.method !== 'POST' || request.url !== FRAME_TOKEN_PATH) {
+        response.writeHead(404).end()
+        return
+      }
+      const presented = String(request.headers['x-frame-token'] ?? '')
+      seen.push(presented)
+      if (!sameFrameToken(presented, current)) {
+        response.writeHead(403, { 'content-type': 'text/plain' }).end('forbidden')
+        return
+      }
+      current = newFrameToken()
+      const address = server.address()
+      const port = typeof address === 'object' && address !== null ? address.port : 0
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ url: `http://127.0.0.1:${String(port)}/?token=${current}` }))
+    })
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+    const address = server.address()
+    const port = typeof address === 'object' && address !== null ? address.port : 0
+    const oldUrl = `http://127.0.0.1:${String(port)}/?token=stored-token`
+    writeFrameUrl(home, oldUrl)
+    const { io, out, err } = fakeIo(app)
+    try {
+      assert.equal(await openFrame(['--new'], io), 0)
+    } finally {
+      server.close()
+    }
+    const rotated = readFrameUrl(home)
+    assert.equal(seen[0], 'stored-token')
+    assert.notEqual(rotated?.token, 'stored-token')
+    assert.equal(out.join(''), `${rotated?.url ?? ''}\n`)
+    assert.equal(err.join(''), '')
+  })
+
+  it('--new with nothing running forgets the address, and the next start mints a new one', async () => {
+    const app = folder()
+    const home = join(app, '.acrylblends')
+    const port = await closedPort()
+    writeFrameUrl(home, `http://127.0.0.1:${String(port)}/?token=gone`)
+    const { io, out, err } = fakeIo(app)
+    assert.equal(await openFrame(['--new'], io), 0)
+    assert.equal(out.join(''), '')
+    assert.equal(existsSync(frameUrlPath(home)), false)
+    assert.match(err.join(''), /forgotten/u)
+  })
+
+  it('refuses more than one folder', async () => {
+    const { io } = fakeIo(folder())
+    assert.equal(await openFrame(['a', 'b'], io), 2)
+  })
+})
+
+describe('the launcher', () => {
+  it('reuses the stored token, keeps the address owner-only, and mounts the rotation route', () => {
+    const plan = ideProfilePlan({
+      appName: 'My App',
+      dshVersion: '0.2.0-rc.2',
+      frameworkVersion: '^1.2.0',
+    })
+    assert.match(plan.hostScript, /await import\('acrylblends\/cli'\)/u)
+    assert.match(plan.hostScript, /typeof frameModule\.readFrameUrl === 'function'/u)
+    assert.match(plan.hostScript, /frameAddress\.readFrameUrl\(home\)/u)
+    assert.match(
+      plan.hostScript,
+      /frameAddress\.reuseFrameToken\(connectionAuth, previousAddress\)/u,
+    )
+    assert.match(plan.hostScript, /frameAddress\.writeFrameUrl\(home, url\)/u)
+    assert.match(plan.hostScript, /new Acryl\(\)\.post\("\/token\/new"/u)
+    assert.match(
+      plan.hostScript,
+      /frameAddress\.sameFrameToken\(presented, connectionAuth\.launchToken\)/u,
+    )
+    assert.match(plan.hostScript, /frameRouterHttp\.mount\("\/api\/acryl-frame"\)/u)
+  })
+})

@@ -1,6 +1,7 @@
 import { add, listPlugins, parseAddOptions } from './add'
 import { buildClient, parseBuildClientOptions } from './build-client'
 import { checkDeps, parseCheckDepsOptions } from './check-deps'
+import { openFrame } from './frame-url'
 import { init, parseInitOptions, UsageError } from './init'
 import { type Io, processIo } from './io'
 import { kvImport, parseKvOptions } from './kv-import'
@@ -22,6 +23,8 @@ Usage:
                                       Bring the library plugins an app carries (the router, the server, the door, ...) up to this
                                       version: untouched files are replaced, an edited file stops it (diff shown) unless --force
   acrylblends plugins                    List the plugin library
+  acrylblends open [dir]           Print the address of the frame running this app (the URL npm run dev printed),
+                                      for a page that has to be opened again after its session ended
   acrylblends preflight                  Check this machine for the workshop: Node, npm, git, a coding agent, a free port
                                       (and on Windows PowerShell and long paths); one line per check, PASS or the fix
   acrylblends build-client [root] [out]  Compile the client modules once for production (src/client to dist/client)
@@ -65,6 +68,7 @@ export async function runCli(argv: readonly string[], io: Io = processIo()): Pro
     if (command === 'kv') return await kvImport(parseKv(args), io)
     if (command === 'check-deps') return checkDeps(parseCheckDeps(args), io)
     if (command === 'plugins') return listPlugins(io)
+    if (command === 'open') return await openFrame(args, io)
     if (command === 'preflight') return await runPreflight(io)
     throw new UsageError(`unknown command "${command}"`)
   } catch (error) {

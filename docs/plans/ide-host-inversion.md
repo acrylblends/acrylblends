@@ -556,7 +556,7 @@ Ubuntu green; the two others named their next causes. macOS: the Go re-press let
 
 **Open cause (product): the first Go press on a freshly loaded frame.** The re-press is a gate mitigation, not a cause fixed: if the first Go does nothing, an attendee who clicks once sees nothing happen. Likely the tile's Go handler is not attached when the page first paints (hydration), or Go fires before the address is committed. The product fix is that Go works on the first press, or stays disabled (visibly) until it can; the gate then presses once.
 
-**Open owner decision: a frame surviving a dev restart.** A host restart mints a new connection token (same port, new token); a frame left open with the old token has to be re-opened through the new printed URL. Whether an open frame should survive a dev restart (persisting the connection token in the profile) is the owner's call, not decided here.
+**The frame surviving a dev restart (decided 2026-11-02).** A host restart minted a new connection token (same port, new token); a frame left open with the old token had to be re-opened through the new printed URL. The owner decided: persist the access token in the app's git-ignored `.acrylblends` home, owner-only, written atomically at mint time, reuse it on later boots, and add a command that reprints the frame's URL (and one that asks for a fresh token); an open frame survives a restart. Implemented on branch 119 (section 24): `.acrylblends/frame-url.json` holds `{version, url, token, pid, writtenAt}`, 0600 (a restricted `icacls` ACL on Windows), a temp file renamed over the old one; the launcher writes it at mint time, and on every later boot gives the stored token back to DSH's connection through the one seam the pinned package offers (the instance field `browserAuth.launchToken` that `authorizeIndex` and `authenticatedUrl` read; nothing in the package is edited, and a package without that shape simply keeps its fresh token). The printed URL is therefore the same on every restart and an open page - even one whose cookie was lost - comes back by reloading its original URL. `acrylblends open [dir]` prints the address of the frame that is listening (a stopped or never-run frame is explained on stderr, never a dead token); `acrylblends open --new` rotates the token in the running host through a token-authenticated route the launcher mounts (`POST /api/acryl-frame/token/new`), so the old address dies at once and the new one is printed and stored.
 
 ### The real Settings causes (`b0139d49`'s red, found with a local dialog dump)
 
@@ -590,5 +590,50 @@ stays on `Reconnecting...`, and no page-side code can re-mint it without the lau
 cookie is durable, the same restart reconnects on its own. The facilitator notes carry this as a known edge; the guide's recovery is a tab reload,
 and the stable port means the printed address stays valid.
 
+**The frame's address and token, kept so a restart changes nothing (owner decision, 2026-11-02).** The launcher writes the printed URL - the only
+thing that can re-enter a frame whose browser session ended - into the app's git-ignored home: `.acrylblends/frame-url.json`,
+`{version, url, token, pid, writtenAt}`, created 0600 (a restricted `icacls` ACL on Windows), written as a temp file renamed over the old one, and
+left behind on a clean stop so the command can say the frame is not running instead of pretending it never ran. On every later boot the launcher
+gives the stored token to DSH's connection through the field the package reads (`browserAuth.launchToken`; the shape is guarded, and a package
+without it keeps its fresh token), so the address and any open page survive a restart. `acrylblends open [dir]` reads the record, checks the host
+still listens, and prints the URL alone on stdout (a stopped or never-run frame goes to stderr with `npm run dev` advice; a dead token is never handed
+out). `acrylblends open --new` rotates the token in the running host: the launcher mounts `POST /api/acryl-frame/token/new`, authenticated by the
+current token, which replaces `launchToken`, rewrites the record and answers the new address; the old address answers 401 from that moment. Unit
+tests cover the mode, the atomic write (no temp files left), owner-only removal, malformed and pre-token records, token extraction and rotation
+helpers, the reuse guard, and all `open` outcomes including `--new` against a host that enforces the rotation; the generated launcher's text is
+asserted to read, reuse, write and rotate. Measured live with the packed CLI: a restart printed the same URL, `open` printed it, `open --new`
+rotated it (old 401, new 303) and the rotated address survived the next restart with the app's page rendering from it. The workshop release is
+**1.2.0** by the owner's decision, and the guide says so.
+
 Still to do in this branch: `verify-ide-template.mjs`'s day-one path must assert the first-run tile (no +, no typed address) once `120-ci-stable`
-lands on main; the guide is re-walked after that gate change. The publish block is the take-home, unchanged from the registry's own README.
+lands on main; the frame-side reconnecting banner (poll an admitted endpoint, on 401 replace "Reconnecting..." with the `npx acrylblends open`
+instruction) goes with that gate change; the guide is re-walked after both. The publish block is the take-home, unchanged from the registry's own
+README.
+
+### The reused token's guards (2026-11-02)
+
+Two guards accompany the seam (condition of the coordinator's acceptance): `packages/cli/test/dsh-launch-token.test.ts` reads the installed
+`@deepseek-ai/dsh-client-connection` and fails loudly when a DSH bump removes or renames the field or when another path mints or compares a
+per-process token - it asserts the constructor assignment, the two reads (`authenticatedUrl`, the index admission), and that `processLaunchToken` has
+exactly the definition and that one call (the WebSocket admission admits through the cookie, never the token). `scripts/verify-frame-token.mjs
+<app-dir>` boots an installed app twice and asserts the second boot prints the same address, that the address admits the page (303 and the cookie),
+and that the cookie admits `/api/remote.mux` - the restart with a reused token admits the page and its WebSocket. It runs on the rehearsal app today;
+it joins `pnpm run check` with the post-120 gate work, where an installed app already exists.
+
+### Upstream request (draft - not posted): a supported launch-token seam
+
+For the owner to post to DSH's Discussions if they choose to:
+
+> **Allow a host to supply the browser launch token (BrowserAuth)**
+>
+> We host an application inside DSH's web GUI and restart the host many times a day during development. `BrowserAuth` mints a random launch token per
+> process (`processLaunchToken`), so every restart changes the printed URL: an already open page survives only through its cookie, and when that cookie
+> is lost or expired the person must reopen a URL that no longer exists. To give the URL (and an open page) a stable identity we read the token back by
+> assigning the instance field `browserAuth.launchToken`, which `authorizeIndex` and `authenticatedUrl` read - it works today, but it is an
+> unsupported seam that a rename or a package refactor would break.
+>
+> Request: let the connection row take the launch token from its config - a literal, or a provider/file the host owns (e.g. `config.launchToken` or
+> `config.launchTokenFile`) - with the current random per-process token as the default. A host could then keep a stable, owner-scoped token across
+> restarts, offer a supported reprint and rotation command, and stop reaching into the instance. Documented as host-owned state (owner-only
+> permissions are the host's business) it would not change the browser trust model: the token stays the sole authentication input at `GET /`, and the
+> cookie remains authority-bound.
