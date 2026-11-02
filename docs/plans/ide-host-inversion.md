@@ -636,7 +636,7 @@ focused node. `focusChatComposer` watches while a chat is the shown tab (bounded
 itself, never from a field, a dialog, a menu or a control the person is using. Tests cover the late composer, the field and the dialog, the replaced
 composer and the deadline.
 
-## 25. A graceful node-server stop (branch 121, 2026-11-02)
+## 26. A graceful node-server stop (branch 121, 2026-11-02)
 
 The disposer closed all connections immediately (`closeAllConnections()` before `close()`), so a request in flight when the app stopped was cut. Requested
 behavior: close idle connections first, let in-flight requests finish within a short bounded grace, then close all connections and close; and since an
@@ -658,14 +658,25 @@ stop destroys it rather than hang. Tests: an in-flight request finishes and its 
 stop or the disposer is a no-op; disposal with an open event stream gets an explicit bound for the grace it now waits; and stopping with a WebSocket open
 resolves while the socket gets its 1001 close frame.
 
-**The whole-context dispose still cuts the request, by the router's design.** Disposing the server's own fiber (or calling `stop()`) lets the in-flight
-request finish and its body arrive. Disposing the whole root instead produced a 200 with `content-length: 0`: Cordis runs every disposer together (measured
-with two effects: both start on the same tick), and the router's own disposal refuses new requests, aborts in-flight flights and ends their bodies at once,
-so the save is cut regardless of the server's grace. The user-facing fix is ordering: stop the server first (the new public `stop()`), then dispose the tree.
-The generated launcher still calls `ctx.fiber.dispose()` directly; changing it is the open decision for this ticket, and it ties into the PTY WebSocket
-question - those sockets belong to the router-http adapter's hub, not this server's, and are closed with 1001 only when that plugin is disposed. Stopping
-the server first and disposing after would give the http request its finish, then let that hub close the sockets properly; stopping and disposing in the
-other order cuts the request, as measured.
+**D: the router drains, and the mount removal that cut a second time.** The first whole-root dispose still answered the save with a 200 and
+`content-length: 0`: Cordis runs every disposer together, and the router's own disposal refused new requests, aborted in-flight flights and ended their
+bodies at once. The coordinator chose D - the router's disposer drains instead of aborting - and first asked whether Cordis awaits async disposers. It
+does: a probe with one 100 ms and one 500 ms disposer starts both on the same tick and resolves the root dispose at 636 ms, after the slow one. D is
+implemented: while closing, the router answers new requests 503 with `Connection: close`; disposal waits up to `disposeGraceMs` for the flights in hand,
+then aborts what is left and settles it for 300 ms. Implementing it exposed a second cut: removing a mount also aborted its flights at once, and on a whole
+root dispose every plugin unloads together, so a route-owning plugin's removal cut the save even when the router drained. Mount removal now follows the
+same rule (drain first, then abort). The launcher is unchanged: it keeps disposing the root directly, and both drains run in that window.
+
+**The gate gap that let a type error hide.** The root typecheck ran three aggregate tsconfigs, not each package's own script, so a package's own test configs
+(the router's `tsconfig.jsx-tests.json` among them) were never exercised by the gate: the compress test's `Blob` parts failed TypeScript 6 there while every
+gate stayed green. The check now also runs `pnpm -r --if-present run typecheck` - every package's own script, test configs included - right after the
+aggregate, and the whole tree passes it (27 packages). That is the same class as the earlier test-timeout gaps: the gate has to run the thing that fails.
+
+Tests on a whole-root dispose, on the frame's own composition (the router, our node server, the webServer port over it, and the router-http adapter): an
+in-flight save finishes with its full body and a mounted WebSocket gets 1001, both inside the grace plus 300 ms; the router's unit tests cover the drain,
+the 503 with `Connection: close`, and that a flight finishing inside the grace is never aborted, while the node-server tests keep the `stop()` path, the
+no-op second stop, the bounded event stream, and the 1001 close frame. The DSH web server stack is not in this test: its own disposal destroys upgraded
+sockets (the client saw 1006) and the frame does not use it.
 
 The Windows frame timings from the three green runs on `af583d6c` (measure only, for the record): blank 4m53 / 5m40 / 8m58, agent 5m12 / 6m15 / 6m51, todo
 4m44 / 5m07 / 6m49, notes 4m16 / 5m05 / 7m09, chat 4m34 / 5m33 / 7m07, nodejs 4m16 / 5m41 / 6m29. Every step grows roughly together rather than one path
