@@ -863,3 +863,15 @@ Fixed in `f6d78142`: the app starts as its own POSIX process group and `stop()` 
 when the second boot starts; the script exits explicitly after its final synchronous line. This was a harness path, not a product flow - a person's
 Ctrl-C reaches the script child through npm, but a bare SIGTERM to npm does not. The agent gate passes end to end locally; the Ubuntu job is the
 proof, and the visual baseline is requested again from this push.
+
+The coordinator relayed the owner's scope decision (2026-11-02): the frame keeps only what every app type needs - the collapsible sessions panel,
+agents, the collapsible right panel, Settings and the app as the central canvas; the IDE-only parts (Files/Changes/Review/Checks/Comments, the
+branch/worktree tree, the git status bar and the IDE Settings sections) leave the default frame, and a redesign slice follows. The visual baseline is
+therefore held: the three PNGs were captured on ubuntu-latest (frame, settings-models, right-panel-open at 1440x900) but are not committed,
+`FRAME_VISUAL` stays off, and the masking/compare code (`scripts/frame-views-frame.json`, `frame-compare --against acryl`, the Linux capture path)
+stays for the baseline after the redesign.
+
+The blank template's first tile showed Chrome's JSON viewer: its root answered JSON to every client, which is nearly invisible in the frame's dark
+surface. Fixed in `9f04ced9`: the root negotiates like the agent template - a browser gets a minimal first page naming the app with a relative About
+link, an API client still gets the JSON hello - so the scaffolder gate's `GET /` contract does not move. The blank frame gate shows the tile with the
+page ("blank-app"), and the scaffolder gate over every template is green.
