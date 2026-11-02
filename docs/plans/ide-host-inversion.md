@@ -741,3 +741,16 @@ For the owner to post to DSH's Discussions if they choose to:
 > restarts, offer a supported reprint and rotation command, and stop reaching into the instance. Documented as host-owned state (owner-only
 > permissions are the host's business) it would not change the browser trust model: the token stays the sole authentication input at `GET /`, and the
 > cookie remains authority-bound.
+
+### Handoff (2026-11-02, 119-workshop-guide)
+
+State: `119-workshop-guide` at `0a38c723` (main `af583d6c` merged); the full check exited 0 on that tree. The handout and facilitator notes are
+rewritten to the frame flow for 1.2.0, and the day-one product fixes and gate assertions are in: the stable port; the first-run tile; the scaffold as
+a git repository; the stable launch token with `acrylblends open` / `open --new` and the launcher's self-contained record; the session banner; the
+unscrollable frame document with the overlay rule narrowed to the first-run card. `verify-ide-template` asserts the first-run tile, the banner after
+cookie loss with `scrollTop` 0, `scrollTop` 0 while Settings is open, and runs `scripts/verify-frame-token.mjs` on its own app.
+
+Open items and next steps, in order: push this branch and watch CI on macOS, Ubuntu and Windows; if the macOS frame job still fails at the tile, pull
+that run's net-log artifact and report the cause before any rerun (do not call it a flake); ask the coordinator to approve landing; after landing,
+walk the handout end to end once as an attendee with the packed CLI in an isolated HOME; the upstream request for a supported launch-token seam in
+this section is drafted, not posted (the owner's to post); nothing goes to the workshop registry without the coordinator's approval.
