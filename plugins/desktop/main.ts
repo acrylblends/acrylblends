@@ -35,7 +35,7 @@ import {
 import { hasSettings, settingsPlacement } from './menu.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
-import { cascade, windowOptions } from './window.ts'
+import { cascade, windowOptions, windowSize } from './window.ts'
 
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url))
 const chosen = selectInstance({ projectRoot, env: process.env })
@@ -140,6 +140,12 @@ if (!app.requestSingleInstanceLock()) {
       const beside =
         BrowserWindow.getFocusedWindow() ??
         BrowserWindow.getAllWindows().find((other) => !other.isDestroyed())
+      const work = (
+        beside === undefined
+          ? screen.getPrimaryDisplay()
+          : screen.getDisplayMatching(beside.getBounds())
+      ).workArea
+      const size = windowSize(work)
       const where = (() => {
         if (beside === undefined) return {}
         const bounds = beside.getBounds()
@@ -148,14 +154,9 @@ if (!app.requestSingleInstanceLock()) {
           .filter((other) => !other.isDestroyed())
           .map((other) => other.getPosition())
           .map(([x = 0, y = 0]) => ({ x, y }))
-        return cascade(
-          bounds,
-          screen.getDisplayMatching(bounds).workArea,
-          { width: 1100, height: 760 },
-          taken,
-        )
+        return cascade(bounds, work, size, taken)
       })()
-      const created = new BrowserWindow(windowOptions({ title: chosen.name, ...where }))
+      const created = new BrowserWindow(windowOptions({ title: chosen.name, ...size, ...where }))
       const address = addressOf(path)
       openedOn.set(created.id, new URL(address).pathname)
       created.webContents.setUserAgent(

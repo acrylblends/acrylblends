@@ -19,6 +19,23 @@ export interface Rect {
 /** How far each new window sits from the one it was opened from. */
 export const CASCADE_STEP = 32
 
+/** A window's size when nothing asks for another, and the smallest it may be. */
+export const WINDOW_SIZE = { width: 1100, height: 760 } as const
+export const WINDOW_MIN_SIZE = { width: 480, height: 360 } as const
+
+/**
+ * The size of a new window on a work area: the usual size, made smaller on a screen where it would not leave room for a few cascade steps, never below the
+ * smallest size. macOS moves a window that runs past the screen's edge back onto it, so on a small screen (CI's 1024x768) a window of the usual size that
+ * `cascade` placed a step from another lands exactly on it; a window of this size fits at its place.
+ */
+export function windowSize(work: Rect): { width: number; height: number } {
+  const room = CASCADE_STEP * 3
+  return {
+    width: Math.max(WINDOW_MIN_SIZE.width, Math.min(WINDOW_SIZE.width, work.width - room)),
+    height: Math.max(WINDOW_MIN_SIZE.height, Math.min(WINDOW_SIZE.height, work.height - room)),
+  }
+}
+
 /**
  * Where a new window goes so that it does not cover another one exactly. The first free place of: a step down and to the right of `from`, and again, while the window still fits on the
  * screen; then the same steps from the top left of the work area (a row of windows cascades, then starts again); and, on a screen no bigger than the window, the steps from `from` even
@@ -73,10 +90,10 @@ export interface WindowOptions {
 export function windowOptions(spec: WindowSpec): WindowOptions {
   return {
     title: spec.title,
-    width: spec.width ?? 1100,
-    height: spec.height ?? 760,
-    minWidth: 480,
-    minHeight: 360,
+    width: spec.width ?? WINDOW_SIZE.width,
+    height: spec.height ?? WINDOW_SIZE.height,
+    minWidth: WINDOW_MIN_SIZE.width,
+    minHeight: WINDOW_MIN_SIZE.height,
     ...(spec.x === undefined || spec.y === undefined ? {} : { x: spec.x, y: spec.y }),
     show: false,
     webPreferences: {
