@@ -1035,18 +1035,31 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
           async () =>
             await evaluate(`(() => {
             const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-            const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
+            const host = iframe?.contentDocument?.querySelector('#agent-panel')
+            const root = host?.shadowRoot
             const open = root?.querySelector('button.open')
             if (!open) return undefined
+            // The panel marks itself ready once its form is wired; filing a submit before that is the half-wired state the gate saw once.
+            if (host.dataset.ready !== '1') return undefined
             open.click()
             const select = root.querySelector('select')
             const drivers = [...select.options].map(option => option.value)
             if (!drivers.includes('agent')) return undefined
             select.value = 'agent'
             const textarea = root.querySelector('textarea')
-            textarea.value = 'add 2 3'
+            // Type the way a person does (the native setter plus an input event), not a bare value assignment the page's own listeners would never see.
+            const message = 'add 2 3'
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+            if (setter !== undefined) setter.call(textarea, message)
+            else textarea.value = message
+            textarea.dispatchEvent(new Event('input', { bubbles: true }))
             root.querySelector('form').requestSubmit()
-            return { drivers }
+            return {
+              drivers,
+              value: textarea.value,
+              ready: host.dataset.ready ?? null,
+              following: host.dataset.following ?? null,
+            }
           })()`),
           30_000,
         )
@@ -1074,16 +1087,20 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         if (answered === undefined || answered.send !== true || answered.stopped !== true) {
           const detail = await evaluate(`(() => {
             const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-            const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
+            const host = iframe?.contentDocument?.querySelector('#agent-panel')
+            const root = host?.shadowRoot
             return {
               log: root?.querySelector('#log')?.innerText?.slice(-600) ?? null,
               send: root === undefined || root === null ? null : root.querySelector('.send')?.disabled,
               stop: root === undefined || root === null ? null : root.querySelector('.stop')?.disabled,
               drivers: root === undefined || root === null ? null : [...(root.querySelector('select')?.options ?? [])].map(option => option.value),
+              value: root?.querySelector('textarea')?.value ?? null,
+              ready: host?.dataset.ready ?? null,
+              following: host?.dataset.following ?? null,
             }
           })()`)
           fail(
-            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}; panel: ${JSON.stringify(detail)}`,
+            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}; at submit: ${JSON.stringify(panel)}; panel: ${JSON.stringify(detail)}`,
           )
         }
         log(

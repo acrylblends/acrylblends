@@ -6,6 +6,17 @@ import { renderMarkdown } from './markdown.ts'
 
 let PREFIX = '/api/agent-panel'
 
+/**
+ * Why a submit does not send: nothing typed, or a run still going. The panel says it in its log instead of returning silently - a Send that does nothing and
+ * says nothing reads as a broken button, and one was observed doing exactly that in the frame gate (empty log, enabled Send, no run).
+ */
+export type SendRefusal = 'empty' | 'busy'
+export function sendRefusal(message: string, following: boolean): SendRefusal | undefined {
+  if (message.trim() === '') return 'empty'
+  if (following) return 'busy'
+  return undefined
+}
+
 interface Session {
   token: string
   drivers: Array<{
@@ -399,6 +410,7 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
     const begin = (): void => {
       if (working !== undefined) return
       following = true
+      host.dataset.following = '1'
       send.disabled = true
       stop.disabled = false
       working = line('', 'working')
@@ -447,6 +459,7 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
       if (working !== undefined) {
         working.remove()
         following = false
+        delete host.dataset.following
         send.disabled = false
         stop.disabled = true
       }
@@ -460,8 +473,15 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   }
   form.addEventListener('submit', async (submitted) => {
     submitted.preventDefault()
+    const refusal = sendRefusal(input.value, following)
+    if (refusal !== undefined) {
+      line(
+        refusal === 'empty' ? 'Type a message first.' : 'A run is already going; stop it first.',
+        'err',
+      )
+      return
+    }
     const message = input.value.trim()
-    if (message === '' || following) return
     input.value = ''
     line(message, 'me')
     try {
@@ -476,6 +496,9 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
       line(`The request failed: ${error instanceof Error ? error.message : String(error)}`, 'err')
     }
   })
+  // The form is wired: a script (the frame gate included) waits for this instead of guessing that the panel can be submitted, and a panel that never got
+  // this far says so by the mark's absence - together with the visible guards above, no submit can vanish without a trace.
+  host.dataset.ready = '1'
   // The latest run, if there is one: shown again after a reload (its question, its events), and followed if it is still going.
   try {
     const latest = await openRun({ t: 'follow' })

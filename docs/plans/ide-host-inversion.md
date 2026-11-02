@@ -700,3 +700,12 @@ through the new launcher and the full check is exit 0.
 Handoff: the full check is green on branch 123; the next step is the branch CI and, on the Windows frame job, either a green run or the captured browser output
 naming whether it is Defender, a first-run dialog or a profile lock - the message and the artifact now exist for that answer. Three consecutive green CI runs
 on one sha are the bar before reporting 123 green.
+
+### The agent panel's silent Send (branch 123, same day)
+
+Run 3's macOS agent gate failed with the panel present, drivers listed, empty log, Send enabled and Stop disabled; the gate-wide page capture added earlier showed only
+warnings (a PTY WebSocket closed before it opened, and the sandbox notices), no exception - so nothing threw, and the submit handler's two silent early returns
+(nothing typed, or a run already being followed) were the fit. The panel now says why it does not send ("Type a message first." / "A run is already going; stop it
+first."), marks itself `data-ready` once its form is wired and `data-following` while a run is going, and the gate waits for the ready mark, types with the native
+setter plus an input event, and prints the textarea value, ready and following at submit time in both the failure message and its panel detail. A guard test covers
+the two refusal reasons. The capture result is part of the record: no exception was thrown, which ruled the half-wired-by-a-throw theory out before the change.
