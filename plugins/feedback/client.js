@@ -54,6 +54,21 @@ function cssEscape(value) {
   return typeof globalThis.CSS?.escape === 'function' ? globalThis.CSS.escape(value) : value.replace(/[^A-Za-z0-9_-]/g, '\\$&')
 }
 
+// The ACRYL frame's view (ide/acryl-blends-frame/src/client/frame-view.ts): the frame's canvas hides the app's own build-time controls in Build and
+// shows what production shows in Preview. A page opened directly has no frame parent and keeps its own behavior.
+const FRAME_VIEW = Symbol.for('acryl.frame.view')
+const FRAME_MODE_EVENT = 'acryl:frame-mode'
+
+/** The frame's view handle, or undefined when this page is the top window or its parent is cross-origin. */
+export function frameViewOf(win) {
+  try {
+    if (win.parent === win) return undefined
+    return win.parent[FRAME_VIEW]
+  } catch {
+    return undefined
+  }
+}
+
 function start(prefix) {
   if (document.querySelector('acryl-feedback')) return
   const host = document.createElement('acryl-feedback')
@@ -162,6 +177,16 @@ function start(prefix) {
       render()
     }
   })
+  // The frame's Build is the builder's screen: the users' Feedback button is not part of it. Preview shows what production shows, and the app runs
+  // feedback in production, so the button returns there. A direct page (no frame) is unchanged.
+  const frame = frameViewOf(window)
+  const applyFrame = () => {
+    const visible = frame === undefined || frame.mode !== 'build'
+    host.style.display = visible ? '' : 'none'
+    if (!visible && state.open) close()
+  }
+  window.addEventListener(FRAME_MODE_EVENT, applyFrame)
+  applyFrame()
   // agent-panel sits in the same corner: its button in development, the Assistant docked on the right in production. Stand to the left of whichever shows.
   const besideOthers = () => {
     const shadow = document.getElementById('agent-panel')?.shadowRoot

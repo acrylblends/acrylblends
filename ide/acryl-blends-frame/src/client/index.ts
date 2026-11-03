@@ -26,6 +26,7 @@ import { createSidebarRightStandIn } from './sidebar-right-stand-in.ts'
 import { createBranchesApi } from './branches.ts'
 import { BranchChatsStore, createBranchChatsApi } from './branch-chats.ts'
 import { createFeedbackApi, feedbackTask } from './feedback.ts'
+import { installFrameView } from './frame-view.ts'
 import { draftInChat } from './chat-draft.ts'
 import type { FeedbackPort } from './LeftPanel.tsx'
 import { appPluginRow, createAppPluginsApi, framePluginRow, type NavigatorPlugin } from './plugins-navigator.ts'
@@ -106,6 +107,9 @@ export function apply(ctx: ClientContext): void {
     const dispose = ctx.reflect.provide('appCanvas', canvas)
     return () => { void dispose() }
   }, 'acryl-blends-frame: the canvas service')
+  // The app's own client plugins read the frame's mode from the canvas page: Build keeps their build-time controls out of the canvas, Preview shows
+  // what production shows, and a mode change reaches them without a reload.
+  ctx.effect(() => installFrameView(canvas, view), 'acryl-blends-frame: the app page view')
   // DSH's chat view opens the links of an answer through `sidebarRight`; the frame has no DSH right sidebar, so it answers for it (a web link opens in a new tab).
   ctx.effect(() => {
     const dispose = ctx.reflect.provide('sidebarRight', createSidebarRightStandIn(url => { window.open(url, '_blank', 'noopener,noreferrer') }))

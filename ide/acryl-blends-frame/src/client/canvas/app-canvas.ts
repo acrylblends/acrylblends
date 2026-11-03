@@ -94,6 +94,11 @@ export class AppCanvasState implements AppCanvas {
     return typeof published?.windowId === 'string' ? published.windowId : undefined
   }
 
+  /** The live app page's window, when the canvas has one: the frame's view contract reaches the page through it. */
+  contentWindow(): Window | undefined {
+    return this.frame?.contentWindow ?? undefined
+  }
+
   /** The identity `useSyncExternalStore` compares. */
   getSnapshot(): AppCanvasView {
     return this.snapshot
