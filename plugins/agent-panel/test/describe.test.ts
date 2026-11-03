@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { describeTool } from '../client/describe.ts'
+import { describePageStep, describeTool } from '../client/describe.ts'
 
 test("a coding agent's command is shown as the command, its bookkeeping is not shown", () => {
   assert.equal(
@@ -50,5 +50,56 @@ test("the app's own agent: the tool and a short form of its arguments, and a fai
   assert.equal(
     describeTool({ tool: 'door_act', input: {}, error: 'invalid: a call needs an op' }),
     'door_act failed: invalid: a call needs an op',
+  )
+})
+
+test("the Assistant's steps say what it did on the page, named as the page names it, and leave out its looks", () => {
+  const act = (input: Record<string, unknown>, result?: unknown) =>
+    describePageStep({ tool: 'door_act', input, ...(result === undefined ? {} : { result }) })
+  assert.equal(describePageStep({ tool: 'door_look', input: {}, result: 'Page: Board' }), undefined)
+  assert.equal(
+    describePageStep({ tool: 'door_look', input: {}, error: 'no page' }),
+    'ui.look() failed',
+  )
+  assert.equal(
+    act({ op: 'click', ref: '1.6' }, { ok: true, target: { role: 'link', name: 'My tasks' } }),
+    'ui.open("My tasks")',
+  )
+  assert.equal(act({ op: 'navigate', path: '/my-tasks' }, { ok: true }), 'ui.open("/my-tasks")')
+  assert.equal(
+    act(
+      { op: 'select', ref: '3.10', option: 'This week' },
+      { ok: true, target: { role: 'combobox', name: 'Due' } },
+    ),
+    'ui.fill("Due", "This week")',
+  )
+  assert.equal(
+    act(
+      { op: 'type', ref: '4.2', text: 'Book the venue' },
+      { ok: true, target: { role: 'textbox', name: 'Title' } },
+    ),
+    'ui.fill("Title", "Book the venue")',
+  )
+  assert.equal(
+    act({ op: 'click', ref: '5.1' }, { ok: true, target: { role: 'button', name: 'Save' } }),
+    'ui.click("Save")',
+  )
+  // No name from the page: the ref stands in; a failed act says so.
+  assert.equal(
+    describePageStep({ tool: 'door_act', input: { op: 'click', ref: '5.1' }, error: 'stale-ref' }),
+    'ui.click(5.1) failed',
+  )
+  assert.equal(act({ op: 'press', key: 'Enter' }, { ok: true }), 'ui.press("Enter")')
+  // The door's chat tool answers in text; the target is read from it.
+  assert.equal(
+    act(
+      { op: 'select', ref: '1.11', option: 'This week' },
+      'done: combobox "Due" (selected This week); look again before the next act',
+    ),
+    'ui.fill("Due", "This week")',
+  )
+  assert.equal(
+    act({ op: 'click', ref: '1.6' }, 'done: link "My tasks"; look again before the next act'),
+    'ui.open("My tasks")',
   )
 })
