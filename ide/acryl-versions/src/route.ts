@@ -39,6 +39,7 @@ interface SaveRequest {
 interface RestoreRequest {
   readonly path: string
   readonly hash: string
+  readonly message?: string
 }
 
 interface ShareRequest {
@@ -53,10 +54,19 @@ function parseSave(body: Record<string, unknown>): SaveRequest | undefined {
 }
 
 function parseRestore(body: Record<string, unknown>): RestoreRequest | undefined {
-  if (Object.keys(body).length !== 2 || typeof body.path !== 'string' || body.path === '' || typeof body.hash !== 'string') {
+  const keys = Object.keys(body)
+  if (
+    keys.length !== (body.message === undefined ? 2 : 3) ||
+    typeof body.path !== 'string' ||
+    body.path === '' ||
+    typeof body.hash !== 'string' ||
+    (body.message !== undefined && typeof body.message !== 'string')
+  ) {
     return undefined
   }
-  return { path: body.path, hash: body.hash }
+  return body.message === undefined
+    ? { path: body.path, hash: body.hash }
+    : { path: body.path, hash: body.hash, message: body.message }
 }
 
 function parseShare(body: Record<string, unknown>): ShareRequest | undefined {
@@ -102,7 +112,7 @@ export function versionsRoutes(versions: Versions, report: ReportError = () => {
   app.post(VERSIONS_SAVE_PATH, ownPage, jsonBody(), write('save a version', 'invalid save request', parseSave,
     input => versions.save(input.path, input.message)))
   app.post(VERSIONS_RESTORE_PATH, ownPage, jsonBody(), write('restore a version', 'invalid restore request', parseRestore,
-    input => versions.restore(input.path, input.hash)))
+    input => versions.restore(input.path, input.hash, input.message)))
   app.post(VERSIONS_SHARE_PATH, ownPage, jsonBody(), write('share the branch', 'invalid share request', parseShare,
     input => versions.share(input.path)))
   return privateApi(VERSIONS_API_PREFIX, app)

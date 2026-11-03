@@ -8,7 +8,7 @@ import { branchClick, createBranchesApi, saveBeforeSwitchMessage } from '../src/
 import { BranchChatsStore } from '../src/client/branch-chats.ts'
 import { createBranchChatsStore } from '../src/branch-chats.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
-import { chatTime, savedLabel, shortTime, versionNumber } from '../src/client/versions.ts'
+import { backText, backToMessage, chatTime, saveBeforeBackMessage, savedLabel, shortTime, versionNumber } from '../src/client/versions.ts'
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
 import { foldersAbove } from '../src/client/FilesView.tsx'
 import { highlightLine, languageOf } from '../src/client/highlight.ts'
@@ -390,6 +390,20 @@ describe('a version\'s time', () => {
     expect(chatTime(Date.parse('2026-11-03T17:59:50Z'), now)).toBe('now')
     expect(chatTime(Date.parse('2026-11-03T17:00:00Z'), now)).toBe('1 h')
     expect(chatTime(undefined, now)).toBe('')
+  })
+})
+
+describe('going back to a version', () => {
+  it('names the new version and the save point before it', () => {
+    expect(backToMessage(2, 'Due dates')).toBe('Back to v2 · Due dates')
+    expect(saveBeforeBackMessage(2)).toBe('Save before going back to v2')
+  })
+
+  it('asks plainly when the tree is clean, and says a save point comes first when files are unsaved or uncounted', () => {
+    expect(backText(2, 'Due dates', 0)).toBe('Go back to v2 · Due dates? A new version records it, so every version stays.')
+    expect(backText(2, 'Due dates', 1)).toBe('1 unsaved change. Save a point first, then go back to v2 · Due dates.')
+    expect(backText(2, 'Due dates', 3)).toContain('3 unsaved changes. Save a point first')
+    expect(backText(2, 'Due dates', undefined)).toContain('could not be counted. Save a point first')
   })
 })
 

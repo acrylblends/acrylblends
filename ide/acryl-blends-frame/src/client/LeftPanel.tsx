@@ -5,7 +5,7 @@ import { formatRelativeTime } from 'acryl-versions/client'
 import { branchNameProblem, type FeedbackNoteView, type FeedbackView, type FrameBranch, type FrameState } from '../contract.ts'
 import type { VersionsLogView } from 'acryl-versions'
 import { PTY_AGENTS, terminalMeta, type FrameTabs } from './tabs.ts'
-import { chatTime, shortTime, versionNumber, type VersionsPort } from './versions.ts'
+import { backText, backToMessage, chatTime, saveBeforeBackMessage, shortTime, versionNumber, type VersionsPort } from './versions.ts'
 import { branchClick, saveBeforeSwitchMessage, type BranchesApi } from './branches.ts'
 import type { BranchChatsPort } from './branch-chats.ts'
 import { feedbackPlace, type FeedbackApi } from './feedback.ts'
@@ -101,6 +101,10 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
   /** The versions also on another branch or the remote, marked "shared". */
   const [shared, setShared] = useState<ReadonlySet<string>>(() => new Set())
   const [saving, setSaving] = useState<string | undefined>(undefined)
+  // The older version a click chose to go back to (asked first), and whether that is running.
+  const [askBack, setAskBack] = useState<{ readonly hash: string; readonly number: number; readonly subject: string } | undefined>(undefined)
+  const [backing, setBacking] = useState<'saving' | 'going back' | undefined>(undefined)
+  const [backNote, setBackNote] = useState<string | undefined>(undefined)
   // The new branch's name while it is typed, and why the last try failed.
   const [naming, setNaming] = useState<string | undefined>(undefined)
   const [branchProblem, setBranchProblem] = useState<string | undefined>(undefined)
@@ -186,6 +190,26 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
       await refresh()
     } catch (cause) {
       setLoad({ status: 'error', message: cause instanceof Error ? cause.message : 'The save point could not be made.' })
+    }
+  }
+
+  // Going back never loses work and never rewrites history: unsaved files get a save point first, then the Host puts the old tree back as a new version
+  // on top, and the frame shows it (head read again, app page reloaded).
+  const goBack = async (target: { readonly hash: string; readonly number: number; readonly subject: string }) => {
+    setBackNote(undefined)
+    try {
+      if (state.unsaved !== 0) {
+        setBacking('saving')
+        await versions.save(state.appRoot, saveBeforeBackMessage(target.number))
+      }
+      setBacking('going back')
+      await versions.restore(state.appRoot, target.hash, backToMessage(target.number, target.subject))
+      setAskBack(undefined)
+      await refresh()
+    } catch (cause) {
+      setBackNote(cause instanceof Error ? cause.message : 'The app could not be put back to that version.')
+    } finally {
+      setBacking(undefined)
     }
   }
 
@@ -430,15 +454,45 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
       <div className="acrylBlendsList">
         {load.status === 'error' && <p className="acrylBlendsNote" data-error>{load.message}</p>}
         {load.status === 'ready' && load.log.entries.length === 0 && <p className="acrylBlendsNote">No versions yet.</p>}
-        {load.status === 'ready' && load.log.entries.map((entry, index) => (
-          <div key={entry.hash} className="acrylBlendsVersion" aria-current={index === 0 || undefined} title={`${entry.short} · ${entry.author}`}>
-            <span className="acrylBlendsVersionDot" />
-            <span className="acrylBlendsItemTitle">
-              v{String(versionNumber(load.log.entries, index))} · {entry.subject}{index === 0 ? ' (current)' : ''}
-            </span>
-            <span className="acrylBlendsMeta">{shared.has(entry.hash) ? 'shared' : shortTime(entry.at)}</span>
-          </div>
-        ))}
+        {load.status === 'ready' && load.log.entries.map((entry, index) => {
+          const number = versionNumber(load.log.entries, index)
+          const target = { hash: entry.hash, number, subject: entry.subject }
+          const asking = askBack?.hash === entry.hash
+          return (
+            <Fragment key={entry.hash}>
+              <div
+                className="acrylBlendsVersion"
+                aria-current={index === 0 || undefined}
+                data-back={index > 0 || undefined}
+                title={index === 0 ? `${entry.short} · ${entry.author}` : `Go back to v${String(number)} · ${entry.short} · ${entry.author}`}
+                role={index === 0 ? undefined : 'button'}
+                tabIndex={index === 0 ? undefined : 0}
+                onClick={index === 0 ? undefined : () => { if (backing === undefined) { setBackNote(undefined); setAskBack(asking ? undefined : target) } }}
+                onKeyDown={index === 0 ? undefined : (event) => { if (event.key === 'Enter' && backing === undefined) { setBackNote(undefined); setAskBack(asking ? undefined : target) } }}
+              >
+                <span className="acrylBlendsVersionDot" />
+                <span className="acrylBlendsItemTitle">
+                  v{String(number)} · {entry.subject}{index === 0 ? ' (current)' : ''}
+                </span>
+                <span className="acrylBlendsMeta">{shared.has(entry.hash) ? 'shared' : shortTime(entry.at)}</span>
+              </div>
+              {asking && (
+                <div className="acrylBlendsAsk acrylBlendsBackAsk" role="group" aria-label={`Go back to v${String(number)}`}>
+                  <p>{backText(number, entry.subject, state.unsaved)}</p>
+                  {backNote !== undefined && <p data-error>{backNote}</p>}
+                  <div className="acrylBlendsAskActions">
+                    <button type="button" className="acrylBlendsSmallButton" disabled={backing !== undefined} onClick={() => { void goBack(target) }}>
+                      {backing === 'saving' ? 'Saving...' : backing === 'going back' ? 'Going back...' : state.unsaved === 0 ? 'Go back' : 'Save a point first'}
+                    </button>
+                    <button type="button" className="acrylBlendsSmallButton" disabled={backing !== undefined} onClick={() => { setAskBack(undefined) }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Fragment>
+          )
+        })}
       </div>
       {notes.available && (
         <>

@@ -18,7 +18,8 @@ export interface VersionsApi {
   /** The branch's versions, newest first. @throws an Error whose message is fit to show the user. */
   log(path: string, limit?: number): Promise<VersionsLogView>
   save(path: string, message: string): Promise<VersionsSaveView>
-  restore(path: string, hash: string): Promise<VersionsRestoreView>
+  /** Bring a version back as a new commit; `message` names that commit (else the Host's "Restore <id>"). */
+  restore(path: string, hash: string, message?: string): Promise<VersionsRestoreView>
   share(path: string): Promise<VersionsShareView>
 }
 
@@ -135,7 +136,7 @@ export function createVersionsApi(fetchImpl: FetchLike = (input, init) => fetch(
       return answer(response, parseLog)
     },
     save: (path, message) => post(VERSIONS_SAVE_PATH, { path, message }, parseSave),
-    restore: (path, hash) => post(VERSIONS_RESTORE_PATH, { path, hash }, parseRestore),
+    restore: (path, hash, message) => post(VERSIONS_RESTORE_PATH, message === undefined ? { path, hash } : { path, hash, message }, parseRestore),
     share: path => post(VERSIONS_SHARE_PATH, { path }, parseShare),
   }
 }

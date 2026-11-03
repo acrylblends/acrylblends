@@ -351,6 +351,13 @@ export function apply(ctx: ClientContext): void {
       versions: {
         log: (path: string) => versionsApi.log(path),
         save: (path: string, message: string) => versionsApi.save(path, message),
+        // The files go back, the frame shows the new head, then the app page reloads on them (restore, state, canvas - in that order).
+        restore: async (path: string, hash: string, message: string) => {
+          const restored = await versionsApi.restore(path, hash, message)
+          await frameState.refresh()
+          canvas.reload()
+          return restored
+        },
         shared: (hashes: readonly string[]) => sharedVersionsApi.shared(hashes),
       },
       tabs,
