@@ -1,7 +1,7 @@
 /** Real git repositories in temp directories, for the Versions suites. */
 
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -12,7 +12,9 @@ export interface TempDirectory {
 
 /** A fresh temp directory the caller removes with `cleanup()`. */
 export function tempDirectory(prefix: string): TempDirectory {
-  const dir = mkdtempSync(join(tmpdir(), prefix))
+  // The versions routes resolve a directory to its real path; on Windows a temp path comes back with the long user
+  // name and the real case, so the fixture stores the canonical path and every assertion compares like with like.
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)))
   return { dir, cleanup: () => { rmSync(dir, { recursive: true, force: true }) } }
 }
 

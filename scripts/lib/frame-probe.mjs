@@ -125,11 +125,12 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
         .map(element => element.getAttribute('aria-label') ?? element.textContent.trim()).filter(Boolean)
       return document.body.innerText.slice(-4000) + '\\n' + labels.slice(0, 120).join('\\n')
     })()`)
-    return /Shortcuts/iu.test(text) ? text : undefined
+    return /Agents/iu.test(text) ? text : undefined
   }, 15_000)
   if (settingsText === undefined)
     throw new Error(`Settings did not render: ${JSON.stringify(await body())}`)
-  const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
+  // 125 slice 2: the separate Shortcuts section left the frame; Agents is one of the frame's own sections.
+  const sections = ['General', 'Models', 'Plugins', 'Agents', 'Support']
   const missing = sections.filter((section) => !new RegExp(section, 'iu').test(settingsText))
   if (missing.length > 0) throw new Error(`Settings is missing ${missing.join(', ')}`)
 
