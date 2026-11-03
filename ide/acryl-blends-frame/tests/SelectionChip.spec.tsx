@@ -5,13 +5,14 @@
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SelectionChip, type SelectionChipInjected } from '../src/client/SelectionChip.tsx'
+import { CHIP_GAP, SelectionChip, chipGeometry, type SelectionChipInjected } from '../src/client/SelectionChip.tsx'
 import { SelectionStore } from '../src/client/selection.ts'
 
 const PICKED = { label: 'Task card', selector: '#board > div', page: '/board' }
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
   document.body.innerHTML = ''
 })
 
@@ -26,6 +27,19 @@ function face(store: SelectionStore): SelectionChipInjected {
     focus: vi.fn(),
   }
 }
+
+describe('chipGeometry', () => {
+  it('puts the chip at the text start, centered on the first line, and moves the text past it', () => {
+    expect(chipGeometry(
+      { left: 100, top: 50 },
+      { left: 90, top: 40 },
+      { width: 80, height: 18 },
+      24,
+      14,
+      4,
+    )).toEqual({ left: 24, top: 17, textInset: 14 + 80 + CHIP_GAP })
+  })
+})
 
 describe('SelectionChip', () => {
   it('renders nothing until an element is picked, then names it', () => {
@@ -97,6 +111,38 @@ describe('SelectionChip', () => {
     send.disabled = true
     fireEvent.click(send)
     expect(injected.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('places the chip on the composer input row and moves the draft and its placeholder past it', () => {
+    const box = (left: number, top: number, width: number, height: number) => ({
+      left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}),
+    })
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this.classList.contains('acrylBlendsSelectionChip')) return box(0, 0, 80, 18) as DOMRect
+      if (this.classList.contains('anchor')) return box(90, 40, 300, 0) as DOMRect
+      if (this.matches('[data-composer-input]')) return box(100, 50, 300, 24) as DOMRect
+      return box(0, 0, 0, 0) as DOMRect
+    })
+    const store = new SelectionStore()
+    store.select(PICKED)
+    const { container } = render(
+      <div data-composer-card>
+        <div className="anchor">
+          <div data-slot="conversation.input.overlay">
+            <SelectionChip {...face(store)} />
+          </div>
+        </div>
+        <div data-composer-input contentEditable style={{ lineHeight: '24px', padding: '4px 8px 0 14px' }} />
+        <div className="placeholder" />
+      </div>,
+    )
+    const chip = container.querySelector('.acrylBlendsSelectionChip') as HTMLElement
+    const editor = container.querySelector('[data-composer-input]') as HTMLElement
+    const placeholder = container.querySelector('.placeholder') as HTMLElement
+    expect(chip.style.left).toBe('24px')
+    expect(chip.style.top).toBe('17px')
+    expect(editor.style.paddingLeft).toBe(`${String(14 + 80 + CHIP_GAP)}px`)
+    expect(placeholder.style.left).toBe(`${String(14 + 80 + CHIP_GAP)}px`)
   })
 
   it('stops watching gestures once the selection is gone', () => {
