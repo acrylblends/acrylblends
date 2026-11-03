@@ -1363,6 +1363,9 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             const drivers = [...select.options].map(option => option.value)
             if (!drivers.includes('agent')) return undefined
             select.value = 'agent'
+            // A person's pick fires a change event; the panel hides the log while a terminal driver is selected, so a bare
+            // value assignment left the very log this step reads hidden on hosts whose default driver is the terminal.
+            select.dispatchEvent(new Event('change', { bubbles: true }))
             const textarea = root.querySelector('textarea')
             // Type the way a person does (the native setter plus an input event), not a bare value assignment the page's own listeners would never see.
             const message = 'add 2 3'
