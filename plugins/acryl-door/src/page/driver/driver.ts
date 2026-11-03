@@ -35,6 +35,8 @@ export interface UiDriverOptions {
   /** Milliseconds since the user last used the page (mouse, keyboard); Infinity when never. */
   readonly msSinceUserInput?: () => number
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>
+  /** Called with the element an act is about to use, for the page to show it (the door's outline on what the agent touches). */
+  readonly touched?: (element: Element) => void
   /** Leave the page: reload it, or go to a path of the app. Default: the document's own `location`, a moment after the answer is sent. */
   readonly leave?: (to: { readonly reload: true } | { readonly path: string }) => void
 }
@@ -66,7 +68,12 @@ export class UiDriver {
   constructor(options: UiDriverOptions) {
     this.options = options
     this.snapshots = new SnapshotBuilder(this.refs, () => options.document().body)
-    this.env = { refs: this.refs, document: options.document, sleep: options.sleep ?? realSleep }
+    this.env = {
+      refs: this.refs,
+      document: options.document,
+      sleep: options.sleep ?? realSleep,
+      ...(options.touched === undefined ? {} : { touched: options.touched }),
+    }
   }
 
   /** The current activity; the same object until something changes, as a store snapshot must be. */

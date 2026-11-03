@@ -6,6 +6,7 @@
 
 import { existsSync } from 'node:fs'
 import { isAbsolute, relative, resolve } from 'node:path'
+import { underAppBase } from '../page/base.ts'
 import { parseUiRequest, UiControlError, type AuditEntry, type UiActionResult, type UiRequest, type UiResult, type UiSnapshot } from '../page/protocol.ts'
 import { renderSnapshot } from '../page/snapshot-text.ts'
 import type { AuditLog } from './audit.ts'
@@ -211,12 +212,9 @@ export class Door {
     const base = this.deps.app.url
     if (base === undefined) return undefined
     try {
-      // The app's own path, under the host prefix when the pages answer there (the frame's canvas): /board is /app/board in the canvas and /board at the root.
-      // (The page's own copy of this join lives in `page/base.ts`, beside the meta it reads; the host program has no DOM types to share it.)
-      const appBase = this.deps.appBase
-      const target = appBase === undefined || path === appBase || path.startsWith(`${appBase}/`)
-        ? path
-        : `${appBase}${path.startsWith('/') ? '' : '/'}${path}`
+      // The app's own path, under the host prefix when the pages answer there (the frame's canvas): /board is /app/board in the canvas and /board at the
+      // root, and the app's root is the prefix itself (`/app`, where its rows mount `/`), as the page's navigation join does it.
+      const target = underAppBase(this.deps.appBase ?? '', path)
       const response = await fetch(new URL(target, base), { headers: { accept: 'text/html' }, signal: AbortSignal.timeout(3000) })
       await response.body?.cancel()
       return response.ok ? `${response.status} at ${path}` : `${response.status} at ${path}: the app serves no page there, look at what is shown and navigate to a path it does`

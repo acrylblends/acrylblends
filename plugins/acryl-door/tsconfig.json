@@ -30,12 +30,12 @@
   ],
   "exclude": [
     "src/page/api.ts",
-    "src/page/base.ts",
     "src/page/driver/**",
     "src/page/channel.ts",
     "src/page/indicator.ts",
     "src/page/index.ts",
     "src/page/main.ts",
+    "src/page/outline.ts",
     "src/page/socket-source.ts",
     "src/page/user-input.ts"
   ]

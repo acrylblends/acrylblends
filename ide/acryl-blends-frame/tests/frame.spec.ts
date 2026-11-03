@@ -12,7 +12,7 @@ import { backText, backToMessage, chatTime, saveBeforeBackMessage, savedLabel, s
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
 import { foldersAbove } from '../src/client/FilesView.tsx'
 import { highlightLine, languageOf } from '../src/client/highlight.ts'
-import { FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, parseStoredTabs, ptyTab, tabsForBranch, terminalMeta, terminalTab } from '../src/client/tabs.ts'
+import { FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, fileTabLabels, parseStoredTabs, ptyTab, tabsForBranch, terminalMeta, terminalTab } from '../src/client/tabs.ts'
 import { FIRST_RUN_VIEW, FrameViewState, parseStoredView, type ViewStorage } from '../src/client/view-state.ts'
 
 describe('parseBranches', () => {
@@ -320,6 +320,42 @@ describe('a terminal row', () => {
     expect(terminalMeta('npm test')).toBe('npm test')
     expect(terminalMeta('ana@laptop:/Users/ana/apps/team-board')).toBe('team-board')
     expect(terminalMeta(undefined)).toBe('')
+  })
+
+  it('still says what ran there after the Host restarts, and forgets it with the tab', () => {
+    const storage = new MemoryStorage()
+    const tabs = new FrameTabs(storage)
+    tabs.open(terminalTab('t1'))
+    tabs.setTitle('t1', 'npm test')
+    // Another tab opened or shown beside it does not take the title away.
+    tabs.open(FILES_TAB)
+    tabs.activate('chat')
+    expect(tabs.getSnapshot().titles).toEqual({ t1: 'npm test' })
+    // After the restart the shell that set the title is gone with the Host, so the row reads the title the strip remembered.
+    const restarted = new FrameTabs(storage)
+    expect(terminalMeta(restarted.getSnapshot().titles?.['t1'])).toBe('npm test')
+    restarted.close('terminal:t1')
+    expect(new FrameTabs(storage).getSnapshot().titles).toBeUndefined()
+  })
+
+  it('keeps no title for a terminal that is not open', () => {
+    expect(parseStoredTabs(JSON.stringify({ tabs: [], active: 'chat', titles: { gone: 'npm test' } }))).toEqual(FIRST_RUN_TABS)
+    const kept = parseStoredTabs(JSON.stringify({ tabs: [{ kind: 'terminal', terminalId: 't1' }], active: 'terminal:t1', titles: { t1: 'npm test', gone: 'ls' } }))
+    expect(kept.titles).toEqual({ t1: 'npm test' })
+  })
+})
+
+describe('file tab labels', () => {
+  it('shows the folder only when another open file has the same name', () => {
+    expect(fileTabLabels(['src/a.ts'])).toEqual(new Map([['src/a.ts', 'a.ts']]))
+    expect(fileTabLabels(['team-board/index.ts', 'src/index.ts']))
+      .toEqual(new Map([['team-board/index.ts', 'team-board/index.ts'], ['src/index.ts', 'src/index.ts']]))
+    expect(fileTabLabels(['index.ts', 'src/index.ts'])).toEqual(new Map([['index.ts', 'index.ts'], ['src/index.ts', 'src/index.ts']]))
+  })
+
+  it('does not cut a folder off the whole path when a short one is enough', () => {
+    expect(fileTabLabels(['a/index.ts', 'b/index.ts', 'c/d/index.ts']))
+      .toEqual(new Map([['a/index.ts', 'a/index.ts'], ['b/index.ts', 'b/index.ts'], ['c/d/index.ts', 'd/index.ts']]))
   })
 })
 

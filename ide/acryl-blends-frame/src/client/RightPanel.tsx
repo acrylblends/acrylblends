@@ -13,7 +13,7 @@ import { NEW_CHAT } from './chats.ts'
 import type { ChatsPort } from './LeftPanel.tsx'
 import { historyGroups, type BranchChatsPort } from './branch-chats.ts'
 import type { SwitchRequests } from './switch-request.ts'
-import { FILES_TAB, GIT_TAB, PTY_AGENTS, chatTab, fileTab, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
+import { FILES_TAB, GIT_TAB, PTY_AGENTS, chatTab, fileTab, fileTabLabels, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
 import { TerminalView } from './TerminalView.tsx'
 import type { FrameTools } from './tools.ts'
 import { chatTime, type VersionsPort } from './versions.ts'
@@ -47,7 +47,7 @@ export interface RightPanelProps {
 
 const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 
-function TabLabel({ tab, chatTitle }: { readonly tab: FrameTab; readonly chatTitle: string }) {
+function TabLabel({ tab, chatTitle, fileLabel }: { readonly tab: FrameTab; readonly chatTitle: string; readonly fileLabel?: string | undefined }) {
   switch (tab.kind) {
     case 'chat': return tab.session === undefined
       ? <>Chat <span className="acrylBlendsTabKind">DeepSeek</span></>
@@ -55,7 +55,12 @@ function TabLabel({ tab, chatTitle }: { readonly tab: FrameTab; readonly chatTit
     case 'pty': return <>{PTY_AGENTS.find(entry => entry.agent === tab.agent)?.tab} <span className="acrylBlendsTabKind">PTY</span></>
     case 'terminal': return <>Terminal</>
     case 'files': return <>Files</>
-    case 'file': return <>{baseName(tab.path)}</>
+    case 'file': {
+      // The folder shows only when two open files share a name, so a tab stays its file's name whenever that name is enough.
+      const label = fileLabel ?? baseName(tab.path)
+      const folder = label.slice(0, label.lastIndexOf('/') + 1)
+      return folder === '' ? <>{label}</> : <><span className="acrylBlendsTabPath">{folder}</span>{label.slice(folder.length)}</>
+    }
     case 'git': return <>Git</>
   }
 }
@@ -80,6 +85,8 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
   // The strip shows the checked-out branch's tabs; another branch's stay open (a terminal keeps running) and come back with that branch.
   const branch = state?.branches.find(entry => entry.current)?.name
   const visible = tabsForBranch(strip, branch)
+  // A file tab whose name another open file tab shares shows the folder that tells them apart.
+  const fileLabels = fileTabLabels(visible.flatMap(tab => (tab.kind === 'file' ? [tab.path] : [])))
   const active = visible.find(tab => tab.id === strip.active) ?? visible[0]
   const root = state?.appRoot
   const shownChats = useMemo(() => {
@@ -180,7 +187,7 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
                 onClick={() => { showTab(tab) }}
                 onAuxClick={(event) => { if (event.button === 1) close(tab.id) }}
               >
-                <TabLabel tab={tab} chatTitle={rows.find(row => tab.kind === 'chat' && row.id === tab.session)?.title ?? NEW_CHAT} />
+                <TabLabel tab={tab} chatTitle={rows.find(row => tab.kind === 'chat' && row.id === tab.session)?.title ?? NEW_CHAT} fileLabel={tab.kind === 'file' ? fileLabels.get(tab.path) : undefined} />
               </button>
               {tab.id !== 'chat' && (
                 <button type="button" className="acrylBlendsTabClose" aria-label="Close tab" onClick={() => { close(tab.id) }}>×</button>

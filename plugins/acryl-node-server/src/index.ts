@@ -16,7 +16,7 @@ import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type {} from 'acryl-router'
+import type { ConnectionInfo, Router } from 'acryl-router'
 import { Request as AdapterRequest } from './adapter/request.ts'
 import { RAW_RESPONSE_HANDLED, RAW_UPGRADE_HANDLED, type RawUpgradeRequest } from './adapter/raw.ts'
 import { createAdaptorServer } from './adapter/server.ts'
@@ -45,6 +45,14 @@ export interface RawUpgradeRoute {
   readonly path: string
   readonly handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>
 }
+
+/**
+ * Answer a request before raw routes and the router, or pass it on with `undefined`. The callback runs synchronously, so a request no gate answers still
+ * reaches a raw route's sentinel synchronously; a gate that needs the router (a host keeping an app's URLs in scope under a prefix, the ACRYL frame's canvas)
+ * returns its promise, and the adapter handles that like the router's own answer. `connection` carries the socket facts, which a router mount needs to check
+ * the peer and the real port.
+ */
+export type RequestGate = (request: Request, connection: ConnectionInfo) => Response | Promise<Response> | undefined
 
 /** The pathname of a request target, for raw matching: a malformed one matches nothing (`'/'` matches only itself). */
 function pathnameOf(target: string | undefined): string {
@@ -94,6 +102,7 @@ export class NodeServer extends Service {
   readonly hostname: string
   readonly config: Config
   private readonly server: Server
+  private readonly router: Router
   private hub: UpgradeHub | undefined
   private bound = 0
   /** The one stop this server runs: a second call (the disposer after an explicit stop) waits on the same promise. */
@@ -106,6 +115,8 @@ export class NodeServer extends Service {
   private readonly rawExact = new Map<string, RawRoute['handler']>()
   private readonly rawPrefix = new Map<string, RawRoute['handler']>()
   private readonly rawUpgrades = new Map<string, RawUpgradeRoute['handler']>()
+  /** Gates registered by a host that maps an app's URLs (see {@link NodeServer.gate}); they run in the order they were added. */
+  private readonly gates: RequestGate[] = []
   /** One raw dispatch per upgrade request: a second listener (or a re-added one) must never emit the same request again. */
   private readonly rawUpgradeSeen = new WeakSet<IncomingMessage>()
 
@@ -114,6 +125,7 @@ export class NodeServer extends Service {
     this.config = config
     this.hostname = config.hostname
     const router = ctx.router
+    this.router = router
     // The handler sees the router's bindings (`c.env.connection`), not the raw `incoming`/`outgoing` pair. The global `Request` and
     // `Response` stay the platform's, because this adapter shares its process with the rest of the app; so the adapter's lightweight
     // request is made a real one (its signal still aborts when the client goes away) before the router re-creates it with its own signal.
@@ -141,6 +153,16 @@ export class NodeServer extends Service {
             status: websocket ? 503 : 400,
             headers: { connection: 'close' },
           })
+        }
+        // A gate decides before raw routes and the router (a host that keeps an app's URLs under a prefix answers a navigation the frame's root would
+        // otherwise claim, and sends the app's own sub-resources to the router so a raw prefix cannot answer for the app): its answer is the request's.
+        if (this.gates.length > 0) {
+          const requestLike = request as unknown as Request
+          const connection: ConnectionInfo = { remoteAddress: incoming.socket.remoteAddress, localPort: incoming.socket.localPort }
+          for (const gate of this.gates) {
+            const answer = gate(requestLike, connection)
+            if (answer !== undefined) return answer
+          }
         }
         const raw = this.rawFor(incoming)
         if (raw !== undefined) {
@@ -266,6 +288,26 @@ export class NodeServer extends Service {
     return () => {
       if (table.get(route.path) === route.handler) table.delete(route.path)
     }
+  }
+
+  /**
+   * Answer matching requests before raw routes and the router, so a host can keep an app's URLs in scope under a prefix (the frame's canvas). A gate runs
+   * synchronously and can answer with a promise (see {@link RequestGate}); gates run in the order they were added, and the returned remover takes this one back.
+   */
+  gate(handler: RequestGate): () => void {
+    this.gates.push(handler)
+    return () => {
+      const at = this.gates.indexOf(handler)
+      if (at !== -1) this.gates.splice(at, 1)
+    }
+  }
+
+  /**
+   * A gate's asynchronous answer: run the request it was given through the router, in the adapter's request form (a gate never makes one itself), with the
+   * socket facts. The raw routes do not run for that request.
+   */
+  throughRouter(request: Request, connection: ConnectionInfo = {}): Promise<Response> {
+    return this.router.fetch(new AdapterRequest(request), connection)
   }
 
   /**

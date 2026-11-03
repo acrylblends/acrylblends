@@ -21,6 +21,7 @@ import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
+import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
 import { AppReloader, watchFolder, type AppRow } from './app-reload.ts'
@@ -75,6 +76,21 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     appInstance: AppInstanceService
   }
+}
+
+/** The socket facts a router mount checks: the peer and the real port. */
+interface CanvasConnection {
+  readonly remoteAddress?: string
+  readonly localPort?: number
+}
+
+/**
+ * The part of `acryl-node-server` the canvas URL mapping uses: a request gate, and its asynchronous answer through the router. Typed here because the
+ * adapter package belongs to the host the frame runs in, not to this plugin.
+ */
+interface CanvasServer {
+  gate(handler: (request: Request, connection: CanvasConnection) => Response | Promise<Response> | undefined): () => void
+  throughRouter(request: Request, connection: CanvasConnection): Promise<Response>
 }
 
 export interface FrameConfig {
@@ -626,6 +642,40 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
   const shareOwner = typeof config.shareOwner === 'string' && /^[A-Za-z0-9-]+$/u.test(config.shareOwner) ? config.shareOwner : undefined
   const root = (ctx.appInstance as { readonly root?: unknown }).root
   if (typeof root !== 'string') throw new Error('acryl-blends-frame: the app instance has no app folder (root)')
+  const appBase = appPage === undefined ? undefined : appPage.replace(/\/+$/u, '')
+  // Development host only: an app page answers under the canvas prefix, but its root-relative links, form actions, images and fetch calls go to the
+  // frame's root. A navigation from an app page is sent back under the prefix (307, so a form's method and body survive); a sub-resource or fetch is
+  // sent to the router, where the frame's routes answer first and the wrapper below serves the app at the same path under the prefix when none does.
+  // Raw routes are skipped for these requests: the frame's own raw prefixes (DSH's `/api` among them) serve the frame's page and static files, and
+  // would answer for the app's paths instead of the app. The frame's own page and APIs carry no referer under /app, and production serves the app at
+  // the root, where none of this exists.
+  if (appBase !== undefined && appBase !== '' && appBase !== '/') {
+    ctx.inject(['nodeServer'], (child) => {
+      const server = child.get('nodeServer') as unknown as CanvasServer | undefined
+      if (server === undefined) return
+      child.effect(() => server.gate((request, connection) => {
+        const url = new URL(request.url)
+        const navigation = appNavigationTarget(appBase, url, request.headers)
+        if (navigation !== undefined) return new Response(null, { status: 307, headers: { location: navigation } })
+        if (appFallbackTarget(appBase, url, request.headers) === undefined) return undefined
+        return server.throughRouter(request, connection)
+      }), 'acryl-blends-frame: an app page\'s URLs under the canvas prefix')
+    })
+    ctx.effect(() => ctx.router.wrap(async (c, next) => {
+      const url = new URL(c.req.url)
+      const target = appFallbackTarget(appBase, url, c.req.raw.headers)
+      // A form's or fetch's body belongs to the app: keep a copy before the frame's routes see the request.
+      const copy = target !== undefined && c.req.method !== 'GET' && c.req.method !== 'HEAD' ? c.req.raw.clone() : undefined
+      await next()
+      if (target === undefined || c.res.status !== 404) return
+      // Navigations went through the gate above; this is a sub-resource, a form response or a fetch.
+      if ((c.req.header('sec-fetch-mode') ?? '').toLowerCase() === 'navigate') return
+      const init: RequestInit = { method: c.req.method, headers: c.req.raw.headers }
+      if (copy !== undefined) init.body = await copy.arrayBuffer()
+      // The app's own routes may check the peer and the real port, as on its own server: hand the transport facts on.
+      c.res = await ctx.router.fetch(new Request(new URL(target, url.origin), init), (c.env as { connection?: CanvasConnection } | undefined)?.connection ?? {})
+    }), 'acryl-blends-frame: app requests under the canvas prefix')
+  }
   ctx.plugin(workspaceHost, appPage === undefined ? {} : { appPage })
   // The chat works in the app's own folder. DSH's first-run workspace is a folder under Documents; with the app's folder registered first, the page's first chat
   // opens in it (DSH makes its default workspace only when it has none), so what the agent writes is the app, and the auto-save can save it.
