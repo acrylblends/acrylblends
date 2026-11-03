@@ -1043,6 +1043,7 @@ the submit cannot navigate (preventDefault first, no form action, tested); the s
 second `start()` caller exists (one tag per HTML response, one module execution per document - host removal is defence); the frame's generated dev
 script has no watcher, so the frame's app server does not restart under a run; the panel's check-then-reload race is fixed and its tests pass (typing
 during the change window leaves the page and text alone; an idle empty composer records the marker before reloading). Also `e1f6617a`: a sent message blurs the composer, so a plugin-install run still reloads the page (verify:panel passes again).
-State at this edit: head `e1f6617a`, pushed; the full check exited 0 (14 gates); CI run 1 of three is in flight. This paragraph is committed after the
-count so the tested sha stays the branch head. Left: three consecutive green CI runs on `e1f6617a`, then commit this note and report. The gate's panel step (on this branch) records the
+State at this edit: main `81bb14dc` (119 landed) merged into the branch as `7e2d208b` with no conflicts; the full check runs on the merged head, then the
+push and three consecutive green CI runs count on that merged sha (the earlier count on `e1f6617a` was stopped when 119 landed, as the landing rule
+requires). The gate's panel step (on this branch) records the
 typed nodes' liveness and the reload marker, so a recurrence names a replaced page or an unwired form.
