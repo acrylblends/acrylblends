@@ -17,7 +17,7 @@ import { ChatSavesStore, createChatSavesApi } from './chat-saves.ts'
 import { TurnSaveFooter } from './TurnSaveFooter.tsx'
 import { BlendsFrame } from './BlendsFrame.tsx'
 import { AppCanvasState } from './canvas/app-canvas.ts'
-import { ChatsStore, type MainViewNavigation } from './chats.ts'
+import { ChatsStore, createRealChatsApi, type MainViewNavigation } from './chats.ts'
 import { FrameStateStore } from './frame-state.ts'
 import { FILES_SEARCH_EVENT } from './FilesView.tsx'
 import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSharedPlugin } from 'acryl-workspace/ui'
@@ -75,7 +75,7 @@ export function apply(ctx: ClientContext): void {
   const selection = new SelectionStore()
   const frameState = new FrameStateStore()
   const view = new FrameViewState(pageStorage())
-  const chats = new ChatsStore(() => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'))
+  const chats = new ChatsStore(() => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'), createRealChatsApi())
   const versionsApi = createVersionsApi()
   const branchesApi = createBranchesApi()
   const branchChats = new BranchChatsStore(createBranchChatsApi())
