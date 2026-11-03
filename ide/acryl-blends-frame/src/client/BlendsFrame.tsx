@@ -133,6 +133,19 @@ export function BlendsFrame({ layout, canvas, selection, frameState, appReload, 
           </span>
         )}
         <span className="acrylBlendsGrow" />
+        {/* The select control sits in the frame's bar, never over the app: the canvas holds only the app. */}
+        {!preview && (
+          <button
+            type="button"
+            className="acrylBlendsSelectButton"
+            aria-pressed={picking}
+            aria-label="Select an element for the chat"
+            title="Select an element for the chat"
+            onClick={() => { setPicking(value => !value) }}
+          >
+            <SelectIcon /> Select
+          </button>
+        )}
         <div className="acrylBlendsModes" role="group" aria-label="Mode">
           <button type="button" aria-pressed={frameView.mode === 'build'} onClick={() => { view.setMode('build') }}>Build</button>
           <button type="button" aria-pressed={frameView.mode === 'preview'} onClick={() => { view.setMode('preview') }}>Preview</button>
@@ -178,19 +191,9 @@ export function BlendsFrame({ layout, canvas, selection, frameState, appReload, 
               <button type="button" className="acrylBlendsSmallButton" onClick={() => { view.setMode('build') }}>Back to Build</button>
             </div>
           )}
-          {!preview && (
+          {!preview && picking && (
             <div className="acrylBlendsCanvasTools">
-              <button
-                type="button"
-                className="acrylBlendsSelectButton"
-                aria-pressed={picking}
-                aria-label="Select an element for the chat"
-                title="Select an element for the chat"
-                onClick={() => { setPicking(value => !value) }}
-              >
-                <SelectIcon /> Select
-              </button>
-              {picking && <span className="acrylBlendsPickingHint" role="status">Click an element in the app. Esc cancels.</span>}
+              <span className="acrylBlendsPickingHint" role="status">Click an element in the app. Esc cancels.</span>
             </div>
           )}
           <div className="acrylBlendsCanvasPage">

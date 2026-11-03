@@ -100,9 +100,9 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylAppCanvasFrame { flex: 1; display: block; width: 100%; height: 100%; border: 0; background: #fff; }
 .acrylBlendsBackbar { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px; background: var(--bf-accent); color: #fff; font-size: 12px; }
 .acrylBlendsCanvasTools { position: absolute; top: 10px; right: 10px; z-index: 4; display: flex; align-items: center; gap: 8px; }
-.acrylBlendsSelectButton { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #d8d4ca; border-radius: 7px; background: rgba(255,255,255,.96); color: #3a3a40; font-size: 12px; cursor: pointer; box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+.acrylBlendsSelectButton { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border: 1px solid var(--bf-border); border-radius: 7px; background: transparent; color: var(--bf-dim); font-size: 12px; cursor: pointer; }
 .acrylBlendsSelectButton svg { width: 13px; height: 13px; }
-.acrylBlendsSelectButton:hover { background: #fff; border-color: #b9b3a4; }
+.acrylBlendsSelectButton:hover { background: var(--bf-surface-2); color: #fff; }
 .acrylBlendsSelectButton[aria-pressed="true"] { background: #e0a43a; border-color: #e0a43a; color: #1d1c1a; }
 .acrylBlendsPickingHint { padding: 4px 9px; border-radius: 7px; background: rgba(29,28,26,.86); color: #fff; font-size: 11.5px; white-space: nowrap; }
 
