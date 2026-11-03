@@ -8,6 +8,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
+import { ownerChangeLines, stripRegistrations, withRegistrations, type ChangedLine } from './app-registration.ts'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { diffStat, unifiedDiff } from './diff'
@@ -147,6 +148,8 @@ export type FrameStep =
       readonly removeProfileScript: boolean
       /** Paths the app edited; refused without `--force`. */
       readonly conflicts: readonly string[]
+      /** For a scaffold file with the owner's own lines: the lines, so the refusal names them. */
+      readonly conflictLines?: Readonly<Record<string, readonly ChangedLine[]>>
       readonly changed: boolean
     }
 
@@ -184,6 +187,23 @@ export function planFrameStep(
     text: file.text,
     state: file.state,
   }))
+  // The framework's own `add` registration lines are not the owner's edits: keep them on the app.ts the upgrade writes, and report only the rest.
+  const appIndex = files.findIndex((file) => file.file === 'src/app.ts')
+  const appFile = appIndex < 0 ? undefined : files[appIndex]
+  let conflictLines: Record<string, readonly ChangedLine[]> | undefined
+  if (appFile !== undefined && appFile.state === 'conflict') {
+    const appTsPath = join(appDir, 'src', 'app.ts')
+    const current = existsSync(appTsPath) ? readText(appTsPath) : undefined
+    if (current !== undefined) {
+      const stripped = stripRegistrations(current, undefined, appFile.text)
+      const target = withRegistrations(appFile.text, stripped.edits)
+      if (stripped.text === appFile.text) {
+        files[appIndex] = { file: 'src/app.ts', text: target, state: target === current ? 'same' : 'update' }
+      } else {
+        conflictLines = { 'src/app.ts': ownerChangeLines(current, target) }
+      }
+    }
+  }
   // The composition root as it will be once the scaffold is written: the plan may be about to replace it.
   const plannedAppTs = files.find((file) => file.file === 'src/app.ts')?.text
   const appTs =
@@ -234,6 +254,7 @@ export function planFrameStep(
     hostPlugins,
     removeProfileScript,
     conflicts,
+    ...(conflictLines === undefined ? {} : { conflictLines }),
     changed,
   }
 }
@@ -300,8 +321,12 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
   // The frame half of the upgrade, planned before anything is written so a refusal leaves the folder exactly as it was.
   const frame = planFrameStep(appDir, library)
   if (frame.kind === 'planned' && frame.conflicts.length > 0 && !options.force) {
+    const own = frame.conflictLines?.['src/app.ts'] ?? []
+    const detail = own.length === 0
+      ? ''
+      : `\n  src/app.ts keeps the framework's plugin registrations; the app's own lines are ${own.map((line) => `line ${String(line.line)} (${JSON.stringify(line.text)})`).join(', ')}`
     io.stderr.write(
-      `error: ${frame.conflicts.join(', ')} in ${appDir} ${frame.conflicts.length === 1 ? 'is' : 'are'} not the previous release's scaffold and acrylblends did not write ${frame.conflicts.length === 1 ? 'it' : 'them'}; nothing was changed. Move the app's version aside (or merge it into the template's) and run again, or run again with --force (the app's versions are saved under .acrylblends/upgrade-backup/ first)\n`,
+      `error: ${frame.conflicts.join(', ')} in ${appDir} ${frame.conflicts.length === 1 ? 'is' : 'are'} not the previous release's scaffold and acrylblends did not write ${frame.conflicts.length === 1 ? 'it' : 'them'}; nothing was changed.${detail} Move the app's version aside (or merge it into the template's) and run again, or run again with --force (the app's versions are saved under .acrylblends/upgrade-backup/ first)\n`,
     )
     return 1
   }
