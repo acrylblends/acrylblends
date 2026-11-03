@@ -4,6 +4,7 @@
  * the kill switch. It touches only this document, never another window and never the OS.
  */
 
+import { appBaseOf, underAppBase } from './base.ts'
 import { PageChannel } from './channel.ts'
 import { UiDriver } from './driver/driver.ts'
 import { mountIndicator } from './indicator.ts'
@@ -39,7 +40,19 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
   const view = document.defaultView
   if (view === null) throw new Error('acryl-door: the document has no window')
   const clock = new UserInputClock()
-  const driver = new UiDriver({ document: () => document, msSinceUserInput: clock.msSince })
+  const appBase = appBaseOf(document)
+  const driver = new UiDriver({
+    document: () => document,
+    msSinceUserInput: clock.msSince,
+    // A host that serves the app under a prefix (the ACRYL frame's canvas) marks its pages: an app path navigates under that prefix, so the same
+    // `act navigate --path /board` reaches the app's /board in the frame and on the app's own server.
+    ...(appBase === '' ? {} : {
+      leave: (to: { readonly reload: true } | { readonly path: string }): void => {
+        if ('reload' in to) view.location.reload()
+        else view.location.assign(underAppBase(appBase, to.path))
+      },
+    }),
+  })
   const windowId = typeof view.crypto?.randomUUID === 'function' ? view.crypto.randomUUID() : `w-${String(Date.now())}-${String(Math.random()).slice(2, 8)}`
   Object.defineProperty(view, PAGE_KEY, { value: Object.freeze({ windowId }), configurable: true })
   const tab = tabOf(view)

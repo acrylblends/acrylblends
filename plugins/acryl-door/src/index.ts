@@ -83,6 +83,12 @@ export interface Config {
    * agent's `act navigate` or a reload after a plugin change never takes the person's tab out of the frame.
    */
   hostIndex?: boolean
+  /**
+   * The host prefix the app's pages are served under (the frame's canvas, `/app`); absent on the app's own server, where they are at the root. The
+   * door puts it on every page as `<meta name="acryl-app-base">`, and `act navigate` with an app path goes under it: a page the app serves at
+   * `/board` is reached at `/app/board` in the frame and at `/board` in production, and the same verb works in both.
+   */
+  appBase?: string
 }
 
 export const Config: z<Config> = z.object({
@@ -90,6 +96,7 @@ export const Config: z<Config> = z.object({
   pageOnly: z.boolean().default(false).description('Only the page and the look and act chat tools (a production assistant); runs in production.'),
   reloadOnChange: z.boolean().default(true).description('Reload the open pages after a plugin was added, removed or reloaded while the app runs.'),
   hostIndex: z.boolean().default(true).description("Put the page script in the host's own index page too; off when that index is a frame around the app."),
+  appBase: z.string().default('').description('The prefix the app pages are served under (the frame canvas), without a trailing slash; empty at the root.'),
   tools: z.object({
     // Not a `door_` name: those are the door's own verbs in the registry, never offered back as app tools.
     expose: z.array(z.string().pattern(/^(?!door_)[A-Za-z][A-Za-z0-9_-]{0,63}$/u)).description('App tools (from the tools registry) the door offers; none by default.'),
@@ -163,12 +170,17 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   const channel = new UiChannel({ attachWaitMs: 2000, requirePage: pageOnly })
   const shell = new ShellChannel()
   const audit = new AuditLog(auditPath(stateDir(app.root)))
+  // Where the app's pages answer under this host (`/app` in the frame): `act navigate` sends an app path there, and a page may read it from the
+  // head. The app's own server has no prefix and no meta.
+  const rawBase = typeof config.appBase === 'string' ? config.appBase.trim() : ''
+  const appBase = rawBase.startsWith('/') && rawBase !== '/' ? rawBase.replace(/\/+$/u, '') : ''
   const door = new Door({
     channel,
     shell,
     audit,
     // The address is read when it is used, not when the plugin applies: the carrier binds after the fiber starts (DSH's webServer reports its listening port only then).
     app: { name: app.name, root: app.root, get url() { return address.url } },
+    ...(appBase === '' ? {} : { appBase }),
     extensions: () => ctx.get('extensions') as unknown as ExtensionsPort | undefined,
     tools: () => ctx.get('tools') as unknown as ToolsPort | undefined,
     expose: config.tools?.expose ?? [],
@@ -181,8 +193,9 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     .get(`${DOOR_PREFIX}/page.js`, c => c.body(`import '${DOOR_PREFIX}/page/main.ts'\n`, 200, { 'content-type': 'text/javascript; charset=utf-8' }))
     .route(`${DOOR_PREFIX}/page`, clientModules({ root: PAGE_DIR, mount: `${DOOR_PREFIX}/page` }))
   // The page script on every HTML page the app answers, whenever its plugin was mounted (the pages of a plugin that loaded at boot, before this one, included): a page an agent writes
-  // can be looked at and driven without anyone adding the tag. A page that already carries it (the templates' own pages) is left as it is. Development only, like the rest of the door.
+  // can be looked at and driven without anyone adding the tag. A page that already carries it keeps one copy. Development only, like the rest of the door.
   const tag = `<script type="module" src="${DOOR_PREFIX}/page.js"></script>`
+  const meta = appBase === '' ? '' : `<meta name="acryl-app-base" content="${appBase}">`
   const addScript = async (c: { res: Response; req: { path: string; header(name: string): string | undefined } }, next: () => Promise<void>): Promise<void> => {
     await next()
     if (!(c.res.headers.get('content-type') ?? '').includes('text/html')) {
@@ -192,11 +205,14 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
         c.res = new Response(notFoundPage(c.req.path, tag), { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } })
       return
     }
-    const html = await c.res.text()
+    let html = await c.res.text()
     const headers = new Headers(c.res.headers)
     headers.delete('content-length')
-    const carries = html.includes(`${DOOR_PREFIX}/page.js`)
-    c.res = new Response(carries ? html : html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag, { status: c.res.status, headers })
+    if (meta !== '' && !html.includes('name="acryl-app-base"'))
+      html = html.includes('</head>') ? html.replace('</head>', `${meta}</head>`) : meta + html
+    if (!html.includes(`${DOOR_PREFIX}/page.js`))
+      html = html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag
+    c.res = new Response(html, { status: c.res.status, headers })
   }
   const router = ctx.router as unknown as { wrap?: (middleware: typeof addScript) => unknown }
   // An app whose router copy is older than this plugin has no `wrap`: the middleware then covers the routes mounted after the door, as the agent panel's does.

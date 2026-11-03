@@ -49,6 +49,8 @@ export interface DoorDeps {
   readonly audit: AuditLog
   /** The app's name, folder and, when it listens, its address (what `brief` prints so an agent can curl the running app). */
   readonly app: { readonly name: string; readonly root: string; readonly url?: string | undefined }
+  /** The prefix the app's pages answer under (the frame's canvas, `/app`); absent on the app's own server, at the root. */
+  readonly appBase?: string | undefined
   /** Read at each call: the services may come and go while the door runs. */
   readonly extensions: () => ExtensionsPort | undefined
   readonly tools: () => ToolsPort | undefined
@@ -209,7 +211,13 @@ export class Door {
     const base = this.deps.app.url
     if (base === undefined) return undefined
     try {
-      const response = await fetch(new URL(path, base), { headers: { accept: 'text/html' }, signal: AbortSignal.timeout(3000) })
+      // The app's own path, under the host prefix when the pages answer there (the frame's canvas): /board is /app/board in the canvas and /board at the root.
+      // (The page's own copy of this join lives in `page/base.ts`, beside the meta it reads; the host program has no DOM types to share it.)
+      const appBase = this.deps.appBase
+      const target = appBase === undefined || path === appBase || path.startsWith(`${appBase}/`)
+        ? path
+        : `${appBase}${path.startsWith('/') ? '' : '/'}${path}`
+      const response = await fetch(new URL(target, base), { headers: { accept: 'text/html' }, signal: AbortSignal.timeout(3000) })
       await response.body?.cancel()
       return response.ok ? `${response.status} at ${path}` : `${response.status} at ${path}: the app serves no page there, look at what is shown and navigate to a path it does`
     } catch {
