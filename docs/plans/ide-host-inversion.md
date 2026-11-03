@@ -1211,9 +1211,9 @@ persistence `v2` with the migration. The gate should check the
 canvas iframe as the app's page (it still opens a Browser tab to prove the app page, which passes but no longer describes the product).
 ## 33. Slice 2 state on branch 125-slice2 (2026-11-03)
 
-Working state for the handoff, not a decision record. Branch `125-slice2` is rebased onto `origin/125-slice1`
-`077b4b6a` and is unpushed; slice 1 has since moved to `85bf3c12` (which includes main `a7befe61`), and slice 2 must be
-rebased onto it before gating.
+Working state for the handoff, not a decision record. Branch `125-slice2` is rebased onto slice 1's final head,
+`origin/125-slice1` `a24b6ff2`, whose own full check (main `a7befe61` merged in) is green including the Preview Notice;
+it is unpushed.
 
 Landed on the branch (rebased shas):
 
@@ -1228,9 +1228,10 @@ Landed on the branch (rebased shas):
 - `7f1ba503` the test cast; `1a7f86cd` this note; `c592cc6b` the Preview Notice wait raised to two minutes;
   `3b5bf2a1` the node-server port-scan test's headroom fix.
 
-Blocked on the gate: the blank frame gate's Preview Notice step fails inside `pnpm run check` but passes when the gate
-runs alone on the same tree, with or without a sibling gate. A reproduction with page diagnostics after `verify:ide-host`
-is in flight. Do not call it a slice 2 regression until that dump is read; it fails before any slice 2 area.
+Gate status: on the older `077b4b6a` base the blank gate's Preview Notice failed inside `pnpm run check` but passed alone;
+slice 1's `a24b6ff2` has a green full pipeline on the same machine, so the branch is now on that base and the clean full
+check is rerun when the machine is free (it was stopped so it would not run beside the backup's 124 check, per the
+no-parallel-gates rule).
 
 Still to do:
 
@@ -1240,6 +1241,9 @@ Still to do:
 - Tab persistence v2 and the Review/Checks/Comments/dock removals are slice 1's (Fork3); do not redo them.
 - Full check, push `125-slice2`, all CI green, then report the sha, then slice 4.
 
-126 state: the session-navigation fix is `22513473`, merged with main `a7befe61` in `638dd437`. Green 1 is CI run
-`41586004208`; attempts 2 failed only on macOS flakes (the agent frame panel and the git-service disposal test) and
-attempt 3 is running. `125-port-inventory` now merges main `a7befe61` at `4439c62b`; its full check is pending.
+126 state: the session-navigation fix is `22513473`, merged with main `a7befe61` in `638dd437`. Attempt 2 failed on two
+macOS causes, both fixed at the cause in `18df5252` (the agent gate now fires the driver select's change event, so the
+log is visible when the terminal is the default driver; the git disposal spec waits bounded for the killed process to
+leave ps). The full check on `18df5252` is green, the branch is pushed, and CI run `41598129084` is counting; 124's
+landing needs a merge into 126 and one more green if the merge touches no counted code.
+`125-port-inventory` merges main `a7befe61` at `4439c62b`; its full check is pending after the machine is free.
