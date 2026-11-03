@@ -1363,9 +1363,17 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             const drivers = [...select.options].map(option => option.value)
             if (!drivers.includes('agent')) return undefined
             select.value = 'agent'
-            // A person's pick fires a change event; the panel hides the log while a terminal driver is selected, so a bare
-            // value assignment left the very log this step reads hidden on hosts whose default driver is the terminal.
-            select.dispatchEvent(new Event('change', { bubbles: true }))
+            // A person's pick fires a change event; it is constructed in the iframe's realm so the panel's own listener
+            // runs exactly as it does for a person. The gate never repairs the panel's DOM: if the panel does not switch
+            // itself to the agent's form, that is the failure to report.
+            const EventCtor = iframe.contentWindow?.Event ?? Event
+            select.dispatchEvent(new EventCtor('change', { bubbles: true }))
+            const logElement = root.querySelector('#log')
+            const formElement = root.querySelector('form')
+            const termElement = root.querySelector('#term')
+            const section = root.querySelector('section')
+            const shown =
+              logElement?.hidden === false && formElement?.hidden === false && termElement?.hidden === true
             const textarea = root.querySelector('textarea')
             // Type the way a person does (the native setter plus an input event), not a bare value assignment the page's own listeners would never see.
             const message = 'add 2 3'
@@ -1376,6 +1384,13 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             root.querySelector('form').requestSubmit()
             return {
               drivers,
+              select: select.value,
+              shown,
+              logHidden: logElement?.hidden ?? null,
+              formHidden: formElement?.hidden ?? null,
+              termHidden: termElement?.hidden ?? null,
+              panelVisible: section === null ? null : getComputedStyle(section).display !== 'none',
+              panelText: root.textContent?.slice(-300) ?? null,
               value: textarea.value,
               ready: host.dataset.ready ?? null,
               following: host.dataset.following ?? null,
@@ -1387,6 +1402,10 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           fail(
             `the agent panel did not appear in the app's page, or its session did not load; server said:\n${output.slice(-2500)}`,
           )
+        if (panel.shown !== true)
+          fail(
+            `the agent panel did not switch to the agent's form when its driver was picked (no DOM repair by the gate): ${JSON.stringify(panel)}`,
+          )
         // The offline agent answers in well under a second on a quiet machine; a loaded macOS runner once took longer than the old 30 s bound
         // (run 41358355702) with the panel unchanged, so the wait is 60 s and a failure carries the panel's own log instead of only `undefined`.
         const answered = await until(
@@ -1394,23 +1413,32 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             await evaluate(`(() => {
             const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
             const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
-            const log = root?.querySelector('#log')?.innerText ?? ''
-            if (!log.includes('The answer is 5.')) return undefined
+            const logElement = root?.querySelector('#log')
+            const log = logElement?.innerText ?? ''
+            if (logElement?.hidden === true || !log.includes('The answer is 5.')) return undefined
             return {
               text: log.slice(-300),
+              visible: true,
               send: root.querySelector('.send').disabled === false,
               stopped: root.querySelector('.stop').disabled === true,
             }
           })()`),
           60_000,
         )
-        if (answered === undefined || answered.send !== true || answered.stopped !== true) {
+        if (
+          answered === undefined ||
+          answered.visible !== true ||
+          answered.send !== true ||
+          answered.stopped !== true
+        ) {
           const detail = await evaluate(`(() => {
             const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
             const host = iframe?.contentDocument?.querySelector('#agent-panel')
             const root = host?.shadowRoot
             return {
               log: root?.querySelector('#log')?.innerText?.slice(-600) ?? null,
+              logText: root?.querySelector('#log')?.textContent?.slice(-600) ?? null,
+              logHidden: root?.querySelector('#log')?.hidden ?? null,
               send: root === undefined || root === null ? null : root.querySelector('.send')?.disabled,
               stop: root === undefined || root === null ? null : root.querySelector('.stop')?.disabled,
               drivers: root === undefined || root === null ? null : [...(root.querySelector('select')?.options ?? [])].map(option => option.value),
