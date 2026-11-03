@@ -37,9 +37,7 @@
         { "click": "Hide right panel" },
         { "wait": 800 }
       ],
-      "mask": [
-        { "x": 292, "y": 49, "width": 440, "height": 18 }
-      ]
+      "mask": [{ "x": 292, "y": 49, "width": 440, "height": 18 }]
     }
   ]
 }
