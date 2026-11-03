@@ -106,6 +106,21 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
     >
       {platform === 'darwin' && collapsed && <div className="dshDesktopLeading" data-acryl-slot="shell.leading">{renderSlot('shell.leading', {})}</div>}
       {platform === 'darwin' && <div className="dshDesktopMacCaptionRow" aria-hidden="true" />}
+      {/* The right panel's own control (125): the panel is collapsible in both modes, and its strip lives inside it, so the way back cannot live
+          there. Always reachable, clear of the Windows caption controls. */}
+      <button
+        type="button"
+        className="dshDesktopRightToggle"
+        aria-label={panels.detailsShown ? 'Hide right panel' : 'Show right panel'}
+        title={panels.detailsShown ? 'Hide the right panel' : 'Show the right panel'}
+        aria-pressed={panels.detailsShown}
+        onClick={() => { if (panels.detailsShown) layout.closeRightbar(); else layout.openRightbar(true, false) }}
+      >
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+          <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
+          <path d="M10 2.5v11" />
+        </svg>
+      </button>
       {platform === 'win32' && <div className="dshDesktopWindowsCaptionRow" aria-hidden="true" />}
       <aside className="dshDesktopSidebarSurface">
         <div className="dshDesktopUpstreamSidebar" data-acryl-slot="sidebar">

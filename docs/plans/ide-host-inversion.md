@@ -1204,6 +1204,17 @@ not built here. Fork3 should confirm this reading before slice 1 is called compl
   the divider and ratio modules and suites are deleted. The state's split API is unreachable and goes in the next pass.
 - `e7c2f4db` the **git status bar** left the frame (`StatusLine`/`buildStatusLine` and its specs deleted).
 
+**The five points from slice 1's review, with their owner and slice.**
+1. The right panel's open/close control: owner decision (both panels collapsible). Fixed here, in slice 1: the frame renders a top-right panel
+   toggle bound to the shell's layout service, always reachable and clear of the Windows caption controls; the gate hides the panel and brings it
+   back through it.
+2. Cmd-P fuzzy search with highlighted file tabs: owner decision. Slice 1B, immediately after slice 1 lands - not an open deferral. The Files tab has
+   the repository search today; the shortcut binding and fuzzy ranking are 1B's work.
+3. C.5's run log: Fork3's verdict (the reading above says the frame's chat is DSH's durable session and PTYs replay from the registry, so the log is
+   for drivers the frame does not mount).
+4. The state's split API (unreachable since the split UI left): cleanup with Fork3's verdict, next pass or slice 2.
+5. Storage key stays v1 (only the app tab needed migrating): version bump with the shell's view-state move in slice 2, per Fork3's verdict.
+
 Remaining for slice 1 (section 31.5): fuzzy search over every file behind a shortcut (the Files
 tab has the repository search; the mockup's `◘P` binding and fuzzy ranking are not wired); the chat run log on the Host (`.acrylblends/runs/<id>.jsonl`, rejoin and replay) moved from the app
 panel; Review, Checks and Comments out of the frame (and `CodeEditor`'s comment gutter), the dock and the split out of the right panel; tab

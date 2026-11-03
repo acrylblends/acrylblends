@@ -1259,6 +1259,30 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       }, 20_000)
       if (right === undefined) fail('the right panel did not show the workspace strip')
       log(`the right panel is the workspace strip with ${String(right.tabs.length)} tab(s)`)
+      // The right panel's own control is in the frame's top bar (125) and is always reachable: hide the panel, and bring it back with the same
+      // control. Without it a closed panel could not be reopened, because the panel's only toggle used to live inside the panel.
+      const detailsWidth = () =>
+        evaluate(`(() => {
+          const frame = document.querySelector('.dshDesktopFrame')
+          const columns = (frame?.style.gridTemplateColumns ?? '').split(' ').filter(Boolean)
+          return columns.length === 3 ? columns[2] : null
+        })()`)
+      if ((await click('Hide right panel')) !== true)
+        fail('the frame has no control to hide the right panel')
+      const hiddenPanel = await until(
+        async () => ((await detailsWidth()) === '0px' ? true : undefined),
+        10_000,
+      )
+      if (hiddenPanel !== true)
+        fail(`the right panel did not hide: ${JSON.stringify(await detailsWidth())}`)
+      if ((await click('Show right panel')) !== true)
+        fail('the frame has no control to show the right panel again')
+      const shownPanel = await until(async () => {
+        const width = await detailsWidth()
+        return width !== null && width !== '0px' ? true : undefined
+      }, 10_000)
+      if (shownPanel !== true) fail('the right panel did not come back from the top-bar control')
+      log('the right panel hides and comes back from the frame top bar')
 
       // (f) The command palette (the same window event `acryl-shortcuts` sends when its shortcut runs).
       await evaluate(`window.dispatchEvent(new Event('acryl:toggle-command-palette')), true`)
