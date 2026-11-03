@@ -75,6 +75,7 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
   const [menu, setMenu] = useState(false)
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const menuRef = useRef<HTMLDivElement>(null)
+  const stripRef = useRef<HTMLDivElement>(null)
   const current = rows.find(row => row.current)
   // The strip shows the checked-out branch's tabs; another branch's stay open (a terminal keeps running) and come back with that branch.
   const branch = state?.branches.find(entry => entry.current)?.name
@@ -85,6 +86,11 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
     const needle = query.trim().toLowerCase()
     return needle === '' ? rows : rows.filter(row => row.title.toLowerCase().includes(needle))
   }, [rows, query])
+
+  // The tab shown stays in view when the strip is longer than the panel.
+  useEffect(() => {
+    stripRef.current?.querySelector('[role="tab"][aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [active?.id, visible.length])
 
   useEffect(() => {
     if (!menu) return undefined
@@ -162,7 +168,7 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
   return (
     <>
       <div className="acrylBlendsTabs" ref={menuRef}>
-        <div className="acrylBlendsTabStrip" role="tablist" aria-label="Agents and tools">
+        <div className="acrylBlendsTabStrip" role="tablist" aria-label="Agents and tools" ref={stripRef}>
           {visible.map(tab => (
             <div key={tab.id} className="acrylBlendsTabWrap" data-closable={tab.id !== 'chat' || undefined}>
               <button

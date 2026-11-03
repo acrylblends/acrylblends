@@ -109,7 +109,7 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsPickingHint { padding: 4px 9px; border-radius: 7px; background: rgba(29,28,26,.86); color: #fff; font-size: 11.5px; white-space: nowrap; }
 
 .acrylBlendsTabs { position: relative; flex: none; border-bottom: 1px solid var(--bf-border); }
-.acrylBlendsTabStrip { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; overflow-x: auto; scrollbar-width: none; }
+.acrylBlendsTabStrip { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; overflow-x: auto; scrollbar-width: none; scroll-padding-right: 40px; }
 .acrylBlendsTabStrip::-webkit-scrollbar { display: none; }
 .acrylBlendsTabWrap { position: relative; display: flex; flex: none; }
 .acrylBlendsTab { padding: 6px 7px; border: 0; border-radius: 6px 6px 0 0; background: transparent; color: var(--bf-dim); display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; font-size: 12px; }
@@ -120,7 +120,8 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsTabWrap .acrylBlendsTabClose { position: absolute; top: 2px; right: -4px; opacity: 0; background: var(--bf-side); }
 .acrylBlendsTabWrap:hover .acrylBlendsTabClose, .acrylBlendsTabClose:focus-visible { opacity: 1; }
 .acrylBlendsTabClose:hover { background: var(--bf-surface-2); color: #fff; }
-.acrylBlendsPlus { margin-left: 2px; flex: none; position: sticky; right: 0; background: var(--bf-side); }
+/* Every open chat has a tab, so the strip can run past the panel: the + stays at its right edge, over a fade, and the tab shown scrolls into view. */
+.acrylBlendsPlus { margin-left: 2px; flex: none; position: sticky; right: 0; background: var(--bf-side); box-shadow: -8px 0 6px 2px var(--bf-side); }
 .acrylBlendsMenu { position: absolute; top: 34px; left: 8px; z-index: 5; width: 230px; background: var(--bf-surface); border: 1px solid #34343a; border-radius: 8px; padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
 .acrylBlendsMenuHead { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--bf-dim); padding: 6px 8px 2px; }
 .acrylBlendsMenuItem { display: flex; gap: 8px; align-items: center; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: #e2e2e6; font-size: 13px; text-align: left; cursor: pointer; }

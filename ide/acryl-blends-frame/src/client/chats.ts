@@ -286,6 +286,7 @@ export class ChatsStore implements ChatsPort {
       this.reconcile()
       return
     }
+    this.tabOpenChats(branch)
     const decision = decideChat({ rows: this.all, real: this.real, running: this.running, assignments: map.getSnapshot(), branch, preferred: this.deps.preferred?.(), open: map.getOpen() })
     if (decision.action === 'open') this.open(decision.id)
     else if (decision.action === 'adopt') map.adopt([decision.id], branch)
@@ -295,6 +296,22 @@ export class ChatsStore implements ChatsPort {
       // moved the chat is still the one shown.
       map.setOpen(shown, true)
     }
+  }
+
+  /**
+   * Every open chat of the checked-out branch has a tab of its own, except the one the base tab shows (the newest of those without): the open set is
+   * remembered by the Host, the strip by the page, so a page that has not seen a chat open gets its tab here.
+   */
+  private tabOpenChats(branch: string): void {
+    const map = this.deps.branchChats
+    const tabs = this.deps.tabs
+    if (map === undefined || tabs === undefined || !map.isOpenKnown() || this.pending !== undefined || this.creating !== undefined) return
+    const tabbed = this.tabbed()
+    const view: ChatsView = { rows: this.all, real: this.real, running: this.running, assignments: map.getSnapshot(), branch, open: map.getOpen() }
+    const base = branchChat(view, tabbed)
+    const missing = this.all.filter(row => row.id !== base?.id && !tabbed.has(row.id) && map.isOpen(row.id) && map.getSnapshot()[row.id] === branch)
+    // Stamped with the branch asked about, not the strip's own idea of it: the strip learns the branch from the page, which may not have drawn yet.
+    tabs.add(...missing.map(row => ({ ...chatTab(row.id), branch })))
   }
 
   /** The chats that have a tab of their own. */

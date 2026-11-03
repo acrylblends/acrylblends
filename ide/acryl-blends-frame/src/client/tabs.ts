@@ -156,6 +156,14 @@ export class FrameTabs {
     this.set({ tabs: open ? this.snapshot.tabs : [...this.snapshot.tabs, next], active: next.id })
   }
 
+  /** Add tabs that are not in the strip yet, at the end, without showing them; a tab added now belongs to the checked-out branch. */
+  add(...added: readonly FrameTab[]): void {
+    const fresh = added
+      .filter(tab => !this.snapshot.tabs.some(existing => existing.id === tab.id))
+      .map(tab => (!isBase(tab) && tab.branch === undefined && this.branch !== undefined ? { ...tab, branch: this.branch } : tab))
+    if (fresh.length > 0) this.set({ tabs: [...this.snapshot.tabs, ...fresh], active: this.snapshot.active })
+  }
+
   activate(id: string): void {
     if (this.snapshot.tabs.some(tab => tab.id === id)) this.set({ ...this.snapshot, active: id })
   }

@@ -184,6 +184,21 @@ describe('open and closed chats', () => {
     expect(t.map.isOpen('m1')).toBe(true)
   })
 
+  it('gives every open chat of the branch a tab on a page that has none, except the one the base tab shows', async () => {
+    const tabs = new FrameTabs()
+    tabs.setBranch('main')
+    const t = setup({ ids: ['m3', 'm2', 'm1'], recorded: { m3: 'main', m2: 'main', m1: 'main' }, real: ['m3', 'm2', 'm1'], open: ['m3', 'm2'], tabs })
+    await t.start()
+    expect(tabs.getSnapshot().tabs.map(tab => tab.id)).toEqual(['chat', 'chat:m2'])
+    expect(tabs.getSnapshot().active).toBe('chat')
+    expect(t.dsh.shown()).toBe('m3')
+    // The tab belongs to the branch the chat is on, even when the strip has not heard of a branch switch yet.
+    tabs.setBranch('elsewhere')
+    t.switchTo('feature')
+    await settle()
+    expect(tabsForBranch(tabs.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['chat', 'chat:m2'])
+  })
+
   it('a chat tab of a chat that is not open is dropped from the strip', () => {
     const tabs = new FrameTabs()
     tabs.setBranch('main')
