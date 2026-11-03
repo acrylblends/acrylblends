@@ -34,6 +34,7 @@ export interface SavedFrameView {
   readonly mode?: FrameMode
   readonly sidebar?: number
   readonly details?: number
+  readonly detailsShown?: boolean
 }
 
 export interface DesktopColumns {
@@ -187,6 +188,11 @@ export class DesktopLayoutState implements ILayout {
     if (typeof view.details === 'number' && Number.isFinite(view.details)) {
       const max = Math.max(DETAILS_MIN, this.viewport > 0 ? this.viewport * DETAILS_MAX_RATIO : view.details)
       next.details = clamp(view.details, 0, max)
+    }
+    if (typeof view.detailsShown === 'boolean') {
+      next.detailsShown = view.detailsShown
+      next.detailsTrack = view.detailsShown
+      if (!view.detailsShown) next.detailsFullscreen = false
     }
     this.publish(next)
   }

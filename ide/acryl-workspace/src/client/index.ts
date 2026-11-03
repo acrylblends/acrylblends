@@ -42,14 +42,12 @@ import { createWorkspaceAgentsApi } from './agents/agents-api.ts'
 import { agentsSettingsPlugin } from './agents/agents-settings-plugin.ts'
 import { settingsSharedPlugin } from './settings/section-plugin.ts'
 import { PaletteConfigState } from './palette/palette-config.ts'
-import { paletteSettingsPlugin } from './palette/palette-settings-plugin.ts'
 import { createAgentStatusApi } from './status/agent-status-api.ts'
 import { AgentStatusState } from './status/agent-status-state.ts'
 import { createTerminalStack } from './dock/terminal-stack.ts'
 import { WorkspaceTabRegistry } from './tabs/registry/tab-registry.ts'
 import { provideWorkspaceTabs } from './tabs/registry/provide.ts'
 import { TabTypesState } from './tabs/tab-types-state.ts'
-import { tabsSettingsPlugin } from './tabs/tabs-settings-plugin.ts'
 import { AgentsState } from './agents/agents-state.ts'
 import { createBrowserNoticePort } from './notifications/system-notice.ts'
 import { ToastState } from './notifications/toast-state.ts'
@@ -292,8 +290,6 @@ export function apply(ctx: ClientContext): void {
     const paletteConfig = new PaletteConfigState(storage)
     ctx.plugin(settingsSharedPlugin())
     ctx.plugin(agentsSettingsPlugin(agents))
-    ctx.plugin(tabsSettingsPlugin(tabTypes, tabRegistry))
-    ctx.plugin(paletteSettingsPlugin(paletteConfig))
     // The strip and its tabs live in the right column in 125; the centre is acryl-app-canvas. A lower priority wins the single slot.
     ctx.slots.inject('rightbar', () => {
       const toasts = new ToastState()

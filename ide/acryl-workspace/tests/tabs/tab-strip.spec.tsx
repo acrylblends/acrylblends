@@ -245,14 +245,6 @@ describe('TabStrip', () => {
     expect(new TabTypesState(storage).isEnabled('kanban')).toBe(false)
   })
 
-  it('links "Add your own tab type" to Settings > Tabs', () => {
-    const onManage = vi.fn(() => true)
-    setup(memoryStorage(), { onManage })
-    fireEvent.click(screen.getByRole('button', { name: 'Choose what to open' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Add your own tab type...' }))
-    expect(onManage).toHaveBeenCalledWith('tabs', expect.any(Function))
-  })
-
   it('opens the last thing you opened when + is clicked, starting with a terminal', () => {
     const { workspace, onOpenPty, storage } = setup()
     fireEvent.click(screen.getByRole('button', { name: 'New tab: Terminal' }))

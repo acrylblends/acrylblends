@@ -57,10 +57,12 @@ export function applyAdvancedShell(ctx: ClientContext, environment: ShellEnviron
   }
 
   const frameStorage = browserViewStorage()
+  const savedView = loadFrameView(frameStorage)
   const desktopLayout = new DesktopLayoutState()
-  // Build or Preview and the widths the person dragged to survive a reload; the right panel's own open state
-  // stays with the panel, which reports it through the layout service.
-  desktopLayout.restoreView(loadFrameView(frameStorage))
+  // Build or Preview, the widths the person dragged to, and whether the right panel was open survive a reload.
+  desktopLayout.restoreView(savedView)
+  // First run opens both panels; afterwards the saved view decides.
+  if (savedView === undefined) desktopLayout.openRightbar(true, false)
   ctx.effect(
     () => provideDesktopLayout(ctx, desktopLayout),
     'acryl-app-shell: layout service',

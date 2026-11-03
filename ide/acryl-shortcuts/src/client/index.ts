@@ -3,8 +3,6 @@ import type { ShortcutBinding, ShortcutCommandId, Shortcuts } from '@acryl/ui/fr
 
 /** One command as `ctx.shortcuts.register` takes it. */
 type ShortcutRegistration = Parameters<Shortcuts['register']>[0]
-import { ShortcutsSection } from './ShortcutsSection.tsx'
-import { installShortcutsStyles } from './styles.ts'
 
 export const name = 'acryl-shortcuts-client'
 export const inject = ['shortcuts']
@@ -24,15 +22,6 @@ export const PALETTE_TOGGLE_EVENT = 'acryl:toggle-command-palette'
 /** Stable id in DSH's shortcut catalog. */
 export const PALETTE_COMMAND_ID = 'acryl.command-palette.toggle' as ShortcutCommandId
 
-/** Dictionary namespace for the section's name in the Settings list. */
-const LOCALE_NAMESPACE = 'acryl.shortcuts'
-
-declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface LocaleNamespaceMap {
-    'acryl.shortcuts': 'nav'
-  }
-}
-
 /**
  * Cmd/Ctrl+Shift+P. The palette's old Cmd/Ctrl+Shift+K overlaps upstream's `session.search` (Cmd/Ctrl+K), and DSH's registry refuses overlapping
  * defaults. A Web page on Linux may only bind a short list of combinations, so that profile gets no default (the command is still listed and bindable).
@@ -40,26 +29,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const PALETTE_BINDING: ShortcutBinding = { code: 'KeyP', modifiers: ['primary', 'shift'] }
 
 export function apply(ctx: ClientContext): void {
+  // The shortcut commands themselves. Settings > Shortcuts left the frame in 125 (the mockup keeps a short list in
+  // General); the commands stay registered and rebindable through DSH's own "Edit shortcuts" dialog.
   ctx.effect(() => registerPalette(ctx), 'acryl-shortcuts: toggle command palette')
-  // A child plugin: the section waits for the Settings slots and the locale service, the shortcuts above do not.
-  ctx.plugin({
-    name: 'acryl-shortcuts-settings',
-    inject: ['slots', 'locale'],
-    apply(child: ClientContext): void {
-      child.effect(() => child.locale.register(LOCALE_NAMESPACE, { en: { nav: 'Shortcuts' }, zh: { nav: '快捷键' } }), 'acryl-shortcuts: dictionary')
-      child.effect(() => installShortcutsStyles(), 'acryl-shortcuts: styles')
-      const t = child.locale.bind(LOCALE_NAMESPACE)
-      child.slots.inject('settings.section', () => child.slots.register({
-        name: 'settings.section',
-        id: 'acryl-shortcuts',
-        // After ACRYL's Agents (40), Tabs (41) and Command palette (42).
-        order: 43,
-        label: () => t('nav'),
-        locale: LOCALE_NAMESPACE,
-        inject: () => ({ shortcuts: ctx.shortcuts }),
-      }, ShortcutsSection))
-    },
-  })
 }
 
 /**

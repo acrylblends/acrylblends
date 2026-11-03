@@ -32,10 +32,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** @param value - parsed JSON of unknown shape; anything unreadable gives nothing. */
 export function parseSavedFrameView(value: unknown): SavedFrameView | undefined {
   if (!isRecord(value)) return undefined
-  const view: { mode?: FrameMode; sidebar?: number; details?: number } = {}
+  const view: { mode?: FrameMode; sidebar?: number; details?: number; detailsShown?: boolean } = {}
   if (value.mode === 'build' || value.mode === 'preview') view.mode = value.mode
   if (typeof value.sidebar === 'number' && Number.isFinite(value.sidebar)) view.sidebar = value.sidebar
   if (typeof value.details === 'number' && Number.isFinite(value.details)) view.details = value.details
+  if (typeof value.detailsShown === 'boolean') view.detailsShown = value.detailsShown
   return Object.keys(view).length === 0 ? undefined : view
 }
 
@@ -64,7 +65,12 @@ export function startFrameViewPersistence(layout: DesktopLayoutState, storage: V
     timer = undefined
     const snapshot = layout.getSnapshot()
     try {
-      storage.setItem(FRAME_VIEW_KEY, JSON.stringify({ mode: snapshot.mode, sidebar: snapshot.sidebar, details: snapshot.details }))
+      storage.setItem(FRAME_VIEW_KEY, JSON.stringify({
+        mode: snapshot.mode,
+        sidebar: snapshot.sidebar,
+        details: snapshot.details,
+        detailsShown: snapshot.detailsShown,
+      }))
     } catch {
       // Storage full or blocked: a convenience only.
     }

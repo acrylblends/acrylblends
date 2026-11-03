@@ -169,7 +169,6 @@ export function NewTabMenu({ open, customAgents, settings, storage, tabTypes, ta
             ? <button type="button" role="menuitem" className="dshWorkspaceMenuItem" onClick={() => { setManaging(false); setNotice(null) }}>Done</button>
             : settings !== null && <button type="button" role="menuitem" className="dshWorkspaceMenuItem" onClick={() => { setManaging(true) }}>Manage agents...</button>}
           <button type="button" role="menuitem" className="dshWorkspaceMenuItem" onClick={() => { manage('agents', 'Open Settings, then Agents, to add more agents.') }}>Add more agents...</button>
-          <button type="button" role="menuitem" className="dshWorkspaceMenuItem" onClick={() => { manage('tabs', 'Open Settings, then Tabs, to manage tab types.') }}>Add your own tab type...</button>
           {notice !== null && <div className="dshWorkspaceMenuHint" role="status">{notice}</div>}
         </div>
       )}
