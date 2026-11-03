@@ -27,6 +27,8 @@ const BACKOFF_MAX_MS = 10_000
 
 export interface PageChannelOptions {
   readonly windowId: string
+  /** The browser tab the page is in (kept across the tab's reloads and moves), so the Host follows a run's page into the next document of its tab. */
+  readonly tab?: string
   /** The desktop window this page is in (`AcrylWindow/<n>` in the user agent, set by the Electron shell), so the Host can drive it by the number `window list` prints. */
   readonly shellWindow?: number
   readonly focused: () => boolean
@@ -70,7 +72,7 @@ export class PageChannel {
 
   connect(): void {
     if (this.disposed || this.source !== undefined) return
-    const query = `window=${encodeURIComponent(this.options.windowId)}&focused=${this.options.focused() ? '1' : '0'}${this.options.shellWindow === undefined ? '' : `&shell=${String(this.options.shellWindow)}`}`
+    const query = `window=${encodeURIComponent(this.options.windowId)}&focused=${this.options.focused() ? '1' : '0'}${this.options.shellWindow === undefined ? '' : `&shell=${String(this.options.shellWindow)}`}${this.options.tab === undefined ? '' : `&tab=${encodeURIComponent(this.options.tab)}`}`
     const viaSocket = this.socketAllowed
     this.socketReady = false
     const source: ChannelSource = viaSocket

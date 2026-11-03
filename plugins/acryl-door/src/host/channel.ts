@@ -44,6 +44,8 @@ interface Connection {
   readonly windowId: string
   /** The desktop window the page is in, when the Electron shell tagged it. */
   readonly shellWindow: number | undefined
+  /** The browser tab the page is in (the page keeps it for the tab's lifetime): a page that reloads or moves to another path comes back with a new window id and the same tab. */
+  readonly tab: string | undefined
   focused: boolean
   /** Order of last focus (or connection), so the most recent wins. */
   lastActive: number
@@ -64,23 +66,39 @@ export interface ChannelOptions {
    * address registers again a moment later). 0 (the default) fails at once.
    */
   readonly attachWaitMs?: number
+  /**
+   * Every call must name the page it is for (`page`), and goes to that page alone: never to the page in front or the one used last, which may be another visitor's. A page-only door
+   * (a production assistant, one channel for every visitor of the app) sets it.
+   */
+  readonly requirePage?: boolean
+}
+
+/** A page whose panel asked for a run: the id the run knows it by, and where that page is now (the same tab after a reload or a move). */
+interface Asker {
+  /** The window id the run was asked from: what its calls name as `page`. */
+  readonly origin: string
+  windowId: string
+  tab: string | undefined
 }
 
 /**
  * The pages and who drives which. One page answers a call, chosen the same way every time: the page whose panel asked for the run that is making the call (`driveFor`), else the page the
  * Host just sent somewhere (it comes back as a new page, `prefer`), else the one in front (it reports `focused`), else the most recently active; a page that did not acknowledge a call in time goes to the end of the line. An explicit desktop `window` picks its page.
+ * A call that names its `page` (the page a run was asked from) goes to that page alone, followed into its tab when it reloads or moves, and to no other.
  */
 export class UiChannel {
   private readonly ackMs: number
   private readonly attachWaitMs: number
+  private readonly requirePage: boolean
   /** The page the Host sent to a new place and that came back: it keeps being driven until the person focuses another page. */
   private preferred: string | undefined
   /** The pages whose panels have a run going, the latest last: a call with no `window` goes to the latest of them that is still connected. */
-  private readonly askers: Array<{ windowId: string }> = []
+  private readonly askers: Asker[] = []
 
   constructor(options: ChannelOptions = {}) {
     this.ackMs = options.ackMs ?? DEFAULT_ACK_MS
     this.attachWaitMs = options.attachWaitMs ?? 0
+    this.requirePage = options.requirePage === true
   }
 
   private readonly connections = new Map<string, Connection>()
@@ -95,12 +113,17 @@ export class UiChannel {
    * Register a page's stream. A stream already open for the same window is closed first, and its calls settle as `disconnected`.
    * @returns the function to call when this stream ends.
    */
-  attach(windowId: string, focused: boolean, stream: PageStream, shellWindow?: number): () => void {
+  attach(windowId: string, focused: boolean, stream: PageStream, shellWindow?: number, tab?: string): () => void {
     const previous = this.connections.get(windowId)
     if (previous !== undefined) this.drop(previous, true)
     // A page that did not answer stays last in line when its stream reconnects: a tab that cannot answer reconnects just as readily, and would otherwise be first again.
-    const connection: Connection = { stream, windowId, shellWindow, focused, lastActive: ++this.clock, suspect: previous?.suspect === true }
+    const connection: Connection = { stream, windowId, shellWindow, tab, focused, lastActive: ++this.clock, suspect: previous?.suspect === true }
     this.connections.set(windowId, connection)
+    // A run's page that reloaded or moved comes back as a new page in the same tab: the run goes on with it.
+    for (const asker of this.askers) {
+      if (asker.windowId === windowId) asker.tab ??= tab
+      else if (tab !== undefined && asker.tab === tab) asker.windowId = windowId
+    }
     // A page that reloaded or came back during its own run is told the run is still going.
     if (this.askers.some(asker => asker.windowId === windowId)) this.tell(connection, '1')
     for (const waiter of [...this.attachWaiters]) waiter(windowId)
@@ -149,7 +172,7 @@ export class UiChannel {
    * @returns the function to call when the run ends.
    */
   driveFor(windowId: string): () => void {
-    const asker = { windowId }
+    const asker: Asker = { origin: windowId, windowId, tab: this.connections.get(windowId)?.tab }
     this.askers.push(asker)
     this.tellPage(windowId, '1')
     return () => {
@@ -159,6 +182,33 @@ export class UiChannel {
       // The page keeps the bar if another run of its own is still going.
       if (!this.askers.some(other => other.windowId === asker.windowId)) this.tellPage(asker.windowId, '0')
     }
+  }
+
+  /** Where the page a run was asked from is now: the same window, or the page that replaced it in the same tab. */
+  private whereIs(page: string): { windowId: string; tab: string | undefined } {
+    const asker = [...this.askers].reverse().find(entry => entry.origin === page)
+    return asker === undefined ? { windowId: page, tab: this.connections.get(page)?.tab } : { windowId: asker.windowId, tab: asker.tab }
+  }
+
+  /**
+   * A promise for the run's page coming back after a reload or a move: the next page that connects in its tab (or with its window id). Ask for it BEFORE the call that makes the page
+   * leave. Pages of other tabs, another visitor's among them, are never taken for it.
+   * @param signal - stop waiting (the act did not move the page after all); the promise then answers `undefined`.
+   * @returns the window id of the page that came back, or `undefined` when it did not within `timeoutMs`.
+   */
+  expectPageBack(page: string, timeoutMs: number, signal?: AbortSignal): Promise<string | undefined> {
+    const { windowId, tab } = this.whereIs(page)
+    return new Promise((resolve) => {
+      const done = (value: string | undefined): void => { clearTimeout(timer); this.attachWaiters.delete(waiter); signal?.removeEventListener('abort', stop); resolve(value) }
+      const stop = (): void => { done(undefined) }
+      signal?.addEventListener('abort', stop, { once: true })
+      const waiter = (attached: string): void => {
+        const connection = this.connections.get(attached)
+        if (attached === windowId || (tab !== undefined && connection?.tab === tab)) done(attached)
+      }
+      const timer = setTimeout(() => { done(undefined) }, timeoutMs)
+      this.attachWaiters.add(waiter)
+    })
   }
 
   private tellPage(windowId: string, running: '0' | '1'): void {
@@ -176,8 +226,10 @@ export class UiChannel {
     if (connection === undefined) return
     this.preferred = windowId
     connection.lastActive = ++this.clock
-    // A run's own page that reloaded or navigated comes back as a new page: the run goes on with that one.
-    for (const asker of this.askers) if (!this.connections.has(asker.windowId)) asker.windowId = windowId
+    // A run's own page that reloaded or navigated comes back as a new page: the run goes on with that one. A run whose page has a tab follows only that tab, so
+    // another visitor's page is never taken for it.
+    for (const asker of this.askers)
+      if (!this.connections.has(asker.windowId) && (asker.tab === undefined || asker.tab === connection.tab)) asker.windowId = windowId
     if (this.askers.some(asker => asker.windowId === windowId)) this.tellPage(windowId, '1')
   }
 
@@ -186,9 +238,11 @@ export class UiChannel {
    * until it speaks; a call that changes the page is never sent to a second page, because the first might still run it.
    * @throws UiControlError `no-window`, `timeout`, `aborted`, `unloaded`, `disconnected`, or whatever the page refused with.
    */
-  async call(request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number; window?: number } = {}, retried = false): Promise<UiResult> {
+  async call(request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number; window?: number; page?: string } = {}, retried = false): Promise<UiResult> {
     if (this.closed) throw new UiControlError('unloaded', 'the door was unloaded')
     const readOnlyCall = request.op === 'snapshot' || request.op === 'wait'
+    if (options.page !== undefined) return await this.callPage(request, options.page, options, readOnlyCall)
+    if (this.requirePage) throw new UiControlError('no-window', 'this door drives only the page whose visitor asked, and the call names no page')
     // A page that is moving to another address registers again a moment later: a read-only call right after a navigate or reload waits for it, rather than failing.
     if (readOnlyCall && this.attachWaitMs > 0 && this.connections.size === 0) await this.expectNewPage(this.attachWaitMs)
     const ordered = this.ordered()
@@ -216,6 +270,26 @@ export class UiChannel {
       if (fresh !== undefined && !tried.has(fresh)) return await this.call(request, options, true)
     }
     throw new UiControlError('timeout', `no page of the app answered within ${String(Math.round(this.ackMs / 1000))} s: the app's pages are open but none responded. Likely causes: a tab in the background, a page that is still loading after a navigation (look again), a page busy running a long script, or a page that holds the browser's six connections with event streams of its own (a page should keep to two). Bring the app's tab to the front, or navigate it, then look again`)
+  }
+
+  /**
+   * A call for one page (the page a run was asked from, followed into its tab): it goes to that page alone and never fails over to another one. A page that is between two
+   * documents (it reloads, or moves to another path) is waited for, up to the attach wait.
+   */
+  private async callPage(request: UiRequest, page: string, options: { signal?: AbortSignal; timeoutMs?: number }, readOnly: boolean): Promise<UiResult> {
+    let target = this.connections.get(this.whereIs(page).windowId)
+    if (target === undefined && this.attachWaitMs > 0) {
+      const back = await this.expectPageBack(page, this.attachWaitMs)
+      if (back !== undefined) target = this.connections.get(back)
+    }
+    if (target === undefined) throw new UiControlError('no-window', 'the page this run is for is not open any more')
+    if (options.signal?.aborted === true) throw new UiControlError('aborted', 'the call was cancelled')
+    try {
+      return await this.callOne(target, request, options, readOnly)
+    } catch (cause) {
+      if (cause instanceof Silent) throw new UiControlError('timeout', 'the page this run is for did not answer: is its tab in the background or still loading? Look again')
+      throw cause
+    }
   }
 
   private callOne(target: Connection, request: UiRequest, options: { signal?: AbortSignal; timeoutMs?: number }, failOver: boolean): Promise<UiResult> {
@@ -260,12 +334,15 @@ export class UiChannel {
 
   /**
    * A promise for the window id of the next page that connects and was not connected when this was asked (the page that came back after a reload or a move).
+   * @param signal - stop waiting; the promise then answers `undefined`.
    * @returns that id, or `undefined` when no new page connected within `timeoutMs`.
    */
-  expectNewPage(timeoutMs: number): Promise<string | undefined> {
+  expectNewPage(timeoutMs: number, signal?: AbortSignal): Promise<string | undefined> {
     const known = new Set(this.connections.keys())
     return new Promise((resolve) => {
-      const done = (value: string | undefined): void => { clearTimeout(timer); this.attachWaiters.delete(waiter); resolve(value) }
+      const done = (value: string | undefined): void => { clearTimeout(timer); this.attachWaiters.delete(waiter); signal?.removeEventListener('abort', stop); resolve(value) }
+      const stop = (): void => { done(undefined) }
+      signal?.addEventListener('abort', stop, { once: true })
       const waiter = (windowId: string): void => { if (!known.has(windowId)) done(windowId) }
       const timer = setTimeout(() => { done(undefined) }, timeoutMs)
       this.attachWaiters.add(waiter)

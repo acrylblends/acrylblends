@@ -27,6 +27,9 @@ export interface DriverActivity {
   readonly killed: boolean
 }
 
+/** How long after an act a navigation it started is still noticed (a link's navigation starts a task or two after the click). */
+const LEAVE_WATCH_MS = 50
+
 export interface UiDriverOptions {
   readonly document: () => Document
   /** Milliseconds since the user last used the page (mouse, keyboard); Infinity when never. */
@@ -142,14 +145,32 @@ export class UiDriver {
   private async run(request: UiRequest, signal: AbortSignal): Promise<UiResult> {
     switch (request.op) {
       case 'snapshot': return this.snapshots.snapshot({ ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.maxNodes === undefined ? {} : { maxNodes: request.maxNodes }) })
-      case 'click': return click(this.env, request)
-      case 'type': return typeText(this.env, request)
+      case 'click': return await this.watchLeaving(() => click(this.env, request), signal)
+      case 'type': return await this.watchLeaving(() => typeText(this.env, request), signal)
       case 'select': return selectOption(this.env, request)
-      case 'press': return pressKey(this.env, request)
+      case 'press': return await this.watchLeaving(() => pressKey(this.env, request), signal)
       case 'scroll': return scroll(this.env, request)
       case 'wait': return wait(this.env, request, signal)
       case 'reload': return this.leave({ reload: true }, 'reloading')
       case 'navigate': return this.leave({ path: request.path }, `going to ${request.path}`)
+    }
+  }
+
+  /**
+   * Run an act that may start a navigation (a click on a link, Enter in a form) and say so: the browser asks `beforeunload` when a navigation starts, during the act or a
+   * moment after it. The answer is sent before the page goes; the Host then waits for the next page instead of reading this one again.
+   */
+  private async watchLeaving(act: () => UiActionResult, signal: AbortSignal): Promise<UiActionResult> {
+    const view = this.options.document().defaultView
+    let leaving = false
+    const onLeave = (): void => { leaving = true }
+    view?.addEventListener('beforeunload', onLeave)
+    try {
+      const result = act()
+      if (!leaving) await this.env.sleep(LEAVE_WATCH_MS, signal)
+      return leaving ? { ...result, leaving: true, detail: `${result.detail === undefined ? '' : `${result.detail}; `}the page is going to another address` } : result
+    } finally {
+      view?.removeEventListener('beforeunload', onLeave)
     }
   }
 
