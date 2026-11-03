@@ -1012,6 +1012,16 @@ far, both commits with the frame booting and the blank gate green:
 - `b6cd161f` a saved workspace **drops the app's browser tab on load** (the first-run tile the centre used to open); every other saved tab stays,
   now in the right panel. The storage key stays v1 because the tab model did not change.
 
+**The gates had been checking a stale build.** The frame gates install the packages the CLI's built `dist` names; for several slice-1 runs only the
+shell and the new canvas had been rebuilt, so the gates exercised the OLD workspace lib in the centre and passed steps the real tree no longer
+satisfies. The rule from here: rebuild every package the gate installs before a frame-gate run (`packages/cli`, every touched `ide/*`), or the gate is
+not talking about this branch. With the real build the blank and agent gates now pass end to end on this head after three gate updates: the first-run
+step asserts the app in `iframe.acrylAppCanvasFrame` instead of a first-run browser tile; the right-panel step asserts the workspace strip with its
+tabs instead of DSH's Files/Changes/Review views; the panel step runs in the canvas frame (falling back to a browser tile); and the Preview Notice
+wait is 120 s with a message naming the parallel-gate case (two frame gates on one machine starved it past a minute; alone it mounts quickly -
+125-slice2's finding). DSH's `ui-sidebar-right` row stays composed (its services and onboarding keep working) while the workspace strip wins the
+`rightbar` slot; removing the row changed nothing visible in the gates and was undone.
+
 **C.5's run log, read against what the frame actually mounts.** In the frame the chat tab renders DSH's own session, whose transcript DSH already
 keeps durably: a frame reload rejoins that session and replays it, and the PTY tabs replay through the terminal registry's scrollback. The extra
 `runs/<id>.jsonl` log is needed for a chat driver the frame does not mount (the standalone app's agent panel, and any non-DSH chat driver); it is

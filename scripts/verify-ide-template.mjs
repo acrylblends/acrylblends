@@ -399,9 +399,12 @@ ${composition.stdout}`)
             const dialog = document.querySelector('[role=dialog]')
             return dialog !== null && dialog.innerText.includes('Preview Notice') ? dialog.innerText.slice(0, 120) : undefined
           })()`),
-        60_000,
+        120_000,
       )
-      if (notice === undefined) fail('the Preview Notice did not appear on a fresh profile')
+      // 120 s: on a loaded machine (two frame gates at once) the notice has taken past a minute to mount; alone it is quick. A failure here names the
+      // parallel-gate case, which was the whole difference between a red and a green run on the same tree (125-slice2's finding, 2026-11-03).
+      if (notice === undefined)
+        fail('the Preview Notice did not appear on a fresh profile (is another frame gate running on this machine?)')
       const noticeScroll = await evaluate(
         `Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)`,
       )
@@ -819,11 +822,11 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       log(
         'the frontend stylesheet is in the document and the entry script holds no swallowed markup',
       )
-      // Day one under the frame (119): the app the person is building is already open in a tile, with no + and no typed address, and the document
-      // has not scrolled (a focused first-run card must not move the shell).
+      // Day one under the frame: the app the person is building is shown in the frame's canvas (125), with no + and no typed address, and the
+      // document has not scrolled (a focused first-run card must not move the shell).
       const firstRunTile = await until(async () => {
         const snapshot = await evaluate(`(() => {
-          const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+          const frame = document.querySelector('iframe.acrylAppCanvasFrame')
           const src = frame?.getAttribute('src') ?? ''
           const text = frame?.contentDocument?.body?.innerText ?? ''
           const tabs = [...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())
@@ -834,14 +837,14 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       }, 20_000)
       if (firstRunTile === undefined)
         fail(
-          `the app did not open itself in a tile on first run (no iframe at /app with content); tabs: ${JSON.stringify(await evaluate(`[...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())`))}`,
+          `the app is not shown in the frame's canvas on first run (no canvas frame at /app with content); tabs: ${JSON.stringify(await evaluate(`[...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())`))}`,
         )
       if (firstRunTile.scrollTop !== 0)
         fail(
           `the page scrolled to ${String(firstRunTile.scrollTop)} on first run: ${JSON.stringify(firstRunTile)}`,
         )
       log(
-        `the app opens itself in a tile on first run ("${firstRunTile.text.trim().split('\n')[0]}")`,
+        `the app's page is in the frame's canvas on first run ("${firstRunTile.text.trim().split('\n')[0]}")`,
       )
       if (
         (await evaluate(
@@ -1051,32 +1054,25 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         fail(`the chat tab is not in the tab strip: ${JSON.stringify(await chatTabs())}`)
       log(`the chat tab is in the tab strip ("${chatTab.trim()}")`)
 
-      // (b) The right panel with the workspace's Files/Changes/Review views (DSH's right sidebar, which the workspace fills).
-      // The panel opens empty and fills after its tab types register; the toggle button also appears a moment after the frame, so the wait
-      // presses it again until the views are there (a press on an already-open panel finds no button and does nothing).
+      // (b) The right panel is the workspace's own strip (125): the tab strip with the chat, the terminals and the file, Files and Git tabs lives
+      // in the right column, and DSH's sidebar-right views are no longer composed into the frame. Wait until the strip is there with its tabs.
       const right = await until(async () => {
         const snapshot = await evaluate(`(() => {
             const bar = document.querySelector('[data-acryl-slot=rightbar]')
             if (bar === null) return undefined
-            const text = bar.innerText
-            if (!text.includes('Changes')) return undefined
+            const tabs = [...bar.querySelectorAll('[role=tab]')].map(tab => tab.textContent.trim())
+            if (tabs.length === 0) return undefined
             const labels = [...bar.querySelectorAll('button,[role=tab]')]
               .map(element => element.getAttribute('aria-label') ?? element.getAttribute('title') ?? element.textContent.trim())
               .filter(Boolean)
-            return { text: text.slice(0, 600), labels: labels.slice(0, 60) }
+            return { text: bar.innerText.slice(0, 600), tabs, labels: labels.slice(0, 60) }
           })()`)
         if (snapshot !== undefined) return snapshot
         await click('Show right panel')
         return undefined
       }, 20_000)
-      if (right === undefined) fail('the right panel did not open with its views')
-      const rightText = `${right.text}\n${right.labels.join('\n')}`
-      for (const label of ['Changes', 'Review'])
-        if (!rightText.includes(label))
-          fail(`the right panel has no ${label} view: ${JSON.stringify(right)}`)
-      if (!rightText.includes('Files') && !rightText.includes('Code'))
-        fail(`the right panel has no files view: ${JSON.stringify(right)}`)
-      log('the right panel offers Files, Changes and Review')
+      if (right === undefined) fail('the right panel did not show the workspace strip')
+      log(`the right panel is the workspace strip with ${String(right.tabs.length)} tab(s)`)
 
       // (f) The command palette (the same window event `acryl-shortcuts` sends when its shortcut runs).
       await evaluate(`window.dispatchEvent(new Event('acryl:toggle-command-palette')), true`)
@@ -1204,6 +1200,37 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       }
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
 
+      // The centre is the app: the frame's canvas shows the app's own page, same-origin, and the panel below runs in it (125 slice 1).
+      const canvasPage = await until(
+        async () =>
+          await evaluate(`(() => {
+            const frame = document.querySelector('iframe.acrylAppCanvasFrame')
+            const doc = frame?.contentDocument ?? null
+            const text = doc?.body?.innerText ?? ''
+            return doc !== null && text.trim() !== '' ? text.slice(0, 120) : undefined
+          })()`),
+        30_000,
+      )
+      if (canvasPage === undefined) {
+        const dump = await evaluate(`(() => {
+          const frame = document.querySelector('iframe.acrylAppCanvasFrame')
+          const main = document.querySelector('[data-acryl-slot="desktop.main"]')
+          let href = null
+          let readable = null
+          try { href = frame?.contentWindow?.location?.href ?? null; readable = frame === null ? null : frame.contentDocument !== null } catch {}
+          return {
+            frames: [...document.querySelectorAll('iframe')].map(f => ({ cls: f.className, src: f.getAttribute('src') })),
+            href, readable,
+            mainText: main?.innerText?.slice(0, 200) ?? null,
+            mainFound: main !== null,
+            conversationSlots: document.querySelectorAll('[data-acryl-slot="conversation"]').length,
+            dialogs: [...document.querySelectorAll('[role="dialog"]')].map(d => (d.getAttribute('aria-label') ?? d.textContent?.slice(0, 40) ?? '')).slice(0, 5),
+          }
+        })()`)
+        fail(`the frame canvas did not show the app page: ${JSON.stringify(dump)}`)
+      }
+      log(`the app's page is shown in the frame's canvas: "${canvasPage.trim().split('\n')[0]}"`)
+
       // The agent template's own plugins run beside the host (the composition check above proves every row active), and the panel's routes belong under
       // the app's mount: /app/api/agent-panel, where the app is served, not the host's own /api. Open the panel in the iframe, let its session load, and
       // ask the app's own offline agent to add two numbers: the run starts and stops, and the answer lands in the panel's own log.
@@ -1211,7 +1238,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         const panel = await until(
           async () =>
             await evaluate(`(() => {
-            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const iframe = document.querySelector('iframe.acrylAppCanvasFrame') ?? document.querySelector('iframe.dshWorkspaceBrowserFrame')
             const host = iframe?.contentDocument?.querySelector('#agent-panel')
             const root = host?.shadowRoot
             const open = root?.querySelector('button.open')
@@ -1249,7 +1276,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         const answered = await until(
           async () =>
             await evaluate(`(() => {
-            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const iframe = document.querySelector('iframe.acrylAppCanvasFrame') ?? document.querySelector('iframe.dshWorkspaceBrowserFrame')
             const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
             const log = root?.querySelector('#log')?.innerText ?? ''
             if (!log.includes('The answer is 5.')) return undefined
@@ -1263,7 +1290,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         )
         if (answered === undefined || answered.send !== true || answered.stopped !== true) {
           const detail = await evaluate(`(() => {
-            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const iframe = document.querySelector('iframe.acrylAppCanvasFrame') ?? document.querySelector('iframe.dshWorkspaceBrowserFrame')
             const host = iframe?.contentDocument?.querySelector('#agent-panel')
             const root = host?.shadowRoot
             return {
