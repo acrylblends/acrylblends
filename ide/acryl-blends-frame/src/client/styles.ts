@@ -3,10 +3,14 @@
 const STYLE_ID = 'acryl-blends-frame-styles'
 
 const CSS = `
-.acrylBlendsFrame {
+/* DSH's dialogs and menus on the frame's dark surface, and its active Settings section in the frame's accent: the mockup's Settings. */
+html body[data-ds-dark-theme] { --dsw-alias-bg-layer-2: #18181b; --dsw-specific-sidebar-nav-item-active: rgba(84,104,255,.16); }
+.acrylBlendsFrame, .acrylBlendsPlugins {
   --bf-bg: #0b0b0d; --bf-side: #111113; --bf-surface: #18181b; --bf-surface-2: #222226; --bf-border: #2a2a2f;
   --bf-text: #e8e8ea; --bf-dim: #8b8b93; --bf-accent: #5468ff; --bf-accent-dim: rgba(84,104,255,.16); --bf-ok: #3fb67b; --bf-warn: #e0a43a;
   --bf-lw: 248px; --bf-rw: 412px;
+}
+.acrylBlendsFrame {
   position: fixed; inset: 0; display: grid; grid-template-rows: 38px minmax(0, 1fr);
   background: var(--bf-bg); color: var(--bf-text); color-scheme: dark;
   font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -140,13 +144,39 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsHistoryButton[aria-pressed="true"] { background: var(--bf-accent-dim); color: #fff; }
 .acrylBlendsChatTitle { color: var(--bf-dim); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acrylBlendsHistory { flex: 1; overflow: auto; padding: 8px 10px; display: grid; gap: 2px; align-content: start; }
-.acrylBlendsHistoryRow { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: #d4d4da; cursor: pointer; text-align: left; }
+.acrylBlendsHistoryGroup { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--bf-dim); padding: 8px 9px 3px; }
+.acrylBlendsHistoryRow { display: grid; gap: 1px; padding: 7px 9px; border: 0; border-radius: 6px; background: transparent; color: #d4d4da; cursor: pointer; text-align: left; }
 .acrylBlendsHistoryRow:hover { background: var(--bf-surface-2); }
 .acrylBlendsHistoryRow[aria-current] { color: #fff; }
 .acrylBlendsHistoryRow small { color: var(--bf-dim); font-size: 11px; }
 .acrylBlendsConversation { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .acrylBlendsConversation[hidden] { display: none; }
 .acrylBlendsConversation > * { flex: 1; min-height: 0; }
+
+.acrylBlendsPlugins { color: var(--bf-text, #e8e8ea); font-size: 13px; }
+.acrylBlendsShortcuts { padding: 14px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #26262b); font-size: 13px; }
+.acrylBlendsShortcutsTitle { font-weight: 500; margin-bottom: 8px; }
+.acrylBlendsShortcuts ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.acrylBlendsShortcuts li { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--dsw-alias-label-secondary, #a1a1aa); }
+.acrylBlendsShortcutsKeys { display: inline-flex; gap: 3px; }
+.acrylBlendsShortcutsKeys kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 5px; background: rgb(127 127 127 / 16%); color: var(--dsw-alias-label-primary, #e8e8ea); font: 11px ui-sans-serif, system-ui, sans-serif; }
+.acrylBlendsPlugins h3 { font-size: 15px; margin: 0 0 2px; color: #fff; }
+.acrylBlendsPluginsSub { color: #8b8b93; font-size: 12px; margin: 0 0 12px; }
+.acrylBlendsPluginsTools { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+.acrylBlendsPluginsTools .acrylBlendsSearch { flex: 1; width: auto; min-width: 160px; }
+.acrylBlendsChip { font-size: 11px; border: 1px solid #34343a; border-radius: 99px; padding: 3px 10px; color: #c8c8d0; background: transparent; cursor: pointer; }
+.acrylBlendsChip[aria-pressed="true"] { border-color: #5468ff; color: #fff; background: rgba(84,104,255,.16); }
+.acrylBlendsPlug { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 4px 12px; align-items: center; padding: 9px 10px; border: 1px solid #2a2a2f; border-radius: 8px; margin-bottom: 6px; }
+.acrylBlendsPlug b { color: #fff; font-weight: 600; font-size: 12.5px; }
+.acrylBlendsPlug small { grid-column: 1; color: #8b8b93; font-size: 11.5px; }
+.acrylBlendsPlugBy { font-size: 10.5px; color: #8b8b93; border: 1px solid #34343a; border-radius: 4px; padding: 1px 6px; grid-row: 1 / span 2; grid-column: 2; white-space: nowrap; }
+.acrylBlendsPlugFixed { grid-row: 1 / span 2; grid-column: 3; font-size: 10.5px; color: #66666e; }
+.acrylBlendsPlugState[data-state="ok"] { color: #3fb67b; } .acrylBlendsPlugState[data-state="warn"] { color: #e0a43a; }
+.acrylBlendsTog { grid-row: 1 / span 2; grid-column: 3; width: 30px; height: 17px; border: 0; padding: 0; border-radius: 99px; background: #3a3a40; position: relative; cursor: pointer; }
+.acrylBlendsTog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: left .12s ease; }
+.acrylBlendsTog[aria-checked="true"] { background: #5468ff; }
+.acrylBlendsTog[aria-checked="true"]::after { left: 15px; }
+.acrylBlendsTog:disabled { opacity: .6; cursor: default; }
 
 .acrylBlendsDialogBackdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.5); display: grid; place-items: center; }
 .acrylBlendsDialog { position: relative; width: min(980px, 92vw); height: min(680px, 88vh); background: var(--bf-surface); border: 1px solid #34343a; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.5); }

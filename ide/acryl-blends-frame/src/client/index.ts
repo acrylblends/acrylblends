@@ -15,6 +15,10 @@ import { AppCanvasState } from './canvas/app-canvas.ts'
 import { ChatsStore, type MainViewNavigation } from './chats.ts'
 import { FrameStateStore } from './frame-state.ts'
 import { FILES_SEARCH_EVENT } from './FilesView.tsx'
+import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSharedPlugin } from 'acryl-workspace/ui'
+import { ShortcutsRow } from './ShortcutsRow.tsx'
+import { appPluginRow, createAppPluginsApi, framePluginRow, type NavigatorPlugin } from './plugins-navigator.ts'
+import { PluginsSection } from './PluginsSection.tsx'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
 import { FILES_TAB, FrameTabs, tabOfTerminal } from './tabs.ts'
@@ -27,6 +31,15 @@ declare module '@deepseek-ai/cordis' {
     appCanvas: AppCanvasState
   }
 }
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    'acryl.blendsFrame': 'plugins'
+  }
+}
+
+const LOCALE_NAMESPACE = 'acryl.blendsFrame'
+/** The Loader row that composes the app's own plugins (`frame/app-plugins.mjs`): loading it again applies a switch in `blend.yaml`. */
 
 export const name = 'acryl-blends-frame-client'
 
@@ -120,6 +133,57 @@ export function apply(ctx: ClientContext): void {
       document.removeEventListener('visibilitychange', read)
     }
   }, 'acryl-blends-frame: read the frame state')
+
+  // Settings → Agents: the workspace's own section, on the workspace Host's agent routes.
+  const agents = new AgentsState(createWorkspaceAgentsApi())
+  ctx.effect(() => { void agents.refresh(); return () => {} }, 'acryl-blends-frame: load the agents')
+  ctx.plugin(settingsSharedPlugin())
+  ctx.plugin(agentsSettingsPlugin(agents))
+
+  // Settings → Plugins: the app's plugins, each with its switch, and the frame's own; the Host starts the app's plugins again after a switch.
+  const appPlugins = createAppPluginsApi()
+  const loadPlugins = async (): Promise<readonly NavigatorPlugin[]> => {
+    const view = await appPlugins.read()
+    return [
+      ...view.plugins.map(plugin => appPluginRow(plugin, async (on) => {
+        await appPlugins.switch(plugin.kind, plugin.name, on)
+        canvas.reload()
+      })),
+      ...view.frame.map(framePluginRow),
+    ]
+  }
+  ctx.plugin({
+    name: 'acryl-blends-frame-plugins-settings',
+    inject: ['slots', 'locale'],
+    apply(child: ClientContext): void {
+      child.effect(() => child.locale.register(LOCALE_NAMESPACE, { en: { plugins: 'Plugins' }, zh: { plugins: '插件' } }), 'acryl-blends-frame: dictionary')
+      const t = child.locale.bind(LOCALE_NAMESPACE)
+      child.slots.inject('settings.section', () => child.slots.register({
+        name: 'settings.section',
+        id: 'acryl-blends-plugins',
+        // After Models and Agents, before Support (90).
+        order: 45,
+        label: () => t('plugins'),
+        locale: LOCALE_NAMESPACE,
+        inject: () => ({ loadPlugins }),
+      }, PluginsSection))
+    },
+  })
+
+  // Settings > General: a short list of the shortcuts.
+  ctx.plugin({
+    name: 'acryl-blends-frame-shortcuts-row',
+    inject: ['slots', 'shortcuts'],
+    apply(child: ClientContext): void {
+      child.slots.inject('settings.general.item', () => child.slots.register({
+        name: 'settings.general.item',
+        id: 'acryl-blends-shortcuts',
+        // After Developer tools (15), before the version (100).
+        order: 50,
+        inject: () => ({ shortcuts: child.shortcuts }),
+      }, ShortcutsRow))
+    },
+  })
 
   ctx.inject(['sessions'], (child) => {
     child.effect(() => chats.watch(child.sessions), 'acryl-blends-frame: chats follow the sessions')

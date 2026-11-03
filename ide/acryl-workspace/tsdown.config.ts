@@ -30,7 +30,9 @@ export default defineConfig([
     clean: false,
     sourcemap: true,
     plugins: [xtermCssPlugin()],
-    noExternal: () => true,
+    // React and the DSH packages stay the importer's own (one React per page, the shared Module Loader for DSH); the rest is bundled in.
+    external: ['react', 'react/jsx-runtime', 'react-dom'],
+    noExternal: (id: string) => id === 'react' || id.startsWith('react/') || id === 'react-dom' || id.startsWith('@deepseek-ai/') ? undefined : true,
   },
   {
     name: `${PACKAGE_NAME}/client`,

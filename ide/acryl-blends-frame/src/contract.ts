@@ -52,3 +52,79 @@ export function parseFrameState(value: unknown): FrameState {
     ...(unsaved === undefined ? {} : { unsaved }),
   }
 }
+
+export const FRAME_PLUGINS_PATH = `${FRAME_API_PREFIX}/plugins`
+export const FRAME_PLUGINS_SWITCH_PATH = `${FRAME_API_PREFIX}/plugins/switch`
+
+/**
+ * Where a plugin of the app comes from: a row of the app's `blend.yaml` (the library plugins the app was made with), or a plugin written into the
+ * app's `plugins/` folder after it was made (what agents build; the `extensions` row starts them).
+ */
+export type AppPluginKind = 'row' | 'made'
+
+/** One plugin of the app, as Settings → Plugins lists it. */
+export interface AppPluginView {
+  readonly name: string
+  readonly kind: AppPluginKind
+  /** Who wrote it: the agent or person of its first commit; absent for a library row. */
+  readonly by?: string
+  /** When it was first committed (ISO time); absent when it is not saved yet or a library row. */
+  readonly at?: string
+  /** Not committed yet: it runs, but no version has it. */
+  readonly unsaved?: boolean
+  /** The library release a library row was copied from (`plugins/library.lock.json`). */
+  readonly version?: string
+  readonly description: string
+  readonly on: boolean
+}
+
+/** How one of the frame's own Loader rows runs: started, waiting for a service it needs, failed to start, or switched off. */
+export type FramePluginState = 'active' | 'waiting' | 'failed' | 'off'
+
+/** One of the frame's own plugins (its Loader rows around the app): shown, not switched here. */
+export interface FramePluginView {
+  readonly id: string
+  readonly name: string
+  readonly version?: string
+  readonly description: string
+  readonly state: FramePluginState
+}
+
+export interface AppPluginsView {
+  readonly plugins: readonly AppPluginView[]
+  readonly frame: readonly FramePluginView[]
+}
+
+const FRAME_PLUGIN_STATES: readonly string[] = ['active', 'waiting', 'failed', 'off'] satisfies FramePluginState[]
+
+/** @throws when the answer is not a plugin list. */
+export function parseAppPluginsView(value: unknown): AppPluginsView {
+  if (!isRecord(value) || !Array.isArray(value.plugins)) throw new Error('plugins: not a list')
+  return {
+    plugins: value.plugins.map((entry: unknown) => {
+      if (!isRecord(entry) || typeof entry.name !== 'string' || (entry.kind !== 'row' && entry.kind !== 'made')
+        || typeof entry.description !== 'string' || typeof entry.on !== 'boolean') throw new Error('plugins: entry')
+      return {
+        name: entry.name,
+        kind: entry.kind,
+        ...(typeof entry.by === 'string' ? { by: entry.by } : {}),
+        ...(typeof entry.at === 'string' ? { at: entry.at } : {}),
+        ...(entry.unsaved === true ? { unsaved: true } : {}),
+        ...(typeof entry.version === 'string' ? { version: entry.version } : {}),
+        description: entry.description,
+        on: entry.on,
+      }
+    }),
+    frame: (Array.isArray(value.frame) ? value.frame : []).map((entry: unknown) => {
+      if (!isRecord(entry) || typeof entry.id !== 'string' || typeof entry.name !== 'string' || typeof entry.description !== 'string'
+        || typeof entry.state !== 'string' || !FRAME_PLUGIN_STATES.includes(entry.state)) throw new Error('plugins: frame entry')
+      return {
+        id: entry.id,
+        name: entry.name,
+        ...(typeof entry.version === 'string' ? { version: entry.version } : {}),
+        description: entry.description,
+        state: entry.state as FramePluginState,
+      }
+    }),
+  }
+}

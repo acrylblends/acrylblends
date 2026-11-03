@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { formatRelativeTime } from 'acryl-versions/client'
 import type { FrameState } from '../contract.ts'
 import { FilesView } from './FilesView.tsx'
 import { FileView } from './FileView.tsx'
@@ -191,6 +192,8 @@ export function RightPanel({ chats, tabs, tools, versions, state, renderConversa
               onChange={(event) => { setQuery(event.target.value) }}
             />
             {shownChats.length === 0 && <p className="acrylBlendsNote">No chats match.</p>}
+            {/* Chats are not tied to a branch yet: every one is the checked-out branch's, the folder the chat works in. */}
+            {shownChats.length > 0 && <div className="acrylBlendsHistoryGroup">{state?.branches.find(branch => branch.current)?.name ?? 'Chats'}</div>}
             {shownChats.map(row => (
               <button
                 key={row.id}
@@ -203,7 +206,7 @@ export function RightPanel({ chats, tabs, tools, versions, state, renderConversa
                 }}
               >
                 {row.title}
-                <small>{row.current ? 'open' : ''}</small>
+                <small>{[row.current ? 'open' : 'closed', row.updatedAt === undefined ? '' : formatRelativeTime(new Date(row.updatedAt).toISOString())].filter(part => part !== '').join(' · ')}</small>
               </button>
             ))}
           </div>

@@ -12,6 +12,8 @@ export interface ChatRow {
   readonly id: string
   readonly title: string
   readonly current: boolean
+  /** When the chat last changed (ms since the epoch); absent when DSH did not say. */
+  readonly updatedAt?: number
 }
 
 /** The chats the frame knows (DSH's sessions), and opening one in the right panel. */

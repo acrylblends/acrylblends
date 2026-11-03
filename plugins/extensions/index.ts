@@ -83,6 +83,11 @@ export interface ExtensionsConfig {
   readOnly?: boolean
   /** Where the read-only start says what it did (the console by default). */
   log?: (line: string) => void
+  /**
+   * Plugins of the sources that are switched off (Settings → Plugins writes this list into `blend.yaml`): they are not started, in development or
+   * production, until taken off the list. Their folders stay as they are.
+   */
+  off?: readonly string[]
 }
 
 const READ_ONLY =
@@ -227,6 +232,7 @@ export class Extensions extends Service {
   private tail: Promise<unknown> = Promise.resolve()
   private disposed = false
   private readonly readOnly: boolean
+  private readonly off: ReadonlySet<string>
   private readonly say: (line: string) => void
   /**
    * The context the service was constructed with. Inside a service method `this.ctx` is Cordis's shadow context, which resolves services as the
@@ -238,6 +244,7 @@ export class Extensions extends Service {
     super(ctx, 'extensions')
     this.owner = ctx
     this.readOnly = config.readOnly === true
+    this.off = new Set(config.off ?? [])
     this.say = config.log ?? ((line) => console.log(line))
     const { home, root } = ctx.appInstance
     this.sources = (config.sources ?? [{ dir: join(home, 'extensions'), trust: 'install' }]).map(
@@ -417,6 +424,7 @@ export class Extensions extends Service {
           entry.isDirectory() &&
           NAME.test(entry.name) &&
           !library.has(entry.name) &&
+          !this.off.has(entry.name) &&
           ENTRIES.some((file) => existsSync(join(dir, file)))
         ) {
           if (!found.some((other) => other.name === entry.name))
@@ -788,6 +796,8 @@ export class Extensions extends Service {
       summary.failed.push({ name: 'extensions.json', error: message(error) })
     }
     for (const [name, record] of Object.entries(records)) {
+      // Switched off: not started, and dropped from the record; switched on again, its folder is found and installed as new.
+      if (this.off.has(name)) continue
       try {
         // What was installed before was approved then: an unchanged source starts again without asking.
         this.approved.set(name, record.version)

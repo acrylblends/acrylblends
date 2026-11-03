@@ -14,10 +14,22 @@ import type {} from 'acrylblends/cordis/router'
 import type {} from 'acrylblends/cordis/router-http'
 import { Acryl } from 'acrylblends'
 import { error } from 'acryl-loopback-http'
-import { ownPage, privateApi } from 'acryl-loopback-http/router'
+import { INVALID_JSON, jsonBody, ownPage, privateApi, readJson } from 'acryl-loopback-http/router'
 import { GitRunner } from 'acryl-versions'
 import * as workspaceHost from 'acryl-workspace'
-import { FRAME_API_PREFIX, FRAME_STATE_PATH, type FrameBranch, type FrameState } from './contract.ts'
+// `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
+import type {} from '@deepseek-ai/cordis-plugin-loader'
+import { readAppPlugins, readFramePlugins, switchAppPlugin, type FrameRow } from './app-plugins.ts'
+import {
+  FRAME_API_PREFIX,
+  FRAME_PLUGINS_PATH,
+  FRAME_PLUGINS_SWITCH_PATH,
+  FRAME_STATE_PATH,
+  type AppPluginKind,
+  type AppPluginsView,
+  type FrameBranch,
+  type FrameState,
+} from './contract.ts'
 
 /**
  * The part of the runtime's `appInstance` service ACRYL plugins read (a separated interface: plugins do not import the runtime). Every plugin
@@ -101,8 +113,42 @@ async function readAppName(root: string): Promise<string> {
   return basename(root)
 }
 
-export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}): Acryl {
+/** Settings → Plugins: the app's plugins, and switching one in `blend.yaml`. */
+export interface PluginsPort {
+  read(): Promise<AppPluginsView>
+  switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
+}
+
+function parseSwitch(body: unknown): { kind: AppPluginKind; name: string; on: boolean } | undefined {
+  if (body === null || typeof body !== 'object') return undefined
+  const { kind, name, on } = body as Record<string, unknown>
+  if ((kind !== 'row' && kind !== 'made') || typeof name !== 'string' || name === '' || name.length > 200 || typeof on !== 'boolean') return undefined
+  return { kind, name, on }
+}
+
+export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort): Acryl {
   const app = new Acryl()
+  if (plugins !== undefined) {
+    app.get(FRAME_PLUGINS_PATH, ownPage, async (c) => {
+      try {
+        return c.json(await plugins.read())
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the plugins could not be read'), 500)
+      }
+    })
+    app.post(FRAME_PLUGINS_SWITCH_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const input = body === INVALID_JSON ? undefined : parseSwitch(body)
+      if (input === undefined) return c.json(error('invalid switch request'), 400)
+      try {
+        await plugins.switch(input.kind, input.name, input.on)
+        return c.json({ ok: true })
+      } catch (cause) {
+        return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be switched'), 409)
+      }
+    })
+  }
   app.get(FRAME_STATE_PATH, ownPage, async (c) => {
     try {
       return c.json(await state())
@@ -113,6 +159,9 @@ export function frameRoutes(state: () => Promise<FrameState>, report: (cause: un
   })
   return privateApi(FRAME_API_PREFIX, app)
 }
+
+/** The Loader row that runs the app's own plugins (the app's `cordis.patch.yml`). */
+const APP_PLUGINS_ROW = 'app-plugins'
 
 export function apply(ctx: Context, config: FrameConfig = {}): void {
   const appPage = typeof config.appPage === 'string' && config.appPage.startsWith('/') ? config.appPage : undefined
@@ -125,9 +174,28 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       const [appName, branches, worktree] = await Promise.all([readAppName(root), readBranches(git, root), readWorktree(git, root)])
       return { appName, appRoot: root, ...(appPage === undefined ? {} : { appPage }), branches, ...worktree }
     }
+    const frameRows = (): FrameRow[] => {
+      const loader = ctx.get('loader')
+      if (loader === undefined) return []
+      return [...loader.entries()].map(entry => ({ id: entry.options.id, name: entry.options.name, disabled: entry.disabled, fiberState: entry.fiber?.state }))
+    }
+    const plugins: PluginsPort = {
+      read: async () => {
+        const [app, frame] = await Promise.all([readAppPlugins(root, git), readFramePlugins(root, frameRows())])
+        return { plugins: app, frame }
+      },
+      switch: async (kind, name, on) => {
+        await switchAppPlugin(root, kind, name, on)
+        // The app's plugins read blend.yaml when they start: start them again so the switch takes effect now.
+        // The overlay's rows sit in a group of the composition, so the row is found by its own id, not resolved from the root.
+        const loader = ctx.get('loader')
+        const entry = loader === undefined ? undefined : [...loader.entries()].find(row => row.options.id === APP_PLUGINS_ROW)
+        if (entry?.fiber !== undefined) await entry.fiber.restart()
+      },
+    }
     ctx.router.route('/', frameRoutes(state, (cause) => {
-      ctx.logger.error(`acryl-blends-frame: state failed: ${cause instanceof Error ? cause.message : String(cause)}`)
-    }))
+      ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }, plugins))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
     return () => { void git.dispose() }
   }, 'acryl-blends-frame: git runner and state route')

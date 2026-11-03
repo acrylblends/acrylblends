@@ -23,7 +23,8 @@ export function chatRows(list: SessionListState): ChatRow[] {
   return list.ids.flatMap((id) => {
     const row = list.byId[id]
     if (row === undefined) return []
-    return [{ id, title: chatTitle(row), current: (row.retainedBy.mainView ?? 0) > 0 }]
+    const updatedAt = (row as { readonly updatedAt?: unknown }).updatedAt
+    return [{ id, title: chatTitle(row), current: (row.retainedBy.mainView ?? 0) > 0, ...(typeof updatedAt === 'number' ? { updatedAt } : {}) }]
   })
 }
 

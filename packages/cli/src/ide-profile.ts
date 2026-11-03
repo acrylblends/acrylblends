@@ -50,7 +50,7 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
   { name: 'acrylblends/cordis/router-http', spec: '', row: 'acryl-router-http', installed: true },
   { name: 'acryl-web', spec: '' },
   { name: 'acryl-settings', spec: '' },
-  { name: 'acryl-shortcuts', spec: '' },
+  // No `acryl-shortcuts`: its Settings > Shortcuts and the command palette's key are the IDE's; the frame lists the shortcuts in General.
   { name: 'acryl-app-shell', spec: '' },
   { name: 'acryl-versions', spec: '' },
   // The page's root: the Blends frame (docs/design/blends-frame-mockup.html), never the IDE's workbench (`acryl-workspace`).
@@ -175,8 +175,7 @@ export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string;
   // The settings surface itself (the dialog, its sections list and the trigger). Without this row the page has no Settings trigger or dialog at all:
   // ui-settings and ui-settings-models only contribute pages into it.
   { id: 'ui-settings-general', name: '@deepseek-ai/dsh-client-ui-settings-general' },
-  // The Settings Plugins section (the plugin list and the inventory page): a settings section of its own, so it mounts with the surface.
-  { id: 'ui-settings-plugins', name: '@deepseek-ai/dsh-client-ui-settings-plugins' },
+  // No `ui-settings-plugins` (DSH's "Built-in plugins"): the frame's Settings > Plugins lists everything the app is made of.
   { id: 'ui-settings-models', name: '@deepseek-ai/dsh-client-ui-settings-models' },
   { id: 'ui-session', name: '@deepseek-ai/dsh-client-ui-session' },
   // No `ui-sidebar` or `ui-sidebar-right`: the Blends frame draws both side panels itself (branches and versions on the left, the agents as tabs on
