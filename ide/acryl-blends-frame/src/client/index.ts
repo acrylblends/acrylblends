@@ -34,7 +34,7 @@ import type { FeedbackPort } from './LeftPanel.tsx'
 import { appPluginRow, createAppPluginsApi, framePluginRow, type NavigatorPlugin } from './plugins-navigator.ts'
 import { PluginsSection } from './PluginsSection.tsx'
 import { SelectionChip, type SelectionChipInjected } from './SelectionChip.tsx'
-import { SelectionStore, contextToInsert } from './selection.ts'
+import { SelectionStore, carriesSelection, handOffSelection } from './selection.ts'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
 import { FILES_TAB, FrameTabs, tabOfTerminal } from './tabs.ts'
@@ -321,7 +321,8 @@ export function apply(ctx: ClientContext): void {
   })
 
   // The element picked in the canvas is what the chat is about (docs/design/blends-frame-mockup.html, scenario 2): its chip sits at the left of
-  // the composer's input row, and a send writes its page and selector into the message the person is sending, without touching their words.
+  // the composer's input row, and the send gesture hands its page and selector to the frame's Host, which gives them to the agent as context for
+  // that message; the person's message itself keeps exactly their words.
   ctx.plugin({
     name: 'acryl-blends-frame-element-selection',
     inject: ['slots', 'sessions'],
@@ -346,19 +347,13 @@ export function apply(ctx: ClientContext): void {
             send: () => {
               const element = selection.getSnapshot().selection
               const input = composer()
-              if (element === undefined || input === undefined || actx === undefined) return
-              const state = input.state.getSnapshot()
-              const text = contextToInsert(state.draft, element)
-              if (text === undefined) return
-              // Append at the end of the draft (the scoped insert-text event applies a plain-text edit there and keeps the reference chips the
-              // person added before it): the message, and so the chat's title, opens with the person's words. The send that triggered this
-              // reads the draft next, in the same gesture.
-              const end = state.draft.length
-              const applied = actx.bail(actx, 'slash/input-insert-text', {
-                text,
-                span: { start: end, end, draftRev: state.draftRev },
-              }) === true
-              if (applied) selection.clear()
+              if (element === undefined || input === undefined) return
+              if (!carriesSelection(input.state.getSnapshot().draft)) return
+              // The pick belongs to this message, so the chip leaves either way. The post goes out in the same gesture, before the composer
+              // sends, and nothing waits on it: the Host attaches the pick to that message's step (../selection-context.ts), and a hand-off that
+              // fails costs the context, never the person's message.
+              selection.clear()
+              void handOffSelection((request, init) => fetch(request, init), sessionId, element)
             },
           }
         },

@@ -15,7 +15,7 @@ export interface SelectionChipInjected {
     subscribe(listener: () => void): () => void
   }
   clear(): void
-  /** Prepend the selection's context to the composer draft, just before the person's own send. */
+  /** Hand the pick to the frame's Host just before the person's own send; the message itself is sent untouched. */
   send(): void
   /** Return the keyboard to the composer, the way the frame's feedback hand-off does. */
   focus(): void

@@ -26,6 +26,7 @@ import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
 import { AppReloader, watchFolder, type AppRow } from './app-reload.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
+import { installSelectionContext, parseSelectionContext, SelectionInbox, sessionOf } from './selection-context.ts'
 import { branchChatsFile, createBranchChatsStore } from './branch-chats.ts'
 import {
   FRAME_API_PREFIX,
@@ -36,6 +37,7 @@ import {
   FRAME_BLANK_CHAT_PATH,
   FRAME_REAL_CHATS_PATH,
   FRAME_BRANCH_CHATS_PATH,
+  FRAME_SELECTION_PATH,
   FRAME_BRANCHES_SWITCH_PATH,
   FRAME_FEEDBACK_PATH,
   FRAME_FEEDBACK_SEEN_PATH,
@@ -329,9 +331,11 @@ export interface FrameRoutesDeps {
   readonly blankChat?: BlankChatPort
   readonly gitSync?: GitSyncPort
   readonly appReload?: AppReloadPort
+  /** The element picks waiting for the step that reads the message they belong to (./selection-context.ts). */
+  readonly selection?: SelectionInbox
 }
 
-export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, blankChat, gitSync, appReload }: FrameRoutesDeps): Acryl {
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, blankChat, gitSync, appReload, selection }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
   if (appReload !== undefined) {
     app.get(FRAME_APP_PATH, ownPage, async (c) => {
@@ -535,6 +539,18 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
       }
     })
   }
+  if (selection !== undefined) {
+    // The composer's send gesture posts the pick here before the message reaches the Host: the next pre-step of that chat takes it once
+    // (./selection-context.ts). Answered as accepted, never as applied: the message goes whether or not the pick arrives.
+    app.post(FRAME_SELECTION_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const session = sessionOf(body)
+      const parsed = parseSelectionContext(body)
+      if (session === undefined || typeof parsed === 'string') return c.json(error(typeof parsed === 'string' ? parsed : 'the selection needs its chat'), 400)
+      selection.add(session, parsed)
+      return c.json({ ok: true }, 202)
+    })
+  }
   app.get(FRAME_STATE_PATH, ownPage, async (c) => {
     try {
       return c.json(await state())
@@ -713,8 +729,18 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       const detail = (cause as { detail?: unknown }).detail
       return new Error(typeof detail === 'string' && detail !== '' ? detail : fallback)
     }
+    // The element a chat message is about: posted by the composer at its send gesture, taken at the step that reads that message, so the
+    // person's bubble keeps their words and the agent still gets the page and selector (./selection-context.ts).
+    const selectionInbox = new SelectionInbox()
+    ctx.effect(
+      () => installSelectionContext(ctx, selectionInbox, (cause) => {
+        ctx.logger.error(`acryl-blends-frame: the selected element did not reach the chat: ${cause instanceof Error ? cause.message : String(cause)}`)
+      }),
+      'acryl-blends-frame: the picked element as context',
+    )
     ctx.router.route('/', frameRoutes({
       state,
+      selection: selectionInbox,
       report: (cause) => {
         ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
       },

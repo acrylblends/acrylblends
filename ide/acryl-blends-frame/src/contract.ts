@@ -382,6 +382,8 @@ export function parseBlankChat(value: unknown): string | undefined {
  * from that (or after a while with the same answer), so the page hears of a new generation as it is up, without a timer.
  */
 export const FRAME_APP_PATH = `${FRAME_API_PREFIX}/app`
+/** POST `{ session, label, page, selector }`: the element the chat message being sent is about, for the Host to hand to the agent as context. */
+export const FRAME_SELECTION_PATH = `${FRAME_API_PREFIX}/selection`
 
 /** Which code the app runs: a new `generation` means the app's files were loaded again; `error` is why the last load was refused (the last good code runs on). */
 export interface AppReloadView {
