@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseSavedWorkspace, serializeWorkspace } from '../../src/client/canvas/persistence.ts'
 import { WorkspaceGroups } from '../../src/client/canvas/groups.ts'
 import { WorkspaceState } from '../../src/client/canvas/state.ts'
-import { makeDock, makeStatus } from '../dock/dock-fixtures.ts'
 import { WorkspaceShellState } from '../../src/client/worktrees/shell-state.ts'
 import { CustomTabPane } from '../../src/client/tabs/registry/CustomTabPane.tsx'
 import { TabTypeError, WorkspaceTabRegistry, type WorkspaceTabProps, type WorkspaceTabType } from '../../src/client/tabs/registry/tab-registry.ts'
@@ -14,6 +13,7 @@ import { TabStrip } from '../../src/client/tabs/TabStrip.tsx'
 import { TabTypesState } from '../../src/client/tabs/tab-types-state.ts'
 import { TabsPanel } from '../../src/client/tabs/TabsPanel.tsx'
 import { TerminalRegistry } from '../../src/client/terminal/terminal-session.ts'
+import { makeStatus } from '../dock/dock-fixtures.ts'
 
 class NoopObserver { observe() {} disconnect() {} unobserve() {} }
 globalThis.ResizeObserver = NoopObserver as unknown as typeof ResizeObserver
@@ -120,13 +120,12 @@ describe('plugin tab types in the + menu and Settings', () => {
     const registry = new WorkspaceTabRegistry()
     const tabTypes = new TabTypesState(undefined)
     const workspace = new WorkspaceState()
-    const dock = makeDock().controller
     const terminals = new TerminalRegistry({ createSocket: () => ({ send() {}, close() {}, onopen: null, onmessage: null, onclose: null, onerror: null, readyState: 0 }), urlFor: id => `ws://x/${id}` })
     function Harness() {
       const snapshot = useSyncExternalStore(l => workspace.subscribe(l), () => workspace.getSnapshot())
       return (
         <>
-          <TabStrip snapshot={snapshot} workspace={workspace} branchLabel="main" branchTitle="/p" runningText={null} storage={undefined} customAgents={[]} terminals={terminals} onSelect={(tile) => { workspace.selectTile(tile.id) }} onClose={() => {}} onOpenPty={() => {}} onOpenChat={() => {}} onRenameChat={() => {}} agentSettings={null} tabTypes={tabTypes} tabRegistry={registry} dock={dock} agentStatus={makeStatus().state} onSetAgentEnabled={async () => {}} onManageSettings={() => true} />
+          <TabStrip snapshot={snapshot} workspace={workspace} branchLabel="main" branchTitle="/p" runningText={null} storage={undefined} customAgents={[]} terminals={terminals} onSelect={(tile) => { workspace.selectTile(tile.id) }} onClose={() => {}} onOpenPty={() => {}} onOpenChat={() => {}} onRenameChat={() => {}} agentSettings={null} tabTypes={tabTypes} tabRegistry={registry} agentStatus={makeStatus().state} onSetAgentEnabled={async () => {}} onManageSettings={() => true} />
           <TabsPanel tabTypes={tabTypes} tabRegistry={registry} />
         </>
       )

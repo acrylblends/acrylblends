@@ -13,8 +13,7 @@ import { AgentIcon } from './AgentIcon.tsx'
 import type { TerminalRegistry } from '../terminal/terminal-session.ts'
 import type { AgentSettingsView } from '../../agents/contract.ts'
 import type { AgentStatusState } from '../status/agent-status-state.ts'
-import type { DockController } from '../dock/dock-controller.ts'
-import { DockButtons, type RightPaneHandle } from '../dock/DockButtons.tsx'
+import type { RightPaneHandle } from '../dock/DockButtons.tsx'
 import type { WorkspaceTabRegistry } from './registry/tab-registry.ts'
 import type { TabTypesState } from './tab-types-state.ts'
 import { NewTabMenu } from './NewTabMenu.tsx'
@@ -31,8 +30,6 @@ export interface TabStripProps {
   readonly runningText: string | null
   /** The whole right pane's own open/collapsed state, so the mode-switch button can open it when a mode needs it. */
   readonly rightPanel?: RightPaneHandle
-  /** The terminal dock, for its mode-switch button. */
-  readonly dock: DockController
   /** What terminal agents report, for the marker on their tabs. */
   readonly agentStatus: AgentStatusState
   readonly storage: Storage | undefined
@@ -113,7 +110,7 @@ function kindGlyph(kind: WorkspaceTile['kind']): string {
   return '◉'
 }
 
-export function TabStrip({ snapshot, workspace, branchLabel, branchTitle, runningText, rightPanel, dock, agentStatus, storage, customAgents, terminals, onSelect, onClose, onOpenPty, onOpenChat, chatAvailable, onRenameChat, agentSettings, tabTypes, tabRegistry, onSetAgentEnabled, onManageSettings }: TabStripProps) {
+export function TabStrip({ snapshot, workspace, branchLabel, branchTitle, runningText, agentStatus, storage, customAgents, terminals, onSelect, onClose, onOpenPty, onOpenChat, chatAvailable, onRenameChat, agentSettings, tabTypes, tabRegistry, onSetAgentEnabled, onManageSettings }: TabStripProps) {
   const tabsRef = useRef<HTMLDivElement>(null)
   const agentStates = useSyncExternalStore(agentStatus.subscribe, agentStatus.getSnapshot)
   const [edges, setEdges] = useState({ start: false, end: false })
@@ -264,7 +261,6 @@ export function TabStrip({ snapshot, workspace, branchLabel, branchTitle, runnin
         onSetAgentEnabled={onSetAgentEnabled}
         onManageSettings={onManageSettings}
       />
-      <DockButtons controller={dock} rightPane={rightPanel} />
       {tabMenu !== null && (
         <TabContextMenu
           x={tabMenu.x}

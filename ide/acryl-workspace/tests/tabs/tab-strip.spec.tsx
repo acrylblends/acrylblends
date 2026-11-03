@@ -8,8 +8,8 @@ import { WorkspaceState, type WorkspaceTile } from '../../src/client/canvas/stat
 import { TabStrip } from '../../src/client/tabs/TabStrip.tsx'
 import { TerminalRegistry } from '../../src/client/terminal/terminal-session.ts'
 import type { AgentSettingsView } from '../../src/agents/contract.ts'
+import { makeStatus } from '../dock/dock-fixtures.ts'
 import { entry, view } from '../agents/fixtures.ts'
-import { makeDock, makeStatus } from '../dock/dock-fixtures.ts'
 import { WorkspaceTabRegistry } from '../../src/client/tabs/registry/tab-registry.ts'
 import { TabTypesState } from '../../src/client/tabs/tab-types-state.ts'
 
@@ -17,7 +17,6 @@ import { TabTypesState } from '../../src/client/tabs/tab-types-state.ts'
 class NoopObserver { observe() {} disconnect() {} unobserve() {} }
 globalThis.ResizeObserver = NoopObserver as unknown as typeof ResizeObserver
 const tabRegistry = new WorkspaceTabRegistry()
-const dock = makeDock().controller
 const agentStatus = makeStatus().state
 const terminals = new TerminalRegistry({ createSocket: () => ({ send() {}, close() {}, onopen: null, onmessage: null, onclose: null, onerror: null, readyState: 0 }), urlFor: id => `ws://x/${id}` })
 
@@ -37,7 +36,7 @@ function memoryStorage(initial: Record<string, string> = {}): Storage {
 
 function Harness({ workspace, storage, onOpenPty, onOpenChat = () => {}, onRenameChat = () => {}, onClose = () => {}, custom = [], settings = null, onManage = () => true, tabTypes, onSetEnabled = async () => {}, chatAvailable }: { chatAvailable?: boolean; workspace: WorkspaceState; storage: Storage; onOpenPty: (id: string, title: string) => void; onOpenChat?: () => void; onRenameChat?: (sessionId: string, title: string) => void; onClose?: (tile: WorkspaceTile) => void; custom?: readonly CustomAgent[]; settings?: AgentSettingsView | null; onManage?: (section: 'agents' | 'tabs', onSettled?: (found: boolean) => void) => boolean; tabTypes?: TabTypesState; onSetEnabled?: (id: string, enabled: boolean) => Promise<void> }) {
   const snapshot = useSyncExternalStore(l => workspace.subscribe(l), () => workspace.getSnapshot())
-  return <TabStrip snapshot={snapshot} workspace={workspace} branchLabel="main" branchTitle="/p" runningText={null} storage={storage} customAgents={custom} terminals={terminals} onSelect={(tile) => { workspace.selectTile(tile.id) }} onClose={onClose} onOpenPty={onOpenPty} onOpenChat={onOpenChat} onRenameChat={onRenameChat} agentSettings={settings} tabTypes={tabTypes ?? new TabTypesState(storage)} tabRegistry={tabRegistry} dock={dock} agentStatus={agentStatus} onSetAgentEnabled={onSetEnabled} onManageSettings={onManage} {...(chatAvailable === undefined ? {} : { chatAvailable })} />
+  return <TabStrip snapshot={snapshot} workspace={workspace} branchLabel="main" branchTitle="/p" runningText={null} storage={storage} customAgents={custom} terminals={terminals} onSelect={(tile) => { workspace.selectTile(tile.id) }} onClose={onClose} onOpenPty={onOpenPty} onOpenChat={onOpenChat} onRenameChat={onRenameChat} agentSettings={settings} tabTypes={tabTypes ?? new TabTypesState(storage)} tabRegistry={tabRegistry} agentStatus={agentStatus} onSetAgentEnabled={onSetEnabled} onManageSettings={onManage} {...(chatAvailable === undefined ? {} : { chatAvailable })} />
 }
 
 function setup(storage = memoryStorage(), extra: { onClose?: (tile: WorkspaceTile) => void; custom?: readonly CustomAgent[]; settings?: AgentSettingsView | null; onManage?: (section: 'agents' | 'tabs', onSettled?: (found: boolean) => void) => boolean; tabTypes?: TabTypesState; onSetEnabled?: (id: string, enabled: boolean) => Promise<void>; chatAvailable?: boolean } = {}) {

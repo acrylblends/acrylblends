@@ -53,9 +53,6 @@ interface FixedCommand {
 const FIXED_COMMANDS: readonly FixedCommand[] = [
   { id: 'command:close-tab', title: 'Close current tab', keywords: ['close', 'tab'], run: a => { a.closeActiveTab() } },
   { id: 'command:right-panel', title: 'Toggle right panel', keywords: ['changes', 'review', 'checks', 'files', 'sidebar'], run: a => { a.toggleRightPanel() } },
-  { id: 'command:terminal-stacked', title: 'Terminal panel: stacked under the right pane', keywords: ['terminal', 'dock', 'layout'], run: a => { a.setTerminalMode('stacked') } },
-  { id: 'command:terminal-bottom', title: 'Terminal panel: at the bottom', keywords: ['terminal', 'dock', 'layout'], run: a => { a.setTerminalMode('bottom') } },
-  { id: 'command:terminal-side', title: 'Terminal panel: side by side', keywords: ['terminal', 'dock', 'layout'], run: a => { a.setTerminalMode('side') } },
   { id: 'command:mode-chats', title: 'Show chats in the left pane', keywords: ['sidebar', 'sessions'], run: a => { a.setShellMode('chats') } },
   { id: 'command:pick-element', title: 'Pick an element for the agent (copies where it is)', keywords: ['inspector', 'pinpoint', 'locate', 'element', 'ui'], run: a => { a.pickElement() } },
   { id: 'command:mode-projects', title: 'Show projects in the left pane', keywords: ['sidebar', 'worktrees', 'repositories'], run: a => { a.setShellMode('projects') } },

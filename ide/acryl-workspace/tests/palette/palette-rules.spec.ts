@@ -122,7 +122,8 @@ describe('built-in items', () => {
     byId.get('tab:t1')?.run()
     byId.get('worktree:/p')?.run()
     byId.get('command:right-panel')?.run()
-    byId.get('command:terminal-side')?.run()
+    // 125: the terminal panel's dock modes are gone, so the palette offers no terminal-layout commands.
+    expect(byId.has('command:terminal-side')).toBe(false)
     byId.get('command:close-tab')?.run()
     byId.get('command:mode-projects')?.run()
     byId.get('setting:tabs')?.run()
@@ -133,7 +134,6 @@ describe('built-in items', () => {
     expect(a.focusTab).toHaveBeenCalledWith('t1')
     expect(a.selectWorktree).toHaveBeenCalledWith('/p')
     expect(a.toggleRightPanel).toHaveBeenCalled()
-    expect(a.setTerminalMode).toHaveBeenCalledWith('side')
     expect(a.closeActiveTab).toHaveBeenCalled()
     expect(a.setShellMode).toHaveBeenCalledWith('projects')
     expect(a.openSettings).toHaveBeenCalledWith('tabs')

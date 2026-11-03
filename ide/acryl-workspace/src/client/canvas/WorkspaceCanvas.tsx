@@ -345,7 +345,6 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
         branchTitle={groupKey}
         runningText={runningText}
         {...(rightPanel === undefined ? {} : { rightPanel })}
-        dock={dock}
         agentStatus={agentStatus}
         chatAvailable={projects.chatAvailable}
         storage={safeStorage()}

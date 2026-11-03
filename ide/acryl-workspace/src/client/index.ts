@@ -11,7 +11,6 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // empty `import type {}` is erased under `verbatimModuleSyntax` and the augmentation never reaches consumers.
 import 'acryl-app-shell/client'
 import { applyAdvancedShell, resolveShellEnvironment } from 'acryl-app-shell/client'
-import { dockShellHooks } from './dock/dock-hooks.tsx'
 import { createAgentBridge } from './sessions/agent-bridge.ts'
 import { ChatSelection } from './chat/chat-selection.ts'
 import type { MainViewNavigation } from './sessions/main-session.ts'
@@ -100,7 +99,8 @@ export function apply(ctx: ClientContext): void {
   if (saved !== undefined) shell.setMode(saved.mode)
   // The terminals and the dock are shared by the frame (which places the dock) and the canvas (its terminal tabs).
   const terminalStack = advanced ? createTerminalStack(ctx, storage, shell) : undefined
-  const frame = advanced ? applyAdvancedShell(ctx, environment, dockShellHooks(terminalStack?.host)) : undefined
+  // 125: no dock wrappers around the columns; the centre is the app canvas and the right column is the workspace strip.
+  const frame = advanced ? applyAdvancedShell(ctx, environment) : undefined
   ctx.effect(() => startWorkspacePersistence({ groups, shell, storage }), 'acryl-workspace: save tabs and view')
   // First run under a Host that serves an app: the centre is the app (acryl-app-canvas); the workspace only selects the app's folder, so the chats
   // and the app's worktree share one tab set. A saved workspace means a previous run already chose; a Host without an app has no folder to select.
