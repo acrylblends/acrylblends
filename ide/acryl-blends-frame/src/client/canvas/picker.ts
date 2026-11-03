@@ -120,3 +120,60 @@ export function attachPicker(doc: Document, handlers: CanvasPickerHandlers): () 
     body.style.cursor = cursor
   }
 }
+
+/**
+ * Mark the element the chat has selected (scenario 2: the picked card stays outlined while it is the selection). The mark follows the element as the
+ * page scrolls or resizes, and is gone when the element is.
+ * @param doc - the app page's document.
+ * @param selector - the selection's selector ({@link SelectedElement.selector}).
+ * @returns a disposer that removes the mark and its listeners.
+ */
+export function markSelected(doc: Document, selector: string): () => void {
+  const body = doc.body
+  const view = doc.defaultView
+  if (body === null || view === null) return () => {}
+  const mark = doc.createElement('acryl-selected-outline')
+  mark.setAttribute('data-acryl-selected-outline', '')
+  Object.assign(mark.style, {
+    position: 'fixed',
+    display: 'none',
+    pointerEvents: 'none',
+    zIndex: '2147483646',
+    boxSizing: 'border-box',
+    border: '2px solid #5b6cff',
+    borderRadius: '8px',
+  })
+  body.append(mark)
+  let frame = 0
+  const place = (): void => {
+    frame = 0
+    let target: Element | null = null
+    try {
+      target = doc.querySelector(selector)
+    } catch {
+      target = null
+    }
+    if (target === null) {
+      mark.style.display = 'none'
+      return
+    }
+    const box = target.getBoundingClientRect()
+    Object.assign(mark.style, {
+      display: 'block',
+      left: `${String(box.left - 2)}px`,
+      top: `${String(box.top - 2)}px`,
+      width: `${String(box.width + 4)}px`,
+      height: `${String(box.height + 4)}px`,
+    })
+  }
+  const schedule = (): void => { if (frame === 0) frame = view.requestAnimationFrame(place) }
+  place()
+  view.addEventListener('scroll', schedule, true)
+  view.addEventListener('resize', schedule)
+  return () => {
+    if (frame !== 0) view.cancelAnimationFrame(frame)
+    view.removeEventListener('scroll', schedule, true)
+    view.removeEventListener('resize', schedule)
+    mark.remove()
+  }
+}

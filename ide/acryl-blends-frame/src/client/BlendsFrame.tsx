@@ -89,6 +89,7 @@ export function BlendsFrame({ layout, canvas, selection, frameState, appReload, 
   const saved = state.status === 'ready' ? savedLabel(state.state.unsaved) : undefined
   const barLabel = [versionLabel, saved].filter((part): part is string => part !== undefined).join(' · ')
   const preview = frameView.mode === 'preview'
+  const selected = useStore(selection).selection
   // Preview is what users see: the frame's own controls, the select control among them, leave the picture.
   useEffect(() => { if (preview) setPicking(false) }, [preview])
   // A picked element is what the chat is about: show the chat and give its composer the keyboard.
@@ -198,6 +199,7 @@ export function BlendsFrame({ layout, canvas, selection, frameState, appReload, 
               picking={picking && !preview}
               onPick={pick}
               onCancel={() => { setPicking(false) }}
+              selected={preview ? undefined : selected}
             />
           </div>
         </main>

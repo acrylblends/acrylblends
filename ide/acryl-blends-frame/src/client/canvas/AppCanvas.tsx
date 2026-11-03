@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
 import type { SelectedElement } from '../selection.ts'
 import type { AppCanvasState } from './app-canvas.ts'
-import { attachPicker } from './picker.ts'
+import { attachPicker, markSelected } from './picker.ts'
 
 export interface AppCanvasProps {
   readonly canvas: AppCanvasState
@@ -13,9 +13,11 @@ export interface AppCanvasProps {
   readonly onPick?: (element: SelectedElement) => void
   /** Escape left the picker. */
   readonly onCancel?: () => void
+  /** The element the chat has selected: outlined while it is on the page shown. */
+  readonly selected?: SelectedElement | undefined
 }
 
-export function AppCanvas({ canvas, picking = false, onPick, onCancel }: AppCanvasProps) {
+export function AppCanvas({ canvas, picking = false, onPick, onCancel, selected }: AppCanvasProps) {
   const snapshot = useSyncExternalStore(
     (listener) => canvas.subscribe(listener),
     () => canvas.getSnapshot(),
@@ -41,6 +43,13 @@ export function AppCanvas({ canvas, picking = false, onPick, onCancel }: AppCanv
       onCancel: () => { handlers.current.onCancel?.() },
     })
   }, [picking, snapshot.address, snapshot.attempt, snapshot.loaded])
+  // The selection stays outlined on the page it was picked on, until it is cleared or the page changes.
+  useEffect(() => {
+    if (picking || selected === undefined || snapshot.address === undefined) return undefined
+    const doc = frame.current?.contentDocument
+    if (doc === null || doc === undefined || doc.location.pathname + doc.location.search !== selected.page) return undefined
+    return markSelected(doc, selected.selector)
+  }, [picking, selected, snapshot.address, snapshot.attempt, snapshot.loaded])
   if (snapshot.address === undefined) return null
   return (
     <iframe
