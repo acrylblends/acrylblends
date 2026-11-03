@@ -178,7 +178,7 @@ test('with a tools list, a run sees only those tools and a call to any other fai
   await root.plugin(agent, { tools: ['look'] }).await()
   let seen: string[] = []
   scripted(root.model)?.teach(({ step, tools: offered }) => {
-    seen = offered.map((tool) => tool.name)
+    seen = (offered ?? []).map((tool) => tool.name)
     return step === 0 ? { tool: 'add', input: [1, 1] } : { text: 'stopped' }
   })
   const result = await root.agent.run('add 1 1')
