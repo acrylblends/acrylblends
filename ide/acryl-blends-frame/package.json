@@ -20,6 +20,10 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./app-generation": {
+      "types": "./lib/app-generation.d.ts",
+      "default": "./lib/app-generation.js"
+    },
     "./client": {
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"

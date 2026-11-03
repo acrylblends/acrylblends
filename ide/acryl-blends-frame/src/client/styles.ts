@@ -25,6 +25,7 @@ html body[data-ds-dark-theme] { --dsw-alias-bg-layer-2: #18181b; --dsw-specific-
 body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsAppName { font-weight: 600; white-space: nowrap; }
 .acrylBlendsAppName small { color: var(--bf-dim); font-weight: 400; margin-left: 6px; font-size: 12px; }
+.acrylBlendsAppError { min-width: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #f87171; }
 .acrylBlendsGrow { flex: 1; }
 .acrylBlendsIconButton { width: 28px; height: 26px; display: grid; place-items: center; border-radius: 6px; border: 0; background: transparent; color: #b8b8c0; cursor: pointer; }
 .acrylBlendsIconButton:hover:not(:disabled) { background: var(--bf-surface-2); }

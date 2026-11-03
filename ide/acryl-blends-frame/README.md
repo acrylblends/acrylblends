@@ -38,3 +38,21 @@ which version in `chat-saves.json` in the app's data home (`GET /api/acryl-blend
 
 The chat the frame mounts needs more of DSH than the frame draws: the agent preset `acryl-blends` (shell, file tools and jobs; the registry's default),
 the host rows it stands on, and the chat view's client rows, with a `sidebarRight` stand-in for the chat's links. They are in `packages/cli/src/ide-profile.ts`.
+
+## The canvas shows what the files say
+
+The app's code runs in the dev host (`npm run dev`), and the host loads it once. So that a version the person goes back to, a file the chat wrote, a
+line typed in an editor or a `git switch` shows in the canvas without a restart (a restart would end the terminals and agents in the right panel),
+the Host loads the app's code again whenever a file under `src/` changes, whoever changed it (300 ms after the last change).
+
+How it works: the launcher (`scripts/ide-host.mjs`) loads `acryl-blends-frame/app-generation` before anything of the app does. It installs a resolve
+hook that, once the Host raises the generation, gives every file of the app's `src/` (and the generated `frame/` rows) a `?gen=N` query, so a new import
+of them - and of everything they import - is a fresh copy. Nothing in `node_modules` or the framework's `plugins/` gets one, so their services stay
+single instances. The Host (`src/app-reload.ts`) then imports the app's rows (`app-plugins`, `app-routes`) under the new generation, and only if that
+succeeds stops them and starts them from the new code. The page follows a long poll on `GET /api/acryl-blends-frame/app?after=<seq>` and reloads the
+canvas when a new generation is up.
+
+A file that does not load (a syntax error, a missing import) or a row that does not start leaves the last good code running and shows one line in
+the top bar (`Not reloaded: src/routes.ts:47 ...`) until the next change loads. In-memory state of the app's modules starts again with each load.
+Development only: Node cannot unload a module, so the old copies stay in memory until the host stops; `npm start` has no launcher and never loads the
+hook. A host started by a launcher that predates the hook runs the code as it started.
