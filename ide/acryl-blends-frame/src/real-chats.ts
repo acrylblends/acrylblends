@@ -86,16 +86,4 @@ export class RealChats {
     }))
     return found.filter((chat): chat is RealChat => chat !== undefined)
   }
-
-  /** Whether the session is known to have no turn: it exists and its log holds none. A session that cannot be read is not called blank. */
-  async isBlank(id: string): Promise<boolean> {
-    if (this.known.has(id)) return false
-    try {
-      if (!(await this.deps.list()).includes(id)) return false
-      return !(await this.deps.look(id)).hasTurn
-    } catch (cause) {
-      this.deps.report?.(cause)
-      return false
-    }
-  }
 }

@@ -367,17 +367,6 @@ export function parseRealChats(value: unknown): RealChatsView {
 }
 
 /**
- * GET: the blank chat (no turn yet) the Host last handed out for the checked-out branch, `{ id }` or `{ id: null }`. POST `{ id }`: the Host records a
- * chat it finds blank as that branch's blank chat. A frame load opens the blank chat instead of letting DSH create a session every time.
- */
-export const FRAME_BLANK_CHAT_PATH = `${FRAME_API_PREFIX}/blank-chat`
-
-export function parseBlankChat(value: unknown): string | undefined {
-  if (!isRecord(value) || typeof value.id !== 'string' || value.id === '') return undefined
-  return value.id
-}
-
-/**
  * GET: the app's code as the Host runs it - `{ seq, generation, error }` (./app-reload.ts). With `?after=<seq>` the Host answers when `seq` differs
  * from that (or after a while with the same answer), so the page hears of a new generation as it is up, without a timer.
  */

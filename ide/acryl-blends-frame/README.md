@@ -30,7 +30,8 @@ app's page is served.
 When the chat's agent finishes a turn that changed files in the app's folder, the Host makes a save point (a version) without being asked. It is named
 after the person's request (its first sentence, cut at a word after 50 characters), it holds the whole folder as `Save point` does, and the chat says
 so in one line under that answer: `edited src/routes.ts, src/board.ts · saved as v7`. The new version is the top of Versions, "(current)", and the top
-bar reads `v7 · saved`. A turn that changed no file makes no version and says nothing.
+bar reads `v7 · saved`. A turn that changed no file makes no version and says nothing. A turn the person stops saves the files it had changed
+by then, under the same line: DSH tells the Host about a stopping turn's changes before the turn ends, and the Host saves on that.
 
 Which files a turn changed comes from DSH's `workspace-changes` row, which compares the working tree before and after each turn, so edits the person
 made earlier and has not saved are not credited to the agent (they are still in the version, as in any save point). The Host keeps which turn made
@@ -38,6 +39,20 @@ which version in `chat-saves.json` in the app's data home (`GET /api/acryl-blend
 
 The chat the frame mounts needs more of DSH than the frame draws: the agent preset `acryl-blends` (shell, file tools and jobs; the registry's default),
 the host rows it stands on, and the chat view's client rows, with a `sidebarRight` stand-in for the chat's links. They are in `packages/cli/src/ide-profile.ts`.
+
+## Chats belong to a branch
+
+A chat belongs to the branch it was made on. The Host records that once per chat in `branch-chats.json` in the app's data home (`/api/acryl-blends-frame/branches/chats`): a chat made by the frame is recorded as it is made, a chat DSH made (or one from before this file) is recorded
+the first time the frame sees it with a turn, on the branch checked out then, and a record is never moved by a later switch. That file is the only source
+of truth; the client reads it and keeps no list of its own.
+
+The chat on screen always belongs to the checked-out branch (`src/client/chats.ts`, `decideChat`): switching to a branch shows its most recently used chat
+(or the one whose tab is showing), and a branch with no chat gets a new one, made on the Host and recorded for it before anything is shown. Expanding a
+branch in the left panel lists its own chats; History in the right panel opens the checked-out branch's. `+` then **Chat** starts a new chat of its own on
+the current branch as a tab (the one on screen is reused while it has no turn); the base tab and each `chat:<id>` tab follow the chat on screen.
+
+DSH moves its main view in steps and finishes a move it started even when something else moved the view meanwhile, so the frame asks for a chat only
+after the call that told it has ended, asks once while that move is on its way, and never from inside DSH's start-up.
 
 ## The canvas shows what the files say
 

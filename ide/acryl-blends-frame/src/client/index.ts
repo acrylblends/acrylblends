@@ -17,7 +17,6 @@ import { ChatSavesStore, createChatSavesApi } from './chat-saves.ts'
 import { TurnSaveFooter } from './TurnSaveFooter.tsx'
 import { BlendsFrame } from './BlendsFrame.tsx'
 import { AppCanvasState } from './canvas/app-canvas.ts'
-import { createBlankChatApi } from './blank-chat.ts'
 import { ChatsStore, createRealChatsApi, type MainViewNavigation, type WorkspaceRegistration } from './chats.ts'
 import { AppReloadStore } from './app-reload.ts'
 import { FrameStateStore } from './frame-state.ts'
@@ -89,12 +88,26 @@ export function apply(ctx: ClientContext): void {
   const view = new FrameViewState(pageStorage())
   // `uiWorkspace` (DSH's navigation) and `workspaces` (its workspace registry) are DSH services this package does not import the types of; the
   // small interfaces in `./chats.ts` describe the calls it makes, so a frame without them composed still works.
-  const chats = new ChatsStore(
-    () => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'),
-    () => (ctx.get as (name: string) => WorkspaceRegistration | undefined)('workspaces'),
-    createRealChatsApi(),
-    createBlankChatApi(),
-  )
+  const branchChats = new BranchChatsStore(createBranchChatsApi())
+  const tabs = new FrameTabs(pageStorage())
+  const checkedOut = (): string | undefined => {
+    const current = frameState.getSnapshot()
+    return current.status === 'ready' ? current.state.branches.find(branch => branch.current)?.name : undefined
+  }
+  const chats = new ChatsStore({
+    navigation: () => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'),
+    workspaceFor: () => (ctx.get as (name: string) => WorkspaceRegistration | undefined)('workspaces'),
+    realChats: createRealChatsApi(),
+    branchChats,
+    branch: checkedOut,
+    appRoot: () => { const current = frameState.getSnapshot(); return current.status === 'ready' ? current.state.appRoot : undefined },
+    // A chat tab of the strip that is showing on the checked-out branch asks for its own chat to be the one on screen.
+    preferred: () => {
+      const strip = tabs.getSnapshot()
+      const active = strip.tabs.find(tab => tab.id === strip.active)
+      return active?.kind === 'chat' && active.session !== undefined && active.branch === checkedOut() ? active.session : undefined
+    },
+  })
   const versionsApi = createVersionsApi()
   const sharedVersionsApi = createSharedVersionsApi()
   const branchesApi = createBranchesApi()
@@ -116,8 +129,6 @@ export function apply(ctx: ClientContext): void {
       return result
     },
   }
-  const branchChats = new BranchChatsStore(createBranchChatsApi())
-  const tabs = new FrameTabs(pageStorage())
   const tools = createFrameTools()
   // The line under an answer that changed the app: what the Host's auto-save made of the turn. A new save changes the versions and the unsaved count, so the frame reads its state again.
   const chatSaves = new ChatSavesStore(createChatSavesApi(), () => { void frameState.refresh() })
@@ -128,7 +139,7 @@ export function apply(ctx: ClientContext): void {
     async hand(note) {
       const current = chats.getSnapshot().find(row => row.current)
       if (current === undefined) return false
-      tabs.activate('chat')
+      tabs.activate(tabs.chatTabId(current.id))
       view.showRight()
       // The screenshot becomes a real attachment of the message (DSH's own draft intake), so the agent sees it with the text.
       if (note.screenshot !== undefined) {
@@ -229,25 +240,33 @@ export function apply(ctx: ClientContext): void {
     return () => { controller.abort() }
   }, "acryl-blends-frame: follow the app's code")
 
-  // A chat belongs to the branch it was first seen on: DSH keeps no branches, so the frame records it in the app's home and the left panel can
-  // list each branch's own chats. A chat already recorded keeps its branch when the folder moves.
+  // A chat belongs to the branch it was made on (`./branch-chats.ts`), and the chat on screen always belongs to the checked-out branch: the store makes it
+  // so whenever the branch, the sessions, the chats with a turn, the map or the strip's chat tab changes (`ChatsStore.reconcile`).
   ctx.effect(() => {
     void branchChats.load()
-    const adopt = () => {
-      const view = frameState.getSnapshot()
-      if (view.status !== 'ready') return
-      const current = view.state.branches.find(branch => branch.current)?.name
+    const reconcile = () => { chats.reconcile() }
+    const offState = frameState.subscribe(reconcile)
+    const offMap = branchChats.subscribe(reconcile)
+    const offTabs = tabs.subscribe(reconcile)
+    // The strip follows the chat on screen: when it changes (a branch switch, a row opened) and a chat tab is the one showing, the tab of that chat is.
+    let shown: string | undefined
+    const follow = () => {
+      const current = chats.getSnapshot().find(row => row.current)?.id
+      if (current === shown) return
+      shown = current
       if (current === undefined) return
-      branchChats.adopt(chats.getSnapshot().map(row => row.id), current)
+      const strip = tabs.getSnapshot()
+      if (strip.tabs.find(tab => tab.id === strip.active)?.kind === 'chat') tabs.activate(tabs.chatTabId(current))
     }
-    const offState = frameState.subscribe(adopt)
-    const offChats = chats.subscribe(adopt)
-    adopt()
+    const offChats = chats.subscribe(follow)
+    reconcile()
     return () => {
       offState()
+      offMap()
+      offTabs()
       offChats()
     }
-  }, 'acryl-blends-frame: chats belong to the branch they were opened on')
+  }, 'acryl-blends-frame: the chat on screen is the checked-out branch\'s')
 
   // Settings → Agents: the workspace's own section, on the workspace Host's agent routes.
   const agents = new AgentsState(createWorkspaceAgentsApi())

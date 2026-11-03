@@ -24,8 +24,12 @@ export interface ChatsPort {
   getSnapshot(): readonly ChatRow[]
   subscribe(listener: () => void): () => void
   open(id: string): void
-  /** A new chat for the folder (a DSH session opened on the branch checked out there); undefined without DSH's sessions service. */
-  create(cwd: string): Promise<string | undefined>
+  /** A new chat on the checked-out branch, shown at once; undefined without DSH's sessions service. */
+  create(): Promise<string | undefined>
+  /** "+ then Chat": a chat of its own on the checked-out branch (the one on screen is reused while it has no turn). */
+  startChat(): Promise<{ readonly id: string; readonly made: boolean } | undefined>
+  /** Show the checked-out branch's chat for the base tab, one that has no tab of its own. */
+  openPrimary(exclude: ReadonlySet<string>): void
 }
 
 /** Feedback from users: the notes, and handing one to an agent (the chat's composer). */
@@ -226,26 +230,18 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
       await branches.switchTo(ask.branch)
       setAskSwitch(undefined)
       setExpanded(current => new Set(current).add(ask.branch))
-      // What the click meant: that chat, that terminal, or the branch's own conversation - its newest chat, or a new one, so the chat the
-      // panel shows is always one this branch lists.
+      // What the click meant: that chat, that terminal, or the branch's own conversation. The chat on screen becomes the branch's own by itself
+      // (`ChatsStore.reconcile`, on the state this switch re-read), whoever moved the folder; here only the item that was clicked is opened.
       if (ask.chat !== undefined) {
         chats.open(ask.chat)
-        showTab('chat')
+        showTab(tabs.chatTabId(ask.chat))
       } else if (ask.tab !== undefined) {
         showTab(ask.tab)
       } else {
-        const own = chatRows.find(row => assignments[row.id] === ask.branch)
-        if (own !== undefined) chats.open(own.id)
-        else {
-          // A branch with no chat gets its own conversation, so the chat on screen is always one the branch lists.
-          try {
-            const created = await chats.create(state.appRoot)
-            if (created === undefined) setSwitchNote({ branch: ask.branch, message: 'A chat for this branch could not be started.' })
-          } catch (cause) {
-            setSwitchNote({ branch: ask.branch, message: cause instanceof Error ? cause.message : 'A chat for this branch could not be started.' })
-          }
-        }
-        showTab('chat')
+        // The branch's conversation: a chat tab that is showing already follows the chat on screen (the strip does, as it changes), so only a tool tab
+        // (a terminal, a file) is left for the chat.
+        const strip = tabs.getSnapshot()
+        if (strip.tabs.find(tab => tab.id === strip.active)?.kind !== 'chat') showTab('chat')
       }
     } catch (cause) {
       setSwitchNote({ branch: ask.branch, message: cause instanceof Error ? cause.message : 'The branch could not be switched to.' })
@@ -393,11 +389,11 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
                   <button
                     type="button"
                     className="acrylBlendsItem"
-                    aria-current={(branch.current && item.current && strip.active === 'chat') || undefined}
+                    aria-current={(branch.current && item.current && strip.tabs.some(tab => tab.id === strip.active && tab.kind === 'chat')) || undefined}
                     onClick={() => {
                       if (branch.current) {
                         chats.open(item.id)
-                        showTab('chat')
+                        showTab(tabs.chatTabId(item.id))
                       } else {
                         openElsewhere({ branch: branch.name, chat: item.id })
                       }

@@ -96,7 +96,8 @@ export function BlendsFrame({ layout, canvas, selection, frameState, appReload, 
   const pick = (element: SelectedElement): void => {
     setPicking(false)
     selection.select(element)
-    tabs.activate('chat')
+    const open = chats.getSnapshot().find(row => row.current)
+    tabs.activate(open === undefined ? 'chat' : tabs.chatTabId(open.id))
     view.showRight()
   }
   const leftOpen = frameView.left && !preview

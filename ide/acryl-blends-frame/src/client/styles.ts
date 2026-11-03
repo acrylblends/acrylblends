@@ -176,6 +176,8 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsChatTitle { color: var(--bf-dim); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acrylBlendsHistory { flex: 1; overflow: auto; padding: 8px 10px; display: grid; gap: 2px; align-content: start; }
 .acrylBlendsHistoryGroup { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--bf-dim); padding: 8px 9px 3px; }
+.acrylBlendsHistoryRow:disabled { opacity: .5; cursor: default; }
+.acrylBlendsTabTitle { display: inline-block; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .acrylBlendsHistoryRow { display: grid; gap: 1px; padding: 7px 9px; border: 0; border-radius: 6px; background: transparent; color: #d4d4da; cursor: pointer; text-align: left; }
 .acrylBlendsHistoryRow:hover { background: var(--bf-surface-2); }
 .acrylBlendsHistoryRow[aria-current] { color: #fff; }
