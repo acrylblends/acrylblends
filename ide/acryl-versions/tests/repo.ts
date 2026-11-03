@@ -12,9 +12,10 @@ export interface TempDirectory {
 
 /** A fresh temp directory the caller removes with `cleanup()`. */
 export function tempDirectory(prefix: string): TempDirectory {
-  // The versions routes resolve a directory to its real path; on Windows a temp path comes back with the long user
-  // name and the real case, so the fixture stores the canonical path and every assertion compares like with like.
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)))
+  // The versions routes resolve a directory to its real path; on Windows that is the long user name and the real
+  // case, while the non-native realpath keeps the 8.3 short name mkdtemp returned. The native call settles on the
+  // same spelling the route answers with, so every assertion compares like with like.
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), prefix)))
   return { dir, cleanup: () => { rmSync(dir, { recursive: true, force: true }) } }
 }
 
