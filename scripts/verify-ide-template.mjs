@@ -688,7 +688,7 @@ ${composition.stdout}`)
   // pixel gate would fail on font rendering, not on the product). FRAME_VISUAL_CAPTURE names a folder to write the states into instead: the baseline is
   // regenerated that way on the Linux runner and approved before it is committed.
   if (template === 'agent') {
-    const views = 'frame,settings-models,right-panel-open'
+    const views = 'frame,settings-models,right-panel-closed'
     const viewsFile = join(root, 'scripts', 'frame-views-frame.json')
     const captureTo = process.env.FRAME_VISUAL_CAPTURE
     if (captureTo !== undefined && captureTo !== '') {
