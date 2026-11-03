@@ -2,6 +2,20 @@
 
 export const FRAME_API_PREFIX = '/api/acryl-blends-frame'
 export const FRAME_STATE_PATH = `${FRAME_API_PREFIX}/state`
+/** POST `{ name }`: a new branch from the checked-out version, switched to (the files stay as they are). */
+export const FRAME_BRANCHES_NEW_PATH = `${FRAME_API_PREFIX}/branches/new`
+
+/**
+ * Why a name cannot be a new branch, in words for the person typing it; `undefined` when it can. The Host asks git as well
+ * (`check-ref-format --branch`), so this only catches what is plain to see while typing.
+ */
+export function branchNameProblem(name: string): string | undefined {
+  if (name.trim() === '') return 'Name the branch.'
+  if (name.length > 100) return 'Use a shorter name.'
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/u.test(name)) return 'Use letters, digits, - _ . and /, starting with a letter or digit.'
+  if (name.includes('..') || name.includes('//') || name.endsWith('/') || name.endsWith('.') || name.endsWith('.lock')) return 'That is not a name git accepts.'
+  return undefined
+}
 
 /** A local branch of the app's repository. */
 export interface FrameBranch {

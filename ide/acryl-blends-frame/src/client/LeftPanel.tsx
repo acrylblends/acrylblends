@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { formatRelativeTime } from 'acryl-versions/client'
-import type { FeedbackNoteView, FeedbackView, FrameState } from '../contract.ts'
+import { branchNameProblem, type FeedbackNoteView, type FeedbackView, type FrameState } from '../contract.ts'
 import type { VersionsLogView } from 'acryl-versions'
 import { PTY_AGENTS, terminalMeta, type FrameTabs } from './tabs.ts'
 import { versionNumber, type VersionsPort } from './versions.ts'
+import type { BranchesApi } from './branches.ts'
 import { feedbackPlace, type FeedbackApi } from './feedback.ts'
 
 /** A chat on the branch, as the left panel lists it. */
@@ -50,6 +51,12 @@ type VersionsLoad =
   | { readonly status: 'ready'; readonly log: VersionsLogView }
   | { readonly status: 'error'; readonly message: string }
 
+/** The Branches "New" button: the Host makes the branch, then the frame reads its state again. */
+export interface BranchesPort {
+  readonly api: BranchesApi
+  readonly changed: () => Promise<void>
+}
+
 export interface LeftPanelProps {
   readonly state: FrameState
   readonly chats: ChatsPort
@@ -57,13 +64,14 @@ export interface LeftPanelProps {
   /** The right panel's tabs: the branch lists its open agents and terminals, and a click shows one. */
   readonly tabs: FrameTabs
   readonly feedback: FeedbackPort
+  readonly branches: BranchesPort
   /** Show a right panel tab (opening the panel when it is closed). */
   readonly showTab: (id: string) => void
   /** Told the newest version's label ("v7"), for the top bar. */
   readonly onVersionLabel: (label: string | undefined) => void
 }
 
-export function LeftPanel({ state, chats, versions, tabs, feedback, showTab, onVersionLabel }: LeftPanelProps) {
+export function LeftPanel({ state, chats, versions, tabs, feedback, branches, showTab, onVersionLabel }: LeftPanelProps) {
   const subscribe = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const chatRows = useSyncExternalStore(subscribe, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
@@ -72,6 +80,9 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, showTab, onV
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(state.branches.filter(b => b.current).map(b => b.name)))
   const [load, setLoad] = useState<VersionsLoad>({ status: 'loading' })
   const [saving, setSaving] = useState<string | undefined>(undefined)
+  // The new branch's name while it is typed, and why the last try failed.
+  const [naming, setNaming] = useState<string | undefined>(undefined)
+  const [branchProblem, setBranchProblem] = useState<string | undefined>(undefined)
   const [notes, setNotes] = useState<FeedbackView>({ available: false, notes: [] })
   const [handNote, setHandNote] = useState<string | undefined>(undefined)
 
@@ -120,6 +131,25 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, showTab, onV
     })
   }
 
+  const createBranch = async () => {
+    if (naming === undefined) return
+    const name = naming.trim()
+    const problem = branchNameProblem(name)
+    if (problem !== undefined) {
+      setBranchProblem(problem)
+      return
+    }
+    try {
+      await branches.api.create(name)
+      setNaming(undefined)
+      setBranchProblem(undefined)
+      setExpanded(current => new Set(current).add(name))
+      await branches.changed()
+    } catch (cause) {
+      setBranchProblem(cause instanceof Error ? cause.message : 'The branch could not be made.')
+    }
+  }
+
   const save = async () => {
     if (saving === undefined || saving.trim() === '') return
     try {
@@ -133,7 +163,32 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, showTab, onV
 
   return (
     <>
-      <div className="acrylBlendsPaneHead"><span className="acrylBlendsLabel">Branches</span></div>
+      <div className="acrylBlendsPaneHead">
+        <span className="acrylBlendsLabel">Branches</span>
+        {state.branches.length > 0 && (
+          <button
+            type="button"
+            className="acrylBlendsSmallButton"
+            title="A new branch from the current version; your files stay as they are"
+            onClick={() => { setBranchProblem(undefined); setNaming(current => (current === undefined ? '' : undefined)) }}
+          >
+            New
+          </button>
+        )}
+      </div>
+      {naming !== undefined && (
+        <form className="acrylBlendsSaveForm" onSubmit={(event) => { event.preventDefault(); void createBranch() }}>
+          <input
+            autoFocus
+            aria-label="Branch name"
+            placeholder="Branch name, e.g. feature-due-dates"
+            value={naming}
+            onChange={(event) => { setNaming(event.target.value); setBranchProblem(undefined) }}
+            onKeyDown={(event) => { if (event.key === 'Escape') setNaming(undefined) }}
+          />
+          {branchProblem !== undefined && <p className="acrylBlendsNote" data-error>{branchProblem}</p>}
+        </form>
+      )}
       <div className="acrylBlendsList">
         {state.branches.length === 0 && <p className="acrylBlendsNote">This app's folder is not a git repository.</p>}
         {state.branches.map(branch => {

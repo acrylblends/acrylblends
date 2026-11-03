@@ -17,6 +17,7 @@ import { FrameStateStore } from './frame-state.ts'
 import { FILES_SEARCH_EVENT } from './FilesView.tsx'
 import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSharedPlugin } from 'acryl-workspace/ui'
 import { ShortcutsRow } from './ShortcutsRow.tsx'
+import { createBranchesApi } from './branches.ts'
 import { createFeedbackApi, feedbackTask } from './feedback.ts'
 import { draftInChat } from './chat-draft.ts'
 import type { FeedbackPort } from './LeftPanel.tsx'
@@ -223,6 +224,7 @@ export function apply(ctx: ClientContext): void {
       tabs,
       tools,
       feedback,
+      branches: { api: createBranchesApi(), changed: () => frameState.refresh() },
     }),
   }, BlendsFrame), 'acryl-blends-frame: root slot')
 }

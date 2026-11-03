@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { countChanges, parseBranches, parseFrameState } from '../src/index.ts'
+import { branchNameProblem } from '../src/contract.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
 import { savedLabel, versionNumber } from '../src/client/versions.ts'
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
@@ -183,5 +184,16 @@ describe('the open file in the tree', () => {
   it('opens every folder above it, outermost first', () => {
     expect(foldersAbove('src/client/board.ts')).toEqual(['src', 'src/client'])
     expect(foldersAbove('package.json')).toEqual([])
+  })
+})
+
+describe('a new branch name', () => {
+  it('takes what git takes and says plainly what it refuses', () => {
+    expect(branchNameProblem('feature-due-dates')).toBeUndefined()
+    expect(branchNameProblem('team/board.v2')).toBeUndefined()
+    expect(branchNameProblem(' ')).toBe('Name the branch.')
+    expect(branchNameProblem('-x')).toMatch(/starting with a letter/)
+    expect(branchNameProblem('a..b')).toBe('That is not a name git accepts.')
+    expect(branchNameProblem('x.lock')).toBe('That is not a name git accepts.')
   })
 })

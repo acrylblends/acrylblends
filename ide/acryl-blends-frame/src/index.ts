@@ -22,6 +22,8 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, switchAppPlugin, type FrameRow } from './app-plugins.ts'
 import {
   FRAME_API_PREFIX,
+  branchNameProblem,
+  FRAME_BRANCHES_NEW_PATH,
   FRAME_FEEDBACK_PATH,
   FRAME_FEEDBACK_SEEN_PATH,
   FRAME_PLUGINS_PATH,
@@ -169,8 +171,28 @@ function parseSeen(body: unknown): string[] | undefined {
   return ids
 }
 
-export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort, feedback?: FeedbackPort): Acryl {
+/** What the Branches "New" button asks of the Host. */
+export interface BranchesPort {
+  /** Make the branch from the checked-out version and switch to it; rejects with git's reason. */
+  create(name: string): Promise<void>
+}
+
+export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort, feedback?: FeedbackPort, branches?: BranchesPort): Acryl {
   const app = new Acryl()
+  if (branches !== undefined) {
+    app.post(FRAME_BRANCHES_NEW_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const name = body !== INVALID_JSON && body !== null && typeof body === 'object' ? (body as { name?: unknown }).name : undefined
+      const problem = typeof name === 'string' ? branchNameProblem(name) : 'Name the branch.'
+      if (typeof name !== 'string' || problem !== undefined) return c.json(error(problem ?? 'Name the branch.'), 400)
+      try {
+        await branches.create(name)
+        return c.json({ ok: true })
+      } catch (cause) {
+        return c.json(error(cause instanceof Error ? cause.message : 'the branch could not be made'), 409)
+      }
+    })
+  }
   if (feedback !== undefined) {
     app.get(FRAME_FEEDBACK_PATH, ownPage, async (c) => {
       try {
@@ -255,7 +277,19 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     }
     ctx.router.route('/', frameRoutes(state, (cause) => {
       ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
-    }, plugins, feedbackPort(() => ctx.get('feedback'))))
+    }, plugins, feedbackPort(() => ctx.get('feedback')), {
+      create: async (name) => {
+        // git's own rule for a branch name, then the branch from HEAD, switched to: the working files, saved or not, stay as they are.
+        try {
+          await git.run(['check-ref-format', '--branch', name], root)
+          await git.run(['switch', '--create', name], root)
+        } catch (cause) {
+          // The runner keeps git's own line ("fatal: a branch named 'x' already exists") as the failure's detail.
+          const detail = (cause as { detail?: unknown }).detail
+          throw new Error(typeof detail === 'string' && detail !== '' ? detail : 'git could not make the branch')
+        }
+      },
+    }))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
     return () => { void git.dispose() }
   }, 'acryl-blends-frame: git runner and state route')

@@ -14,7 +14,7 @@ import type { AppCanvasState } from './canvas/app-canvas.ts'
 import { AppCanvas } from './canvas/AppCanvas.tsx'
 import type { FrameStateStore } from './frame-state.ts'
 import type { FrameViewState } from './view-state.ts'
-import { LeftPanel, type ChatsPort, type FeedbackPort } from './LeftPanel.tsx'
+import { LeftPanel, type BranchesPort, type ChatsPort, type FeedbackPort } from './LeftPanel.tsx'
 import { savedLabel, type VersionsPort } from './versions.ts'
 import { RightPanel } from './RightPanel.tsx'
 import type { FrameTabs } from './tabs.ts'
@@ -30,6 +30,7 @@ export interface BlendsFrameInjected {
   readonly tabs: FrameTabs
   readonly tools: FrameTools
   readonly feedback: FeedbackPort
+  readonly branches: BranchesPort
 }
 
 export type BlendsFrameProps = PropsRuntime<'root'> & PropsRenderSlots<'main' | 'shell.overlay' | 'sidebar.settings'> & BlendsFrameInjected
@@ -46,7 +47,7 @@ const PanelIcon = ({ side }: { side: 'left' | 'right' }) => (
   </svg>
 )
 
-export function BlendsFrame({ layout, canvas, frameState, view, chats, versions, tabs, tools, feedback, renderSlot }: BlendsFrameProps) {
+export function BlendsFrame({ layout, canvas, frameState, view, chats, versions, tabs, tools, feedback, branches, renderSlot }: BlendsFrameProps) {
   const state = useStore(frameState)
   const frameView = useStore(view)
   const activePanelId = useSyncExternalStore(layout.panelInfo.subscribe, () => layout.panelInfo.getSnapshot().activePanelId)
@@ -118,6 +119,7 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
               versions={versions}
               tabs={tabs}
               feedback={feedback}
+              branches={branches}
               showTab={(id) => {
                 tabs.activate(id)
                 view.showRight()
