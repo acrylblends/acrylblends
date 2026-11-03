@@ -556,7 +556,7 @@ Ubuntu green; the two others named their next causes. macOS: the Go re-press let
 
 **Open cause (product): the first Go press on a freshly loaded frame.** The re-press is a gate mitigation, not a cause fixed: if the first Go does nothing, an attendee who clicks once sees nothing happen. Likely the tile's Go handler is not attached when the page first paints (hydration), or Go fires before the address is committed. The product fix is that Go works on the first press, or stays disabled (visibly) until it can; the gate then presses once.
 
-**Open owner decision: a frame surviving a dev restart.** A host restart mints a new connection token (same port, new token); a frame left open with the old token has to be re-opened through the new printed URL. Whether an open frame should survive a dev restart (persisting the connection token in the profile) is the owner's call, not decided here.
+**The frame surviving a dev restart (decided 2026-11-02).** A host restart minted a new connection token (same port, new token); a frame left open with the old token had to be re-opened through the new printed URL. The owner decided: persist the access token in the app's git-ignored `.acrylblends` home, owner-only, written atomically at mint time, reuse it on later boots, and add a command that reprints the frame's URL (and one that asks for a fresh token); an open frame survives a restart. Implemented on branch 119 (section 25): `.acrylblends/frame-url.json` holds `{version, url, token, pid, writtenAt}`, 0600 (a restricted `icacls` ACL on Windows), a temp file renamed over the old one; the launcher writes it at mint time, and on every later boot gives the stored token back to DSH's connection through the one seam the pinned package offers (the instance field `browserAuth.launchToken` that `authorizeIndex` and `authenticatedUrl` read; nothing in the package is edited, and a package without that shape simply keeps its fresh token). The printed URL is therefore the same on every restart and an open page - even one whose cookie was lost - comes back by reloading its original URL. `acrylblends open [dir]` prints the address of the frame that is listening (a stopped or never-run frame is explained on stderr, never a dead token); `acrylblends open --new` rotates the token in the running host through a token-authenticated route the launcher mounts (`POST /api/acryl-frame/token/new`), so the old address dies at once and the new one is printed and stored.
 
 ### The real Settings causes (`b0139d49`'s red, found with a local dialog dump)
 
@@ -635,6 +635,246 @@ page lands on the body and an attendee clicks before the first word; the same ha
 focused node. `focusChatComposer` watches while a chat is the shown tab (bounded at 30 s) and focuses the composer only when focus is on the page
 itself, never from a field, a dialog, a menu or a control the person is using. Tests cover the late composer, the field and the dialog, the replaced
 composer and the deadline.
+
+## 25. The workshop flow rehearsed (2026-11-01, branch 119-workshop-guide)
+
+The handout was rewritten to the frame flow (create; the frame opens on the app; Settings > Models; chat; a coding agent in a terminal tab; edit and
+see it at /app; upgrade an older app; publish as take-home), and then walked on this Mac from the packed CLI in an isolated HOME, never on port 3080.
+Every stopping point in that walk was a product cause, not a guide step:
+
+- **The frame opened on an empty canvas (fixed, `8d2615b1`).** The app was only reachable by pressing +, choosing New Browser Tab and pasting a full
+  address with `/app`. The overlay now tells the workspace row where the app's page is (`appPage: /app`, `FRAME_PAGE_PREFIX` in the CLI, with a test
+  that every template's `FRAME_MOUNT_PREFIX` still agrees), the workspace Host advertises the page, the app folder and the app's name through its
+  capabilities route, and on a first run (no saved tabs) the client selects the app's folder and opens the page in a tile titled with the app's name.
+  The chat binds a moment later and takes the focus; the app's page takes it back once, within the first six seconds, and never after. A Host without
+  an app (ACRYL Web, Desktop) advertises no page and keeps its empty canvas. Measured: first run shows the app's page in the tile with no click.
+- **A restart changed the frame's address (fixed, `9f23b3a4`).** The launcher listened on `ACRYLBLENDS_PORT` or 0, so every `npm run dev` minted a new
+  origin; the frame's auth cookie is bound to the origin, so the page could never come back. The launcher now selects the app's own instance (the
+  folder's stable port, the same one the app's own server uses) and listens there; the gates still pass 0 for any free port. Measured with the cookie
+  durable: a restart with the page open reconnects by itself within a few seconds, on the same address, with the app's tile and the chat's session
+  still there.
+- **The app was not a git repository (fixed in this commit).** The frame's Files and Changes views answer only for a git worktree; without one,
+  Files said "file request failed" and the left pane said "detached". `acrylblends init` now runs `git init` and makes the scaffold the first commit
+  (`Initial commit from acrylblends`, the person's own identity when git has one), so Files opens the app's source and Changes starts from the
+  person's edits instead of "421 files changed". Measured: Files failed before, listed and opened `src/routes.ts` after.
+
+**The reconnect's one open case (browser, not the app).** Chrome persists cookies to disk lazily (about half a minute). If the host dies within that
+window of the frame's first load, the browser's auth cookie can be lost with the page's network state; every retry then answers 401 and the page
+stays on `Reconnecting...`, and no page-side code can re-mint it without the launch token (which DSH deliberately keeps out of the page). After the
+cookie is durable, the same restart reconnects on its own. The facilitator notes carry this as a known edge; the guide's recovery is a tab reload,
+and the stable port means the printed address stays valid.
+
+**The frame's address and token, kept so a restart changes nothing (owner decision, 2026-11-02).** The launcher itself writes the printed URL - the
+only thing that can re-enter a frame whose browser session ended - into the app's git-ignored home (the record is the launcher's own bookkeeping, so an
+app whose installed framework predates `acrylblends open` still gets it; the CLI reads the same record): `.acrylblends/frame-url.json`,
+`{version, url, token, pid, writtenAt}`, created 0600 (a restricted `icacls` ACL on Windows), written as a temp file renamed over the old one, and
+left behind on a clean stop so the command can say the frame is not running instead of pretending it never ran. On every later boot the launcher
+gives the stored token to DSH's connection through the field the package reads (`browserAuth.launchToken`; the shape is guarded, and a package
+without it keeps its fresh token), so the address and any open page survive a restart. `acrylblends open [dir]` reads the record, checks the host
+still listens, and prints the URL alone on stdout (a stopped or never-run frame goes to stderr with `npm run dev` advice; a dead token is never handed
+out). `acrylblends open --new` rotates the token in the running host: the launcher mounts `POST /api/acryl-frame/token/new`, authenticated by the
+current token, which replaces `launchToken`, rewrites the record and answers the new address; the old address answers 401 from that moment. Unit
+tests cover the mode, the atomic write (no temp files left), owner-only removal, malformed and pre-token records, token extraction and rotation
+helpers, the reuse guard, and all `open` outcomes including `--new` against a host that enforces the rotation; the generated launcher's text is
+asserted to read, reuse, write and rotate. Measured live with the packed CLI: a restart printed the same URL, `open` printed it, `open --new`
+rotated it (old 401, new 303) and the rotated address survived the next restart with the app's page rendering from it. The workshop release is
+**1.2.0** by the owner's decision, and the guide says so.
+
+**The session banner (coordinator's request, 2026-11-02).** The frame's client watches DSH's client connection recovery state (`ctx.connection.state`)
+and, while it is not `connected`, polls one small admitted Remote (`POST /api/settings/describe`) every three seconds; the workspace's own routes sit
+on a longer router prefix and are not behind the browser session, so they could not answer. Only statuses are read: any admitted answer (200, 400,
+404, 500) proves the session, a network failure is the connection's own retry, and a 401 that holds for two consecutive polls means the browser
+session is gone - the banner then replaces the endless "Reconnecting..." at the top of the canvas, over the tab strip, with: "This frame's session
+ended. Open the address the terminal printed, or run `npx acrylblends open` in the app folder and open the address it prints." The watcher stops
+polling once the connection recovers, and a composition without a connection service renders nothing. Unit tests (fake connection, fake probe, fake
+timers) cover quiet-when-connected, no polling at all, the one-401 race, the two-401 verdict with the exact message, non-401 answers and network
+failures staying quiet, recovery, dispose, and the probe's request shape. Measured live: with the cookie deleted and the host restarted inside the
+window, the banner appeared on the second poll cycle with the exact text and the page scrolled nowhere. The post-120 gate work landed with the merge of `af583d6c`: `verify-ide-template` now asserts the first-run tile (the app's page already open, no +
+and no typed address, `scrollTop` 0 with the card shown), the session banner after the browser cookie is deleted and the host restarts on the same
+port (the text names `npx acrylblends open`, `scrollTop` 0), `scrollTop` 0 while Settings is open, and it runs `scripts/verify-frame-token.mjs` on
+the app it scaffolded (the same address after a restart, page 303 + cookie, WebSocket open, record 0600 with the matching token) - all measured green
+on the agent template: "the app opens itself in a tile on first run", "the session banner names `npx acrylblends open` ... with the page unscrolled",
+"verify-frame-token: the same address after a restart admits the page and its WebSocket", OK. The guide's reconnecting step already names the
+command. The publish block is the take-home, unchanged from the registry's own README.
+
+**The document must never scroll (coordinator's finding from the banner screenshot).** The frame's page scrolled to 256px when DSH's first-run key
+card appeared: the card is a body-level root appended after `#root` in normal flow (`div._root_...`, 256px tall below the 800px shell), so the document
+grew to 1056px, and the card's autofocused input scrolled the whole page down - the tab strip and the sidebar's content went off-screen. The probe
+that found it (computed overflow, body children, rects) is recorded above in the measurements. Fixed in the app shell's advanced styles (`acryl-app-
+shell`): `html, body { overflow: hidden; }` so the frame owns the viewport and only its panes scroll, and - narrowed, after the coordinator's review,
+from "every body-level root" to the cause itself - `body > div:not(#root):has(input[aria-label="API key"]) { position: fixed; inset: auto 0 0 0;
+z-index: 60; }`, which matches only the first-run key card's root and leaves every other portal (menus, tooltips, the palette, popovers, toasts) to
+position itself. Measured after: `scrollTop` 0 with the card shown (input focused), after blur and after a reload; `scrollHeight` 800; the card
+visible as a bottom sheet over the intact frame; the card's root `fixed` at top 644; Settings > Models still opens; the banner still appears with
+scroll 0. The narrowed rule's reach was verified in the live frame: the tab strip's `+` menu, the command palette and the Settings dropdown all live
+inside `#root` (body root `#root`, position static) and not in a body-level root, so the rule cannot touch them; the menu's rect with and without
+the rule is identical (top 40, left 1106, 254x534) and removing the rule only returns the key card to flow (body root static, top 900). The
+product's tooltips are native `title` attributes drawn by the browser, not DOM elements, and the workspace's toasts render inside `.dshWorkspace`
+(that is, inside `#root`); automation could not make Pi or Claude exit their TUI to raise one, but by construction neither can be reached by a
+body-level rule. Screenshots of the menu, palette and dropdown with the rule and after removing it are in the rehearsal record. The page gate
+assertion (scrollTop stays 0 through the first-run card, Settings and the banner) joins the post-120 gate work with the other assertions.
+
+### The reused token's guards (2026-11-02)
+
+Two guards accompany the seam (condition of the coordinator's acceptance): `packages/cli/test/dsh-launch-token.test.ts` reads the installed
+`@deepseek-ai/dsh-client-connection` and fails loudly when a DSH bump removes or renames the field or when another path mints or compares a
+per-process token - it asserts the constructor assignment, the two reads (`authenticatedUrl`, the index admission), and that `processLaunchToken` has
+exactly the definition and that one call (the WebSocket admission admits through the cookie, never the token). `scripts/verify-frame-token.mjs
+<app-dir>` boots an installed app twice and asserts the second boot prints the same address, that the address admits the page (303 and the cookie),
+and that the cookie admits `/api/remote.mux` - the restart with a reused token admits the page and its WebSocket. It runs on the rehearsal app today;
+it joins `pnpm run check` with the post-120 gate work, where an installed app already exists.
+
+### Upstream request (draft - not posted): a supported launch-token seam
+
+For the owner to post to DSH's Discussions if they choose to:
+
+> **Allow a host to supply the browser launch token (BrowserAuth)**
+>
+> We host an application inside DSH's web GUI and restart the host many times a day during development. `BrowserAuth` mints a random launch token per
+> process (`processLaunchToken`), so every restart changes the printed URL: an already open page survives only through its cookie, and when that cookie
+> is lost or expired the person must reopen a URL that no longer exists. To give the URL (and an open page) a stable identity we read the token back by
+> assigning the instance field `browserAuth.launchToken`, which `authorizeIndex` and `authenticatedUrl` read - it works today, but it is an
+> unsupported seam that a rename or a package refactor would break.
+>
+> Request: let the connection row take the launch token from its config - a literal, or a provider/file the host owns (e.g. `config.launchToken` or
+> `config.launchTokenFile`) - with the current random per-process token as the default. A host could then keep a stable, owner-scoped token across
+> restarts, offer a supported reprint and rotation command, and stop reaching into the instance. Documented as host-owned state (owner-only
+> permissions are the host's business) it would not change the browser trust model: the token stays the sole authentication input at `GET /`, and the
+> cookie remains authority-bound.
+
+### Handoff (2026-11-02, 119-workshop-guide)
+
+State: `119-workshop-guide` at `0a38c723` (main `af583d6c` merged); the full check exited 0 on that tree. The handout and facilitator notes are
+rewritten to the frame flow for 1.2.0, and the day-one product fixes and gate assertions are in: the stable port; the first-run tile; the scaffold as
+a git repository; the stable launch token with `acrylblends open` / `open --new` and the launcher's self-contained record; the session banner; the
+unscrollable frame document with the overlay rule narrowed to the first-run card. `verify-ide-template` asserts the first-run tile, the banner after
+cookie loss with `scrollTop` 0, `scrollTop` 0 while Settings is open, and runs `scripts/verify-frame-token.mjs` on its own app.
+
+Open items and next steps, in order: push this branch and watch CI on macOS, Ubuntu and Windows; if the macOS frame job still fails at the tile, pull
+that run's net-log artifact and report the cause before any rerun (do not call it a flake); ask the coordinator to approve landing; after landing,
+walk the handout end to end once as an attendee with the packed CLI in an isolated HOME; the upstream request for a supported launch-token seam in
+this section is drafted, not posted (the owner's to post); nothing goes to the workshop registry without the coordinator's approval.
+
+### Handoff 2 (2026-11-02, after the owner test kit)
+
+The owner kit lives at `/Users/musichen/_projects/p11_acr_agentcontextrelay/acryldev/_testfield/acrylblends-test-kit-1.2.0-rc`
+(`sh /Users/musichen/_projects/p11_acr_agentcontextrelay/acryldev/_testfield/acrylblends-test-kit-1.2.0-rc/try.sh`; README.txt; five screenshots in
+`screenshots/`). Owner rule: nothing is ever created directly in the home folder; test material lives in `acryldev/_testfield` or the session's scratch
+directory. The kit was deliberately moved there (its regenerated prefix, home, npm cache, npmrc and install log were cleared, and frame-specs.json and
+README.txt rewritten to the new path); it is rebuilt and re-shot only in that folder. It packs the CLI and the 13 frame packages from the branch's working tree as tarballs, installs the CLI from the kit, creates the
+agent app inside the kit, uses an isolated HOME, never the registry's acrylblends (`^1.0.0` peers require a non-prerelease version, so the kit's CLI
+tarball is version 1.2.0). A run of the kit found six visual defects; three are fixed in `ffd55b5f`: (1) the frame never applied the theme font
+(`--dsw-font-family` was on the root but no rule used it), so every DSH-drawn surface rendered in Times - html/body now take that one inherited
+value; (2) the Preview Notice and the key card were a bottom sheet - a body-level root hosting a `[role=dialog]` is now a full-viewport centered
+modal layer, like ACRYL; (5) `npm install` writes `package-lock.json` after the scaffold's first commit, so a fresh app said "1 file changed" - every
+template gitignores it. Re-measured in the rebuilt kit: sans typography everywhere, both dialogs centered, a fresh app clean, five distinct shots.
+
+Still open from that review, with the second pass's findings: (3) the right panel's "Start" view is misplaced - the compass icon and the "Start"
+label float at the panel's top-left with the toolbar icons stacked under them, and the card list (Files, Changes, Review, Checks, Comments) runs under
+the right panel's own Terminal dock, so the Comments card is clipped by the dock's tab strip; the view needs ACRYL's placement and a scroll region
+above the dock. (4) "Open configuration file" sits close to the close X in Settings. (6) the left-panel screenshot should show a listed session (it
+was taken before one existed). (7) The centered dialogs have no surface: the Preview Notice and the key card are bare text over the app page - no card
+background, border, shadow or backdrop scrim - and the key card's text and buttons overlap the terminal dock; the Continue button is a flat grey box.
+DSH's own dialog styles are probably missing the same way the font token was unused (the dialog element's class hashed styles exist in
+ModelsSection/OnboardingModal CSS tags, but the element may carry none of them or a wrapper's CSS is absent); find that cause and port ACRYL's dialog
+surface and backdrop rather than painting a new card. (8) The Settings nav truncates "Command pale..." - widen the nav or let labels wrap as ACRYL
+does. Gate gap: `verify-ide-template` checks structure, not look - wire `scripts/frame-compare.mjs` (the 2% threshold against the ACRYL reference
+shots) for the first-run screen, Settings > Models and the right panel so this class fails CI.
+
+State: branch 119-workshop-guide at `ffd55b5f`; typecheck green, the full check has NOT been run since `ffd55b5f` (the last green check was
+`9a63850c`; the earlier gate additions were green on the agent template). Next, in the coordinator's order: full check + push + CI on `ffd55b5f`; then fix 7 (dialog surface and backdrop at the cause), 3 (the Start view's
+placement and the card list's scroll region), 4 and 8; then the frame-compare wiring; then rebuild the kit (in `acryldev/_testfield` only) and re-shoot,
+every shot compared with ACRYL before reporting. The kit's app folder is removed and its port free; the kit itself (tarballs, prefix, home, cache,
+screenshots) is ready.
+
+### Handoff 3 (2026-11-02, after the stylesheet root cause)
+
+The kit's dialog defect and the Start view's misplacement had one cause, found by reading the live page rather than the code's intent: `clientAssetTags`
+in `plugins/acryl-page/src/index.ts` copied the frontend's `<script ... src>` opening tag without its closing `</script>`. The browser then parsed the
+vendor modulepreload and both stylesheet links as that script's text, so DSH's whole component stylesheet (primitives: Modal, Button, Input, Menu, ...)
+never loaded and every surface drawn by it fell back to browser defaults. The theme tokens still worked because the theme plugin injects its CSS inline,
+which is why only primitives-drawn surfaces looked wrong. Fixed at the cause in `49417c57`: the page closes the tag it owns, the test pins the copied
+tags, and the gate asserts it twice - the served page's script tags are closed, and in real Chrome the document carries a stylesheet link while the
+entry script element holds no text. With the stylesheet loaded, the three symptom patches from `ffd55b5f`/`6cd7a585` were re-measured and removed:
+DSH's base CSS sets body font-family, its Modal root is fixed/centered/z-index 1000, and the notice, Settings and banner scroll assertions pass without
+`html, body { overflow: hidden }`. Defects 3 and 4 are gone with the same cause (the Start header sits like ACRYL's, the card list ends above the dock,
+and "Open configuration file" is a proper outline button with ACRYL's spacing). Defect 6 was a shot-order issue, fixed in the kit scenario.
+
+Defect 8 is a ticket, not a 119 fix: the Settings nav truncates "Command pale..." in ACRYL and in the frame alike (ACRYL's own settings-models
+reference shows the same ellipsis), so it is an ACRYL + frame UI ticket - widen the nav or let labels wrap in both.
+
+Frame-compare is now wired with the coordinator's conditions. `scripts/frame-views-frame.json` holds the frame's three day-one states (first-run,
+Settings > Models, the right panel) at one fixed viewport, 1440x900, with masks only for what changes every run (the app's port inside the address
+field, the terminal dock's text). `verify-ide-template` captures those states for the agent template after the notice check and, when `FRAME_VISUAL=1`
+on Linux, compares them with `scripts/frame-reference-frame` at 2% (`FRAME_VISUAL_CAPTURE` writes the states instead, for regenerating the baseline);
+macOS and Windows keep the structural assertions. `.github/workflows/frame-baseline.yml` regenerates the baseline on the Ubuntu runner (Node 24) and
+uploads the PNGs for review. `frame-compare compare` now honors `--views`, and `check --against acryl` reads `scripts/frame-reference` and never
+fails: that set is ACRYL Desktop with no project and ACRYL's own plugins, so content differs by design (measured on the fixed build: settings-models
+3.67% at 1440x900 and 4.95% at 1024x768, right-panel-open 37%, frame 72.4%/64.6%; the diff image shows the dialog chrome itself aligned). The baseline
+is captured on the Linux runner and approved by the coordinator before it is committed; until then the frame job does not set `FRAME_VISUAL`.
+
+Kit: rebuilt in `acryldev/_testfield/acrylblends-test-kit-1.2.0-rc` from `49417c57` (CLI 1.2.0, 13 frame tarballs), a fresh app installed through
+`try.sh`, and the five shots retaken at 1280x800 into `screenshots/`: the Preview Notice as a centered card with a scrim, the frame with the app open,
+the right panel with the Start header and its list above the dock, Settings > Models with its real surface, and the terminal. The app folder is removed
+after the run so the owner's `try.sh` starts clean.
+
+State: branch 119-workshop-guide; `49417c57` (root cause) and `9f57d0fd` (visual gate wiring) on top of the green `7c7b5e40`; the full check has not
+been run since `49417c57`. Next: the Linux baseline capture and the coordinator's review of the five kit shots; commit the baseline and set
+`FRAME_VISUAL=1` on the frame job once approved; run the full check and push; CI.
+
+### Handoff 4 (2026-11-02, owner kit review round two)
+
+(9) Settings > Models said "Use your Claude, ChatGPT or DeepSeek subscription" but listed only DeepSeek. The sign-in rows come from the harness
+authorization catalog, and the frame's driver rows composed `llm-deepseek-account` without `llm-pi-ai` - the multi-provider twin whose flows register
+Claude, ChatGPT and the rest of the catalog. Fixed in `7b6b307d` by adding `llm-pi-ai` to `DRIVER_ROWS`, mounted dormant exactly as DSH's base mounts
+it: zero model routes until a sign-in supplies a provider profile, which is what the Models page does. The page gate now fails if those two rows are
+absent (the workshop guide tells attendees a subscription works); the agent gate is green with every row active and both rows shown. Changing the copy
+was never the fix, as the coordinator said.
+
+(10) The gear icons in the Settings nav are parity, not a defect: ACRYL's own settings-models reference shows the same generic gear for Agents, Tabs,
+Command palette, Shortcuts and Agent Control. DSH's settings dialog maps icons only for `account`, `models`, `agent-presets`, `plugins` and
+`archived-sessions`; every other id falls back to the gear. Our frame renders exactly that, and our own Support section gets the same fallback. No
+change; noted with the item 8 ticket (Settings nav truncation, ACRYL + frame).
+
+Lint: the `b093fe2d` Linux check jobs failed on one formatter error in `scripts/verify-ide-template.mjs`, introduced by the visual-gate commit after
+the last local full check on `7c7b5e40`. The two unused imports (`tokenOfFrameUrl` in the frame-url test, `mkdtempSync` in
+`scripts/build-legacy-layouts.mjs`) were warnings: `biome check .` reports them and still exits 0, so the local full check was not skipping lint - it
+simply predated the formatter error. Both imports are removed in `7b6b307d`, and lint exits 0 with warnings only.
+
+Kit: rebuilt again from `7b6b307d` (CLI tarball repacked; the 13 frame tarballs are unchanged since the stylesheet fix) with a fresh app; the
+settings-models shot now shows the Claude, ChatGPT and DeepSeek sign-in rows. The visual baseline is requested again from this push, since fix 9
+changes the settings-models state; the three PNGs are reviewed and approved before they are committed, and `FRAME_VISUAL` stays off until then.
+
+A second gap in (9) showed up only in the rebuilt kit: composing `llm-pi-ai` brought Claude but not ChatGPT. DSH 0.2.0-rc.2's pi-ai catalog gives
+`llm-pi-ai/openai` an API key only; the ChatGPT subscription flow lives on its legacy `llm-pi-ai/openai-codex` route ("OpenAI (ChatGPT Plus/Pro)"),
+which the card kept under Other providers. Fixed in `3ba045be`: the featured ChatGPT row takes whichever of the two routes the catalog actually offers
+with an OAuth flow (preferring `openai`, falling back to `openai-codex`), and a promoted route is not listed twice. The gate assertion was reading the
+section text, which always contains "Claude, ChatGPT or DeepSeek" whether the rows exist or not; it now reads the card's row names. The agent gate
+shows all three rows and the sign-in package's 32 tests pass, including the legacy-route case.
+
+The Ubuntu page gate then stalled for forty minutes after its banner line, and the guards added for it (`f6d78142`'s predecessors) turned the stall
+into a named failure instead of silence: `verify-frame-token: gave up after 10 minutes`, with no progress because the watchdog's `process.exit`
+truncated buffered stdout. Synchronous progress lines (`71bcfada`) then named the failure in two lines: boot 1 passed every check and "stopped", but
+boot 2 printed port **3705** instead of 3704 and `STABLE` was false. Signalling `npm run dev` alone leaves the app process (npm -> sh -> node) alive
+holding the stable port on Linux, so the next boot scans to another port - the guarantee this check exists for breaks - and the leftover child kept
+the script's event loop alive, which is why the watchdog fired after the work was already done.
+
+Fixed in `f6d78142`: the app starts as its own POSIX process group and `stop()` signals the group (taskkill `/T` on Windows), so the port is free
+when the second boot starts; the script exits explicitly after its final synchronous line. This was a harness path, not a product flow - a person's
+Ctrl-C reaches the script child through npm, but a bare SIGTERM to npm does not. The agent gate passes end to end locally; the Ubuntu job is the
+proof, and the visual baseline is requested again from this push.
+
+The coordinator relayed the owner's scope decision (2026-11-02): the frame keeps only what every app type needs - the collapsible sessions panel,
+agents, the collapsible right panel, Settings and the app as the central canvas; the IDE-only parts (Files/Changes/Review/Checks/Comments, the
+branch/worktree tree, the git status bar and the IDE Settings sections) leave the default frame, and a redesign slice follows. The visual baseline is
+therefore held: the three PNGs were captured on ubuntu-latest (frame, settings-models, right-panel-open at 1440x900) but are not committed,
+`FRAME_VISUAL` stays off, and the masking/compare code (`scripts/frame-views-frame.json`, `frame-compare --against acryl`, the Linux capture path)
+stays for the baseline after the redesign.
+
+The blank template's first tile showed Chrome's JSON viewer: its root answered JSON to every client, which is nearly invisible in the frame's dark
+surface. Fixed in `9f04ced9`: the root negotiates like the agent template - a browser gets a minimal first page naming the app with a relative About
+link, an API client still gets the JSON hello - so the scaffolder gate's `GET /` contract does not move. The blank frame gate shows the tile with the
+page ("blank-app"), and the scaffolder gate over every template is green.
 
 ## 26. A graceful node-server stop (branch 121, 2026-11-02)
 

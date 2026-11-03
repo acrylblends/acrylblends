@@ -256,6 +256,9 @@ body[data-ds-dark-theme] .dshWorkspaceAcrylMarkDark { display: block; }
 .dshWorkspaceSideAdd:hover { background: var(--dsw-alias-fill-hover, rgb(255 255 255 / 8%)); }
 .dshWorkspaceSideHint { margin: 4px 8px; padding: 6px 8px; border-left: 2px solid #4d6bfe; color: var(--dsw-alias-label-secondary); font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
 .dshWorkspaceSideNotice { margin: 4px 8px; padding: 6px 8px; border-left: 2px solid #f87171; color: #fca5a5; font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
+/* The session banner replaces the endless "Reconnecting..." when the browser's session ended: warning colours, the whole width, above the tabs. */
+.dshWorkspaceSessionBanner { position: absolute; inset: 0 0 auto 0; z-index: 30; margin: 0; padding: 8px 14px; border-bottom: 1px solid color-mix(in srgb, #f59e0b 45%, transparent); background: color-mix(in srgb, #f59e0b 14%, var(--dsw-alias-bg-base)); color: var(--dsw-alias-label-primary); font: 13px/1.5 ui-sans-serif, system-ui, sans-serif; }
+.dshWorkspaceSessionBanner code { padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, #000 28%, transparent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .dshWorkspaceSideEmpty { padding: 12px 6px; color: var(--dsw-alias-label-secondary); font: 12px/1.5 ui-sans-serif, system-ui, sans-serif; }
 .dshWorkspaceRepo { margin: 6px 0 10px; }
 .dshWorkspaceRepoHead { display: flex; align-items: center; gap: 4px; }

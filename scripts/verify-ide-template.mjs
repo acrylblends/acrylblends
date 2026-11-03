@@ -90,6 +90,7 @@ async function until(fn, ms, every = 300) {
  * page; its /settings page is the one that always renders. `notes` has no unauthenticated JSON route at the prefix, so its page is the proof.
  */
 const PAGES = {
+  // The blank app's root answers a page to a browser (the first tile) and JSON to an API client, like the agent template.
   blank: { path: '/app/about', text: 'About', api: { path: '/app' } },
   agent: { path: '/app/settings', text: 'Settings', panel: true, api: { path: '/app' } },
   todo: { path: '/app', text: 'Todo', api: { path: '/app/api', list: true } },
@@ -401,6 +402,13 @@ ${composition.stdout}`)
         60_000,
       )
       if (notice === undefined) fail('the Preview Notice did not appear on a fresh profile')
+      const noticeScroll = await evaluate(
+        `Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)`,
+      )
+      if (noticeScroll !== 0)
+        fail(
+          `the page scrolled to ${String(noticeScroll)} with the Preview Notice shown; the frame must never scroll at the document level`,
+        )
       const clicked = await evaluate(`(() => {
         const dialog = document.querySelector('[role=dialog]')
         if (dialog === null) return false
@@ -467,6 +475,16 @@ ${composition.stdout}`)
   if (!readFileSync(pageHtml, 'utf8').includes('__DSH_BOOT__'))
     fail('the page does not carry the client-module boot wire')
   const html = readFileSync(pageHtml, 'utf8')
+  // Every script the page copies from the frontend is closed. An unclosed entry script turns the tags after it (the stylesheet links) into its text:
+  // DSH's component stylesheet never loads, and the frame draws its dialogs and buttons with browser defaults. The string check fails here, before a
+  // browser can hide the cause.
+  for (const match of html.matchAll(/<script\b[^>]*\bsrc=[^>]*>/gu)) {
+    const after = html.slice(match.index + match[0].length)
+    if (!after.trimStart().startsWith('</script>'))
+      fail(
+        `the page's script tag ${match[0]} is not closed; the tags after it would be swallowed as its text`,
+      )
+  }
   if (!html.includes('acryl-workspace/client.js'))
     fail(`the page does not load the workspace client; server said:\n${output.slice(-2500)}`)
   const tags = html.split('/api/acryl-door/page.js').length - 1
@@ -533,7 +551,92 @@ ${composition.stdout}`)
   url = afterNotice.url
   origin = afterNotice.origin
 
-  await checkTileInBrowser(url, origin, jar, page, output, mock)
+  // The frame's look, for the workshop's agent template: three day-one states at one fixed viewport, captured here and compared with the committed
+  // baseline at 2%. The compare runs only on Linux CI, where the runner's fonts are fixed; macOS and Windows keep the structural assertions (a cross-OS
+  // pixel gate would fail on font rendering, not on the product). FRAME_VISUAL_CAPTURE names a folder to write the states into instead: the baseline is
+  // regenerated that way on the Linux runner and approved before it is committed.
+  if (template === 'agent') {
+    const views = 'frame,settings-models,right-panel-open'
+    const viewsFile = join(root, 'scripts', 'frame-views-frame.json')
+    const captureTo = process.env.FRAME_VISUAL_CAPTURE
+    if (captureTo !== undefined && captureTo !== '') {
+      const shot = spawnSync(
+        process.execPath,
+        [
+          join(root, 'scripts', 'frame-compare.mjs'),
+          'capture',
+          serverUrl,
+          captureTo,
+          '--views',
+          views,
+          '--views-file',
+          viewsFile,
+        ],
+        { encoding: 'utf8' },
+      )
+      if (shot.status !== 0)
+        fail(
+          `the frame's visual states did not capture (exit ${String(shot.status)}):\n${shot.stdout ?? ''}${shot.stderr ?? ''}`,
+        )
+      log(`the frame's visual states are captured in ${captureTo}`)
+    }
+    if (process.env.FRAME_VISUAL === '1' && process.platform === 'linux') {
+      const baseline = join(root, 'scripts', 'frame-reference-frame')
+      if (!existsSync(baseline))
+        fail(
+          'the frame visual baseline is missing (scripts/frame-reference-frame); capture it on this runner first',
+        )
+      const looks = spawnSync(
+        process.execPath,
+        [
+          join(root, 'scripts', 'frame-compare.mjs'),
+          'check',
+          baseline,
+          serverUrl,
+          join(scratch, 'frame-visual'),
+          '--views',
+          views,
+          '--views-file',
+          viewsFile,
+        ],
+        { encoding: 'utf8' },
+      )
+      if (looks.status !== 0)
+        fail(
+          `the frame does not match its visual baseline (exit ${String(looks.status)}):\n${looks.stdout ?? ''}${looks.stderr ?? ''}`,
+        )
+      log('the frame matches its visual baseline at 1440x900 within 2%')
+    }
+  }
+
+  // The session banner check needs the same host back on the same origin: the page's cookie is gone, the connection cannot recover, and the frame
+  // must say so instead of spinning.
+  const restartSamePort = async () => {
+    const held = new URL(serverUrl).port
+    await stopServer()
+    bootEnv.ACRYLBLENDS_PORT = held
+    return await startServer()
+  }
+  await checkTileInBrowser(url, origin, jar, page, output, mock, restartSamePort)
+  // The frame's stable launch token end to end (119): verify-frame-token boots this app twice on its own port and asserts the same address after the
+  // restart, that the address admits the page (303 and the cookie) and that the cookie admits the frame's WebSocket.
+  await stopServer()
+  const frameToken = spawnSync(
+    process.execPath,
+    [join(root, 'scripts', 'verify-frame-token.mjs'), app],
+    {
+      encoding: 'utf8',
+      env: { ...process.env, ...bootEnv, ACRYLBLENDS_PORT: '' },
+      // The step boots two apps and has its own watchdog; a child that still hangs must fail this gate with a name instead of holding the job until
+      // its timeout (the Ubuntu runner once sat here for over forty minutes, 2026-11-02).
+      timeout: 720_000,
+    },
+  )
+  if (frameToken.status !== 0)
+    fail(
+      `verify-frame-token failed (exit ${String(frameToken.status)}${frameToken.error === undefined ? '' : `: ${frameToken.error.message}`}):\n${frameToken.stdout ?? ''}${frameToken.stderr ?? ''}`,
+    )
+  log('verify-frame-token: the same address after a restart admits the page and its WebSocket')
   // The owner's rule: the key lives only in DSH's own store, never in the page or the app folder.
   const keyFiles = filesContaining(bootEnv.ACRYLBLENDS_HOME, GATE_KEY)
   if (keyFiles.length === 0) fail('the host did not store the key in its own home')
@@ -606,7 +709,7 @@ function setInputValue(selector, value) {
  * iframe's document (same origin, so the gate sees what a person sees). This is ACRYL's canvas browser tile, not DSH's right-sidebar browser row:
  * that package registers a tab type for DSH's right sidebar, while the owner's requirement is the main surface, which is the workspace canvas.
  */
-async function checkTileInBrowser(url, origin, jar, page, output, mock) {
+async function checkTileInBrowser(url, origin, jar, page, output, mock, restartHost) {
   const profile = mkdtempSync(join(tmpdir(), 'ide-template-tile-'))
   // When the tile's request dies (the iframe shows the browser's error page), its net log names why: ERR_CONNECTION_RESET, ERR_EMPTY_RESPONSE or
   // ERR_ABORTED. CI uploads the file as an artifact only when a gate fails, and the failure message carries its path.
@@ -696,6 +799,50 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       if (frame.mode !== 'advanced' || frame.frames !== 1)
         fail(`the page is not the frame's advanced layout: ${JSON.stringify(frame)}`)
       log('the page renders the ACRYL frame')
+      // The frontend's component stylesheet is really in the document, not swallowed as the entry script's text. Without it every DSH dialog, button
+      // and input falls back to browser defaults (the owner kit's flat grey buttons and the dialog without a surface or backdrop, 2026-11-02).
+      const entry = await evaluate(`(() => {
+        const script = document.querySelector('script[src*="/assets/index-"]')
+        return {
+          links: document.querySelectorAll('link[rel=stylesheet]').length,
+          entryText: (script?.textContent ?? '').length,
+        }
+      })()`)
+      if (entry.links === 0)
+        fail(
+          'the frame document has no stylesheet link: the entry script swallowed the frontend stylesheets',
+        )
+      if (entry.entryText !== 0)
+        fail(
+          `the entry script element holds ${String(entry.entryText)} characters of text: the page's tags after it were swallowed`,
+        )
+      log(
+        'the frontend stylesheet is in the document and the entry script holds no swallowed markup',
+      )
+      // Day one under the frame (119): the app the person is building is already open in a tile, with no + and no typed address, and the document
+      // has not scrolled (a focused first-run card must not move the shell).
+      const firstRunTile = await until(async () => {
+        const snapshot = await evaluate(`(() => {
+          const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+          const src = frame?.getAttribute('src') ?? ''
+          const text = frame?.contentDocument?.body?.innerText ?? ''
+          const tabs = [...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())
+          if (!src.includes('/app') || text.length === 0) return undefined
+          return { src, text: text.slice(0, 120), tabs: tabs.slice(0, 8), scrollTop: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) }
+        })()`)
+        return snapshot
+      }, 20_000)
+      if (firstRunTile === undefined)
+        fail(
+          `the app did not open itself in a tile on first run (no iframe at /app with content); tabs: ${JSON.stringify(await evaluate(`[...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())`))}`,
+        )
+      if (firstRunTile.scrollTop !== 0)
+        fail(
+          `the page scrolled to ${String(firstRunTile.scrollTop)} on first run: ${JSON.stringify(firstRunTile)}`,
+        )
+      log(
+        `the app opens itself in a tile on first run ("${firstRunTile.text.trim().split('\n')[0]}")`,
+      )
       if (
         (await evaluate(
           `document.querySelector('[role=dialog]')?.innerText.includes('Preview Notice') ?? false`,
@@ -803,6 +950,24 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       }
       if (models.failed !== undefined)
         fail(`Settings > Models failed: ${JSON.stringify(models.failed)}`)
+      // The workshop guide tells attendees a Claude or ChatGPT subscription works through this page: the sign-in rows come from the harness
+      // authorization catalog (llm-pi-ai's flows), so a frame composed without that row silently offers DeepSeek alone - the owner's item 9.
+      // The rows, not the intro sentence: the sentence already says "Claude, ChatGPT or DeepSeek" whatever is listed.
+      const signIn = await until(async () => {
+        const rows = await evaluate(`(() => {
+          const names = [...document.querySelectorAll('[role=dialog] .acrylSignInName strong')]
+            .map((element) => element.textContent.trim())
+          return { names }
+        })()`)
+        return rows?.names.includes('Claude') === true && rows?.names.includes('ChatGPT') === true
+          ? rows
+          : undefined
+      }, 20_000)
+      if (signIn === undefined)
+        fail(
+          'Settings > Models does not offer the Claude and ChatGPT sign-in rows the workshop guide names',
+        )
+      log('Settings > Models offers the Claude and ChatGPT sign-in rows the guide names')
       await evaluate(`(() => {
         const dialog = document.querySelector('[role=dialog]')
         const input = dialog.querySelector('input[type=password]') ?? dialog.querySelector('input[aria-label="API key"]')
@@ -842,6 +1007,11 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
       log(
         'Settings > Models loads, takes the DeepSeek key, and the first-run prompt leaves once it is saved',
       )
+      const afterSettings = await evaluate(
+        `Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)`,
+      )
+      if (afterSettings !== 0)
+        fail(`the page scrolled to ${String(afterSettings)} while Settings was open`)
 
       const pressEscape = async () => {
         for (const type of ['keyDown', 'keyUp'])
@@ -1490,6 +1660,38 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock) {
         log(`Settings has ${sections.join(', ')}`)
         await pressEscape()
       }
+      // The session banner (119): the browser's session is gone (its cookie is deleted, as Chrome loses it after a restart inside its flush window)
+      // and the host restarts under the open page. The connection cannot recover, so the frame must name the command instead of spinning - and the
+      // document must not scroll while it does.
+      const cookies = (await cdp.send('Network.getAllCookies')).result?.cookies ?? []
+      for (const cookie of cookies)
+        await cdp.send('Network.deleteCookies', {
+          name: cookie.name,
+          domain: cookie.domain,
+          path: cookie.path,
+        })
+      const restartedUrl = await restartHost()
+      if (restartedUrl === undefined) fail('the host did not restart for the session banner check')
+      const banner = await until(async () => {
+        return await evaluate(`(() => {
+          const alert = [...document.querySelectorAll('[role=alert]')].find((element) => element.innerText.includes('session ended'))
+          if (alert === undefined) return undefined
+          return { text: alert.innerText.slice(0, 300), scrollTop: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) }
+        })()`)
+      }, 30_000)
+      if (banner === undefined) {
+        const detail = await evaluate(`document.body.innerText.slice(0, 400)`)
+        fail(
+          `the session banner did not appear after the host restarted without the browser's session: ${JSON.stringify(detail)}; server said:\n${output.slice(-1500)}`,
+        )
+      }
+      if (!banner.text.includes('npx acrylblends open'))
+        fail(`the session banner does not name the command: ${JSON.stringify(banner.text)}`)
+      if (banner.scrollTop !== 0)
+        fail(`the page scrolled to ${String(banner.scrollTop)} while the session banner showed`)
+      log(
+        'the session banner names `npx acrylblends open` after the browser session ended, with the page unscrolled',
+      )
     } catch (error) {
       const reported = pageReported()
       if (reported.length > 0)

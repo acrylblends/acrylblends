@@ -1,4 +1,5 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { APP_PLUGINS_FILE, appFrameRows } from './frame-rows'
@@ -33,6 +34,25 @@ import {
 /** A command line mistake. The CLI prints it with the help text and exits 2. */
 export class UsageError extends Error {
   override name = 'UsageError'
+}
+
+/**
+ * A new app is a git repository from the start: its `.gitignore` is written with the scaffold, `npm run save` commits it, and the frame's Files and
+ * Changes views work on a git worktree (the app's own folder; without one they answer "file request failed"). A folder that already is a repository, or
+ * a machine without git, is left alone.
+ */
+function startRepository(directory: string): void {
+  if (existsSync(join(directory, '.git'))) return
+  const run = (args: string[]) =>
+    spawnSync('git', args, { cwd: directory, stdio: 'ignore', windowsHide: true }).status === 0
+  if (!run(['init', '-q'])) return
+  if (!run(['add', '-A'])) return
+  // A machine without a git identity still gets the first commit: this one is the scaffolder's, and later commits use the person's own identity. The `-c`
+  // options are git's own and must precede the command.
+  const identity = run(['config', 'user.email'])
+    ? []
+    : ['-c', 'user.name=acrylblends', '-c', 'user.email=scaffold@acrylblends.invalid']
+  run([...identity, 'commit', '-q', '-m', 'Initial commit from acrylblends'])
 }
 
 /** What `init` was asked for. Anything left undefined is asked for on a terminal, or defaulted. */
@@ -194,6 +214,8 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
     `created ${name} (${template}) in ${directory}: ${files.length} files, plugins ${own.map((plugin) => plugin.name).join(', ')}${forDesktop.length > 0 ? `; the desktop shell adds ${forDesktop.map((plugin) => plugin.name).join(', ')}, which it needs` : ''}\n`,
   )
 
+  // The scaffold is the repository's first commit, so the frame's Changes view starts from what the person (or their agent) changed afterwards.
+  startRepository(directory)
   if (install && (await io.install(directory)) !== 0) {
     io.stderr.write('error: npm install failed; run it yourself in the new directory\n')
     return 1

@@ -37,8 +37,25 @@ describe('acryl-page', () => {
     expect(html).toContain('window.__TEST_BOOT__ = 1')
     expect(html).toContain('/assets/')
     expect(html).toContain('<link rel="stylesheet"')
+    // The entry script is closed: an unclosed copy turns the stylesheet links after it into script text, and the frame falls back to browser defaults
+    // for every DSH component (dialogs without a surface or backdrop, flat buttons).
+    expect(html).toMatch(/<script\b[^>]*\bsrc="[^"]*"[^>]*><\/script>/u)
+    expect(html).not.toMatch(/<script\b[^>]*\bsrc="[^"]*"[^>]*>\s*<link/u)
     // The frontend package's own title is not what the page says.
     expect(html).not.toContain('<title>DeepSeek Harness</title>')
+  })
+
+  it('closes the entry script it copies, so the tags after it parse', () => {
+    const tags = page.clientAssetTags(
+      '<title>x</title><script type="module" crossorigin src="./assets/index-abc.js"></script>' +
+        '<link rel="modulepreload" crossorigin href="./assets/vendor.js">' +
+        '<link rel="stylesheet" crossorigin href="./assets/index.css">',
+    )
+    expect(tags).toBe(
+      '<script type="module" crossorigin src="./assets/index-abc.js"></script>\n' +
+        '    <link rel="modulepreload" crossorigin href="./assets/vendor.js">\n' +
+        '    <link rel="stylesheet" crossorigin href="./assets/index.css">',
+    )
   })
 
   it('serves the built assets the entry imports', async () => {
