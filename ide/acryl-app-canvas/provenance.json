@@ -1,0 +1,7 @@
+{
+  "source": {
+    "repository": "same repository (acrylblends)",
+    "note": "New in the 125 redesign (docs/plans/ide-host-inversion.md section 31, boundary A): the centre canvas, split out of the workspace's first-run browser tile (ide/acryl-workspace/src/client/index.ts) and BrowserPane."
+  },
+  "ported": "2026-11-03, slice 1 of the 125 redesign"
+}
