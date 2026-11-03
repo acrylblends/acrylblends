@@ -170,6 +170,10 @@ jobs:
       # Chrome is installed on all three images (Google Chrome: /usr/bin on ubuntu, the app bundle on macOS, Program Files on Windows); scripts/lib/platform.mjs finds
       # each, and CHROME_BIN overrides it. A runner without a browser fails the gate's tile step with that message rather than skipping it.
       - name: frame gate (${{ matrix.template }})
+        # The agent page is the one with a committed visual baseline (scripts/frame-reference-frame, regenerated for 125 on this image); the mask
+        # covers only what changes on every run (the app's port), at 2%.
+        env:
+          FRAME_VISUAL: ${{ matrix.template == 'agent' && '1' || '' }}
         run: node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs ${{ matrix.template }}
       # The tile check's Chrome writes a net log to the runner's temp folder; when a gate fails, its failed request's error code (a reset, an empty
       # response, an abort) decides between a transport race and a cancelled navigation instead of leaving it to inference.

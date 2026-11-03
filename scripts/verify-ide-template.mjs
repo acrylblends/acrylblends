@@ -1275,6 +1275,17 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         fail(`the right panel did not show the workspace strip: ${JSON.stringify(dump)}`)
       }
       log(`the right panel is the workspace strip with ${String(right.tabs.length)} tab(s)`)
+      // The frame's right-panel toggle must not cover the strip's + control: the panel's head keeps room for it (Fork3's capture, shots2).
+      const plusHit = await evaluate(`(() => {
+        const plus = document.querySelector('button.dshWorkspacePlus')
+        if (plus === null) return { found: false }
+        const rect = plus.getBoundingClientRect()
+        const at = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+        return { found: true, hit: at === plus || plus.contains(at), at: at === null ? null : (at.className || at.tagName) }
+      })()`)
+      if (plusHit?.found !== true || plusHit.hit !== true)
+        fail(`the right panel's toggle covers the + control: ${JSON.stringify(plusHit)}`)
+      log('the + control is clear of the panel toggle')
       // The right panel's own control is in the frame's top bar (125) and is always reachable: hide the panel, and bring it back with the same
       // control. Without it a closed panel could not be reopened, because the panel's only toggle used to live inside the panel.
       const detailsWidth = () =>
@@ -1297,6 +1308,58 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       }, 10_000)
       if (shownPanel !== true) fail('the right panel did not come back from the top-bar control')
       log('the right panel hides and comes back from the frame top bar')
+      // The canvas iframe is the app's page: marking it before the panel hides proves the frame around it never recreates it (section 31, A.6).
+      await evaluate(
+        `(() => { const frame = document.querySelector('iframe.acrylAppCanvasFrame'); if (frame) frame.dataset.gateMark = 'canvas-1'; return true })()`,
+      )
+      if ((await click('Hide right panel')) !== true)
+        fail('the frame has no control to hide the right panel')
+      await until(async () => ((await detailsWidth()) === 0 ? true : undefined), 10_000)
+      if ((await click('Show right panel')) !== true)
+        fail('the frame has no control to show the right panel again')
+      const marked = await until(
+        async () =>
+          (await evaluate(
+            `document.querySelector('iframe.acrylAppCanvasFrame')?.dataset.gateMark === 'canvas-1'`,
+          )) === true
+            ? true
+            : undefined,
+        10_000,
+      )
+      if (marked !== true)
+        fail('the canvas iframe was recreated when the right panel hid and came back')
+      // A right-panel tab switch must not recreate it either: the + control opens its primary tab (the remembered one; the terminal on a fresh
+      // profile), then the chat tab takes the front again, and the marked canvas frame must be the same element throughout.
+      await evaluate(
+        `(() => { const plus = document.querySelector('button.dshWorkspacePlus'); if (plus) plus.click(); return true })()`,
+      )
+      await until(
+        async () =>
+          (await evaluate(`document.querySelectorAll('[role=tab]').length`)) >= 2
+            ? true
+            : undefined,
+        10_000,
+      )
+      const chat = await evaluate(`(() => {
+        const tab = [...document.querySelectorAll('[role=tab]')].find(candidate => /chat/iu.test(candidate.textContent))
+        if (!tab) return false
+        tab.click()
+        return true
+      })()`)
+      if (chat !== true) fail('could not switch back to the chat tab')
+
+      const stillMarked = await until(
+        async () =>
+          (await evaluate(
+            `document.querySelector('iframe.acrylAppCanvasFrame')?.dataset.gateMark === 'canvas-1'`,
+          )) === true
+            ? true
+            : undefined,
+        10_000,
+      )
+      if (stillMarked !== true)
+        fail('the canvas iframe was recreated when a right-panel tab switched')
+      log('the canvas iframe survives a right-panel hide/show and a tab switch')
 
       // (f) The command palette (the same window event `acryl-shortcuts` sends when its shortcut runs).
       await evaluate(`window.dispatchEvent(new Event('acryl:toggle-command-palette')), true`)

@@ -2,7 +2,7 @@ import xtermCss from 'virtual:xterm-css'
 
 const WORKSPACE_STYLES = `
 .dshWorkspace { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; height: 100%; background: var(--dsw-alias-bg-base); }
-.dshWorkspaceTabstrip { display: flex; align-items: stretch; min-height: 36px; border-bottom: 1px solid var(--dsw-alias-border-l1); background: color-mix(in srgb, var(--dsw-alias-bg-base) 92%, black); -webkit-app-region: no-drag; }
+.dshWorkspaceTabstrip { display: flex; align-items: stretch; min-height: 36px; padding-right: 44px; border-bottom: 1px solid var(--dsw-alias-border-l1); background: color-mix(in srgb, var(--dsw-alias-bg-base) 92%, black); -webkit-app-region: no-drag; }
 .dshWorkspaceTabs { display: flex; flex: 1; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-behavior: smooth; }
 .dshWorkspaceTabs::-webkit-scrollbar { display: none; }
 /* Edge fades tell the user more tabs are hidden on that side; they follow the scroll position. */
@@ -297,7 +297,7 @@ body[data-ds-dark-theme] .dshWorkspaceAcrylMarkDark { display: block; }
 .dshWorkspaceSessionClose:hover { background: var(--dsw-alias-fill-hover, rgb(255 255 255 / 12%)); color: var(--dsw-alias-label-primary); }
 .dshWorkspaceWorktreeNew:hover { background: var(--dsw-alias-fill-hover, rgb(255 255 255 / 12%)); }
 .dshWorkspaceSideFoot { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; padding: 8px 8px 0; border-top: 1px solid var(--dsw-alias-border-l2); }
-.dshWorkspaceStrip { display: flex; flex: none; align-items: center; gap: 4px; padding: 6px 44px 6px 10px; border-top: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base, transparent); }
+.dshWorkspaceStrip { display: flex; flex: none; align-items: center; gap: 4px; padding: 6px 10px; border-top: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base, transparent); }
 .dshWorkspaceStripSpacer { flex: 1; }
 .dshWorkspaceStripButton { appearance: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font: 600 13px/1 ui-sans-serif, system-ui, sans-serif; }
 .dshWorkspaceStripButton:hover { background: var(--dsw-alias-fill-hover, rgb(127 127 127 / 12%)); color: var(--dsw-alias-label-primary); }

@@ -1204,6 +1204,15 @@ not built here. Fork3 should confirm this reading before slice 1 is called compl
   the divider and ratio modules and suites are deleted. The state's split API is unreachable and goes in the next pass.
 - `e7c2f4db` the **git status bar** left the frame (`StatusLine`/`buildStatusLine` and its specs deleted).
 
+**Fork3's recheck of 83d78cc0, and what changed.**
+- The 44px room went into `.dshWorkspaceStrip`, which is the LEFT panel's bottom toolbar, not the right tab row; it is reverted there and the padding is on
+  `.dshWorkspaceTabstrip` now. The gate asserts the + control is reachable with `document.elementFromPoint` at its centre returning the + itself.
+- The toy identity spec proved nothing about the real frame and is removed. The gate now marks the canvas iframe before the panel hides, asserts the same
+  marked element after it comes back, and does it again around a right-panel tab switch (the + control opens its primary tab, then the chat tab returns).
+- `scripts/frame-views-frame.json`'s third view is `right-panel-closed` (the panel opens on load, so the view clicks Hide). The Linux baseline is regenerated
+  from this head with `frame-baseline.yml` and committed, with `FRAME_VISUAL=1` on the Linux agent frame job so every later Linux run compares slice 1's
+  real look at 2%.
+
 **Fork3's review of f7137516, and what changed (the landing head carries these).**
 - The frame's right-panel toggle opened onto a closed panel on first run, and the gate's strip wait passed on a collapsed column. Fixed: the frame opens the
   right panel once per page load (31 B.4's first run; remembering joins slice 2's shell state), the gate requires a panel column wider than 0 (measured,
