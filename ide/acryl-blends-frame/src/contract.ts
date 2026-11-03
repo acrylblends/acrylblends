@@ -244,3 +244,16 @@ export function parseChatSaves(value: unknown): ChatSavesView {
     }),
   }
 }
+
+/** GET: the chats that have at least one turn (`RealChatsView`); a chat nobody has written to is not a chat the frame lists. */
+export const FRAME_REAL_CHATS_PATH = `${FRAME_API_PREFIX}/real-chats`
+
+export interface RealChatsView {
+  readonly sessions: readonly string[]
+}
+
+/** @throws when the value is not a list of chat ids. */
+export function parseRealChats(value: unknown): RealChatsView {
+  if (!isRecord(value) || !Array.isArray(value.sessions) || !value.sessions.every((id: unknown) => typeof id === 'string')) throw new Error('real chats: not a list')
+  return { sessions: value.sessions as string[] }
+}
