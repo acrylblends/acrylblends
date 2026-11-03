@@ -24,7 +24,9 @@ deprecated name of `Acryl`.
 
 ## How a feature is built
 
-Routes are an ordinary `Acryl` app that a plugin mounts once with `ctx.router.route(prefix, app)`. The mount belongs to the plugin and goes away when it unloads.
+Routes are an ordinary `Acryl` app that a plugin mounts once with `ctx.router.route('/notes', app)`. The mount belongs to the plugin and goes away when it unloads.
+
+The frame that hosts the app in development adds its canvas prefix to every route a plugin mounts: the same plugin answers `/notes` under `npm start` and `/app/notes` in the canvas. Write the app's own path and never put the frame's prefix in a route.
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'

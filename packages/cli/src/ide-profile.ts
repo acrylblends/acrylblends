@@ -622,7 +622,8 @@ function overlayOf(
     '    - id: app-instance',
     '      name: ./app/runtime.mjs',
     // The frame's index is not the app: the door drives the app's page in the canvas, never the frame around it (an agent's navigate would leave the frame).
-    ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts', '      config:', '        hostIndex: false'] : []),
+    // The canvas prefix goes with it: `act navigate --path /board` reaches the app's /board at the canvas prefix, the same path it has on its own server.
+    ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts', '      config:', '        hostIndex: false', `        appBase: ${FRAME_PAGE_PREFIX}`] : []),
     ...appRows.flatMap((row) => [
       `    - id: ${row.id}`,
       `      name: ${row.name}`,
