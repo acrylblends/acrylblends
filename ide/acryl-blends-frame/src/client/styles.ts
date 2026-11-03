@@ -154,6 +154,8 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsGitRemoteState { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acrylBlendsGitRemote .acrylBlendsSmallButton { flex: none; }
 .acrylBlendsSmallButton:disabled { opacity: .45; cursor: default; }
+/* git's lines can carry a long path or URL: they wrap inside the panel. */
+.acrylBlendsGit .acrylBlendsNote { overflow-wrap: anywhere; }
 
 .acrylBlendsFile pre { margin: 0; font: 12px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: #d6d6dc; white-space: pre; }
 .acrylBlendsLine { min-height: 1.6em; }

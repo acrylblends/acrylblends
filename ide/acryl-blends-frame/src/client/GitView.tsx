@@ -98,7 +98,8 @@ export function GitView({ git, versions, sync, root, revision }: GitViewProps) {
         </button>
       </div>
       {remote.status === 'error' && <p className="acrylBlendsNote" data-error>{remote.message}</p>}
-      {remote.status === 'ready' && remote.state.kind === 'tracking' && remote.state.fetchError !== undefined && (
+      {/* A push or pull says what git said; the fetch's own line would only repeat it. */}
+      {outcome === undefined && remote.status === 'ready' && remote.state.kind === 'tracking' && remote.state.fetchError !== undefined && (
         <p className="acrylBlendsNote" data-error>The remote did not answer: {remote.state.fetchError}</p>
       )}
       {outcome !== undefined && (

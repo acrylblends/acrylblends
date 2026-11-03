@@ -169,7 +169,7 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
               Files <small>tree; a file opens as a tab</small>
             </button>
             <button type="button" role="menuitem" className="acrylBlendsMenuItem" onClick={() => { openTool(GIT_TAB) }}>
-              Git <small>changes, history</small>
+              Git <small>changes, history, push and pull</small>
             </button>
             <div className="acrylBlendsMenuItem" data-gone aria-disabled="true">Browser <small>the canvas is it</small></div>
           </div>
