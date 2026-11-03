@@ -1,7 +1,8 @@
 /**
  * The right panel's tabs (docs/design/blends-frame-mockup.html): the chat, PTY agents (Claude Code, Codex, Pi as they are, in a terminal), a
  * terminal, Files, a file opened from it, and Git. One store for the right panel's strip and the left panel's open items; remembered per page.
- * A terminal tab names the Host's PTY session, which outlives the page, so a reload shows the same terminal again.
+ * A terminal tab names the Host's PTY session, which outlives the page, so a reload shows the same terminal again. Every tab but the chat belongs
+ * to the branch it was opened on: the strip shows the checked-out branch's tabs, and the others stay (a terminal keeps running) out of the list.
  */
 
 import type { ViewStorage } from './view-state.ts'
@@ -16,12 +17,12 @@ export const PTY_AGENTS = [
 export type PtyAgent = (typeof PTY_AGENTS)[number]['agent']
 
 export type FrameTab =
-  | { readonly kind: 'chat'; readonly id: 'chat' }
-  | { readonly kind: 'pty'; readonly id: string; readonly agent: PtyAgent; readonly terminalId: string }
-  | { readonly kind: 'terminal'; readonly id: string; readonly terminalId: string }
-  | { readonly kind: 'files'; readonly id: 'files' }
-  | { readonly kind: 'file'; readonly id: string; readonly path: string }
-  | { readonly kind: 'git'; readonly id: 'git' }
+  | { readonly kind: 'chat'; readonly id: 'chat'; readonly branch?: string }
+  | { readonly kind: 'pty'; readonly id: string; readonly agent: PtyAgent; readonly terminalId: string; readonly branch?: string }
+  | { readonly kind: 'terminal'; readonly id: string; readonly terminalId: string; readonly branch?: string }
+  | { readonly kind: 'files'; readonly id: 'files'; readonly branch?: string }
+  | { readonly kind: 'file'; readonly id: string; readonly path: string; readonly branch?: string }
+  | { readonly kind: 'git'; readonly id: 'git'; readonly branch?: string }
 
 export interface FrameTabsSnapshot {
   readonly tabs: readonly FrameTab[]
@@ -42,20 +43,29 @@ export const fileTab = (path: string): FrameTab => ({ kind: 'file', id: `file:${
 export const FILES_TAB: FrameTab = { kind: 'files', id: 'files' }
 export const GIT_TAB: FrameTab = { kind: 'git', id: 'git' }
 
+/** The tabs the strip shows on a branch: the chat always, and what was opened on that branch. No branch (outside a repository): every tab. */
+export function tabsForBranch(snapshot: FrameTabsSnapshot, branch: string | undefined): readonly FrameTab[] {
+  if (branch === undefined) return snapshot.tabs
+  return snapshot.tabs.filter(tab => tab.kind === 'chat' || tab.branch === branch)
+}
+
+const stamped = (tab: FrameTab, branch: string | undefined): FrameTab => (branch === undefined ? tab : { ...tab, branch })
+
 function parseTab(value: unknown): FrameTab | undefined {
   if (value === null || typeof value !== 'object') return undefined
   const tab = value as Record<string, unknown>
   const text = (key: string): string | undefined => (typeof tab[key] === 'string' && tab[key] !== '' ? tab[key] as string : undefined)
+  const branch = text('branch')
   switch (tab.kind) {
     case 'chat': return CHAT
-    case 'files': return FILES_TAB
-    case 'git': return GIT_TAB
-    case 'file': { const path = text('path'); return path === undefined ? undefined : fileTab(path) }
-    case 'terminal': { const id = text('terminalId'); return id === undefined ? undefined : terminalTab(id) }
+    case 'files': return stamped(FILES_TAB, branch)
+    case 'git': return stamped(GIT_TAB, branch)
+    case 'file': { const path = text('path'); return path === undefined ? undefined : stamped(fileTab(path), branch) }
+    case 'terminal': { const id = text('terminalId'); return id === undefined ? undefined : stamped(terminalTab(id), branch) }
     case 'pty': {
       const id = text('terminalId')
       const agent = PTY_AGENTS.find(entry => entry.agent === tab.agent)?.agent
-      return id === undefined || agent === undefined ? undefined : ptyTab(agent, id)
+      return id === undefined || agent === undefined ? undefined : stamped(ptyTab(agent, id), branch)
     }
     default: return undefined
   }
@@ -80,6 +90,17 @@ export function parseStoredTabs(raw: string | null): FrameTabsSnapshot {
   return { tabs, active: typeof active === 'string' && tabs.some(tab => tab.id === active) ? active : 'chat' }
 }
 
+/** Whether the remembered strip already went through the branch migration (`setBranch`). */
+function parseStoredBranching(raw: string | null): boolean {
+  if (raw === null) return false
+  try {
+    const value: unknown = JSON.parse(raw)
+    return value !== null && typeof value === 'object' && (value as { branched?: unknown }).branched === true
+  } catch {
+    return false
+  }
+}
+
 /** The tab a terminal session shows in, if one does. */
 export function tabOfTerminal(snapshot: FrameTabsSnapshot, terminalId: string): FrameTab | undefined {
   return snapshot.tabs.find(tab => (tab.kind === 'pty' || tab.kind === 'terminal') && tab.terminalId === terminalId)
@@ -88,6 +109,10 @@ export function tabOfTerminal(snapshot: FrameTabsSnapshot, terminalId: string): 
 export class FrameTabs {
   private snapshot: FrameTabsSnapshot
   private readonly listeners = new Set<() => void>()
+  /** The checked-out branch the strip is showing; new tabs are opened on it. */
+  private branch: string | undefined
+  /** Whether the remembered tabs already went through the branch migration (see `setBranch`). */
+  private branched: boolean
 
   constructor(private readonly storage?: ViewStorage) {
     let raw: string | null = null
@@ -97,6 +122,7 @@ export class FrameTabs {
       raw = null
     }
     this.snapshot = parseStoredTabs(raw)
+    this.branched = parseStoredBranching(raw)
   }
 
   getSnapshot(): FrameTabsSnapshot {
@@ -108,10 +134,22 @@ export class FrameTabs {
     return () => { this.listeners.delete(listener) }
   }
 
-  /** Show a tab, adding it at the end of the strip when it is not open yet. */
+  /**
+   * The checked-out branch. The first time it is known, the tabs remembered before branches had their own lists (every tab carried no branch) are
+   * put on that branch, which is where they were opened as far as anyone can tell; later calls only change where new tabs go.
+   */
+  setBranch(branch: string | undefined): void {
+    this.branch = branch
+    if (this.branched || branch === undefined) return
+    this.branched = true
+    this.set({ tabs: this.snapshot.tabs.map(tab => (tab.kind === 'chat' || tab.branch !== undefined ? tab : { ...tab, branch })), active: this.snapshot.active })
+  }
+
+  /** Show a tab, adding it at the end of the strip when it is not open yet; a tab opened now belongs to the checked-out branch. */
   open(tab: FrameTab): void {
-    const open = this.snapshot.tabs.some(existing => existing.id === tab.id)
-    this.set({ tabs: open ? this.snapshot.tabs : [...this.snapshot.tabs, tab], active: tab.id })
+    const next = tab.kind !== 'chat' && tab.branch === undefined && this.branch !== undefined ? { ...tab, branch: this.branch } : tab
+    const open = this.snapshot.tabs.some(existing => existing.id === next.id)
+    this.set({ tabs: open ? this.snapshot.tabs : [...this.snapshot.tabs, next], active: next.id })
   }
 
   activate(id: string): void {
@@ -140,7 +178,7 @@ export class FrameTabs {
     if (next.active === this.snapshot.active && next.tabs === this.snapshot.tabs) return
     this.snapshot = { ...next, ...(this.snapshot.titles === undefined ? {} : { titles: this.snapshot.titles }) }
     try {
-      this.storage?.setItem(STORAGE_KEY, JSON.stringify({ tabs: next.tabs, active: next.active }))
+      this.storage?.setItem(STORAGE_KEY, JSON.stringify({ tabs: next.tabs, active: next.active, branched: this.branched }))
     } catch {
       // A blocked storage only forgets the strip for the next page.
     }

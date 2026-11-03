@@ -21,11 +21,14 @@ import * as workspaceHost from 'acryl-workspace'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, switchAppPlugin, type FrameRow } from './app-plugins.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
+import { branchChatsFile, createBranchChatsStore } from './branch-chats.ts'
 import {
   FRAME_API_PREFIX,
   branchNameProblem,
   FRAME_BRANCHES_NEW_PATH,
   FRAME_CHAT_SAVES_PATH,
+  FRAME_BRANCH_CHATS_PATH,
+  FRAME_BRANCHES_SWITCH_PATH,
   FRAME_FEEDBACK_PATH,
   FRAME_FEEDBACK_SEEN_PATH,
   FRAME_PLUGINS_PATH,
@@ -178,6 +181,8 @@ function parseSeen(body: unknown): string[] | undefined {
 export interface BranchesPort {
   /** Make the branch from the checked-out version and switch to it; rejects with git's reason. */
   create(name: string): Promise<void>
+  /** Move the app's folder to an existing local branch; rejects with git's reason. */
+  switchTo(name: string): Promise<void>
 }
 
 /** What each turn of a chat saved (the auto-save), for the line under the answer. */
@@ -188,7 +193,33 @@ export interface ChatSavesPort {
 /** A session id as DSH mints them: letters, digits and dashes, never a path. */
 const SESSION_ID = /^[A-Za-z0-9_-]{1,100}$/u
 
-export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort, feedback?: FeedbackPort, branches?: BranchesPort, chatSaves?: ChatSavesPort): Acryl {
+/** The `name` of a branch request, or why it cannot be one. */
+export function parseBranchName(body: unknown): { name: string } | { problem: string } {
+  const name = body !== null && typeof body === 'object' ? (body as { name?: unknown }).name : undefined
+  if (typeof name !== 'string') return { problem: 'Name the branch.' }
+  const problem = branchNameProblem(name)
+  return problem === undefined ? { name } : { problem }
+}
+
+/** Which branch each chat was opened on (the frame lists a branch's own chats; DSH itself knows no branches). */
+export interface BranchChatsPort {
+  read(): Promise<Record<string, string>>
+  /** Records a chat's branch once; a chat stays where it was opened. */
+  assign(id: string, branch: string): Promise<void>
+}
+
+export interface FrameRoutesDeps {
+  readonly state: () => Promise<FrameState>
+  readonly report?: (cause: unknown) => void
+  readonly plugins?: PluginsPort
+  readonly feedback?: FeedbackPort
+  readonly branches?: BranchesPort
+  readonly branchChats?: BranchChatsPort
+  /** What each turn of a chat saved (the auto-save), for the line under the answer. */
+  readonly chatSaves?: ChatSavesPort
+}
+
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
   if (chatSaves !== undefined) {
     app.get(FRAME_CHAT_SAVES_PATH, ownPage, async (c) => {
@@ -204,15 +235,47 @@ export function frameRoutes(state: () => Promise<FrameState>, report: (cause: un
   }
   if (branches !== undefined) {
     app.post(FRAME_BRANCHES_NEW_PATH, ownPage, jsonBody(), async (c) => {
-      const body = await readJson(c)
-      const name = body !== INVALID_JSON && body !== null && typeof body === 'object' ? (body as { name?: unknown }).name : undefined
-      const problem = typeof name === 'string' ? branchNameProblem(name) : 'Name the branch.'
-      if (typeof name !== 'string' || problem !== undefined) return c.json(error(problem ?? 'Name the branch.'), 400)
+      const parsed = parseBranchName(await readJson(c))
+      if ('problem' in parsed) return c.json(error(parsed.problem), 400)
       try {
-        await branches.create(name)
+        await branches.create(parsed.name)
         return c.json({ ok: true })
       } catch (cause) {
         return c.json(error(cause instanceof Error ? cause.message : 'the branch could not be made'), 409)
+      }
+    })
+    app.post(FRAME_BRANCHES_SWITCH_PATH, ownPage, jsonBody(), async (c) => {
+      const parsed = parseBranchName(await readJson(c))
+      if ('problem' in parsed) return c.json(error(parsed.problem), 400)
+      try {
+        await branches.switchTo(parsed.name)
+        return c.json({ ok: true })
+      } catch (cause) {
+        return c.json(error(cause instanceof Error ? cause.message : 'the branch could not be switched to'), 409)
+      }
+    })
+  }
+  if (branchChats !== undefined) {
+    app.get(FRAME_BRANCH_CHATS_PATH, ownPage, async (c) => {
+      try {
+        return c.json({ chats: await branchChats.read() })
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the branch chats could not be read'), 500)
+      }
+    })
+    app.post(FRAME_BRANCH_CHATS_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const record = body !== null && typeof body === 'object' ? (body as { id?: unknown; branch?: unknown }) : {}
+      if (typeof record.id !== 'string' || record.id === '' || record.id.length > 200) return c.json(error('invalid chat'), 400)
+      if (typeof record.branch !== 'string') return c.json(error('Name the branch.'), 400)
+      const problem = branchNameProblem(record.branch)
+      if (problem !== undefined) return c.json(error(problem), 400)
+      try {
+        await branchChats.assign(record.id, record.branch)
+        return c.json({ ok: true })
+      } catch (cause) {
+        return c.json(error(cause instanceof Error ? cause.message : 'the chat could not be recorded'), 409)
       }
     })
   }
@@ -316,6 +379,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       ctx.logger.error(`acryl-blends-frame: ${cause instanceof Error ? cause.message : String(cause)}`)
     }
     const git = new GitRunner()
+    const chatsFile = createBranchChatsStore(branchChatsFile(ctx.appInstance.home))
     const state = async (): Promise<FrameState> => {
       const [appName, branches, worktree] = await Promise.all([readAppName(root), readBranches(git, root), readWorktree(git, root)])
       return { appName, appRoot: root, ...(appPage === undefined ? {} : { appPage }), branches, ...worktree }
@@ -351,21 +415,46 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     // DSH announces every event of every chat session here; `workspace/changes` is the one that says a turn changed files.
     const stopListening = (ctx as unknown as SessionEvents).on('session/event', (session, event) => { autoSave.observe(session.id, event) })
     const chatSaves: ChatSavesPort = { read: async session => ({ saves: await store.forSession(session) }) }
-    ctx.router.route('/', frameRoutes(state, (cause) => {
-      ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
-    }, plugins, feedbackPort(() => ctx.get('feedback')), {
-      create: async (name) => {
-        // git's own rule for a branch name, then the branch from HEAD, switched to: the working files, saved or not, stay as they are.
-        try {
-          await git.run(['check-ref-format', '--branch', name], root)
-          await git.run(['switch', '--create', name], root)
-        } catch (cause) {
-          // The runner keeps git's own line ("fatal: a branch named 'x' already exists") as the failure's detail.
-          const detail = (cause as { detail?: unknown }).detail
-          throw new Error(typeof detail === 'string' && detail !== '' ? detail : 'git could not make the branch')
-        }
+    /** git's own line as the message a person reads: the runner keeps it as the failure's detail. */
+    const gitReason = (cause: unknown, fallback: string): Error => {
+      const detail = (cause as { detail?: unknown }).detail
+      return new Error(typeof detail === 'string' && detail !== '' ? detail : fallback)
+    }
+    ctx.router.route('/', frameRoutes({
+      state,
+      report: (cause) => {
+        ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
       },
-    }, chatSaves))
+      plugins,
+      feedback: feedbackPort(() => ctx.get('feedback')),
+      branches: {
+        create: async (name) => {
+          // git's own rule for a branch name, then the branch from HEAD, switched to: the working files, saved or not, stay as they are.
+          try {
+            await git.run(['check-ref-format', '--branch', name], root)
+            await git.run(['switch', '--create', name], root)
+          } catch (cause) {
+            throw gitReason(cause, 'git could not make the branch')
+          }
+        },
+        switchTo: async (name) => {
+          // Only a local branch is switched to: a commit or `HEAD~2` would leave the folder on no branch, which the frame cannot show.
+          const target = (await readBranches(git, root)).find(branch => branch.name === name)
+          if (target === undefined) throw new Error(`There is no branch named ${name}.`)
+          if (target.current) return
+          try {
+            await git.run(['switch', name], root)
+          } catch (cause) {
+            throw gitReason(cause, 'git could not switch branches')
+          }
+        },
+      },
+      branchChats: {
+        read: () => chatsFile.read(root),
+        assign: (id, branch) => chatsFile.assign(root, id, branch),
+      },
+      chatSaves,
+    }))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
     return () => {
       stopListening()

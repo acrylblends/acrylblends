@@ -611,7 +611,7 @@ describe('add agent-panel and driver-pty', () => {
     ).toBe(0)
     const dir = join(scratch, 'agent-panel-app')
     const shipped = readFileSync(join(dir, 'blend.yaml'), 'utf8')
-    expect(shipped).toMatch(/- id: agent-panel\n {6}name: agent-panel\n {4}- id: routes\n/u)
+    expect(shipped).toMatch(/- id: agent-panel\n {6}name: agent-panel\n(?: {4}#[^\n]*\n)* {4}- id: routes\n/u)
     expect(readFileSync(join(dir, 'src/app.ts'), 'utf8')).toContain("'agent-panel': panel,")
     expect(existsSync(join(dir, 'plugins/agent-panel/index.ts'))).toBe(true)
     const again = fakeIo()
@@ -624,7 +624,7 @@ describe('add agent-panel and driver-pty', () => {
     ).toBe(0)
     const rows = readFileSync(join(dir, 'blend.yaml'), 'utf8')
     expect(rows).toMatch(
-      /- id: agent-panel\n {6}name: agent-panel\n(?: {4}- id: driver-(?:pty|acp)\n {6}name: driver-(?:pty|acp)\n){2} {4}- id: routes\n/u,
+      /- id: agent-panel\n {6}name: agent-panel\n(?: {4}- id: driver-(?:pty|acp)\n {6}name: driver-(?:pty|acp)\n){2}(?: {4}#[^\n]*\n)* {4}- id: routes\n/u,
     )
     const app = readFileSync(join(dir, 'src/app.ts'), 'utf8')
     expect(app).toContain("import * as driverPty from '../plugins/driver-pty/index.ts'")

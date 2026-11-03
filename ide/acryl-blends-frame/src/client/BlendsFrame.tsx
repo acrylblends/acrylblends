@@ -13,8 +13,10 @@ import type { DesktopLayoutState } from 'acryl-app-shell/client'
 import type { AppCanvasState } from './canvas/app-canvas.ts'
 import { AppCanvas } from './canvas/AppCanvas.tsx'
 import type { FrameStateStore } from './frame-state.ts'
+import type { SelectedElement, SelectionStore } from './selection.ts'
 import type { FrameViewState } from './view-state.ts'
 import { LeftPanel, type BranchesPort, type ChatsPort, type FeedbackPort } from './LeftPanel.tsx'
+import type { BranchChatsPort } from './branch-chats.ts'
 import { savedLabel, type VersionsPort } from './versions.ts'
 import { RightPanel } from './RightPanel.tsx'
 import type { FrameTabs } from './tabs.ts'
@@ -23,6 +25,7 @@ import type { FrameTools } from './tools.ts'
 export interface BlendsFrameInjected {
   readonly layout: DesktopLayoutState
   readonly canvas: AppCanvasState
+  readonly selection: SelectionStore
   readonly frameState: FrameStateStore
   readonly view: FrameViewState
   readonly chats: ChatsPort
@@ -31,6 +34,8 @@ export interface BlendsFrameInjected {
   readonly tools: FrameTools
   readonly feedback: FeedbackPort
   readonly branches: BranchesPort
+  /** Which branch each chat was opened on (DSH keeps no branches; the Host records it). */
+  readonly branchChats: BranchChatsPort
 }
 
 export type BlendsFrameProps = PropsRuntime<'root'> & PropsRenderSlots<'main' | 'shell.overlay' | 'sidebar.settings'> & BlendsFrameInjected
@@ -47,11 +52,20 @@ const PanelIcon = ({ side }: { side: 'left' | 'right' }) => (
   </svg>
 )
 
-export function BlendsFrame({ layout, canvas, frameState, view, chats, versions, tabs, tools, feedback, branches, renderSlot }: BlendsFrameProps) {
+const SelectIcon = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+    <circle cx="8" cy="8" r="4.5" />
+    <path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15" />
+  </svg>
+)
+
+export function BlendsFrame({ layout, canvas, selection, frameState, view, chats, versions, tabs, tools, feedback, branches, branchChats, renderSlot }: BlendsFrameProps) {
   const state = useStore(frameState)
   const frameView = useStore(view)
   const activePanelId = useSyncExternalStore(layout.panelInfo.subscribe, () => layout.panelInfo.getSnapshot().activePanelId)
   const [versionLabel, setVersionLabel] = useState<string | undefined>(undefined)
+  // The select control belongs to the canvas, not to the app: it turns clicks into picks until a click, Escape, or Preview ends it.
+  const [picking, setPicking] = useState(false)
 
   useEffect(() => {
     if (state.status === 'ready' && state.state.appPage !== undefined && canvas.address() === undefined) {
@@ -59,10 +73,24 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
     }
   }, [state, canvas])
 
+  // The checked-out branch: the right panel's strip shows its tabs, and a tab opened now belongs to it.
+  useEffect(() => {
+    if (state.status === 'ready') tabs.setBranch(state.state.branches.find(branch => branch.current)?.name)
+  }, [state, tabs])
+
   const appName = state.status === 'ready' ? state.state.appName : ''
   const saved = state.status === 'ready' ? savedLabel(state.state.unsaved) : undefined
   const barLabel = [versionLabel, saved].filter((part): part is string => part !== undefined).join(' · ')
   const preview = frameView.mode === 'preview'
+  // Preview is what users see: the frame's own controls, the select control among them, leave the picture.
+  useEffect(() => { if (preview) setPicking(false) }, [preview])
+  // A picked element is what the chat is about: show the chat and give its composer the keyboard.
+  const pick = (element: SelectedElement): void => {
+    setPicking(false)
+    selection.select(element)
+    tabs.activate('chat')
+    view.showRight()
+  }
   const leftOpen = frameView.left && !preview
   const rightOpen = frameView.right && !preview
   // A keyed panel other than the conversation (one DSH or a plugin opens) is a page of its own: it covers the frame until closed.
@@ -120,6 +148,7 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
               tabs={tabs}
               feedback={feedback}
               branches={branches}
+              branchChats={branchChats}
               showTab={(id) => {
                 tabs.activate(id)
                 view.showRight()
@@ -136,8 +165,28 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
               <button type="button" className="acrylBlendsSmallButton" onClick={() => { view.setMode('build') }}>Back to Build</button>
             </div>
           )}
+          {!preview && (
+            <div className="acrylBlendsCanvasTools">
+              <button
+                type="button"
+                className="acrylBlendsSelectButton"
+                aria-pressed={picking}
+                aria-label="Select an element for the chat"
+                title="Select an element for the chat"
+                onClick={() => { setPicking(value => !value) }}
+              >
+                <SelectIcon /> Select
+              </button>
+              {picking && <span className="acrylBlendsPickingHint" role="status">Click an element in the app. Esc cancels.</span>}
+            </div>
+          )}
           <div className="acrylBlendsCanvasPage">
-            <AppCanvas canvas={canvas} />
+            <AppCanvas
+              canvas={canvas}
+              picking={picking && !preview}
+              onPick={pick}
+              onCancel={() => { setPicking(false) }}
+            />
           </div>
         </main>
         <aside className="acrylBlendsRight" aria-label="Agents" hidden={!rightOpen}>
@@ -147,6 +196,7 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
             tools={tools}
             versions={versions}
             state={state.status === 'ready' ? state.state : undefined}
+            branchChats={branchChats}
             renderConversation={(): ReactNode => renderSlot('main', {}, { entryKey: 'conversation' })}
           />
         </aside>

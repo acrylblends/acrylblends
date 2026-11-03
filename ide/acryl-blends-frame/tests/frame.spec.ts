@@ -1,12 +1,18 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { countChanges, parseBranches, parseFrameState } from '../src/index.ts'
-import { branchNameProblem } from '../src/contract.ts'
+import { countChanges, parseBranches, parseBranchName, parseFrameState } from '../src/index.ts'
+import { FRAME_BRANCHES_NEW_PATH, FRAME_BRANCHES_SWITCH_PATH, branchNameProblem, parseBranchChats } from '../src/contract.ts'
+import { branchClick, createBranchesApi, saveBeforeSwitchMessage } from '../src/client/branches.ts'
+import { BranchChatsStore } from '../src/client/branch-chats.ts'
+import { createBranchChatsStore } from '../src/branch-chats.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
 import { savedLabel, versionNumber } from '../src/client/versions.ts'
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
 import { foldersAbove } from '../src/client/FilesView.tsx'
 import { highlightLine, languageOf } from '../src/client/highlight.ts'
-import { FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, parseStoredTabs, ptyTab, terminalMeta } from '../src/client/tabs.ts'
+import { FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, parseStoredTabs, ptyTab, tabsForBranch, terminalMeta, terminalTab } from '../src/client/tabs.ts'
 import { FIRST_RUN_VIEW, FrameViewState, parseStoredView, type ViewStorage } from '../src/client/view-state.ts'
 
 describe('parseBranches', () => {
@@ -163,6 +169,115 @@ describe('the right panel tabs', () => {
       .toEqual({ tabs: [{ kind: 'chat', id: 'chat' }, fileTab('src/a.ts')], active: 'chat' })
     expect(parseStoredTabs('nonsense')).toBe(FIRST_RUN_TABS)
   })
+
+  it('keeps the branch a remembered tab was opened on', () => {
+    const stored = JSON.stringify({ tabs: [{ kind: 'terminal', terminalId: 't1', branch: 'main' }], active: 'terminal:t1', branched: true })
+    expect(parseStoredTabs(stored).tabs[1]).toEqual({ kind: 'terminal', id: 'terminal:t1', terminalId: 't1', branch: 'main' })
+  })
+})
+
+describe('tabs per branch', () => {
+  it('opens a tab on the checked-out branch and shows only that branch\'s tabs', () => {
+    const storage = new MemoryStorage()
+    const tabs = new FrameTabs(storage)
+    tabs.setBranch('main')
+    tabs.open(terminalTab('t1'))
+    tabs.open(FILES_TAB)
+    expect(tabs.getSnapshot().tabs.map(tab => [tab.id, tab.branch])).toEqual([
+      ['chat', undefined],
+      ['terminal:t1', 'main'],
+      ['files', 'main'],
+    ])
+    tabs.setBranch('feature')
+    tabs.open(fileTab('src/a.ts'))
+    expect(tabsForBranch(tabs.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['chat', 'terminal:t1', 'files'])
+    expect(tabsForBranch(tabs.getSnapshot(), 'feature').map(tab => tab.id)).toEqual(['chat', 'file:src/a.ts'])
+    expect(tabsForBranch(tabs.getSnapshot(), undefined).map(tab => tab.id)).toEqual(['chat', 'terminal:t1', 'files', 'file:src/a.ts'])
+    // The strip comes back the same on the next page.
+    const again = new FrameTabs(storage)
+    again.setBranch('main')
+    expect(tabsForBranch(again.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['chat', 'terminal:t1', 'files'])
+  })
+
+  it('puts the tabs remembered before branches had their own lists on the first branch it sees, once', () => {
+    const storage = new MemoryStorage()
+    storage.setItem('acryl-blends-frame.tabs.v1', JSON.stringify({ tabs: [{ kind: 'terminal', terminalId: 'old' }], active: 'terminal:old' }))
+    const tabs = new FrameTabs(storage)
+    expect(tabs.getSnapshot().tabs[1]).toEqual({ kind: 'terminal', id: 'terminal:old', terminalId: 'old' })
+    tabs.setBranch('main')
+    expect(tabs.getSnapshot().tabs[1]).toEqual({ kind: 'terminal', id: 'terminal:old', terminalId: 'old', branch: 'main' })
+    tabs.setBranch('feature')
+    expect(tabs.getSnapshot().tabs[1]).toMatchObject({ branch: 'main' })
+  })
+})
+
+describe('a chat\'s branch', () => {
+  it('is the branch the chat was first seen on, and stays when the folder moves', () => {
+    const calls: string[] = []
+    const store = new BranchChatsStore({
+      read: async () => ({}),
+      assign: async (id, branch) => { calls.push(`${id}:${branch}`) },
+    })
+    store.adopt(['a', 'b'], 'main')
+    expect(store.getSnapshot()).toEqual({ a: 'main', b: 'main' })
+    store.adopt(['a', 'b', 'c'], 'feature')
+    expect(store.getSnapshot()).toEqual({ a: 'main', b: 'main', c: 'feature' })
+    expect(calls).toEqual(['a:main', 'b:main', 'c:feature'])
+  })
+
+  it('shows an assignment at once and drops it when the Host refuses, so the next look tries again', async () => {
+    let refuse = true
+    const calls: string[] = []
+    const store = new BranchChatsStore({
+      read: async () => ({}),
+      assign: async (id, branch) => {
+        calls.push(`${id}:${branch}`)
+        if (refuse) throw new Error('the Host said no')
+      },
+    })
+    store.adopt(['a'], 'main')
+    expect(store.getSnapshot()).toEqual({ a: 'main' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(store.getSnapshot()).toEqual({})
+    refuse = false
+    store.adopt(['a'], 'main')
+    expect(store.getSnapshot()).toEqual({ a: 'main' })
+    expect(calls).toEqual(['a:main', 'a:main'])
+  })
+
+  it('keeps a chat recorded before the page opened', async () => {
+    const store = new BranchChatsStore({ read: async () => ({ a: 'main' }), assign: async () => {} })
+    await store.load()
+    store.adopt(['a'], 'feature')
+    expect(store.getSnapshot()).toEqual({ a: 'main' })
+  })
+})
+
+describe('the branch chats file', () => {
+  it('reads what the Host was told', () => {
+    expect(parseBranchChats({ chats: { s1: 'main' } })).toEqual({ s1: 'main' })
+    expect(() => parseBranchChats({ chats: { s1: 7 } })).toThrow('entry')
+    expect(() => parseBranchChats({})).toThrow('not a map')
+  })
+
+  it('records a chat once per app folder, serializing writes', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'branch-chats-'))
+    try {
+      const store = createBranchChatsStore(join(dir, 'frame', 'branch-chats.json'))
+      expect(await store.read('/apps/a')).toEqual({})
+      await Promise.all([
+        store.assign('/apps/a', 's1', 'main'),
+        store.assign('/apps/a', 's2', 'feature'),
+        store.assign('/apps/b', 's1', 'other'),
+      ])
+      expect(await store.read('/apps/a')).toEqual({ s1: 'main', s2: 'feature' })
+      expect(await store.read('/apps/b')).toEqual({ s1: 'other' })
+      await store.assign('/apps/a', 's1', 'feature')
+      expect(await store.read('/apps/a')).toEqual({ s1: 'main', s2: 'feature' })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('a terminal row', () => {
@@ -195,5 +310,66 @@ describe('a new branch name', () => {
     expect(branchNameProblem('-x')).toMatch(/starting with a letter/)
     expect(branchNameProblem('a..b')).toBe('That is not a name git accepts.')
     expect(branchNameProblem('x.lock')).toBe('That is not a name git accepts.')
+  })
+})
+
+describe('a branch request', () => {
+  it('reads a name git would take, and says why one it would not cannot be used', () => {
+    expect(parseBranchName({ name: 'feature-due-dates' })).toEqual({ name: 'feature-due-dates' })
+    expect(parseBranchName({ name: 'a..b' })).toEqual({ problem: 'That is not a name git accepts.' })
+    expect(parseBranchName({})).toEqual({ problem: 'Name the branch.' })
+    expect(parseBranchName(null)).toEqual({ problem: 'Name the branch.' })
+    expect(parseBranchName({ name: 7 })).toEqual({ problem: 'Name the branch.' })
+  })
+})
+
+describe('switching a branch', () => {
+  const main = { name: 'main', current: true }
+  const feature = { name: 'feature', current: false }
+
+  it('opens the current branch, switches to another, and asks first when files are unsaved', () => {
+    expect(branchClick(main, 0)).toBe('toggle')
+    // The current branch's click only opens what is running on it, whatever the unsaved count.
+    expect(branchClick(main, 3)).toBe('toggle')
+    expect(branchClick(feature, 0)).toBe('switch')
+    expect(branchClick(feature, 2)).toBe('ask')
+    // A count that could not be read never switches at once.
+    expect(branchClick(feature, undefined)).toBe('ask')
+  })
+
+  it('names the save point after what it is for', () => {
+    expect(saveBeforeSwitchMessage('feature-due-dates')).toBe('Save before switching to feature-due-dates')
+  })
+})
+
+describe('the branch API', () => {
+  const answering = (status: number, body: unknown, calls: { url: string; body: unknown }[]) =>
+    createBranchesApi(async (url, init) => {
+      calls.push({ url, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) })
+      return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+    })
+
+  it('asks the Host to switch, naming the branch', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    await answering(200, { ok: true }, calls).switchTo('feature')
+    expect(calls).toEqual([{ url: FRAME_BRANCHES_SWITCH_PATH, body: { name: 'feature' } }])
+  })
+
+  it('keeps git\'s reason when the switch is refused', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    const api = answering(409, { error: 'error: Your local changes to the following files would be overwritten by checkout' }, calls)
+    await expect(api.switchTo('feature')).rejects.toThrow('Your local changes')
+    expect(calls[0]?.url).toBe(FRAME_BRANCHES_SWITCH_PATH)
+  })
+
+  it('creates through its own route', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    await answering(200, { ok: true }, calls).create('feature')
+    expect(calls).toEqual([{ url: FRAME_BRANCHES_NEW_PATH, body: { name: 'feature' } }])
+  })
+
+  it('answers a refusal without JSON with a plain line', async () => {
+    const api = createBranchesApi(async () => new Response('nope', { status: 502 }))
+    await expect(api.switchTo('feature')).rejects.toThrow('the branch could not be switched to (HTTP 502)')
   })
 })

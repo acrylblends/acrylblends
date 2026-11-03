@@ -185,13 +185,13 @@ describe('the chat-saves route', () => {
   const port = { read: (session: string) => Promise.resolve({ saves: session === 'abc' ? [{ turn: 1, files: ['a.ts'], hash: 'h', version: 2, subject: 'S' }] : [] }) }
 
   it('answers a chat\'s saves to the app\'s own page', async () => {
-    const response = await call(frameRoutes(state, () => {}, undefined, undefined, undefined, port), '/api/acryl-blends-frame/chat-saves?session=abc')
+    const response = await call(frameRoutes({ state, chatSaves: port }), '/api/acryl-blends-frame/chat-saves?session=abc')
     expect(response.status).toBe(200)
     expect(parseChatSaves(await response.json()).saves).toHaveLength(1)
   })
 
   it('refuses a session that is not an id', async () => {
-    const app = frameRoutes(state, () => {}, undefined, undefined, undefined, port)
+    const app = frameRoutes({ state, chatSaves: port })
     expect((await call(app, '/api/acryl-blends-frame/chat-saves')).status).toBe(400)
     expect((await call(app, '/api/acryl-blends-frame/chat-saves?session=../../etc')).status).toBe(400)
   })

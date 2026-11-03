@@ -8,6 +8,9 @@
 import '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@acryl/ui/frame'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+// The conversation slot map (conversation.input.dock) and the scoped input events the send hook writes through.
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { SessionInput } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { DesktopLayoutState, DesktopThemePresenter, provideDesktopLayout, stripLaunchToken } from 'acryl-app-shell/client'
 import { createVersionsApi } from 'acryl-versions/client'
 import { ChatSavesStore, createChatSavesApi } from './chat-saves.ts'
@@ -21,11 +24,14 @@ import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSh
 import { ShortcutsRow } from './ShortcutsRow.tsx'
 import { createSidebarRightStandIn } from './sidebar-right-stand-in.ts'
 import { createBranchesApi } from './branches.ts'
+import { BranchChatsStore, createBranchChatsApi } from './branch-chats.ts'
 import { createFeedbackApi, feedbackTask } from './feedback.ts'
 import { draftInChat } from './chat-draft.ts'
 import type { FeedbackPort } from './LeftPanel.tsx'
 import { appPluginRow, createAppPluginsApi, framePluginRow, type NavigatorPlugin } from './plugins-navigator.ts'
 import { PluginsSection } from './PluginsSection.tsx'
+import { SelectionChip, type SelectionChipInjected } from './SelectionChip.tsx'
+import { SelectionStore, contextToInsert } from './selection.ts'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
 import { FILES_TAB, FrameTabs, tabOfTerminal } from './tabs.ts'
@@ -66,10 +72,13 @@ function pageStorage(): ViewStorage | undefined {
 export function apply(ctx: ClientContext): void {
   const layout = new DesktopLayoutState()
   const canvas = new AppCanvasState()
+  const selection = new SelectionStore()
   const frameState = new FrameStateStore()
   const view = new FrameViewState(pageStorage())
   const chats = new ChatsStore(() => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'))
   const versionsApi = createVersionsApi()
+  const branchesApi = createBranchesApi()
+  const branchChats = new BranchChatsStore(createBranchChatsApi())
   const tabs = new FrameTabs(pageStorage())
   const tools = createFrameTools()
   // The line under an answer that changed the app: what the Host's auto-save made of the turn. A new save changes the versions and the unsaved count, so the frame reads its state again.
@@ -158,6 +167,26 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'acryl-blends-frame: read the frame state')
 
+  // A chat belongs to the branch it was first seen on: DSH keeps no branches, so the frame records it in the app's home and the left panel can
+  // list each branch's own chats. A chat already recorded keeps its branch when the folder moves.
+  ctx.effect(() => {
+    void branchChats.load()
+    const adopt = () => {
+      const view = frameState.getSnapshot()
+      if (view.status !== 'ready') return
+      const current = view.state.branches.find(branch => branch.current)?.name
+      if (current === undefined) return
+      branchChats.adopt(chats.getSnapshot().map(row => row.id), current)
+    }
+    const offState = frameState.subscribe(adopt)
+    const offChats = chats.subscribe(adopt)
+    adopt()
+    return () => {
+      offState()
+      offChats()
+    }
+  }, 'acryl-blends-frame: chats belong to the branch they were opened on')
+
   // Settings → Agents: the workspace's own section, on the workspace Host's agent routes.
   const agents = new AgentsState(createWorkspaceAgentsApi())
   ctx.effect(() => { void agents.refresh(); return () => {} }, 'acryl-blends-frame: load the agents')
@@ -225,6 +254,50 @@ export function apply(ctx: ClientContext): void {
     child.effect(() => chats.watch(child.sessions), 'acryl-blends-frame: chats follow the sessions')
   })
 
+  // The element picked in the canvas is what the chat is about (docs/design/blends-frame-mockup.html, scenario 2): its chip sits above the
+  // composer, and a send writes its page and selector into the message the person is sending, without touching the words they typed.
+  ctx.plugin({
+    name: 'acryl-blends-frame-element-selection',
+    inject: ['slots', 'sessions'],
+    apply(child: ClientContext): void {
+      child.slots.inject('conversation.input.dock', () => child.slots.register({
+        name: 'conversation.input.dock',
+        id: 'element-selection',
+        order: 10,
+        inject: (sessionId): SelectionChipInjected => {
+          const actx = child.sessions.scope(sessionId)
+          const composer = (): SessionInput | undefined => {
+            if (actx === undefined) return undefined
+            return actx.get('conversation')?.input.for(actx)
+          }
+          return {
+            selection: {
+              get: () => selection.getSnapshot().selection,
+              subscribe: listener => selection.subscribe(listener),
+            },
+            clear: () => { selection.clear() },
+            focus: () => { composer()?.focus() },
+            send: () => {
+              const element = selection.getSnapshot().selection
+              const input = composer()
+              if (element === undefined || input === undefined || actx === undefined) return
+              const state = input.state.getSnapshot()
+              const text = contextToInsert(state.draft, element)
+              if (text === undefined) return
+              // Insert at the start of the draft, where the scoped insert-text event applies a plain-text edit and keeps the reference
+              // chips the person added after it. The send that triggered this reads the draft next, in the same gesture.
+              const applied = actx.bail(actx, 'slash/input-insert-text', {
+                text,
+                span: { start: 0, end: 0, draftRev: state.draftRev },
+              }) === true
+              if (applied) selection.clear()
+            },
+          }
+        },
+      }, SelectionChip))
+    },
+  })
+
   ctx.effect(() => ctx.slots.register({
     name: 'root',
     children: {
@@ -239,6 +312,7 @@ export function apply(ctx: ClientContext): void {
     inject: () => ({
       layout,
       canvas,
+      selection,
       frameState,
       view,
       chats,
@@ -246,7 +320,17 @@ export function apply(ctx: ClientContext): void {
       tabs,
       tools,
       feedback,
-      branches: { api: createBranchesApi(), changed: () => frameState.refresh() },
+      branchChats,
+      branches: {
+        api: branchesApi,
+        changed: () => frameState.refresh(),
+        // The folder moves, the frame shows the new current branch, then the app page reloads on that branch's files.
+        switchTo: async (name: string) => {
+          await branchesApi.switchTo(name)
+          await frameState.refresh()
+          canvas.reload()
+        },
+      },
     }),
   }, BlendsFrame), 'acryl-blends-frame: root slot')
 }

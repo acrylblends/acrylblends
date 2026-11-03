@@ -11,7 +11,8 @@ import { FilesView } from './FilesView.tsx'
 import { FileView } from './FileView.tsx'
 import { GitView } from './GitView.tsx'
 import type { ChatsPort } from './LeftPanel.tsx'
-import { FILES_TAB, GIT_TAB, PTY_AGENTS, fileTab, ptyTab, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
+import type { BranchChatsPort } from './branch-chats.ts'
+import { FILES_TAB, GIT_TAB, PTY_AGENTS, fileTab, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
 import { TerminalView } from './TerminalView.tsx'
 import type { FrameTools } from './tools.ts'
 import type { VersionsPort } from './versions.ts'
@@ -34,6 +35,8 @@ export interface RightPanelProps {
   readonly tools: FrameTools
   readonly versions: VersionsPort
   readonly state: FrameState | undefined
+  /** Which branch each chat was opened on, for the history's rows. */
+  readonly branchChats: BranchChatsPort
   readonly renderConversation: () => ReactNode
 }
 
@@ -50,18 +53,23 @@ function TabLabel({ tab }: { readonly tab: FrameTab }) {
   }
 }
 
-export function RightPanel({ chats, tabs, tools, versions, state, renderConversation }: RightPanelProps) {
+export function RightPanel({ chats, tabs, tools, versions, state, branchChats, renderConversation }: RightPanelProps) {
   const subscribeChats = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const rows = useSyncExternalStore(subscribeChats, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
   const strip = useSyncExternalStore(subscribeTabs, () => tabs.getSnapshot())
+  const subscribeAssignments = useCallback((listener: () => void) => branchChats.subscribe(listener), [branchChats])
+  const assignments = useSyncExternalStore(subscribeAssignments, () => branchChats.getSnapshot())
   const [history, setHistory] = useState(false)
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState(false)
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const menuRef = useRef<HTMLDivElement>(null)
   const current = rows.find(row => row.current)
-  const active = strip.tabs.find(tab => tab.id === strip.active) ?? strip.tabs[0]
+  // The strip shows the checked-out branch's tabs; another branch's stay open (a terminal keeps running) and come back with that branch.
+  const branch = state?.branches.find(entry => entry.current)?.name
+  const visible = tabsForBranch(strip, branch)
+  const active = visible.find(tab => tab.id === strip.active) ?? visible[0]
   const root = state?.appRoot
   const shownChats = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -98,6 +106,9 @@ export function RightPanel({ chats, tabs, tools, versions, state, renderConversa
       tools.terminals.release(closed.terminalId)
       void tools.pty.close(closed.terminalId).catch(() => {})
     }
+    // Closing the shown tab may leave the strip on one of another branch's, which it does not draw: the chat is the fallback.
+    const after = tabs.getSnapshot()
+    if (!tabsForBranch(after, branch).some(tab => tab.id === after.active)) tabs.activate('chat')
   }
 
   const openTool = (tab: FrameTab) => {
@@ -109,7 +120,7 @@ export function RightPanel({ chats, tabs, tools, versions, state, renderConversa
     <>
       <div className="acrylBlendsTabs" ref={menuRef}>
         <div className="acrylBlendsTabStrip" role="tablist" aria-label="Agents and tools">
-          {strip.tabs.map(tab => (
+          {visible.map(tab => (
             <div key={tab.id} className="acrylBlendsTabWrap" data-closable={tab.kind !== 'chat' || undefined}>
               <button
                 type="button"
@@ -192,8 +203,8 @@ export function RightPanel({ chats, tabs, tools, versions, state, renderConversa
               onChange={(event) => { setQuery(event.target.value) }}
             />
             {shownChats.length === 0 && <p className="acrylBlendsNote">No chats match.</p>}
-            {/* Chats are not tied to a branch yet: every one is the checked-out branch's, the folder the chat works in. */}
-            {shownChats.length > 0 && <div className="acrylBlendsHistoryGroup">{state?.branches.find(branch => branch.current)?.name ?? 'Chats'}</div>}
+            {/* Every chat of the app, whichever branch it was opened on; a chat's branch is in its row. */}
+            {shownChats.length > 0 && <div className="acrylBlendsHistoryGroup">All chats</div>}
             {shownChats.map(row => (
               <button
                 key={row.id}
@@ -206,7 +217,7 @@ export function RightPanel({ chats, tabs, tools, versions, state, renderConversa
                 }}
               >
                 {row.title}
-                <small>{[row.current ? 'open' : 'closed', row.updatedAt === undefined ? '' : formatRelativeTime(new Date(row.updatedAt).toISOString())].filter(part => part !== '').join(' · ')}</small>
+                <small>{[assignments[row.id], row.current ? 'open' : 'closed', row.updatedAt === undefined ? '' : formatRelativeTime(new Date(row.updatedAt).toISOString())].filter(part => part !== '' && part !== undefined).join(' · ')}</small>
               </button>
             ))}
           </div>
@@ -226,7 +237,7 @@ export function RightPanel({ chats, tabs, tools, versions, state, renderConversa
           files={tools.files}
           root={root}
           // The file open as a tab (the latest one): the tree shows where it is.
-          current={strip.tabs.findLast(tab => tab.kind === 'file')?.path}
+          current={visible.findLast(tab => tab.kind === 'file')?.path}
           openFile={(path) => { tabs.open(fileTab(path)) }}
         />
       )}
