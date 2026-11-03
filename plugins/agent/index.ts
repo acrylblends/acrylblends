@@ -17,4 +17,4 @@ export {
   type Step,
   scripted,
 } from './model.ts'
-export { type Tool, type Tools, tools } from './tools.ts'
+export { type CallOptions, type Tool, type Tools, tools } from './tools.ts'
