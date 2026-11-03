@@ -7,7 +7,7 @@ A coding agent (Claude Code, Codex, OpenCode, Copilot and others) builds on Acry
 - `AGENTS.md`: where the API is, how a feature is built (an `Acryl` app mounted with `ctx.router.route`, a plugin registered in `src/app.ts` and `blend.yaml`, a state cell),
   the defaults and how each is swapped, the things that surprise people, and what must pass before a task is done (`npm test` and `npm run check`).
 - `CLAUDE.md`: the same text as `AGENTS.md`, so tools that read either file read the same guide.
-- One skill, `app-guide`, in `.claude/skills/app-guide/SKILL.md` and `.agents/skills/app-guide/SKILL.md` (the same text): where to read first, the one plugin folder, the defaults, the door, and what "done" means.
+- Two skills, `acryl-app` and `cordis-plugin`, in `.claude/skills/<name>/SKILL.md` and `.agents/skills/<name>/SKILL.md` (the same text in both places): how the app is put together and how to change and check it through the door, and how to add a feature as a Cordis plugin.
 - `.gitignore` lists `.acryl/`, the folder the door keeps its secret and state in, so `git add -A` stages none of it.
 
 ## One plugin folder

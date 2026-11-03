@@ -1,0 +1,13 @@
+---
+name: acryl-app
+description: How the __APP_NAME__ app is put together - its blend.yaml rows, src/app.ts registry, src/routes.ts and plugins/ folder - and how to change it, run it and check it through the door. Use before adding a feature, a route, a plugin or a dependency to this app, and before saying the work is done.
+---
+
+# Working in __APP_NAME__
+
+1. **Read first.** `AGENTS.md` (the same text as `CLAUDE.md`) is the app's guide. The framework's API is in `docs/framework/`: start at `docs/framework/README.md`, and `docs/framework/api/summary.md` is the one-page summary. Parts the docs mark "not yet available" are not in this app.
+2. **The app is data plus code.** `blend.yaml` is the blueprint: which plugins (rows) the app mounts, in what order, with what config. `src/app.ts` is the runtime: its `registry` maps each row's `name` to the plugin module, and `compose` starts them. `src/routes.ts` is the app's own `Acryl` app (its page and API). A plugin the app owns is a folder `plugins/<name>/`.
+3. **Make the change small.** A route is a handler on the app's `Acryl` app mounted with `ctx.router.route('/', app)`; test it with `await app.request('/path')`. A feature that belongs in the app is a `plugins/<name>/` folder (see the cordis-plugin skill), plus a row in `blend.yaml` and its import in the `registry` of `src/app.ts`. `npx acrylblends add <name>` copies a library plugin there.
+4. **Defaults are swappable.** The database, the key-value store, the server and the window are plugins behind ports; the table "Defaults you can swap" in `AGENTS.md` names each default and where it is swapped. Never reach around a port to a driver: `npx acrylblends check-deps` fails the check.
+5. **Look at the running app.** In development the app writes `.acryl/bin/acryl`: `acryl brief` says what this folder runs, `acryl look` shows the open page as text with refs, and `acryl act click|type|select|press|scroll|wait|navigate|reload` acts on it. Look again before each act, because the refs change. `acryl plugin add <folder>` installs a plugin into the running app. This is the app's control surface: use it instead of guessing what the page shows.
+6. **Done means checked.** `npm test` passes, and the change shows in the running app. No secret goes in a file or in `git status`: keys come from environment variables.
