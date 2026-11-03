@@ -45,7 +45,8 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsLeft { border-right: 1px solid var(--bf-border); overflow-y: auto; }
 .acrylBlendsRight { border-left: 1px solid var(--bf-border); }
 
-.acrylBlendsPaneHead { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 6px; }
+.acrylBlendsPaneHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 6px; }
+.acrylBlendsPaneHead .acrylBlendsSmallButton { flex: none; white-space: nowrap; }
 .acrylBlendsLabel { color: var(--bf-dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .acrylBlendsList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; padding: 0 6px; }
 .acrylBlendsSmallButton { font-size: 11px; color: #c8c8d0; background: var(--bf-surface-2); border: 1px solid #2f2f35; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
@@ -59,6 +60,7 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsBranchRow { display: flex; align-items: center; }
 .acrylBlendsCaretButton { display: flex; align-items: center; justify-content: center; width: 18px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--bf-dim); cursor: pointer; flex: none; }
 .acrylBlendsCaretButton:hover { background: var(--bf-surface-2); color: #e2e2e6; }
+.acrylBlendsCaretSpace { width: 18px; height: 24px; flex: none; }
 .acrylBlendsBranch { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #e2e2e6; font-weight: 600; white-space: nowrap; cursor: pointer; text-align: left; }
 .acrylBlendsBranch:hover { background: var(--bf-surface-2); }
 .acrylBlendsBranch svg { width: 13px; height: 13px; color: var(--bf-dim); flex: none; }

@@ -8,6 +8,17 @@ export const FRAME_BRANCHES_NEW_PATH = `${FRAME_API_PREFIX}/branches/new`
 export const FRAME_BRANCHES_SWITCH_PATH = `${FRAME_API_PREFIX}/branches/switch`
 /** GET: `{ chats: { <session id>: <branch> } }`; POST `{ id, branch }`: record which branch a chat was opened on. */
 export const FRAME_BRANCH_CHATS_PATH = `${FRAME_API_PREFIX}/branches/chats`
+/** POST `{ hashes }`: which of these versions are also on another branch or the remote. */
+export const FRAME_VERSIONS_SHARED_PATH = `${FRAME_API_PREFIX}/versions/shared`
+
+/** @throws when the answer is not a list of version hashes. */
+export function parseSharedVersions(value: unknown): string[] {
+  if (!isRecord(value) || !Array.isArray(value.shared)) throw new Error('shared versions: not a list')
+  return value.shared.map((hash: unknown) => {
+    if (typeof hash !== 'string' || hash === '') throw new Error('shared versions: entry')
+    return hash
+  })
+}
 
 /** @throws when the answer is not a map of chat id to branch name. */
 export function parseBranchChats(value: unknown): Record<string, string> {
