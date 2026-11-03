@@ -7,9 +7,10 @@
  * - A middleware appends one script tag (`<mount>/api/feedback/feedback.js`) to every HTML response, so no page is edited (agent-panel's way).
  * - In the ACRYL frame's canvas the button follows the frame's view: Build hides it (the builder has its own left panel for notes), and Preview shows it as
  *   production does. A page opened directly keeps it on every page.
- * - `POST <mount>/api/feedback/notes` takes one note from the app's own page (same origin), at most 30 a minute across the app. The page adds a
- *   screenshot of what the person saw (the browser's tab capture, with the picker's outline on the page), downscaled and capped; a refused capture
- *   still sends the note.
+ * - `POST <mount>/api/feedback/notes` takes one note from the app's own page (same origin), at most 30 a minute across the app. The form offers
+ *   "Attach a screenshot of this page" (checked) and says the browser will ask to share the tab; the page adds the tab capture with the picker's
+ *   outline, downscaled and capped. Only Chromium is offered the option (Firefox and Safari ignore preferCurrentTab and would share the whole
+ *   screen); unchecking it or a refused capture still sends the note.
  * - Nobody reads the notes over HTTP here: the builder reads them through the service. Opt-in: `acrylblends add feedback`.
  */
 import { readFileSync } from 'node:fs'

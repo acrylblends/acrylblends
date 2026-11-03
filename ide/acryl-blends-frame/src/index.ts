@@ -719,7 +719,15 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
         ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
       },
       plugins,
-      feedback: feedbackPort(() => ctx.get('feedback')),
+      // The app's feedback service may be isolated to its own composition (the template isolates it under the app-plugins row); read it from that
+      // row's scope first, then from the frame's own, so both an isolated and an unisolated app answer.
+      feedback: feedbackPort(() => {
+        const loader = ctx.get('loader') as unknown as {
+          entries(): Array<{ readonly options: { readonly id: string }; readonly fiber?: { readonly ctx?: { get(key: string): unknown } } }>
+        } | undefined
+        const appPlugins = loader?.entries().find(row => row.options.id === APP_PLUGINS_ROW)
+        return appPlugins?.fiber?.ctx?.get('feedback') ?? ctx.get('feedback')
+      }),
       branches: {
         create: async (name) => {
           // git's own rule for a branch name, then the branch from HEAD, switched to: the working files, saved or not, stay as they are.
