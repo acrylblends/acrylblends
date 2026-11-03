@@ -350,11 +350,13 @@ export function apply(ctx: ClientContext): void {
               const state = input.state.getSnapshot()
               const text = contextToInsert(state.draft, element)
               if (text === undefined) return
-              // Insert at the start of the draft, where the scoped insert-text event applies a plain-text edit and keeps the reference
-              // chips the person added after it. The send that triggered this reads the draft next, in the same gesture.
+              // Append at the end of the draft (the scoped insert-text event applies a plain-text edit there and keeps the reference chips the
+              // person added before it): the message, and so the chat's title, opens with the person's words. The send that triggered this
+              // reads the draft next, in the same gesture.
+              const end = state.draft.length
               const applied = actx.bail(actx, 'slash/input-insert-text', {
                 text,
-                span: { start: 0, end: 0, draftRev: state.draftRev },
+                span: { start: end, end, draftRev: state.draftRev },
               }) === true
               if (applied) selection.clear()
             },

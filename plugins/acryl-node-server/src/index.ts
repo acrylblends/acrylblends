@@ -169,6 +169,10 @@ export class NodeServer extends Service {
       // tracks them and waits for their owner's close frame before cutting what is left.
       this.upgraded.add(socket)
       socket.once('close', () => { this.upgraded.delete(socket) })
+      // Node drops the HTTP server's own error listener when it hands a socket to 'upgrade', and the route may still be deciding (a check that
+      // reads a store) when the client resets: without a listener of its own, that ECONNRESET would throw and stop the whole server. The socket
+      // is simply gone; its owner, if it has one yet, sees the close.
+      socket.on('error', () => { socket.destroy() })
       const websocket = request.headers.upgrade?.toLowerCase() === 'websocket'
       const handler = this.rawUpgrades.get(pathnameOf(request.url))
       // A raw claim owns its path. A WebSocket upgrade nobody claimed is left to the router's hub when one is attached; with no hub, or for a

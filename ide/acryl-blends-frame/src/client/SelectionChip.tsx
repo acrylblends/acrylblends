@@ -25,6 +25,8 @@ export type SelectionChipProps = SelectionChipInjected
 
 /** The mockup's gap between the chip and the input text. */
 export const CHIP_GAP = 8
+/** The custom property the editor carries while a chip is shown: the first line's indent (./styles.ts reads it). */
+export const CHIP_INSET_PROPERTY = '--acrylBlendsChipInset'
 
 /** Where the chip sits inside the composer card, and how far the draft's text moves right to make room for it. */
 export interface ChipGeometry {
@@ -103,8 +105,9 @@ export function SelectionChip({ selection, clear, send, focus }: SelectionChipPr
       window.removeEventListener('click', onGesture, true)
     }
   }, [current?.selector, current?.page, send])
-  // The chip is not a child of the editor, so the text makes room for it: the editor's left pad and its placeholder move by the chip's width,
-  // and the chip is placed on the first line. Layout follows the card while the draft grows or the window resizes.
+  // The chip is not a child of the editor, so the text makes room for it: the first line of the draft is indented by the chip's width (the
+  // lines under it keep the full width), the placeholder moves with it, and the chip is placed on the first line. Layout follows the card
+  // while the draft grows or the window resizes.
   useLayoutEffect(() => {
     if (current === undefined) return undefined
     const element = chip.current
@@ -113,7 +116,6 @@ export function SelectionChip({ selection, clear, send, focus }: SelectionChipPr
     const card = element?.closest('[data-composer-card]')
     const editor = card?.querySelector<HTMLElement>('[data-composer-input]')
     if (element === null || element === undefined || anchor === null || anchor === undefined || editor === null || editor === undefined) return undefined
-    const previousPadding = editor.style.paddingLeft
     // The base geometry is read once: every later placement adds to the same pads instead of reading back its own inset and compounding it.
     const initial = getComputedStyle(editor)
     const basePaddingLeft = Number.parseFloat(initial.paddingLeft) || 0
@@ -132,7 +134,7 @@ export function SelectionChip({ selection, clear, send, focus }: SelectionChipPr
       )
       element.style.left = `${String(geometry.left)}px`
       element.style.top = `${String(geometry.top)}px`
-      editor.style.paddingLeft = `${String(geometry.textInset)}px`
+      editor.style.setProperty(CHIP_INSET_PROPERTY, `${String(geometry.textInset - basePaddingLeft)}px`)
       placeholder = editor.nextElementSibling instanceof HTMLElement ? editor.nextElementSibling : undefined
       if (placeholder !== undefined) placeholder.style.left = `${String(geometry.textInset)}px`
     }
@@ -149,7 +151,7 @@ export function SelectionChip({ selection, clear, send, focus }: SelectionChipPr
       observer?.disconnect()
       mutations?.disconnect()
       window.removeEventListener('resize', place)
-      editor.style.paddingLeft = previousPadding
+      editor.style.removeProperty(CHIP_INSET_PROPERTY)
       if (placeholder !== undefined) placeholder.style.left = ''
     }
   }, [current?.selector, current?.page, current?.label])

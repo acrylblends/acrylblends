@@ -98,11 +98,13 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsCanvas { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #fff; }
 .acrylBlendsCanvasPage { flex: 1; min-height: 0; display: flex; }
 .acrylAppCanvasFrame { flex: 1; display: block; width: 100%; height: 100%; border: 0; background: #fff; }
-.acrylBlendsBackbar { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px; background: var(--bf-accent); color: #fff; font-size: 12px; }
+/* Preview: a small pill floating over the app's top centre, so the app keeps its whole height, as users see it. */
+.acrylBlendsBackbar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 14px; border-radius: 999px; background: rgba(29,28,26,.94); color: #fff; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+.acrylBlendsBackbar .acrylBlendsSmallButton { border: 0; border-radius: 999px; background: var(--bf-accent); color: #fff; }
 .acrylBlendsCanvasTools { position: absolute; top: 10px; right: 10px; z-index: 4; display: flex; align-items: center; gap: 8px; }
-.acrylBlendsSelectButton { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #d8d4ca; border-radius: 7px; background: rgba(255,255,255,.96); color: #3a3a40; font-size: 12px; cursor: pointer; box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+.acrylBlendsSelectButton { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border: 1px solid var(--bf-border); border-radius: 7px; background: transparent; color: var(--bf-dim); font-size: 12px; cursor: pointer; }
 .acrylBlendsSelectButton svg { width: 13px; height: 13px; }
-.acrylBlendsSelectButton:hover { background: #fff; border-color: #b9b3a4; }
+.acrylBlendsSelectButton:hover { background: var(--bf-surface-2); color: #fff; }
 .acrylBlendsSelectButton[aria-pressed="true"] { background: #e0a43a; border-color: #e0a43a; color: #1d1c1a; }
 .acrylBlendsPickingHint { padding: 4px 9px; border-radius: 7px; background: rgba(29,28,26,.86); color: #fff; font-size: 11.5px; white-space: nowrap; }
 
@@ -181,6 +183,8 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsConversation { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .acrylBlendsConversation[hidden] { display: none; }
 .acrylBlendsConversation > * { flex: 1; min-height: 0; }
+/* With a chip, only the draft's first line makes room for it (SelectionChip sets the indent): the first paragraph, or the bare text. */
+[data-composer-input] > :first-child, [data-composer-input]:not(:has(> *)) { text-indent: var(--acrylBlendsChipInset, 0px); }
 .acrylBlendsSelectionChip { position: absolute; z-index: 2; display: inline-flex; align-items: center; gap: 4px; max-width: 60%; height: 18px; padding: 0 6px; border: 0; border-radius: 5px; background: var(--bf-surface-2); color: #c8c8d0; font-size: 11px; line-height: 18px; white-space: nowrap; }
 .acrylBlendsSelectionChipLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .acrylBlendsSelectionChipClear { width: 13px; height: 13px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #8b8b93; font-size: 12px; line-height: 1; cursor: pointer; display: grid; place-items: center; flex: none; opacity: 0; }

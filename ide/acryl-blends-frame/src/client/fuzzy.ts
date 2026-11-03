@@ -11,7 +11,8 @@ const BOUNDARY = new Set(['/', '-', '_', '.', ' '])
 
 /**
  * Match `query` against one path, case-insensitively, letters in order. Each matched letter scores; one right after the previous match, at the
- * start of a word, or in the file's own name scores more, a long gap scores less, and a shorter path wins a tie. @returns undefined when the letters are not all there.
+ * start of a word, or in the file's own name scores more, a long gap or a long stretch from the first letter to the last scores less, and a
+ * shorter path wins a tie. @returns undefined when the letters are not all there.
  */
 export function fuzzyMatch(query: string, path: string): FuzzyMatch | undefined {
   const needle = query.replace(/\s+/g, '').toLowerCase()
@@ -30,6 +31,9 @@ export function fuzzyMatch(query: string, path: string): FuzzyMatch | undefined 
     if (at === 0 || BOUNDARY.has(path[at - 1] as string)) score += 3
     if (at >= nameStart) score += 2
   }
+  // The letters spread over a long stretch cost as a whole too: "brd" in "board" beats "brd" in "bring-your-own-tool.md", wherever the name is.
+  const spread = (hits.at(-1) as number) - (hits[0] as number) + 1 - hits.length
+  score -= Math.min(10, spread / 2)
   return { path, hits, score: score - path.length / 100 }
 }
 

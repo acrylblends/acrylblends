@@ -99,7 +99,8 @@ async function shoot(page, file) {
 const MOCKUP_SETUP = (scenario) => `(() => {
   const button = document.querySelector('.scenarios button[data-s=${JSON.stringify(scenario)}]')
   if (button === null) throw new Error('no scenario ${scenario}')
-  button.click()
+  // A click that does not bubble: the mock closes Settings (scenario 6) on any click that reaches the document.
+  button.dispatchEvent(new MouseEvent('click', { bubbles: false }))
   const style = document.createElement('style')
   style.textContent = '.win { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; min-width: 0 !important; border: 0 !important; border-radius: 0 !important; z-index: 2147483647 } .dots { display: none !important } body { overflow: hidden !important }'
   document.head.append(style)

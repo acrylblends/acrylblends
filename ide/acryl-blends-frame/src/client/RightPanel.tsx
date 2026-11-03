@@ -4,13 +4,13 @@
  * search, a file opens as its own tab) and Git. There is no Browser: the canvas is the browser. The chat has History at its top left.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { FrameState } from '../contract.ts'
 import { FilesView } from './FilesView.tsx'
 import { FileView } from './FileView.tsx'
 import { GitView } from './GitView.tsx'
 import type { ChatsPort } from './LeftPanel.tsx'
-import type { BranchChatsPort } from './branch-chats.ts'
+import { historyGroups, type BranchChatsPort } from './branch-chats.ts'
 import { FILES_TAB, GIT_TAB, PTY_AGENTS, fileTab, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
 import { TerminalView } from './TerminalView.tsx'
 import type { FrameTools } from './tools.ts'
@@ -204,22 +204,26 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
               onChange={(event) => { setQuery(event.target.value) }}
             />
             {shownChats.length === 0 && <p className="acrylBlendsNote">No chats match.</p>}
-            {/* Every chat of the app, whichever branch it was opened on; a chat's branch is in its row. */}
-            {shownChats.length > 0 && <div className="acrylBlendsHistoryGroup">All chats</div>}
-            {shownChats.map(row => (
-              <button
-                key={row.id}
-                type="button"
-                className="acrylBlendsHistoryRow"
-                aria-current={row.current || undefined}
-                onClick={() => {
-                  chats.open(row.id)
-                  setHistory(false)
-                }}
-              >
-                {row.title}
-                <small>{[assignments[row.id], row.current ? 'open' : 'closed', chatTime(row.updatedAt)].filter(part => part !== '' && part !== undefined).join(' · ')}</small>
-              </button>
+            {/* Every chat of the app, grouped by the branch it was opened on, the checked-out branch first. */}
+            {historyGroups(shownChats, assignments, branch).map(group => (
+              <Fragment key={group.branch ?? ''}>
+                <div className="acrylBlendsHistoryGroup">{group.branch ?? 'No branch'}</div>
+                {group.rows.map(row => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    className="acrylBlendsHistoryRow"
+                    aria-current={row.current || undefined}
+                    onClick={() => {
+                      chats.open(row.id)
+                      setHistory(false)
+                    }}
+                  >
+                    {row.title}
+                    <small>{[row.current ? 'open' : 'closed', chatTime(row.updatedAt)].filter(part => part !== '').join(' · ')}</small>
+                  </button>
+                ))}
+              </Fragment>
             ))}
           </div>
         )}

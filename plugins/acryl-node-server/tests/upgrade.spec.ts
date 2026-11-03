@@ -1,5 +1,6 @@
 /** WebSocket upgrades on the standalone adapter (spec 047 T009): checks as middleware, plain refusals, text-only and size limits, heartbeat, and plugin-owned sockets. */
 import { request as httpRequest } from 'node:http'
+import { connect } from 'node:net'
 import { Context } from '@deepseek-ai/cordis'
 import { Acryl, apply as routerApply, connectionOf, name as routerName } from 'acryl-router'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -196,5 +197,45 @@ describe('testWebSocket: the in-process pair', () => {
     socket!.close(1000, 'bye')
     expect(seen.closed).toEqual([{ code: 1000, reason: 'bye' }])
     await hub.close()
+  })
+})
+
+describe('a client that resets an upgrade it sent', () => {
+  it('costs the server nothing: the socket error is absorbed while the route is still deciding, and the next request is served', async () => {
+    const ctx = await boot()
+    await ctx.plugin({
+      name: 'slow-ws',
+      inject: ['router', 'nodeServer'],
+      apply(inner: Context) {
+        const upgrade = inner.nodeServer.upgrades()
+        inner.router.route(
+          '/',
+          new Acryl()
+            // The route takes its time to decide, as a check that reads a store does: the client is gone before it answers.
+            .use('/slow', async (_c, next) => { await new Promise(resolve => setTimeout(resolve, 40)); await next() })
+            .get('/slow', upgrade(() => ({})))
+            .get('/alive', c => c.text('alive')),
+        )
+      },
+    })
+    const errors: unknown[] = []
+    const onError = (error: unknown): void => { errors.push(error) }
+    process.on('uncaughtException', onError)
+    try {
+      const { port } = ctx.nodeServer
+      const resetOne = () => new Promise<void>((resolve) => {
+        const socket = connect(port, '127.0.0.1', () => {
+          socket.write(`GET /slow HTTP/1.1\r\nHost: 127.0.0.1:${String(port)}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n`)
+          setTimeout(() => { socket.resetAndDestroy(); resolve() }, 5)
+        })
+        socket.on('error', () => { resolve() })
+      })
+      await Promise.all(Array.from({ length: 20 }, resetOne))
+      await new Promise(resolve => setTimeout(resolve, 120))
+      expect(errors).toEqual([])
+      expect(await (await fetch(`${ctx.nodeServer.url}/alive`)).text()).toBe('alive')
+    } finally {
+      process.off('uncaughtException', onError)
+    }
   })
 })

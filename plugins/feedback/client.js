@@ -35,9 +35,24 @@ export function elementLabel(element) {
     element.getAttribute('title') ||
     element.getAttribute('alt')
   if (named) return clip(named)
-  const heading = element.querySelector('h1, h2, h3, h4, b, strong')
-  const text = (heading?.textContent || element.textContent || '').replace(/\s+/g, ' ').trim()
+  // A heading names its section; bold text inside does not (a card's bold person name is not the card), so it falls to the first text.
+  const heading = element.querySelector('h1, h2, h3, h4, h5, h6')
+  const text = (heading?.textContent || firstText(element) || '').replace(/\s+/g, ' ').trim()
   return text === '' ? element.tagName.toLowerCase() : `"${clip(text)}"`
+}
+
+/** The first piece of text an element shows, in document order. */
+function firstText(node) {
+  for (const child of node.childNodes) {
+    if (child.nodeType === 3 && (child.textContent || '').trim() !== '') return child.textContent
+    if (child.nodeType === 1) {
+      const tag = child.tagName.toLowerCase()
+      if (tag === 'script' || tag === 'style') continue
+      const found = firstText(child)
+      if (found !== undefined) return found
+    }
+  }
+  return undefined
 }
 
 function clip(text) {

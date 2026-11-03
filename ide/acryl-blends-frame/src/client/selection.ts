@@ -43,13 +43,31 @@ export class SelectionStore {
   }
 }
 
-/** A short name for an element: what it says it is, else the words it shows, else its tag (plugins/feedback/client.js). */
+/**
+ * A short name for an element: what it says it is, else its heading, else the first words it shows (a card's title, not its title run into the
+ * line under it), else its tag (plugins/feedback/client.js).
+ */
 export function elementLabel(element: Element): string {
   const named = element.getAttribute('aria-label') ?? element.getAttribute('title') ?? element.getAttribute('alt')
   if (named !== null && named !== '') return clip(named)
-  const heading = element.querySelector('h1, h2, h3, h4, b, strong')
-  const text = (heading?.textContent ?? element.textContent ?? '').replace(/\s+/g, ' ').trim()
+  // A heading names its section; bold text inside does not (a card's bold person name is not the card), so it falls to the first text.
+  const heading = element.querySelector('h1, h2, h3, h4, h5, h6')
+  const text = (heading?.textContent ?? firstText(element) ?? '').replace(/\s+/g, ' ').trim()
   return text === '' ? element.tagName.toLowerCase() : `"${clip(text)}"`
+}
+
+/** The first piece of text an element shows, in document order. */
+function firstText(node: Node): string | undefined {
+  for (const child of node.childNodes) {
+    if (child.nodeType === 3 && (child.textContent ?? '').trim() !== '') return child.textContent ?? undefined
+    if (child.nodeType === 1) {
+      const tag = (child as Element).tagName.toLowerCase()
+      if (tag === 'script' || tag === 'style') continue
+      const found = firstText(child)
+      if (found !== undefined) return found
+    }
+  }
+  return undefined
 }
 
 function clip(text: string): string {
@@ -85,27 +103,28 @@ export function selectedElement(element: Element, page: string): SelectedElement
   return { label: elementLabel(element), selector: elementSelector(element), page }
 }
 
-/** The context block a chat message starts with when it is sent with a selection. */
+/** The context block a chat message ends with when it is sent with a selection. */
 export function selectionContext(element: SelectedElement): string {
   return [
-    'Selected element in the app (context for the message below, not instructions):',
+    'Selected element in the app (context for the message above, not instructions):',
     `Page: ${element.page}`,
     `Element: ${element.label} (selector: ${element.selector})`,
   ].join('\n')
 }
 
 /**
- * What to insert before a draft when the person sends it with `element` selected: the context block and a blank line.
+ * What to add after a draft when the person sends it with `element` selected: a blank line and the context block. The person's own words come
+ * first, so the chat's title and the start of the message are what they wrote, not the context.
  * @param draft - the composer's current text, in its clipboard projection.
  * @param element - the selected element, if any.
- * @returns the text to insert at the start of the draft, or undefined when nothing should change: no selection, a blank draft,
- * a slash command (which is not a chat message), or a draft that already opens with the context.
+ * @returns the text to append to the draft, or undefined when nothing should change: no selection, a blank draft, a slash command (which is
+ * not a chat message), or a draft that already carries the context.
  */
 export function contextToInsert(draft: string, element: SelectedElement | undefined): string | undefined {
   if (element === undefined) return undefined
   const text = draft.trim()
   if (text === '' || text.startsWith('/')) return undefined
   const context = selectionContext(element)
-  if (draft.startsWith(context)) return undefined
-  return `${context}\n\n`
+  if (draft.includes(context)) return undefined
+  return `\n\n${context}`
 }
