@@ -1,4 +1,5 @@
-import { realpathSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { VersionsGitError } from '../src/git/errors.ts'
 import { GitRunner } from '../src/git/runner.ts'
@@ -163,6 +164,21 @@ describe('versions restore', () => {
     expect(git(repo.dir, ['rev-parse', second])).toBe(second)
     expect(Number(git(repo.dir, ['rev-list', '--count', 'HEAD']))).toBe(countBefore + 1)
     expect(git(repo.dir, ['status', '--porcelain'])).toBe('')
+  })
+
+  it('removes a file added after the version, and names the commit as asked', async () => {
+    const repo = repository()
+    writeFile(repo.dir, 'a.txt', 'one')
+    const first = commitAll(repo.dir, 'first')
+    writeFile(repo.dir, 'b.txt', 'added later')
+    commitAll(repo.dir, 'second')
+
+    const restored = await versions().restore(repo.dir, first, 'Back to v1 · first')
+
+    expect(restored.commit.subject).toBe('Back to v1 · first')
+    expect(existsSync(join(repo.dir, 'b.txt'))).toBe(false)
+    expect(git(repo.dir, ['status', '--porcelain'])).toBe('')
+    await expect(versions().restore(repo.dir, first, '  ')).rejects.toThrow(/commit message/)
   })
 
   it('refuses while the worktree has uncommitted changes and changes nothing', async () => {

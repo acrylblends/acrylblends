@@ -83,6 +83,10 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsItemMeta { flex: 0 0 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
 
 .acrylBlendsVersion { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border-radius: 6px; color: #d4d4da; white-space: nowrap; }
+.acrylBlendsVersion[data-back] { cursor: pointer; }
+.acrylBlendsVersion[data-back]:hover { background: var(--bf-surface-2); }
+.acrylBlendsBackAsk { margin-left: 8px; }
+.acrylBlendsBackAsk p[data-error] { color: #f0a0a0; }
 .acrylBlendsVersion[aria-current] { background: var(--bf-accent-dim); color: #fff; }
 .acrylBlendsVersionDot { width: 7px; height: 7px; border-radius: 2px; border: 1.5px solid #77777f; flex: none; }
 .acrylBlendsVersion[aria-current] .acrylBlendsVersionDot { background: var(--bf-accent); border-color: var(--bf-accent); }

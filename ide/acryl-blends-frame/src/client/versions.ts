@@ -9,6 +9,8 @@ import { FRAME_VERSIONS_SHARED_PATH, parseSharedVersions } from '../contract.ts'
 export interface VersionsPort {
   log(path: string): Promise<VersionsLogView>
   save(path: string, message: string): Promise<unknown>
+  /** Put the app back to a version as a new version on top (history is never rewritten), then show it: the frame state read again, the app page reloaded. */
+  restore(path: string, hash: string, message: string): Promise<unknown>
   /** The versions that are also on another local branch or a remote-tracking branch. */
   shared(hashes: readonly string[]): Promise<readonly string[]>
 }
@@ -66,4 +68,21 @@ export function shortTime(at: string, now: number = Date.now()): string {
 /** A chat's "last active" in the same short form as a version's time; empty when DSH did not say. */
 export function chatTime(updatedAt: number | undefined, now: number = Date.now()): string {
   return updatedAt === undefined ? '' : shortTime(new Date(updatedAt).toISOString(), now)
+}
+
+/** The new version's name when the app goes back to one: "Back to v2 · Due dates". */
+export function backToMessage(number: number, subject: string): string {
+  return `Back to v${String(number)} · ${subject}`
+}
+
+/** The save point made first when files are unsaved. */
+export function saveBeforeBackMessage(number: number): string {
+  return `Save before going back to v${String(number)}`
+}
+
+/** What the confirmation says; with unsaved files (or an uncounted tree) it says a save point comes first. */
+export function backText(number: number, subject: string, unsaved: number | undefined): string {
+  if (unsaved === undefined) return `The unsaved files could not be counted. Save a point first, then go back to v${String(number)} · ${subject}.`
+  if (unsaved > 0) return `${String(unsaved)} unsaved ${unsaved === 1 ? 'change' : 'changes'}. Save a point first, then go back to v${String(number)} · ${subject}.`
+  return `Go back to v${String(number)} · ${subject}? A new version records it, so every version stays.`
 }

@@ -100,10 +100,17 @@ export class Versions {
     return { entry, commit: commitView(entry) }
   }
 
-  /** Bring a version's tree back as a new commit; never rewrite history and never touch a dirty worktree. */
-  async restore(path: string, hash: string): Promise<VersionsRestoreView> {
+  /**
+   * Bring a version's tree back as a new commit; never rewrite history and never touch a dirty worktree. The tree is the version's exactly: a file
+   * added after it is removed too. The commit is called `message`, else `Restore <short id>`.
+   */
+  async restore(path: string, hash: string, message?: string): Promise<VersionsRestoreView> {
     const dir = await this.git.resolveDirectory(path)
     const requested = typeof hash === 'string' ? hash.trim().toLowerCase() : ''
+    const text = message === undefined ? undefined : message.trim()
+    if (text !== undefined && (text === '' || text.length > MAX_COMMIT_MESSAGE || text.includes('\0'))) {
+      throw new VersionsGitError('write a commit message (up to 5000 characters)', 'invalid')
+    }
     if (!VERSION_HASH_PATTERN.test(requested)) {
       throw new VersionsGitError('a version is a commit id of 7 to 40 hexadecimal characters', 'invalid')
     }
@@ -123,11 +130,12 @@ export class Versions {
     const short = (await this.git.run(['rev-parse', '--short', full], dir)).stdout.trim()
     // Ask about the identity before checkout: a missing user.name must not leave a half-restored worktree behind.
     await this.requireIdentity(dir)
-    await this.git.run(['checkout', full, '--', '.'], dir, undefined, RESTORE_TIMEOUT_MS)
+    // `read-tree -u --reset` makes the index and the files the version's tree, removals included (`checkout <id> -- .` would keep a file added since).
+    await this.git.run(['read-tree', '-u', '--reset', full], dir, undefined, RESTORE_TIMEOUT_MS)
     if ((await this.git.run(['diff', '--cached', '--name-only', '-z'], dir)).stdout === '') {
       throw new VersionsGitError('the working tree already matches this version', 'conflict')
     }
-    await this.createCommit(dir, `Restore ${short}`)
+    await this.createCommit(dir, text ?? `Restore ${short}`)
     const entry = await this.headEntry(dir)
     return { restored: short, commit: commitView(entry) }
   }
