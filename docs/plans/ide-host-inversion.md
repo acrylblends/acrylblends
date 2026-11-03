@@ -987,3 +987,199 @@ trigger, both moving the same panel, so a second press in the same tick can togg
 dialog's own text, re-presses only when the dialog has vanished, and presses one trigger per attempt: the product's foot button first (its `openSettings`
 path activates the DSH trigger itself), the hidden trigger as the fallback. Blank and agent gates pass on the final code; the three-run count restarts on
 this push.
+
+## 31. The frame redesign: the Cordis mini-design (branch 125, 2026-11-03)
+
+The spec is the owner's mockup in the ACRYL repository, `specs/049-framework-architecture/design/blends-frame-mockup.html` (commits `f8263a89` and
+`5b544f3a`); its Decided table is the scope. The source map is `docs/plans/125-port-inventory.md` (branch `125-port-inventory`, `d8c42637`): every
+part below names its sources by the inventory's part number, and the file:line detail lives there, not here. This section decides the boundaries the
+four slices are built against, answers the inventory's fourteen questions (31.3), and says why an agent outside the app's iframe is immune to the
+app's reloads (31.4). Each boundary in 31.2 follows the six points of the Cordis protocol (ACRYL `CLAUDE.md`): (1) capability and boundary, (2)
+provides and consumes, (3) effects and disposal, (4) configuration and composition, (5) events and durability, (6) verification. Loader row ids equal
+package names.
+
+### 31.1 Ground rules
+
+- **Move, do not rewrite.** Every part already runs in the frame as a ported ACRYL package (`ide/*`, ported from ACRYL `37f4dd9c`, each package's
+  `provenance.json`). 125 moves components between slots and splits packages where a boundary below says so; new code is limited to what 31.2 marks
+  new. Start from `ide/` and, before touching one of the thirteen files that diverged from ACRYL's `plugins/acryl-workspace` (inventory, "Which
+  checkout"), read the ACRYL twin so neither side's fixes are lost.
+- **One tab system.** Today two coexist: the centre canvas strip (`WorkspaceState` tiles) and DSH's session-scoped `sidebarRight` tabs (Files,
+  Changes, Review, Checks, Comments). 125 keeps the first and retires the second from the frame: every right-panel view becomes a tab kind of the
+  workspace strip, which renders in the right column.
+- **The frame never replaces the app page on its own** (section 30). The app canvas is the only place the app is shown; only a person or the agent
+  (through the door) reloads or navigates it.
+- **The Decided table wins over the mockup's bullets.** "Dropped: branches and worktrees" (mockup line 549) contradicts "Git branches as the top
+  level"; it is read as dropping worktree paths, the branch chip and the status bar, as the inventory reads it (part 5).
+
+### 31.2 The boundaries
+
+**A. `acryl-app-canvas` (new client plugin, slice 1): the centre holds only the app.** Ports from: the first-run browser tile and `BrowserPane`
+(inventory part 1).
+1. One capability: show the app's own page in the one frame the agent drives. It needs its own lifecycle because Preview shows only it and a desktop
+   surface may replace it with a native view.
+2. Provides `appCanvas`: `address()`, `navigate(path)`, `reload()`, `subscribe(listener)` for loads, and `pageWindow()` (the canvas page's door window
+   id, read from its `acryl.door.page` key). Consumes `slots` (registers `desktop.main` at a priority that wins over the workspace canvas, which no
+   longer registers there) and the workspace's capabilities projection (`appPage`).
+3. Effects: the slot registration; one load listener. The iframe is created once per address and never re-pointed; there is no retry that replaces a
+   page that loaded (section 30); `reload()` and `navigate()` are called only from the address bar, the reload button and the door.
+4. No configuration: the address is the Host's `appPage`. It replaces the first-run browser tile (`client/index.ts`, "the app page on first run");
+   the Browser tab kind stays for other sites, opening at the app page or empty (section 30).
+5. Events: `load` (address, readable). Durable: nothing.
+6. Verification: jsdom, the iframe is created once per address and switching panels, modes and tabs never recreates it; the gate's re-point and
+   outside-site recorder (section 30) watches this pane; a gate step reloads the app page during a right-panel run and asserts the run continues.
+
+**B. The right panel and its strip (slice 1), in `acryl-workspace` and `acryl-app-shell`.** Ports from: inventory parts 1 (tab strip, model,
+persistence), 4 (Files), 5 (Changes, diff), 8 (what is dropped).
+1. Boundary: `acryl-workspace` owns tabs, tab kinds and their persistence (they share state with the left panel and the palette; a second strip
+   owner would be a parallel tab system); `acryl-app-shell` owns the right column's container, width and open state. DSH's `sidebarRight` is no
+   longer composed into the frame's right column.
+2. `acryl-workspace` provides the existing `workspaceTabs` registry and registers the strip into the shell's `rightbar` slot. The Files and Changes
+   bodies (today `sidebar.right.pane.tab` contributions, `files-tab.ts`, `changes-tab.ts`) are re-registered as strip tab kinds; the Git tab is
+   Changes plus history (D). Consumes `slots`, `theme`, the shell's right-panel state.
+3. Effects: the slot registration; every pane keyed by its tab id (section 30). Panes of tabs not in front stay mounted and hidden, so a chat, a
+   terminal or an agent view never reconnects on a tab switch; a closed tab disposes its view, and a PTY tab's Host process lives until Stop or
+   close, as today.
+4. Composition: the right panel is frame-scoped (it exists with no chat running) and opens on first run, then remembered (Decided). Tabs persist
+   under `acryl-workspace:v1`, bumped to `v2` with a migration: saved centre tabs move to the right panel, saved browser tabs that showed the app
+   are dropped (the canvas shows it). The dock, the split, the status bar, Review, Checks and Comments leave the frame (inventory part 8; 31.3 Q13).
+5. Events: tab selection is local. Selecting the chat tab on "New Session" happens on the transition only (the blank-session steal is fixed in
+   today's frame on `126-session-nav`); in 125 the New Session action selects the tab itself instead of the session list implying it.
+6. Verification: the workspace suites move with their components; new: a hidden tab keeps its view mounted, the v1 to v2 migration, the + menu
+   offers agents, PTYs, terminal, Files and Git; the gate's strip steps run in the right panel and the right panel opens with no chat.
+
+**C. The chat and agents in the right panel (slice 1): `acryl-agent-tabs` (new client plugin).** Ports from: inventory parts 2 (PTY registry and
+spawning) and 3 (the DSH chat and its history); the runs from `ide/acryl-control` (`AgentControl`) and the agent panel's `drivers` registry.
+1. Boundary: an agent tab is a view of a run that lives on the Host. The run owners already exist and stay: the PTY registry
+   (`acryl-workspace/src/pty`) for PTY agents (Claude, Codex, Pi run as they are) and the terminal; `AgentControl` and the `drivers` registry for chat
+   drivers. The new plugin owns only the tab kinds and their views.
+2. Provides tab kinds through `workspaceTabs`: `chat` (the DSH conversation, 31.3 Q2), `agent` (a driver's chat run), and the existing PTY kind.
+   Consumes `workspaceTabs`, `appCanvas` (the page the agent drives), and the drivers' Host routes, which move from the app's mount to the frame
+   host's private API behind the loopback admission `acryl-plugin-admin` uses (`acryl-loopback-http/router`).
+3. Effects: one socket per open view to follow its run, closed with the view; closing a tab does not stop its run (Stop does).
+4. Composition: Loader row `acryl-agent-tabs`; without drivers it is PENDING and the + menu lists none. The agent panel inside the app's page stays
+   for a standalone app (no frame) and is not composed in the frame.
+5. Durability: a chat run appends its events to a run log on the Host (`.acryl/runs/<id>.jsonl`) as it streams; a view, a frame reload or a second
+   window rejoins by id and replays (section 29's open ticket). PTY runs replay through the registry's scrollback.
+6. Verification: a run started in a tab survives an app page reload, the door's `navigate`, a plugin install that recomposes the app's rows, and a
+   frame page reload (rejoin and replay); Stop ends it; three remounts leave one socket each.
+
+**D. The left panel: branches with their open items, Versions, the Git tab's history (slice 2).** Ports from: inventory part 5.
+1. Boundary: `acryl-workspace` keeps the worktree and project state; the tree becomes branch-first (31.3 Q3). History and Versions are one new
+   capability, `acryl-versions` (Host and client halves), because they are new Host surface with their own lifecycle and an app without git has none.
+2. `acryl-workspace` provides `workspaceTree`, a read-only projection of branches and their open items (PTY tabs, agent tabs, open chats by `cwd`;
+   `entriesForWorktree`'s rule). `acryl-versions` provides Host routes `GET /api/acryl-versions/log`, `POST /api/acryl-versions/restore` and
+   `POST /api/acryl-versions/share`, behind the loopback admission, on `commits.ts`'s runner and error style; its client half renders Versions under
+   the selected branch and the Git tab's history list. It consumes `workspaceTree` for the selected branch.
+3. Effects: the existing git polling effect (`startShellPolling`) is the one poller; `acryl-versions` subscribes to it.
+4. Composition: the IDE-only parts (the workspace strip, the folder picker, the Projects list) leave the default frame Blueprint and stay as opt-in
+   rows. The tree lists only open items; chat history is a History button in the chat tab (31.3 Q7).
+5. Durability: versions are commits (31.3 Q6); nothing else is stored.
+6. Verification: tree-model tests (a branch with two chats and a PTY open shows three items; closing a tab removes its row); route tests on a real
+   repository fixture (log, a restore that leaves history intact, refusal of a restore with uncommitted changes); the gate's left-panel step asserts
+   the branch row and its open chat.
+
+**E. Build and Preview (slice 2): a shell mode in `acryl-app-shell`.** Ports from: inventory part 7. `mode: 'build' | 'preview'` joins the shell's
+persisted view state and is switched in the top bar; Preview hides both panels and the strip and shows a pill to come back. The canvas element is
+the same in both, so switching never reloads the app page (verification: jsdom identity of the iframe across switches; a gate step switches during a
+run). Production is not a mode of the frame (31.3 Q10).
+
+**F. The plugin navigator (slice 3), in `acryl-plugin-admin`.** Ports from: inventory part 6.
+1. Boundary: `acryl-plugin-admin` already owns the architecture snapshot and the lifecycle routes; the navigator is its Settings > Plugins content.
+2. Provides the navigator as the Plugins section's content, replacing DSH's "Built-in plugins" body; Architecture stays as an advanced tab. The
+   lifecycle entry view grows a `source` (31.3 Q8) computed on the Host.
+3. Effects: the tab's dictionaries and styles in one effect each, as today.
+4. The switch is the existing lifecycle enable/disable route, persisted in the profile's patch file; protected rows (the frame's own: the workspace,
+   the shell, the router rows) show the switch disabled with their `protectedReason`; dependents are listed before a switch-off.
+5. Durability: the patch file; the Loader recomposes and the navigator follows the snapshot.
+6. Verification: extend `ide/acryl-plugin-admin/tests/lifecycle` (no parallel lifecycle): the source of a frame row, an app row and an
+   agent-installed row; off makes a row absent and its dependents PENDING, on restores them; protected rows refuse.
+
+**G. Production feedback (slice 4): `acryl-feedback` (new, opt-in).** Ports from: ACRYL `plugins/acryl-mount-anchors` (`preciseElementAt`,
+`selectorFor`, `nearestSlot`, the overlay and its shortcut pattern; inventory part 7).
+1. Boundary: a production plugin of the app (it runs with the frame gone), opt-in per app.
+2. Host half: `POST /api/acryl-feedback/notes` (same-origin, size-bounded, rate-limited, stored as `.acryl/feedback/*.jsonl`) and a read route for
+   the frame. Client half: the Feedback button, the pinpoint tool (on only while Feedback is open) and "Nothing specific". The frame's left panel
+   lists notes through a `workspaceTree` section; "Send to agent" opens an agent tab with the note, the page URL, the element's selector, text and
+   bounding box.
+3. Effects: the button's DOM in one effect; the picker's listeners only while it is active.
+4. Config: on or off, the limits.
+5. Durability: the notes file.
+6. Verification: route tests (limits, admission, text stored as text); a jsdom test of the picker producing a stable selector; a production gate
+   step posting a note and the frame listing it.
+
+**H. The production assistant (slice 4): `acryl-assistant` (new, opt-in).** Ports from: ACRYL `plugins/acryl-agent-control` (the `ui_*` tools,
+approval and audit) and `runtime/acryl-control` (`AgentControl`); the door's `MUTATING_OPS` split (inventory part 7).
+1. Boundary: the agent panel of a production app; it drives the UI for the person and cannot change the app.
+2. A session profile `assistant`, fixed when the session is created and never widened inside it: the provider is started with only the door's page
+   verbs (`brief`, `look`, `act`) as tools, and the door's Host verb dispatch refuses every other verb for a session with that profile (`plugin-*`,
+   `tool-*`, `window-*`), whatever the caller asks. No file, shell, plugin or credential tool exists in the session. Acting in the UI is allowed:
+   it is what the person could do, with the person's own page.
+3. Effects: the run and its door channel in the plugin's effect.
+4. Config: the provider and key from the host's credential store, never the page; the profile is code, not configuration.
+5. Durability: one audit line per verb with its decision, as the door writes today.
+6. Verification: a Host test that every verb outside the profile is refused even when named directly; the harness's full-access mode cannot be set
+   on an `assistant` session; a production gate step where the assistant ticks a card and is refused a plugin install.
+
+### 31.3 The inventory's questions, answered
+
+1. **Session-scoped `sidebarRight` vs a frame-scoped panel.** A frame-owned panel: the workspace strip in the `rightbar` slot (B). The Files and
+   Changes bodies are reused as tab kinds; `sidebarRight` is not composed into the frame.
+2. **Where the conversation renders.** The chat tab renders the same keyed `main` slot entry (`renderSlot('main', { entryKey: 'conversation' })`),
+   passed to the panel host as `renderConversation` exactly as the canvas receives it today. There is one conversation, never a second chat.
+3. **The tab-set key.** The worktree path, as today. The left panel labels each worktree by its branch and shows no paths. A branch with no worktree
+   is not a row in 125; the tree's + creates a branch and its worktree together, as today. A branch list route is not added.
+4. **The two terminal systems.** One: the dock is dropped and terminals are PTY tabs; hidden tabs stay mounted (B.3).
+5. **Persistence after the move.** Tabs stay in workspace storage (`v2` with a migration, B.4); the right panel's open state and width, and the
+   Build/Preview mode, join the shell's persisted view state in `acryl-app-shell`.
+6. **Versions.** A version is a commit on the branch; `save_app` and the Git tab's commit both make them. Restore makes a new commit that brings the
+   chosen version's tree back (`git checkout <sha> -- .` then commit "Restore <short sha>"); history is never rewritten, and restore is refused
+   while there are uncommitted changes. "Shared" is whether the commit is on the upstream (ahead/behind); Share is an explicit push route with its
+   own errors, never part of commit. Pull is not in 125. Sharing to the Blend registry stays in `acrylblends publish`, linked from Versions.
+7. **History and dismissal.** Opening a chat from History makes it open again: its dismissal is cleared and it gets its row and tab.
+8. **The navigator's provenance.** The lifecycle entry view grows `source: { kind: 'frame' | 'app' | 'installed' | 'registry', package, version,
+   description, installedAt? }`, joined on the Host from the Loader row's Blueprint section, the package's `plugin.json` or `package.json`, and the
+   extensions ledger. One projection in one package; the client does not join. No author string is invented: the source is the "who made it".
+9. **Settings scope.** Tabs and Command palette leave Settings. Plugin tab types are always in the + menu; the palette stays as a keyboard feature
+   with its built-in list. The ACRYL shortcuts become a short list in General, and the separate Shortcuts section goes.
+10. **Production: composition or mode.** A composition. `npm start` boots the app without the frame and without the development rows, with
+    `ACRYL_PRODUCTION_KEEP` as the one switch (and its warning); Build and Preview are the runtime modes of `npm run dev`. A runtime "production"
+    switch inside the frame would leave the development rows loaded, which is the thing Production must not have.
+11. **Feedback screenshots.** None in slice 4: a note carries the URL, the element's selector, text and bounding box, and the person's words. A
+    capture path is a new capability with its own design (the page cannot reliably draw itself; a Host-side browser is heavy) and is recorded as a
+    question for the owner, not built.
+12. **Where the assistant's limit lives.** In the door's Host verb dispatch and in the session's tool set, both fixed by the `assistant` profile at
+    session creation (H.2); a full-access mode cannot be applied to such a session.
+13. **Removal edges.** The diff pane keeps "send to agent" and sends the line comment straight to the current chat, without the Review store; the
+    editor's comment gutter goes with Comments (`CodeEditor` loses its `comments` parameter); the run-check path goes with Checks (the Git tab has no
+    run action); Comments' paste targets go with Comments.
+14. **Browser tab vs first-run app tile.** A dedicated canvas surface (A); the Browser tab kind stays for other sites.
+
+### 31.4 Why an agent outside the app's iframe is immune to app reloads
+
+A run has two parts: the process doing the work and the view following it. Before 125 both depended on the app's page. The panel's view lived in the
+app's document, and the run's events reached the person only through that document's open request. Anything that replaced the document cut the run
+off from the person: the panel's own reload after a plugin install, the tile retry of section 30, a person pressing reload, the door's `navigate`,
+or the chat tab taking the front and unmounting the tile (`126-session-nav`).
+
+In 125 the run lives on the frame's Host, in the frame's own rows (`AgentControl`, the PTY registry), and its view lives in the frame's own document,
+in the right panel. The frame's dev script runs no file watcher (section 29), so the app's file changes do not restart that process, and a plugin
+install recomposes the app's rows, not the frame's (slice 1 proves both, C.6). The app's page is a separate browsing context inside the canvas
+iframe. Reloading or navigating it destroys only that context: the frame document, its sockets and the Host run are untouched. The reloaded page's
+door script connects again with a new window id, and the agent's door calls aim at the canvas page (`appCanvas.pageWindow()`) rather than "the page
+used last", so the next `look` sees the reloaded app. That also ends section 25's "close the browser tab first" advice. A frame page reload, which
+is rare, loses the view but not the run, and the run log replays it. Only the Host itself stopping ends a run, and that is the person's act.
+
+### 31.5 Slices
+
+1. The app canvas, the right panel, the chat and agents (A, B, C): the centre holds only the app; the strip with + in the right panel; chat with
+   History; PTY agents and terminal; Files with fuzzy search (`palette/fuzzy.ts`) and highlighted file tabs (`CodeEditor`); Git with changes; the
+   run log; Review, Checks, Comments, the dock and the status bar leave the frame.
+2. The left panel and the modes (D, E): branches with their open items, Versions and the Git tab's history, Build and Preview, the IDE-only parts
+   opt-in.
+3. The plugin navigator (F).
+4. The production plugins (G, H).
+
+DS_Fork3 and DS2 implement them in order on `125-frame-redesign`. Each slice lands with its full check green on its exact sha and three CI greens.
+The owner's open questions from the mockup ("Production + assistant ... what was the rest?") and from 31.3 Q11 (screenshots) are asked before
+slice 4 starts.
