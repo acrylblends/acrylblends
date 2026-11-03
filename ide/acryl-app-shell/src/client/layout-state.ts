@@ -192,7 +192,12 @@ export class DesktopLayoutState implements ILayout {
     if (typeof view.detailsShown === 'boolean') {
       next.detailsShown = view.detailsShown
       next.detailsTrack = view.detailsShown
-      if (!view.detailsShown) next.detailsFullscreen = false
+      if (!view.detailsShown) {
+        next.detailsFullscreen = false
+        // A remembered closed panel must beat the shell's page-load default open, which fires when the width is 0:
+        // keep a width for the next open without showing the panel now.
+        if (next.details === 0) next.details = DETAILS_MIN
+      }
     }
     this.publish(next)
   }

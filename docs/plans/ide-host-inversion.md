@@ -1209,6 +1209,12 @@ tab has the repository search; the mockup's `◘P` binding and fuzzy ranking are
 panel; Review, Checks and Comments out of the frame (and `CodeEditor`'s comment gutter), the dock and the split out of the right panel; tab
 persistence `v2` with the migration. The gate should check the
 canvas iframe as the app's page (it still opens a Browser tab to prove the app page, which passes but no longer describes the product).
+
+- **Back-port ticket (found on 126):** ACRYL's own web client still leaves the launch token in the address bar after
+  exchanging it for the browser's cookie, so a reconnect can spend it again and re-admit a page whose cookie is gone.
+  The frame fixed it in `acryl-app-shell` (`history.replaceState` after admission, with a tested helper); ACRYL's
+  `apps/acryl-web` needs the same strip.
+
 ## 33. Slice 2 state on branch 125-slice2 (2026-11-03)
 
 Working state for the handoff, not a decision record. Branch `125-slice2` is rebased onto slice 1's final head,
