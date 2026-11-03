@@ -16,6 +16,8 @@ export interface ActionEnvironment {
   readonly document: () => Document
   /** Resolves after `ms`; rejects when `signal` aborts. Injectable so tests need no real time. */
   readonly sleep: (ms: number, signal: AbortSignal) => Promise<void>
+  /** Called with the element an act is about to use, so the page can show the person what the agent is touching. */
+  readonly touched?: (element: Element) => void
 }
 
 const target = (role: string, name: string): { role: string; name: string } => ({ role, name })
@@ -35,6 +37,7 @@ function prepare(env: ActionEnvironment, ref: string): { element: Element; role:
   if ((element as HTMLButtonElement).disabled === true || element.getAttribute('aria-disabled') === 'true') {
     throw new UiControlError('not-actionable', `"${resolved.name}" is disabled`)
   }
+  env.touched?.(element)
   return resolved
 }
 
@@ -149,6 +152,7 @@ export function scroll(env: ActionEnvironment, request: Request<'scroll'>): UiAc
   const dy = request.direction === 'up' ? -amount : request.direction === 'down' ? amount : 0
   if (request.ref !== undefined) {
     const { element, role, name } = env.refs.resolve(request.ref)
+    env.touched?.(element)
     ;(element as HTMLElement).scrollBy?.({ left: dx, top: dy })
     if (typeof (element as HTMLElement).scrollBy !== 'function') { element.scrollTop += dy; element.scrollLeft += dx }
     return { ok: true, target: target(role, name), detail: `scrolled ${request.direction}` }

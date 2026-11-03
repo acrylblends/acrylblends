@@ -8,6 +8,7 @@ import { appBaseOf, underAppBase } from './base.ts'
 import { PageChannel } from './channel.ts'
 import { UiDriver } from './driver/driver.ts'
 import { mountIndicator } from './indicator.ts'
+import { mountOutlines } from './outline.ts'
 import { UserInputClock } from './user-input.ts'
 
 export const DOOR_BASE = '/api/acryl-door'
@@ -41,9 +42,12 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
   if (view === null) throw new Error('acryl-door: the document has no window')
   const clock = new UserInputClock()
   const appBase = appBaseOf(document)
+  // The ring on whatever the agent touches, drawn in this page (the frame's canvas and production's assistant both get it).
+  const outlines = mountOutlines(document)
   const driver = new UiDriver({
     document: () => document,
     msSinceUserInput: clock.msSince,
+    touched: (element) => { outlines.touched(element) },
     // A host that serves the app under a prefix (the ACRYL frame's canvas) marks its pages: an app path navigates under that prefix, so the same
     // `act navigate --path /board` reaches the app's /board in the frame and on the app's own server.
     ...(appBase === '' ? {} : {
@@ -88,6 +92,7 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
     Reflect.deleteProperty(view, PAGE_KEY)
     channel.dispose()
     removeIndicator()
+    outlines.dispose()
     detachInput()
     // Pending calls settle as `unloaded` and every ref goes stale.
     driver.dispose()
