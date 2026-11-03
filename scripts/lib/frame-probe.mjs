@@ -81,26 +81,23 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
       )}`,
     )
 
+  // 125: the right column is the workspace's own strip (the tab strip with the chat, terminals and the file, Files and Git tabs); DSH's
+  // Files/Changes/Review sidebar is no longer composed into the frame.
   const right = await until(async () => {
     const snapshot = await evaluate(`(() => {
       const bar = document.querySelector('[data-acryl-slot=rightbar]')
-      if (bar === null || !bar.innerText.includes('Changes')) return undefined
+      const tabs = [...(bar?.querySelectorAll('[role=tab]') ?? [])].map(tab => tab.textContent.trim())
+      if (bar === null || tabs.length === 0) return undefined
       const labels = [...bar.querySelectorAll('button,[role=tab]')]
         .map(element => element.getAttribute('aria-label') ?? element.getAttribute('title') ?? element.textContent.trim())
         .filter(Boolean)
-      return { text: bar.innerText.slice(0, 600), labels: labels.slice(0, 60) }
+      return { text: bar.innerText.slice(0, 600), tabs, labels: labels.slice(0, 60) }
     })()`)
     if (snapshot !== undefined) return snapshot
     await click('Show right panel')
     return undefined
   }, timeoutMs)
-  if (right === undefined) throw new Error('the right panel did not open with its views')
-  const rightText = `${right.text}\n${right.labels.join('\n')}`
-  for (const label of ['Changes', 'Review'])
-    if (!rightText.includes(label))
-      throw new Error(`the right panel has no ${label} view: ${rightText}`)
-  if (!rightText.includes('Files') && !rightText.includes('Code'))
-    throw new Error(`the right panel has no files view: ${rightText}`)
+  if (right === undefined) throw new Error('the right panel did not show the workspace strip')
 
   // Settings the way a person opens it (the left panel's foot), pressed only while no Settings dialog is up; only a visible dialog whose nav has a real section counts.
   const opened = await until(
