@@ -255,6 +255,8 @@ export function frameReport(frame: FrameStep): string {
   for (const file of frame.profile.files)
     if (file.state !== 'same')
       parts.push(`${file.file} ${file.state === 'update' ? 'updated' : 'added'}`)
+  if (frame.profile.clientRowsAdded.length > 0)
+    parts.push(`scripts/ide-host.mjs client rows added (${frame.profile.clientRowsAdded.join(', ')})`)
   for (const plugin of frame.hostPlugins) parts.push(`plugins/${plugin} added`)
   if (frame.removeProfileScript) parts.push(`${OLD_PROFILE_SCRIPT} removed`)
   if (frame.profile.manifestChanged)

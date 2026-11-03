@@ -3,7 +3,7 @@ import { appendFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, test } from 'node:test'
-import { frameViewOf, shotSize } from '../client.js'
+import { canCaptureTab, frameViewOf, shotSize } from '../client.js'
 import { FeedbackStore, LIMITS, parseNewNote, parseScreenshot } from '../store.ts'
 
 const dirs: string[] = []
@@ -148,5 +148,22 @@ describe('the screenshot size', () => {
     assert.deepEqual(shotSize(2560, 1440), { width: 1280, height: 720 })
     assert.deepEqual(shotSize(800, 600), { width: 800, height: 600 })
     assert.deepEqual(shotSize(100, 2000), { width: 64, height: 1280 })
+  })
+})
+
+describe('the screenshot option', () => {
+  const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+  const edge = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+  const firefox = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:132.0) Gecko/20100101 Firefox/132.0'
+  const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15'
+  const android = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+
+  test('offers the tab capture only where the browser can target the tab', () => {
+    assert.equal(canCaptureTab(chrome, true), true)
+    assert.equal(canCaptureTab(edge, true), true)
+    assert.equal(canCaptureTab(firefox, true), false)
+    assert.equal(canCaptureTab(safari, true), false)
+    assert.equal(canCaptureTab(android, true), false)
+    assert.equal(canCaptureTab(chrome, false), false)
   })
 })

@@ -10,3 +10,6 @@ export function shotSize(width: number, height: number, maxSide?: number): { wid
 
 /** The largest screenshot the page sends (decoded bytes); the Host refuses more than 512 KB. */
 export const SHOT_MAX_BYTES: number
+
+/** Whether this browser can capture the current tab (Chromium only; Firefox and Safari would offer the whole screen). */
+export function canCaptureTab(userAgent: string, hasDisplayCapture: boolean): boolean

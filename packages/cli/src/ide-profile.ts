@@ -241,11 +241,14 @@ export const AGENT_PRESET_ROWS: readonly {
  * the failure the old overlay avoided by disabling the row); the only layout client row mounted is `acryl-app-shell`, so the document renders
  * the ACRYL frame.
  */
-export const CLIENT_ROWS: readonly {
+/** One DSH client row of the frame's profile: a package, its Loader id, and the config it mounts with. */
+export interface ClientRow {
   readonly id: string
   readonly name: string
   readonly config?: Readonly<Record<string, unknown>>
-}[] = [
+}
+
+export const CLIENT_ROWS: readonly ClientRow[] = [
   { id: 'client-modules', name: '@deepseek-ai/dsh-client-modules' },
   { id: 'client-locale', name: '@deepseek-ai/dsh-client-locale' },
   { id: 'client-shortcuts', name: '@deepseek-ai/dsh-client-shortcuts' },
@@ -274,6 +277,47 @@ export const CLIENT_ROWS: readonly {
   { id: 'client-resources', name: '@deepseek-ai/dsh-client-resources' },
   { id: 'ui-input-trigger', name: '@deepseek-ai/dsh-client-ui-input-trigger' },
 ]
+
+/** The array literal a host script writes for its rows (`const clientRows = [...];`, JSON at two spaces). */
+const CLIENT_ROWS_BLOCK = /const clientRows = (\[[\s\S]*?\n\])/u
+
+/** The client rows a host script names, or undefined when its array cannot be read. */
+export function parseHostClientRows(hostText: string): ClientRow[] | undefined {
+  const match = CLIENT_ROWS_BLOCK.exec(hostText)
+  if (match?.[1] === undefined) return undefined
+  try {
+    const parsed: unknown = JSON.parse(match[1])
+    if (!Array.isArray(parsed)) return undefined
+    return parsed.filter((row): row is ClientRow => row !== null && typeof row === 'object'
+      && typeof (row as { id?: unknown }).id === 'string' && typeof (row as { name?: unknown }).name === 'string')
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Add the client rows the current host script names and the app's host script does not, keeping every row the app has exactly as it is: a person's
+ * own row, or one whose config they changed. The app's rows keep their order; the missing current rows follow; the rest of the host script is the
+ * current one. An app without a host script (a new app) or with an unreadable array gets the current script as it is.
+ * @param currentHost - the host script the CLI generates now.
+ * @param appHost - the app's existing host script, when it has one.
+ * @returns the text to write and the row names it added.
+ */
+export function mergeHostClientRows(currentHost: string, appHost: string | undefined): { readonly text: string; readonly added: readonly string[] } {
+  if (appHost === undefined) return { text: currentHost, added: [] }
+  const current = parseHostClientRows(currentHost)
+  const app = parseHostClientRows(appHost)
+  if (current === undefined || app === undefined) return { text: currentHost, added: [] }
+  const names = new Set(app.map(row => row.name))
+  const missing = current.filter(row => !names.has(row.name))
+  const block = CLIENT_ROWS_BLOCK.exec(currentHost)
+  if (block === null) return { text: currentHost, added: [] }
+  const merged = [...app, ...missing]
+  return {
+    text: currentHost.replace(block[0], `const clientRows = ${JSON.stringify(merged, null, 2)}`),
+    added: missing.map(row => row.name),
+  }
+}
 
 /**
  * `scripts/ide-host.mjs`: the app's launcher. It boots the framework's node server and the webServer port the driver rows register on, then the frame
@@ -701,6 +745,8 @@ export interface IdeProfileWritePlan {
   readonly files: readonly IdeProfileFileWrite[]
   /** Whether `package.json` changes once merged (a merge, never a conflict: the app owns that file). */
   readonly manifestChanged: boolean
+  /** Client rows the app's host script did not name yet, which the write adds. */
+  readonly clientRowsAdded: readonly string[]
 }
 
 /** The door is app source, not a registry package: the row exists when the app carries it, and nothing fails when it does not. */
@@ -716,8 +762,17 @@ export function planIdeProfileWrite(root: string, input: IdeProfileInput): IdePr
   const manifestFile = join(root, 'package.json')
   const existing = existsSync(manifestFile) ? readFileSync(manifestFile, 'utf8') : undefined
   const plan = ideProfilePlan(withDoor(root, input), existing)
+  const hostPath = join(root, 'scripts/ide-host.mjs')
+  const appHost = existsSync(hostPath) ? readFileSync(hostPath, 'utf8') : undefined
+  let clientRowsAdded: readonly string[] = []
   const files = GENERATED_FILES.map(({ file, of }) => {
-    const text = of(plan)
+    let text = of(plan)
+    if (file === 'scripts/ide-host.mjs') {
+      // The launcher updates as a whole; its rows are a merge, so a person's own row or a row they changed survives and only missing rows are added.
+      const merged = mergeHostClientRows(text, appHost)
+      text = merged.text
+      clientRowsAdded = merged.added
+    }
     const path = join(root, file)
     if (!existsSync(path)) return { file, text, state: 'add' as const }
     const before = readFileSync(path, 'utf8')
@@ -729,7 +784,7 @@ export function planIdeProfileWrite(root: string, input: IdeProfileInput): IdePr
       state: GENERATED_MARKER.test(firstLine) ? ('update' as const) : ('conflict' as const),
     }
   })
-  return { plan, files, manifestChanged: existing !== plan.packageJson }
+  return { plan, files, manifestChanged: existing !== plan.packageJson, clientRowsAdded }
 }
 
 /** Write a plan made by {@link planIdeProfileWrite}: only the files whose bytes differ, and `package.json` only when the merge changes it. */
