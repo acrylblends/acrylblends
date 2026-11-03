@@ -116,6 +116,8 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsTab:hover { color: #d4d4da; }
 .acrylBlendsTab[aria-selected="true"] { color: #fff; box-shadow: inset 0 -2px 0 var(--bf-accent); }
 .acrylBlendsTabKind { font-size: 10px; color: #77777f; }
+/* A file tab whose name another open file shares: the folder that tells them apart, dim, before the name. */
+.acrylBlendsTabPath { font-size: 10.5px; color: #77777f; }
 .acrylBlendsTabClose { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--bf-dim); font-size: 13px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
 .acrylBlendsTabWrap .acrylBlendsTabClose { position: absolute; top: 2px; right: -4px; opacity: 0; background: var(--bf-side); }
 .acrylBlendsTabWrap:hover .acrylBlendsTabClose, .acrylBlendsTabClose:focus-visible { opacity: 1; }
@@ -164,7 +166,8 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 /* git's lines can carry a long path or URL: they wrap inside the panel. */
 .acrylBlendsGit .acrylBlendsNote { overflow-wrap: anywhere; }
 
-.acrylBlendsFile pre { margin: 0; font: 12px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: #d6d6dc; white-space: pre; }
+/* The file keeps its lines whole: the pane scrolls sideways (min-width: 100% keeps the line numbers' column at the panel's left edge). */
+.acrylBlendsFile pre { margin: 0; font: 12px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: #d6d6dc; white-space: pre; width: max-content; min-width: 100%; }
 .acrylBlendsLine { min-height: 1.6em; }
 .acrylBlendsLn { color: #55555c; display: inline-block; margin-right: 1ch; text-align: right; user-select: none; }
 .acrylBlendsTok-kw { color: #c678dd; } .acrylBlendsTok-fn { color: #61afef; } .acrylBlendsTok-st { color: #98c379; }
