@@ -192,7 +192,8 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, sh
       <div className="acrylBlendsList">
         {state.branches.length === 0 && <p className="acrylBlendsNote">This app's folder is not a git repository.</p>}
         {state.branches.map(branch => {
-          const open = expanded.has(branch.name)
+          // Only the checked-out branch has rows under it (see below), so only it opens: another branch's caret stays closed rather than opening onto nothing.
+          const open = branch.current && expanded.has(branch.name)
           // Chats and terminals are not tied to a branch yet: they are the checked-out branch's, since that is the folder they work in.
           const count = branch.current ? chatRows.length + terminals.length : 0
           return (
