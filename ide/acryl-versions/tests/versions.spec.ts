@@ -248,7 +248,7 @@ describe('versions share', () => {
     git(other.dir, ['config', 'user.email', 'other@example.com'])
     writeFile(other.dir, 'a.txt', 'theirs')
     commitAll(other.dir, 'theirs')
-    git(other.dir, ['push', '-q', 'origin', 'main'])
+    git(other.dir, ['push', '-q', 'origin', 'HEAD:main'])
 
     writeFile(repo.dir, 'a.txt', 'ours')
     commitAll(repo.dir, 'ours')

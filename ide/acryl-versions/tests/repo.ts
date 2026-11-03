@@ -38,6 +38,9 @@ export function makeRepository(prefix = 'acryl-versions-repo-'): TempDirectory {
 export function makeBareRemote(prefix = 'acryl-versions-remote-'): TempDirectory {
   const remote = tempDirectory(prefix)
   git(remote.dir, ['init', '--bare', '-q'])
+  // The remote's HEAD names the branch a clone checks out; without this it is the machine's init.defaultBranch
+  // (master on a CI runner, main here), and a clone then commits to a branch the share test pushes as main.
+  git(remote.dir, ['symbolic-ref', 'HEAD', 'refs/heads/main'])
   return remote
 }
 
