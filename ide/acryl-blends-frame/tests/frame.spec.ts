@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { countChanges, parseBranches, parseFrameState } from '../src/index.ts'
-import { branchNameProblem } from '../src/contract.ts'
+import { countChanges, parseBranches, parseBranchName, parseFrameState } from '../src/index.ts'
+import { FRAME_BRANCHES_NEW_PATH, FRAME_BRANCHES_SWITCH_PATH, branchNameProblem } from '../src/contract.ts'
+import { branchClick, createBranchesApi, saveBeforeSwitchMessage } from '../src/client/branches.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
 import { savedLabel, versionNumber } from '../src/client/versions.ts'
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
@@ -195,5 +196,66 @@ describe('a new branch name', () => {
     expect(branchNameProblem('-x')).toMatch(/starting with a letter/)
     expect(branchNameProblem('a..b')).toBe('That is not a name git accepts.')
     expect(branchNameProblem('x.lock')).toBe('That is not a name git accepts.')
+  })
+})
+
+describe('a branch request', () => {
+  it('reads a name git would take, and says why one it would not cannot be used', () => {
+    expect(parseBranchName({ name: 'feature-due-dates' })).toEqual({ name: 'feature-due-dates' })
+    expect(parseBranchName({ name: 'a..b' })).toEqual({ problem: 'That is not a name git accepts.' })
+    expect(parseBranchName({})).toEqual({ problem: 'Name the branch.' })
+    expect(parseBranchName(null)).toEqual({ problem: 'Name the branch.' })
+    expect(parseBranchName({ name: 7 })).toEqual({ problem: 'Name the branch.' })
+  })
+})
+
+describe('switching a branch', () => {
+  const main = { name: 'main', current: true }
+  const feature = { name: 'feature', current: false }
+
+  it('opens the current branch, switches to another, and asks first when files are unsaved', () => {
+    expect(branchClick(main, 0)).toBe('toggle')
+    // The current branch's click only opens what is running on it, whatever the unsaved count.
+    expect(branchClick(main, 3)).toBe('toggle')
+    expect(branchClick(feature, 0)).toBe('switch')
+    expect(branchClick(feature, 2)).toBe('ask')
+    // A count that could not be read never switches at once.
+    expect(branchClick(feature, undefined)).toBe('ask')
+  })
+
+  it('names the save point after what it is for', () => {
+    expect(saveBeforeSwitchMessage('feature-due-dates')).toBe('Save before switching to feature-due-dates')
+  })
+})
+
+describe('the branch API', () => {
+  const answering = (status: number, body: unknown, calls: { url: string; body: unknown }[]) =>
+    createBranchesApi(async (url, init) => {
+      calls.push({ url, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) })
+      return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+    })
+
+  it('asks the Host to switch, naming the branch', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    await answering(200, { ok: true }, calls).switchTo('feature')
+    expect(calls).toEqual([{ url: FRAME_BRANCHES_SWITCH_PATH, body: { name: 'feature' } }])
+  })
+
+  it('keeps git\'s reason when the switch is refused', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    const api = answering(409, { error: 'error: Your local changes to the following files would be overwritten by checkout' }, calls)
+    await expect(api.switchTo('feature')).rejects.toThrow('Your local changes')
+    expect(calls[0]?.url).toBe(FRAME_BRANCHES_SWITCH_PATH)
+  })
+
+  it('creates through its own route', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    await answering(200, { ok: true }, calls).create('feature')
+    expect(calls).toEqual([{ url: FRAME_BRANCHES_NEW_PATH, body: { name: 'feature' } }])
+  })
+
+  it('answers a refusal without JSON with a plain line', async () => {
+    const api = createBranchesApi(async () => new Response('nope', { status: 502 }))
+    await expect(api.switchTo('feature')).rejects.toThrow('the branch could not be switched to (HTTP 502)')
   })
 })

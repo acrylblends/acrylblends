@@ -24,6 +24,7 @@ import {
   FRAME_API_PREFIX,
   branchNameProblem,
   FRAME_BRANCHES_NEW_PATH,
+  FRAME_BRANCHES_SWITCH_PATH,
   FRAME_FEEDBACK_PATH,
   FRAME_FEEDBACK_SEEN_PATH,
   FRAME_PLUGINS_PATH,
@@ -175,21 +176,39 @@ function parseSeen(body: unknown): string[] | undefined {
 export interface BranchesPort {
   /** Make the branch from the checked-out version and switch to it; rejects with git's reason. */
   create(name: string): Promise<void>
+  /** Move the app's folder to an existing local branch; rejects with git's reason. */
+  switchTo(name: string): Promise<void>
+}
+
+/** The `name` of a branch request, or why it cannot be one. */
+export function parseBranchName(body: unknown): { name: string } | { problem: string } {
+  const name = body !== null && typeof body === 'object' ? (body as { name?: unknown }).name : undefined
+  if (typeof name !== 'string') return { problem: 'Name the branch.' }
+  const problem = branchNameProblem(name)
+  return problem === undefined ? { name } : { problem }
 }
 
 export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort, feedback?: FeedbackPort, branches?: BranchesPort): Acryl {
   const app = new Acryl()
   if (branches !== undefined) {
     app.post(FRAME_BRANCHES_NEW_PATH, ownPage, jsonBody(), async (c) => {
-      const body = await readJson(c)
-      const name = body !== INVALID_JSON && body !== null && typeof body === 'object' ? (body as { name?: unknown }).name : undefined
-      const problem = typeof name === 'string' ? branchNameProblem(name) : 'Name the branch.'
-      if (typeof name !== 'string' || problem !== undefined) return c.json(error(problem ?? 'Name the branch.'), 400)
+      const parsed = parseBranchName(await readJson(c))
+      if ('problem' in parsed) return c.json(error(parsed.problem), 400)
       try {
-        await branches.create(name)
+        await branches.create(parsed.name)
         return c.json({ ok: true })
       } catch (cause) {
         return c.json(error(cause instanceof Error ? cause.message : 'the branch could not be made'), 409)
+      }
+    })
+    app.post(FRAME_BRANCHES_SWITCH_PATH, ownPage, jsonBody(), async (c) => {
+      const parsed = parseBranchName(await readJson(c))
+      if ('problem' in parsed) return c.json(error(parsed.problem), 400)
+      try {
+        await branches.switchTo(parsed.name)
+        return c.json({ ok: true })
+      } catch (cause) {
+        return c.json(error(cause instanceof Error ? cause.message : 'the branch could not be switched to'), 409)
       }
     })
   }
@@ -275,6 +294,11 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
         if (entry?.fiber !== undefined) await entry.fiber.restart()
       },
     }
+    /** git's own line as the message a person reads: the runner keeps it as the failure's detail. */
+    const gitReason = (cause: unknown, fallback: string): Error => {
+      const detail = (cause as { detail?: unknown }).detail
+      return new Error(typeof detail === 'string' && detail !== '' ? detail : fallback)
+    }
     ctx.router.route('/', frameRoutes(state, (cause) => {
       ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
     }, plugins, feedbackPort(() => ctx.get('feedback')), {
@@ -284,9 +308,18 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
           await git.run(['check-ref-format', '--branch', name], root)
           await git.run(['switch', '--create', name], root)
         } catch (cause) {
-          // The runner keeps git's own line ("fatal: a branch named 'x' already exists") as the failure's detail.
-          const detail = (cause as { detail?: unknown }).detail
-          throw new Error(typeof detail === 'string' && detail !== '' ? detail : 'git could not make the branch')
+          throw gitReason(cause, 'git could not make the branch')
+        }
+      },
+      switchTo: async (name) => {
+        // Only a local branch is switched to: a commit or `HEAD~2` would leave the folder on no branch, which the frame cannot show.
+        const target = (await readBranches(git, root)).find(branch => branch.name === name)
+        if (target === undefined) throw new Error(`There is no branch named ${name}.`)
+        if (target.current) return
+        try {
+          await git.run(['switch', name], root)
+        } catch (cause) {
+          throw gitReason(cause, 'git could not switch branches')
         }
       },
     }))

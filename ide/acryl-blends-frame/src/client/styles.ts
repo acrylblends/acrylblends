@@ -62,6 +62,11 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsBranch .acrylBlendsCaret { width: 10px; height: 10px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.4; color: var(--bf-dim); transition: transform .12s ease; }
 .acrylBlendsCaret[data-open] { transform: rotate(90deg); }
 .acrylBlendsBranchName { overflow: hidden; text-overflow: ellipsis; }
+.acrylBlendsAsk { margin: 2px 8px 6px 22px; padding: 7px 8px; border: 1px solid #34343a; border-radius: 6px; background: var(--bf-surface-2); }
+.acrylBlendsAsk p { margin: 0 0 7px; color: var(--bf-dim); font-size: 12px; }
+.acrylBlendsAskActions { display: flex; gap: 6px; }
+.acrylBlendsAskActions button { white-space: nowrap; }
+.acrylBlendsBranchGroup > .acrylBlendsNote { margin: 2px 8px 6px 22px; }
 .acrylBlendsItem { display: flex; align-items: center; gap: 7px; width: 100%; padding: 4px 8px 4px 30px; border: 0; border-radius: 6px; background: transparent; color: #cfcfd6; white-space: nowrap; cursor: pointer; text-align: left; }
 .acrylBlendsItem:hover { background: var(--bf-surface-2); }
 .acrylBlendsItem[aria-current] { background: var(--bf-accent-dim); color: #fff; }

@@ -67,6 +67,7 @@ export function apply(ctx: ClientContext): void {
   const view = new FrameViewState(pageStorage())
   const chats = new ChatsStore(() => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'))
   const versionsApi = createVersionsApi()
+  const branchesApi = createBranchesApi()
   const tabs = new FrameTabs(pageStorage())
   const tools = createFrameTools()
   // Feedback from users: the notes, and handing one to the chat as a task the builder reads and sends.
@@ -224,7 +225,16 @@ export function apply(ctx: ClientContext): void {
       tabs,
       tools,
       feedback,
-      branches: { api: createBranchesApi(), changed: () => frameState.refresh() },
+      branches: {
+        api: branchesApi,
+        changed: () => frameState.refresh(),
+        // The folder moves, the frame shows the new current branch, then the app page reloads on that branch's files.
+        switchTo: async (name: string) => {
+          await branchesApi.switchTo(name)
+          await frameState.refresh()
+          canvas.reload()
+        },
+      },
     }),
   }, BlendsFrame), 'acryl-blends-frame: root slot')
 }

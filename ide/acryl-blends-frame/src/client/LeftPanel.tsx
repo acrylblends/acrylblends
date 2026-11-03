@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { formatRelativeTime } from 'acryl-versions/client'
-import { branchNameProblem, type FeedbackNoteView, type FeedbackView, type FrameState } from '../contract.ts'
+import { branchNameProblem, type FeedbackNoteView, type FeedbackView, type FrameBranch, type FrameState } from '../contract.ts'
 import type { VersionsLogView } from 'acryl-versions'
 import { PTY_AGENTS, terminalMeta, type FrameTabs } from './tabs.ts'
 import { versionNumber, type VersionsPort } from './versions.ts'
-import type { BranchesApi } from './branches.ts'
+import { branchClick, saveBeforeSwitchMessage, type BranchesApi } from './branches.ts'
 import { feedbackPlace, type FeedbackApi } from './feedback.ts'
 
 /** A chat on the branch, as the left panel lists it. */
@@ -51,10 +51,12 @@ type VersionsLoad =
   | { readonly status: 'ready'; readonly log: VersionsLogView }
   | { readonly status: 'error'; readonly message: string }
 
-/** The Branches "New" button: the Host makes the branch, then the frame reads its state again. */
+/** The left panel's branch calls: New, and moving to an existing branch with the state re-read and the app page reloaded. */
 export interface BranchesPort {
   readonly api: BranchesApi
   readonly changed: () => Promise<void>
+  /** Switch the app's folder to a branch, read the frame state again and reload the app page; rejects with the Host's reason. */
+  readonly switchTo: (name: string) => Promise<void>
 }
 
 export interface LeftPanelProps {
@@ -83,6 +85,10 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, sh
   // The new branch's name while it is typed, and why the last try failed.
   const [naming, setNaming] = useState<string | undefined>(undefined)
   const [branchProblem, setBranchProblem] = useState<string | undefined>(undefined)
+  // The branch a click would move to, asking first because files are unsaved; the branch in flight; and why the last try failed.
+  const [askSwitch, setAskSwitch] = useState<string | undefined>(undefined)
+  const [busySwitch, setBusySwitch] = useState<{ readonly branch: string; readonly phase: 'saving' | 'switching' } | undefined>(undefined)
+  const [switchNote, setSwitchNote] = useState<{ readonly branch: string; readonly message: string } | undefined>(undefined)
   const [notes, setNotes] = useState<FeedbackView>({ available: false, notes: [] })
   const [handNote, setHandNote] = useState<string | undefined>(undefined)
 
@@ -161,6 +167,45 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, sh
     }
   }
 
+  // A save point when the person chose one, then the Host moves the folder; the frame state re-read marks the new current branch, and the
+  // composition reloads the app page on its files (switch, state, canvas - in that order). Nothing here stashes or discards work.
+  const switchTo = async (name: string, saveFirst: boolean) => {
+    setBusySwitch({ branch: name, phase: saveFirst ? 'saving' : 'switching' })
+    setSwitchNote(undefined)
+    try {
+      if (saveFirst) {
+        await versions.save(state.appRoot, saveBeforeSwitchMessage(name))
+        setBusySwitch({ branch: name, phase: 'switching' })
+      }
+      await branches.switchTo(name)
+      setAskSwitch(undefined)
+      setExpanded(current => new Set(current).add(name))
+    } catch (cause) {
+      setSwitchNote({ branch: name, message: cause instanceof Error ? cause.message : 'The branch could not be switched to.' })
+    } finally {
+      setBusySwitch(undefined)
+    }
+  }
+
+  const clickBranch = (branch: FrameBranch) => {
+    if (busySwitch !== undefined) return
+    const action = branchClick(branch, state.unsaved)
+    if (action === 'toggle') {
+      toggle(branch.name)
+    } else if (action === 'switch') {
+      void switchTo(branch.name, false)
+    } else {
+      setSwitchNote(undefined)
+      setAskSwitch(branch.name)
+    }
+  }
+
+  /** What the ask's first button says while its work runs. */
+  const saveButtonLabel = (name: string): string => {
+    if (busySwitch?.branch !== name) return 'Save a point first'
+    return busySwitch.phase === 'saving' ? 'Saving...' : 'Switching...'
+  }
+
   return (
     <>
       <div className="acrylBlendsPaneHead">
@@ -198,7 +243,13 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, sh
           const count = branch.current ? chatRows.length + terminals.length : 0
           return (
             <div key={branch.name} className="acrylBlendsBranchGroup">
-              <button type="button" className="acrylBlendsBranch" aria-expanded={open} onClick={() => { toggle(branch.name) }}>
+              <button
+                type="button"
+                className="acrylBlendsBranch"
+                aria-expanded={branch.current ? open : undefined}
+                title={branch.current ? 'Show what is open on this branch' : `Switch to ${branch.name}`}
+                onClick={() => { clickBranch(branch) }}
+              >
                 <svg className="acrylBlendsCaret" data-open={open || undefined} viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2l3 3-3 3" /></svg>
                 <BranchIcon />
                 <span className="acrylBlendsBranchName">{branch.name}</span>
@@ -206,6 +257,34 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, sh
                   {branch.current ? <span className="acrylBlendsDot" data-live /> : count > 0 ? `${String(count)} open` : ''}
                 </span>
               </button>
+              {askSwitch === branch.name && (
+                <div className="acrylBlendsAsk" role="group" aria-label={`Switch to ${branch.name}`}>
+                  <p>
+                    {state.unsaved === undefined
+                      ? 'The unsaved files could not be counted. Save a point first, or cancel.'
+                      : `${String(state.unsaved)} unsaved ${state.unsaved === 1 ? 'change' : 'changes'}. Save a point first, or cancel.`}
+                  </p>
+                  <div className="acrylBlendsAskActions">
+                    <button
+                      type="button"
+                      className="acrylBlendsSmallButton"
+                      disabled={busySwitch !== undefined}
+                      onClick={() => { void switchTo(branch.name, true) }}
+                    >
+                      {saveButtonLabel(branch.name)}
+                    </button>
+                    <button
+                      type="button"
+                      className="acrylBlendsSmallButton"
+                      disabled={busySwitch !== undefined}
+                      onClick={() => { setAskSwitch(undefined) }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              {switchNote?.branch === branch.name && <p className="acrylBlendsNote" data-error>{switchNote.message}</p>}
               {open && branch.current && chatRows.map(item => (
                 <button
                   key={item.id}

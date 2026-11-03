@@ -4,6 +4,8 @@ export const FRAME_API_PREFIX = '/api/acryl-blends-frame'
 export const FRAME_STATE_PATH = `${FRAME_API_PREFIX}/state`
 /** POST `{ name }`: a new branch from the checked-out version, switched to (the files stay as they are). */
 export const FRAME_BRANCHES_NEW_PATH = `${FRAME_API_PREFIX}/branches/new`
+/** POST `{ name }`: the app's folder moves to an existing local branch. */
+export const FRAME_BRANCHES_SWITCH_PATH = `${FRAME_API_PREFIX}/branches/switch`
 
 /**
  * Why a name cannot be a new branch, in words for the person typing it; `undefined` when it can. The Host asks git as well
