@@ -1037,13 +1037,26 @@ template's own `npm run dev` for a standalone app runs `node --watch`, where a r
 in-memory run; the panel would come back with no run to follow. That is a ticket for the standalone path (a durable run log, or the run in a process the
 watcher does not restart), not this branch.
 
+**A port no browser opens (the merged-head check's second defect).** The full check on the merged head (`5c3afee3`) stopped in `verify-frame-token`:
+boot 1 printed `http://127.0.0.1:3659/` and the gate's `fetch` threw `TypeError: fetch failed` with cause `bad port`, and that same nested gate failed
+`verify-upgrade-frame`. The cause was not the gate. `stablePort` hashes every app's address into 3100..3999 (`plugins/instance`), and 3659 is one of the
+Fetch standard's bad ports, which Chromium refuses for a page too (ERR_UNSAFE_PORT): that app's address could never have been opened by a person. The
+listener now skips them: `acryl-node-server` carries the standard's 82 ports (probed against Node 24 port by port on 2026-11-03), and `portCandidates`
+leaves them out of the scan like a taken port, configured or scanned. The address record, the profile row and the printed URL already carry the bound
+port, so the stable address simply becomes the next usable one (3660 for 3659) and a restart keeps it; a configured restricted port with no scan left to
+move to fails with `no usable port from X to Y: each is taken, or one a browser refuses` instead of binding an address no browser opens. Tests: the list
+and the candidates (the skip does not widen the range; port 0 stays the system's choice), a real socket asked for 3659 binding 3660 and answering a
+fetch, and the instance seed path (a project folder whose hash is 3659 boots on an address fetch reaches). `verify-upgrade-frame` passes again with the
+fix (`96afd061`).
+
 **State (2026-11-03, survives a compact).** Branch `124-panel-reload` from `542cfaf2`; commits `44d51a99` (draft, single host, diagnostics),
 `efa29230` (restore once, no retry, causes checked), `749b35b3` (reload decided when it happens, marker + tests), `f70c9c96` (jsdom types). Proven:
 the submit cannot navigate (preventDefault first, no form action, tested); the server records a run before answering the ask (no follow race); no
 second `start()` caller exists (one tag per HTML response, one module execution per document - host removal is defence); the frame's generated dev
 script has no watcher, so the frame's app server does not restart under a run; the panel's check-then-reload race is fixed and its tests pass (typing
 during the change window leaves the page and text alone; an idle empty composer records the marker before reloading). Also `e1f6617a`: a sent message blurs the composer, so a plugin-install run still reloads the page (verify:panel passes again).
-State at this edit: main `81bb14dc` (119 landed) merged into the branch as `7e2d208b` with no conflicts; the full check runs on the merged head, then the
-push and three consecutive green CI runs count on that merged sha (the earlier count on `e1f6617a` was stopped when 119 landed, as the landing rule
+State at this edit: main `81bb14dc` (119 landed) merged into the branch as `7e2d208b` with no conflicts; the full check on the merged head (`5c3afee3`)
+found the restricted port above, fixed in `96afd061`; the full check runs again on the head that carries this note, then the push and three consecutive
+green CI runs count on that sha (the earlier count on `e1f6617a` was stopped when 119 landed, as the landing rule
 requires). The gate's panel step (on this branch) records the
 typed nodes' liveness and the reload marker, so a recurrence names a replaced page or an unwired form.
