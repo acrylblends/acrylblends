@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, parseBlendRows, setMadeOn, setRowOn } from '../src/app-plugins.ts'
 import { filterPlugins, framePluginRow, madeWhen } from '../src/client/plugins-navigator.ts'
+import { feedbackPlace, feedbackTask } from '../src/client/feedback.ts'
+import { parseFeedbackView } from '../src/contract.ts'
 
 const BLEND = `spec:
   runtime: cordis
@@ -81,5 +83,29 @@ describe('the plugins navigator', () => {
     expect(docSummary('/**\n * The extensions service (`ctx.extensions`): install and reload plugins. More here.\n *\n * Later.\n */\nexport {}'))
       .toBe('The extensions service (ctx.extensions): install and reload plugins.')
     expect(docSummary('export const x = 1')).toBe('')
+  })
+})
+
+describe('feedback from users', () => {
+  const note = { id: 'n1', at: '2026-11-03T10:00:00Z', text: 'Due date is "cut off"', page: '/app/board?x=1', element: { selector: 'li:nth-of-type(2)', label: 'li "Fix the invite link"' }, seen: false }
+
+  it('names the page a note came from', () => {
+    expect(feedbackPlace(note, '/app')).toBe('board page')
+    expect(feedbackPlace({ page: '/app/' }, '/app')).toBe('Home page')
+  })
+
+  it('hands an agent the page, the element and the note quoted as data', () => {
+    const task = feedbackTask(note)
+    expect(task).toContain('Page: /app/board?x=1')
+    expect(task).toContain('Element: li "Fix the invite link" (selector: li:nth-of-type(2))')
+    expect(task).toContain('"Due date is \\"cut off\\""')
+    const { element: _pinned, ...general } = note
+    expect(feedbackTask(general)).toContain('Element: nothing specific')
+  })
+
+  it("reads the Host's answer, and no section without the plugin", () => {
+    expect(parseFeedbackView({ available: false, notes: [] })).toEqual({ available: false, notes: [] })
+    expect(parseFeedbackView({ available: true, notes: [note] }).notes[0]?.element?.label).toBe('li "Fix the invite link"')
+    expect(() => parseFeedbackView({ available: true, notes: [{ id: 1 }] })).toThrow('note')
   })
 })

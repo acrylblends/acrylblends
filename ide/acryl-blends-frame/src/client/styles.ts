@@ -154,6 +154,12 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsConversation > * { flex: 1; min-height: 0; }
 
 .acrylBlendsPlugins { color: var(--bf-text, #e8e8ea); font-size: 13px; }
+.acrylBlendsFeedbackNew { margin-left: auto; color: var(--bf-warn); font-size: 11px; }
+.acrylBlendsFeedback { display: grid; gap: 2px; width: calc(100% - 12px); margin: 0 6px 4px; padding: 7px 9px; border: 0; border-radius: 6px; background: rgba(224,164,58,.14); color: #ecdcbc; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.acrylBlendsFeedback:hover { background: rgba(224,164,58,.22); }
+.acrylBlendsFeedback[data-seen] { background: rgba(224,164,58,.07); color: #b9ad97; }
+.acrylBlendsFeedback b { color: #fff; font-weight: 600; }
+.acrylBlendsFeedback small { opacity: .75; font-size: 11px; }
 .acrylBlendsShortcuts { padding: 14px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #26262b); font-size: 13px; }
 .acrylBlendsShortcutsTitle { font-weight: 500; margin-bottom: 8px; }
 .acrylBlendsShortcuts ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }

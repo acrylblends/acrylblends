@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { formatRelativeTime } from 'acryl-versions/client'
-import type { FrameState } from '../contract.ts'
+import type { FeedbackNoteView, FeedbackView, FrameState } from '../contract.ts'
 import type { VersionsLogView } from 'acryl-versions'
 import { PTY_AGENTS, terminalMeta, type FrameTabs } from './tabs.ts'
 import { versionNumber, type VersionsPort } from './versions.ts'
+import { feedbackPlace, type FeedbackApi } from './feedback.ts'
 
 /** A chat on the branch, as the left panel lists it. */
 export interface ChatRow {
@@ -22,6 +23,18 @@ export interface ChatsPort {
   subscribe(listener: () => void): () => void
   open(id: string): void
 }
+
+/** Feedback from users: the notes, and handing one to an agent (the chat's composer). */
+export interface FeedbackPort {
+  readonly api: FeedbackApi
+  /** @returns false when there is no chat to hand it to. */
+  hand(note: FeedbackNoteView): boolean
+}
+
+/** How often the left panel asks for new feedback. */
+const FEEDBACK_INTERVAL_MS = 15_000
+/** How many notes the panel lists; the newest first. */
+const FEEDBACK_SHOWN = 5
 
 const BranchIcon = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -43,13 +56,14 @@ export interface LeftPanelProps {
   readonly versions: VersionsPort
   /** The right panel's tabs: the branch lists its open agents and terminals, and a click shows one. */
   readonly tabs: FrameTabs
+  readonly feedback: FeedbackPort
   /** Show a right panel tab (opening the panel when it is closed). */
   readonly showTab: (id: string) => void
   /** Told the newest version's label ("v7"), for the top bar. */
   readonly onVersionLabel: (label: string | undefined) => void
 }
 
-export function LeftPanel({ state, chats, versions, tabs, showTab, onVersionLabel }: LeftPanelProps) {
+export function LeftPanel({ state, chats, versions, tabs, feedback, showTab, onVersionLabel }: LeftPanelProps) {
   const subscribe = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const chatRows = useSyncExternalStore(subscribe, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
@@ -58,6 +72,29 @@ export function LeftPanel({ state, chats, versions, tabs, showTab, onVersionLabe
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(state.branches.filter(b => b.current).map(b => b.name)))
   const [load, setLoad] = useState<VersionsLoad>({ status: 'loading' })
   const [saving, setSaving] = useState<string | undefined>(undefined)
+  const [notes, setNotes] = useState<FeedbackView>({ available: false, notes: [] })
+  const [handNote, setHandNote] = useState<string | undefined>(undefined)
+
+  const readFeedback = useCallback(async () => {
+    try {
+      setNotes(await feedback.api.read())
+    } catch {
+      // The section keeps what it showed; the next read tries again.
+    }
+  }, [feedback])
+  useEffect(() => {
+    void readFeedback()
+    const timer = window.setInterval(() => { void readFeedback() }, FEEDBACK_INTERVAL_MS)
+    return () => { window.clearInterval(timer) }
+  }, [readFeedback])
+
+  const hand = async (note: FeedbackNoteView) => {
+    setHandNote(feedback.hand(note) ? undefined : 'Open a chat first, then hand the note to it.')
+    if (!note.seen) {
+      await feedback.api.markSeen([note.id]).catch(() => {})
+      await readFeedback()
+    }
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -177,6 +214,32 @@ export function LeftPanel({ state, chats, versions, tabs, showTab, onVersionLabe
           </div>
         ))}
       </div>
+      {notes.available && (
+        <>
+          <div className="acrylBlendsSep" />
+          <div className="acrylBlendsPaneHead">
+            <span className="acrylBlendsLabel">Feedback from users</span>
+            {notes.notes.some(note => !note.seen) && <span className="acrylBlendsFeedbackNew">{String(notes.notes.filter(note => !note.seen).length)} new</span>}
+          </div>
+          <div className="acrylBlendsList">
+            {notes.notes.length === 0 && <p className="acrylBlendsNote">No feedback yet. People send it with the Feedback button on the app's pages.</p>}
+            {handNote !== undefined && <p className="acrylBlendsNote" data-error>{handNote}</p>}
+            {notes.notes.slice(0, FEEDBACK_SHOWN).map(note => (
+              <button
+                key={note.id}
+                type="button"
+                className="acrylBlendsFeedback"
+                data-seen={note.seen || undefined}
+                title="Hand it to an agent: the note goes into the chat, ready to send"
+                onClick={() => { void hand(note) }}
+              >
+                <span><b>{feedbackPlace(note, state.appPage ?? '')}</b> · "{note.text}"</span>
+                <small>{note.element === undefined ? 'nothing specific' : `pinned on ${note.element.label}`} · {formatRelativeTime(note.at)}</small>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <div className="acrylBlendsLeftFoot">
         <span className="acrylBlendsDot" data-live />
         Running locally · port {window.location.port || (window.location.protocol === 'https:' ? '443' : '80')}

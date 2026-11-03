@@ -22,11 +22,15 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, switchAppPlugin, type FrameRow } from './app-plugins.ts'
 import {
   FRAME_API_PREFIX,
+  FRAME_FEEDBACK_PATH,
+  FRAME_FEEDBACK_SEEN_PATH,
   FRAME_PLUGINS_PATH,
   FRAME_PLUGINS_SWITCH_PATH,
   FRAME_STATE_PATH,
   type AppPluginKind,
   type AppPluginsView,
+  type FeedbackView,
+  parseFeedbackNotes,
   type FrameBranch,
   type FrameState,
 } from './contract.ts'
@@ -126,8 +130,64 @@ function parseSwitch(body: unknown): { kind: AppPluginKind; name: string; on: bo
   return { kind, name, on }
 }
 
-export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort): Acryl {
+/** The builder's side of the app's feedback: the notes people sent, and marking them seen. */
+export interface FeedbackPort {
+  read(): Promise<FeedbackView>
+  markSeen(ids: readonly string[]): Promise<void>
+}
+
+/** The app's `feedback` service as the frame uses it, checked at each call: the plugin may be off, or come and go with a switch. */
+interface FeedbackSource {
+  list(): Promise<unknown>
+  markSeen(ids: readonly string[]): Promise<void>
+}
+
+function isFeedbackSource(value: unknown): value is FeedbackSource {
+  return value !== null && typeof value === 'object'
+    && typeof (value as { list?: unknown }).list === 'function' && typeof (value as { markSeen?: unknown }).markSeen === 'function'
+}
+
+/** Reads the app's `feedback` service where it is now; `available` false without it. */
+export function feedbackPort(source: () => unknown): FeedbackPort {
+  return {
+    async read() {
+      const service = source()
+      if (!isFeedbackSource(service)) return { available: false, notes: [] }
+      return { available: true, notes: parseFeedbackNotes(await service.list()) }
+    },
+    async markSeen(ids) {
+      const service = source()
+      if (isFeedbackSource(service)) await service.markSeen(ids)
+    },
+  }
+}
+
+function parseSeen(body: unknown): string[] | undefined {
+  if (body === null || typeof body !== 'object') return undefined
+  const ids = (body as { ids?: unknown }).ids
+  if (!Array.isArray(ids) || ids.length > 500 || !ids.every((id): id is string => typeof id === 'string' && id.length <= 100)) return undefined
+  return ids
+}
+
+export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort, feedback?: FeedbackPort): Acryl {
   const app = new Acryl()
+  if (feedback !== undefined) {
+    app.get(FRAME_FEEDBACK_PATH, ownPage, async (c) => {
+      try {
+        return c.json(await feedback.read())
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the feedback could not be read'), 500)
+      }
+    })
+    app.post(FRAME_FEEDBACK_SEEN_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const ids = body === INVALID_JSON ? undefined : parseSeen(body)
+      if (ids === undefined) return c.json(error('invalid seen request'), 400)
+      await feedback.markSeen(ids)
+      return c.json({ ok: true })
+    })
+  }
   if (plugins !== undefined) {
     app.get(FRAME_PLUGINS_PATH, ownPage, async (c) => {
       try {
@@ -195,7 +255,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     }
     ctx.router.route('/', frameRoutes(state, (cause) => {
       ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
-    }, plugins))
+    }, plugins, feedbackPort(() => ctx.get('feedback'))))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
     return () => { void git.dispose() }
   }, 'acryl-blends-frame: git runner and state route')

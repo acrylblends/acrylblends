@@ -170,6 +170,7 @@ export async function composeInto(
         ? {
             'agent-panel': { mount: FRAME_MOUNT_PREFIX },
             'driver-pty': { mount: FRAME_MOUNT_PREFIX },
+            feedback: { mount: FRAME_MOUNT_PREFIX },
           }
         : {}),
       // The frame host runs the server itself and its app instance carries no port; only the app's own server configures one.

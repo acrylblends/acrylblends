@@ -128,3 +128,45 @@ export function parseAppPluginsView(value: unknown): AppPluginsView {
     }),
   }
 }
+
+export const FRAME_FEEDBACK_PATH = `${FRAME_API_PREFIX}/feedback`
+export const FRAME_FEEDBACK_SEEN_PATH = `${FRAME_API_PREFIX}/feedback/seen`
+
+/** One note a person sent from the app (the `feedback` plugin), as the left panel shows it. */
+export interface FeedbackNoteView {
+  readonly id: string
+  /** ISO time it was sent. */
+  readonly at: string
+  readonly text: string
+  /** The page's path it was sent from. */
+  readonly page: string
+  /** The element it was pinned on; absent for "Nothing specific". */
+  readonly element?: { readonly selector: string; readonly label: string }
+  readonly seen: boolean
+}
+
+/** `available` is false when the app has no `feedback` plugin (or it is switched off): the left panel then shows no section. */
+export interface FeedbackView {
+  readonly available: boolean
+  readonly notes: readonly FeedbackNoteView[]
+}
+
+/** @throws when the value is not a list of notes. */
+export function parseFeedbackNotes(value: unknown): FeedbackNoteView[] {
+  if (!Array.isArray(value)) throw new Error('feedback: not a list')
+  return value.map((entry: unknown) => {
+    if (!isRecord(entry) || typeof entry.id !== 'string' || typeof entry.at !== 'string' || typeof entry.text !== 'string'
+      || typeof entry.page !== 'string' || typeof entry.seen !== 'boolean') throw new Error('feedback: note')
+    const element = entry.element
+    const pinned = isRecord(element) && typeof element.selector === 'string' && typeof element.label === 'string'
+      ? { element: { selector: element.selector, label: element.label } }
+      : {}
+    return { id: entry.id, at: entry.at, text: entry.text, page: entry.page, ...pinned, seen: entry.seen }
+  })
+}
+
+/** @throws when the answer is not a feedback view. */
+export function parseFeedbackView(value: unknown): FeedbackView {
+  if (!isRecord(value) || typeof value.available !== 'boolean') throw new Error('feedback: not a view')
+  return { available: value.available, notes: parseFeedbackNotes(value.notes) }
+}

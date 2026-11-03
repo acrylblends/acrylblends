@@ -17,6 +17,9 @@ import { FrameStateStore } from './frame-state.ts'
 import { FILES_SEARCH_EVENT } from './FilesView.tsx'
 import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSharedPlugin } from 'acryl-workspace/ui'
 import { ShortcutsRow } from './ShortcutsRow.tsx'
+import { createFeedbackApi, feedbackTask } from './feedback.ts'
+import { draftInChat } from './chat-draft.ts'
+import type { FeedbackPort } from './LeftPanel.tsx'
 import { appPluginRow, createAppPluginsApi, framePluginRow, type NavigatorPlugin } from './plugins-navigator.ts'
 import { PluginsSection } from './PluginsSection.tsx'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
@@ -65,6 +68,16 @@ export function apply(ctx: ClientContext): void {
   const versionsApi = createVersionsApi()
   const tabs = new FrameTabs(pageStorage())
   const tools = createFrameTools()
+  // Feedback from users: the notes, and handing one to the chat as a task the builder reads and sends.
+  const feedback: FeedbackPort = {
+    api: createFeedbackApi(),
+    hand(note) {
+      const current = chats.getSnapshot().find(row => row.current)
+      tabs.activate('chat')
+      view.showRight()
+      return current !== undefined && draftInChat(ctx, current.id, feedbackTask(note))
+    },
+  }
 
   ctx.effect(() => provideDesktopLayout(ctx, layout), 'acryl-blends-frame: layout service')
   // DSH's views read the open keyed panel through the standard `usePanelInfo` hook, which the root supplies.
@@ -209,6 +222,7 @@ export function apply(ctx: ClientContext): void {
       versions: { log: (path: string) => versionsApi.log(path), save: (path: string, message: string) => versionsApi.save(path, message) },
       tabs,
       tools,
+      feedback,
     }),
   }, BlendsFrame), 'acryl-blends-frame: root slot')
 }
