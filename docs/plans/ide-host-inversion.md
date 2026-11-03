@@ -1009,9 +1009,13 @@ far, both commits with the frame booting and the blank gate green:
   History joins it with slice 2's Versions.
 - `b341c944` the chat tab's **History**: every chat including the ones closed with the tab's x (badged), one search field over the titles, a pick
   clears the dismissal (`shell.restoreChat`) and reopens the chat through the tree's own selection.
+- `dbeeab46` **Review, Checks and Comments** are no longer composed into the frame (their stores stay for the diff pane's send-to-agent path until
+  the editor's comment gutter goes), and the **split** left the right panel: no split button, menu item or pane; a saved split is dropped on load;
+  the divider and ratio modules and suites are deleted. The state's split API is unreachable and goes in the next pass.
 - `e7c2f4db` the **git status bar** left the frame (`StatusLine`/`buildStatusLine` and its specs deleted).
 
-Remaining for slice 1 (section 31.5): fuzzy search over every file behind a shortcut (the Files tab has the repository search; the mockup's `◘P` binding and fuzzy ranking are not wired); the chat run log on the Host (`.acrylblends/runs/<id>.jsonl`, rejoin and replay) moved from the app
+Remaining for slice 1 (section 31.5): the terminal dock out of the strip and the shell hooks; fuzzy search over every file behind a shortcut (the Files
+tab has the repository search; the mockup's `◘P` binding and fuzzy ranking are not wired); the chat run log on the Host (`.acrylblends/runs/<id>.jsonl`, rejoin and replay) moved from the app
 panel; Review, Checks and Comments out of the frame (and `CodeEditor`'s comment gutter), the dock and the split out of the right panel; tab
 persistence `v2` with the migration. The gate should check the
 canvas iframe as the app's page (it still opens a Browser tab to prove the app page, which passes but no longer describes the product).
