@@ -16,7 +16,7 @@
 
 Every template is a Cordis app: `blend.yaml` lists the plugins that are mounted, every plugin is a folder in `plugins/`, and the app is started by `src/main.ts`. A bare template name after the directory is the same as `--template`: `npm create acrylblends@latest my-app notes`. `bun` is no longer a template; the framework still runs on Bun (see [Bun](../getting-started/bun.md)), but a new app is a Cordis app on Node.
 
-Every template includes `AGENTS.md` and `CLAUDE.md` (the same text), one skill (`app-guide`) in `.claude/skills/` and `.agents/skills/`, and a copy of these docs in `docs/framework/`, so a coding agent working in the folder reads the
+Every template includes `AGENTS.md` and `CLAUDE.md` (the same text), two skills (`acryl-app`, `cordis-plugin`) in `.claude/skills/` and `.agents/skills/`, and a copy of these docs in `docs/framework/`, so a coding agent working in the folder reads the
 API from the folder.
 
 ## Passing arguments
