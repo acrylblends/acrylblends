@@ -42,3 +42,22 @@ export function describeTool(data: Record<string, unknown>): string | undefined 
   const failed = data.error ? ` failed: ${clip(String(data.error))}` : ''
   return `${tool}${input}${failed}`
 }
+
+/** The Assistant's step on the page, as the person reads it under the answer: `ui.look()`, `ui.click(3.12)`, `ui.type(4.2, "Book the venue")`, `ui.navigate("/calendar")`. */
+export function describePageStep(data: Record<string, unknown>): string | undefined {
+  if (data.tool === 'door_look') return `ui.look()${data.error ? ' failed' : ''}`
+  if (data.tool !== 'door_act') return describeTool(data)
+  const input = (typeof data.input === 'object' && data.input !== null ? data.input : {}) as Record<string, unknown>
+  const quoted = (value: unknown): string => JSON.stringify(clip(String(value ?? '')))
+  const op = typeof input.op === 'string' ? input.op : 'act'
+  const ref = typeof input.ref === 'string' ? input.ref : undefined
+  const args =
+    op === 'navigate' ? [quoted(input.path)]
+    : op === 'type' ? [ref, quoted(input.text)]
+    : op === 'select' ? [ref, quoted(input.option)]
+    : op === 'press' ? [quoted(input.key)]
+    : op === 'scroll' ? [input.direction === undefined ? undefined : quoted(input.direction)]
+    : op === 'wait' ? [quoted(input.text ?? input.name)]
+    : [ref]
+  return `ui.${op}(${args.filter((arg) => arg !== undefined).join(', ')})${data.error ? ' failed' : ''}`
+}

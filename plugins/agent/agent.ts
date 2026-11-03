@@ -39,6 +39,11 @@ export interface Budget {
 export interface AgentConfig {
   /** Steps per run before it stops. */
   steps?: number
+  /**
+   * The only tools a run may see and call; absent: every tool in the registry. A production assistant gets the page tools alone (`door_look`, `door_act`), so whatever
+   * a visitor asks, the agent can use the app and never change it. A call to any other name fails as an unknown tool would.
+   */
+  tools?: readonly string[]
 }
 
 /**
@@ -91,6 +96,7 @@ export const agent = {
   inject: ['model', 'tools', 'memory'],
   apply(ctx: Context, config?: AgentConfig) {
     const limit = config?.steps ?? 6
+    const allowed = config?.tools === undefined ? undefined : new Set(config.tools)
     let runs = 0
     ctx.provide('agent', {
       async run(question, options) {
@@ -124,7 +130,7 @@ export const agent = {
                     step: budget.steps,
                     toolResult,
                     trace: [...trace],
-                    tools: scope.tools.list(),
+                    tools: scope.tools.list().filter((tool) => allowed?.has(tool.name) ?? true),
                     signal,
                   }),
                   signal,
@@ -144,6 +150,8 @@ export const agent = {
                 ? recorder?.start(`tool:${step.tool}`, step.input, { parent: record.id })
                 : undefined
               try {
+                if (allowed !== undefined && !allowed.has(step.tool))
+                  throw new Error(`no tool named "${step.tool}" is allowed in this run`)
                 toolResult = await until(
                   scope.tools.call(step.tool, step.input, { signal }),
                   signal,

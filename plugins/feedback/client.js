@@ -162,15 +162,17 @@ function start(prefix) {
       render()
     }
   })
-  // agent-panel's button sits in the same corner in development: stand to its left while it is there.
+  // agent-panel sits in the same corner: its button in development, the Assistant docked on the right in production. Stand to the left of whichever shows.
   const besideOthers = () => {
-    const other = document.getElementById('agent-panel')?.shadowRoot?.querySelector('button.open')
-    const box = other && getComputedStyle(other).display !== 'none' ? other.getBoundingClientRect() : null
+    const shadow = document.getElementById('agent-panel')?.shadowRoot
+    const shown = (element) => element && getComputedStyle(element).display !== 'none' ? element.getBoundingClientRect() : null
+    const box = shown(shadow?.querySelector('section.shown')) ?? shown(shadow?.querySelector('button.open'))
     const right = box && box.width > 0 ? `${Math.round(window.innerWidth - box.left + 8)}px` : ''
     button.style.right = right
     pop.style.right = right
   }
   for (const delay of [0, 500, 2000]) setTimeout(besideOthers, delay)
+  window.addEventListener('agent-panel:layout', besideOthers)
   window.addEventListener('resize', besideOthers)
   document.addEventListener('mousemove', onMove, true)
   document.addEventListener('click', onClick, true)

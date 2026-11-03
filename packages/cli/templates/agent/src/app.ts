@@ -77,6 +77,9 @@ const DEVELOPMENT_ROWS: Record<string, string> = {
     'a plugin installed live runs in this process, and POST /extensions/approve decides installs',
 }
 
+/** The only tools the production Assistant's agent may call: look at the page and act on it. */
+const ASSISTANT_TOOLS = ['door_look', 'door_act']
+
 /**
  * The app's rows in the manifest's order, composed into `ctx`: the app's own server calls this from `createApp`, and the generated frame layer mounts it
  * as one row, so the frame runs the app exactly as the app's own server does (same rows, same order, same config). `host: true` leaves the server and the
@@ -111,7 +114,17 @@ export async function composeInto(
       'save',
     ])
       leaveOut.add(row)
-  if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off')
+  // The Assistant (production, ACRYL_ASSISTANT=on): the agent panel docked for the app's visitors. Its agent keeps only the page tools and the door only the page,
+  // so it uses the app for a visitor (opens pages, filters, fills in forms) and cannot change the app, its code or its secrets. Not in the frame host.
+  const assistant =
+    process.env.NODE_ENV === 'production' &&
+    process.env.ACRYL_ASSISTANT === 'on' &&
+    process.env.ACRYL_DOOR !== 'off' &&
+    listen
+  if (
+    !assistant &&
+    (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off')
+  )
     leaveOut.add('acryl-door')
   // Production: the rows that give a visitor power over the running app or the owner's model key are left out too. The agent (`POST /ask` spends the model key and runs tools),
   // the builder and the extensions (live plugin install runs code in this process, and `POST /extensions/approve` decides it) are development tools. `ACRYL_PRODUCTION_KEEP`
@@ -134,7 +147,7 @@ export async function composeInto(
           `WARNING: the "${row}" row runs in production because ACRYL_PRODUCTION_KEEP names it: ${danger}. Nothing here is behind a login; put the app behind your own.`,
         )
       else if (row === 'extensions') extensionsReadOnly = true
-      else leaveOut.add(row)
+      else if (!(assistant && row === 'agent')) leaveOut.add(row)
     }
   }
   const manifest = {
@@ -164,6 +177,15 @@ export async function composeInto(
         ],
       },
       builder: { dir: extensionsDir },
+      ...(assistant
+        ? {
+            agent: { tools: ASSISTANT_TOOLS },
+            'acryl-door': { pageOnly: true },
+            'agent-panel': { assistant: true },
+            // The visitor reaches the agent through the panel only: no /ask, /tasks or /extensions routes.
+            routes: { agentRoutes: false },
+          }
+        : {}),
       // The rows that serve routes of their own mount them under the app's prefix, as makeApp does. On the app's own server that prefix is the root (the
       // row's default); the frame host serves the app at FRAME_MOUNT_PREFIX, and its own `/api` routes would answer for a row left at the root.
       ...(options.host === true

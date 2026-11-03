@@ -171,3 +171,17 @@ test('with tasks mounted, a run cancelled by its signal is recorded as failed, n
   assert.equal((await run).status, 'cancelled')
   assert.deepEqual(events, ['agent-run fail the run was cancelled'])
 })
+
+test('with a tools list, a run sees only those tools and a call to any other fails', async () => {
+  const root = new Context()
+  for (const plugin of [model, tools, memory]) await root.plugin(plugin).await()
+  await root.plugin(agent, { tools: ['look'] }).await()
+  let seen: string[] = []
+  scripted(root.model)?.teach(({ step, tools: offered }) => {
+    seen = offered.map((tool) => tool.name)
+    return step === 0 ? { tool: 'add', input: [1, 1] } : { text: 'stopped' }
+  })
+  const result = await root.agent.run('add 1 1')
+  assert.deepEqual(seen, [])
+  assert.equal(result.trace[0]?.error, 'no tool named "add" is allowed in this run')
+})

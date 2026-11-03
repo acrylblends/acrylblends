@@ -6,10 +6,10 @@
 
 import { UiControlError } from '../page/protocol.ts'
 import { DoorError, type Door, type ToolsPort } from './door.ts'
-import { chatToolName, VERB_SPECS, VERBS } from './verbs.ts'
+import { chatToolName, VERB_SPECS, VERBS, type Verb } from './verbs.ts'
 
-/** Register every verb. @returns the function that removes them all; it also aborts the calls still running. */
-export function registerChatTools(tools: ToolsPort, door: Door): () => void {
+/** Register the verbs (default: every one). @returns the function that removes them all; it also aborts the calls still running. */
+export function registerChatTools(tools: ToolsPort, door: Door, verbs: readonly Verb[] = VERBS): () => void {
   const running = new AbortController()
   const removers: Array<() => void> = []
   const removeAll = (): void => {
@@ -17,7 +17,7 @@ export function registerChatTools(tools: ToolsPort, door: Door): () => void {
     for (const remove of removers.splice(0).reverse()) remove()
   }
   try {
-    for (const verb of VERBS) {
+    for (const verb of verbs) {
       removers.push(tools.register(chatToolName(verb), {
         description: VERB_SPECS[verb].description,
         // The model is told which fields the verb takes (an `act` needs its `op`), the same schema MCP lists.

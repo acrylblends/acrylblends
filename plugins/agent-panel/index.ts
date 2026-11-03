@@ -9,7 +9,9 @@
  * - Only the app's own page may ask (a same-origin request carrying the token), one run at a time, and every ask is written to `.acryl/audit/agent-panel.jsonl`.
  * - The routes live under the app's mount: the root of the app's own server, or the frame's prefix (`/app`) when the frame hosts it, where the host's own
  *   `/api` routes would otherwise answer first. The row's `mount` config names it.
- * - Development only: the plugin does nothing with `NODE_ENV=production` or `ACRYL_DOOR=off`.
+ * - Development only: the plugin does nothing with `NODE_ENV=production` or `ACRYL_DOOR=off`, except as the Assistant (`assistant: true`): then it runs in production too,
+ *   docked open on the right, with the app's own agent only. The app gives that agent the page tools alone and a page-only door, so it uses the app for a visitor and
+ *   cannot change it (src/app.ts, `ACRYL_ASSISTANT=on`).
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { appendFileSync, mkdirSync } from 'node:fs'
@@ -61,6 +63,8 @@ export interface PanelConfig {
    * `routerHttp.mount` take). The panel's routes, script tag and client live under it, so they belong to the app and are served wherever it is.
    */
   mount?: string
+  /** The Assistant: a production panel for the app's visitors, with the app's own agent only (no coding agent, no terminal). Runs with `NODE_ENV=production`. */
+  assistant?: boolean
 }
 
 /** The panel's routes under a checked mount: empty, or an absolute path such as `/app` with no trailing slash (the `routerHttp.mount` rule). */
@@ -77,7 +81,8 @@ export function fromOwnPage(headers: Headers): boolean {
 }
 
 export function apply(ctx: Context, config: PanelConfig = {}): void {
-  if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off') return
+  const assistant = config.assistant === true
+  if (process.env.ACRYL_DOOR === 'off' || (process.env.NODE_ENV === 'production' && !assistant)) return
   const PREFIX = panelPrefix(config.mount)
   const root = ctx.appInstance.root
   const token = randomBytes(24).toString('hex')
@@ -95,8 +100,9 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
     (headers) => fromOwnPage(headers) && headers.get('x-agent-panel-token') === token,
   )
   ctx.effect(() => registry.register(agentDriver(ctx)))
-  for (const program of availableHeadless(config.drivers))
-    ctx.effect(() => registry.register(headlessDriver(program, root)))
+  if (!assistant)
+    for (const program of availableHeadless(config.drivers))
+      ctx.effect(() => registry.register(headlessDriver(program, root)))
 
   const tag = `<script type="module" src="${PREFIX}/panel.js"></script>`
   const addScript = async (c: { res: Response }, next: () => Promise<void>): Promise<void> => {
@@ -140,6 +146,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
         return c.json({ error: "only the app's own page may use the panel" }, 403)
       return c.json({
         token,
+        ...(assistant ? { assistant: true } : {}),
         // A terminal driver names the browser module that draws its view and the prefix its endpoints live under: the plugin that owns the view
         // also knows where the app is mounted, so the panel never guesses either.
         drivers: registry.list().map((driver) => ({

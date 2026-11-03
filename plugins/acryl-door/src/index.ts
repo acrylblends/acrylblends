@@ -18,6 +18,7 @@ import { clientModules } from 'acryl-node-server/client-modules'
 import { auditPath, AuditLog } from './host/audit.ts'
 import { UiChannel } from './host/channel.ts'
 import { registerChatTools } from './host/chat-tools.ts'
+import { PAGE_VERBS, VERBS } from './host/verbs.ts'
 import { Door, type ExtensionsPort, type ToolsPort } from './host/door.ts'
 import { assertDoorIsFree, newSecret, removeDoorFile, stateDir, writeDoorFile } from './host/door-file.ts'
 import { DOOR_PREFIX, privateApi } from './host/http.ts'
@@ -68,12 +69,19 @@ export interface Config {
    * run it in production (a packaged desktop app whose user drives it with an agent) says so here; `ACRYL_DOOR=off` still wins.
    */
   allowInProduction?: boolean
+  /**
+   * Page only, for a production assistant: the page channel and two chat tools, `door_look` and `door_act`, and nothing else - no operator routes, no MCP, no desktop
+   * shell channel, no `.acryl/` file, no plugin, tool or window verbs. The app's agent can then use the page for a visitor and cannot change the app. Runs in production
+   * without `allowInProduction`; `ACRYL_DOOR=off` still wins.
+   */
+  pageOnly?: boolean
   /** Reload the open pages after a live plugin change, so an agent that built a feature sees it on the page it has open. Default: true. */
   reloadOnChange?: boolean
 }
 
 export const Config: z<Config> = z.object({
   allowInProduction: z.boolean().default(false).description('Run in production too (NODE_ENV=production); ACRYL_DOOR=off still turns it off.'),
+  pageOnly: z.boolean().default(false).description('Only the page and the look and act chat tools (a production assistant); runs in production.'),
   reloadOnChange: z.boolean().default(true).description('Reload the open pages after a plugin was added, removed or reloaded while the app runs.'),
   tools: z.object({
     // Not a `door_` name: those are the door's own verbs in the registry, never offered back as app tools.
@@ -118,7 +126,8 @@ export function notFoundPage(path: string, scriptTag: string): string {
 export function apply(ctx: Context, rawConfig: Config = {}): void {
   const config = Config(rawConfig)
   // Development only: nothing is started, mounted or written in production, or when switched off.
-  if (process.env.ACRYL_DOOR === 'off' || (process.env.NODE_ENV === 'production' && config.allowInProduction !== true)) return
+  const pageOnly = config.pageOnly === true
+  if (process.env.ACRYL_DOOR === 'off' || (process.env.NODE_ENV === 'production' && config.allowInProduction !== true && !pageOnly)) return
   const app = ctx.get('appInstance') as unknown as AppFolder
   // The carrier, as the host provides it: DSH's `acrylWeb`, or the plain node server's own url. Read when used, never captured at apply time.
   const carrier = (): Listening | undefined => {
@@ -139,7 +148,8 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   }
   const address: { url: string } = { url: '' }
   // The rival check runs at activation, not in the deferred write: a folder another live process serves fails the row at once (the write waits for a bound port).
-  assertDoorIsFree(app.root)
+  // A page-only door writes no file, so it has no rival to check.
+  if (!pageOnly) assertDoorIsFree(app.root)
   const secret = newSecret()
   // A look right after a navigate or reload waits up to two seconds for the page that is moving to register again, and a read-only call that no page acknowledged gives a page that just registered one more try.
   const channel = new UiChannel({ attachWaitMs: 2000 })
@@ -258,17 +268,21 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     DOOR_PREFIX,
     pageModule,
     pageChannelRoutes(channel, { prefix: DOOR_PREFIX }),
-    shellRoutes(DOOR_PREFIX, secret, shell),
-    operatorRoutes(DOOR_PREFIX, secret, door, reportError),
-    mcpRoutes(DOOR_PREFIX, secret, door, reportError),
+    ...(pageOnly ? [] : [
+      shellRoutes(DOOR_PREFIX, secret, shell),
+      operatorRoutes(DOOR_PREFIX, secret, door, reportError),
+      mcpRoutes(DOOR_PREFIX, secret, door, reportError),
+    ]),
   ))
   // The built-in chat's agent reads the `tools` registry: the verbs are in it while both are up.
   ctx.inject(['tools'], (inner) => {
-    inner.effect(() => registerChatTools(inner.get('tools') as unknown as ToolsPort, door), 'acryl-door: the verbs in the tools registry')
+    inner.effect(() => registerChatTools(inner.get('tools') as unknown as ToolsPort, door, pageOnly ? PAGE_VERBS : VERBS), 'acryl-door: the verbs in the tools registry')
   })
   ctx.effect(function* () {
     yield ctx.reflect.provide('door', door)
   }, 'acryl-door: the door service')
+  // A page-only door leaves no file and no command for an operator.
+  if (pageOnly) return
   // The carrier binds asynchronously (DSH's webServer, the node server before it): the address and the file are written once it reports a real port.
   ctx.effect(async () => {
     let bound = carrier()
@@ -286,7 +300,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
 }
 
 export { Door, DoorError, type VerbAnswer } from './host/door.ts'
-export { chatToolName, VERB_SPECS, VERBS, type Verb, type VerbSpec } from './host/verbs.ts'
+export { chatToolName, PAGE_VERBS, VERB_SPECS, VERBS, type Verb, type VerbSpec } from './host/verbs.ts'
 export { mcpTools } from './host/mcp-routes.ts'
 export { DOOR_PREFIX } from './host/http.ts'
 export { assertDoorIsFree, doorFilePath, readDoorFile, STATE_DIR, type DoorFile } from './host/door-file.ts'

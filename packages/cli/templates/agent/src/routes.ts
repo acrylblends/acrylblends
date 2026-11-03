@@ -91,7 +91,7 @@ export function makeApp(prefix = ''): Acryl {
 export const routes = {
   name: 'routes',
   inject: ['router'],
-  apply(ctx: Context, options: { readonly prefix?: string } = {}) {
+  apply(ctx: Context, options: { readonly prefix?: string; readonly agentRoutes?: boolean } = {}) {
     const prefix = options.prefix ?? ''
     // A body here is a name, an id or a question; anything bigger is refused before it is read.
     const json = async (c: {
@@ -104,6 +104,8 @@ export const routes = {
     // The app's own page and routes at the one prefix; the agent routes below mount at the same prefix.
     ctx.router.route(prefix === '' ? '/' : prefix, makeApp(prefix))
     // The routes that give a visitor the agent: mounted only while the agent, the extensions and the tasks run (see the header).
+    // `agentRoutes: false` (the production Assistant) keeps them unmounted although the agent runs.
+    if (options.agentRoutes === false) return
     ctx.inject(['agent', 'extensions', 'tasks'], (inner) => {
       const app = new Acryl().use(limit).get('/extensions', (c) =>
         c.json({
