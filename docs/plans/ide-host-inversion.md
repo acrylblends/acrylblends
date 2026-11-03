@@ -1111,3 +1111,9 @@ chat tab with no click: `synchronizeWorkspaceWithSessionNavigation` treats every
 and selects the chat tab, and a fresh app's chat is always blank. The canvas unmounts the tab that leaves the front, so the app page (and any panel
 run in it) is gone; coming back loads it again. The 125 redesign moves the agent out of the app's iframe, which removes the run loss; whether the
 canvas should also keep browser tabs mounted, and the New Session signal become an event instead of list state, is recorded for 125.
+
+**Open item: a graceful stop on Windows (a branch after 124 and 122).** On Windows a signal is `TerminateProcess`: nothing runs the host's disposal
+(the persistence flush, PTY reaping, the graceful stop 121 built) when the gate stops it, and probably not when the desktop app closes either. 122's
+gate fix ends the host's whole tree instead of relying on the host to end its own children; the product fix is a stop request the host can act on
+before any tree kill - Ctrl-C/CTRL_BREAK, or a loopback shutdown route that the owner token guards - so a Windows stop settles like a POSIX one.
+Not fixed on 122; it gets its own branch after 124 and 122 land.
