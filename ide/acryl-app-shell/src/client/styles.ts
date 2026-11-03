@@ -47,6 +47,53 @@ html:has([aria-modal="true"]) .dshDesktopWindowsCaptionRow::before,
 html:has([aria-modal="true"]) .dshDesktopMacCaptionRow::before,
 html:has([aria-modal="true"]) .dshDesktopSidebarSurface,
 html:has([aria-modal="true"]) .dshDesktopSidebarSurface::before { -webkit-app-region: no-drag !important; }
+.dshDesktopModeBar {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  -webkit-app-region: no-drag;
+}
+.dshDesktopModeBar button {
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 2px 10px;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.dshDesktopModeBar button[aria-pressed="true"] { opacity: 1; background: var(--dsw-alias-border-l1); }
+.dshDesktopPreviewPill {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  appearance: none;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-base);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 4px 14px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.dshDesktopFrame[data-frame-mode="preview"] { grid-template-rows: 100%; }
+.dshDesktopFrame[data-frame-mode="preview"] .dshDesktopConversationSurface { grid-row: 1; }
 @media (prefers-reduced-motion: reduce) {
   .dshDesktopFrame,
   .dshDesktopResizeHandle { transition: none !important; }

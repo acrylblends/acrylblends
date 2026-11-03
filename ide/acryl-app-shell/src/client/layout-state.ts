@@ -10,6 +10,9 @@
 
 import type { HostObservable, ILayout, MainPanelId, PanelInfo } from '@acryl/ui/frame'
 
+/** Build shows the frame; Preview hides both panels and gives the whole window to the app. */
+export type FrameMode = 'build' | 'preview'
+
 export interface DesktopLayoutSnapshot {
   /** Sidebar width preference in px; 0 means collapsed to the rail. */
   sidebar: number
@@ -22,6 +25,15 @@ export interface DesktopLayoutSnapshot {
   /** The panel wants its own column (docked), rather than covering the window. */
   detailsTrack: boolean
   detailsFullscreen: boolean
+  /** Build keeps the panel widths as saved; preview overrides them for the grid only. */
+  mode: FrameMode
+}
+
+/** What a previous run left of the frame's own view, restored before the first render. */
+export interface SavedFrameView {
+  readonly mode?: FrameMode
+  readonly sidebar?: number
+  readonly details?: number
 }
 
 export interface DesktopColumns {
@@ -85,6 +97,16 @@ export interface FrameSolution {
  * would have if docked (reported to it) and one for the columns actually laid out.
  */
 export function solveFrame(viewport: number, panels: DesktopLayoutSnapshot, railWidth: number): FrameSolution {
+  if (panels.mode === 'preview') {
+    // The app alone: the side columns keep their state (and stay mounted) but get no width.
+    return {
+      narrow: viewport < SIDEBAR_AUTO_COLLAPSE,
+      collapsed: true,
+      normal: { sidebar: 0, center: viewport, details: 0 },
+      columns: { sidebar: 0, center: viewport, details: 0 },
+      rightbar: { width: 0, viewportWidth: viewport, canShow: false },
+    }
+  }
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
   const collapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
   const sidebarPreference = collapsed ? 0 : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
@@ -122,6 +144,7 @@ export class DesktopLayoutState implements ILayout {
     detailsShown: false,
     detailsTrack: false,
     detailsFullscreen: false,
+    mode: 'build' as FrameMode,
   })
   private readonly listeners = new Set<() => void>()
   private viewport = 0
@@ -153,6 +176,29 @@ export class DesktopLayoutState implements ILayout {
 
   getSnapshot(): DesktopLayoutSnapshot {
     return this.snapshot
+  }
+
+  /** Restore the view a previous run saved; a missing or invalid field keeps the default. */
+  restoreView(view: SavedFrameView | undefined): void {
+    if (view === undefined) return
+    const next = { ...this.snapshot }
+    if (view.mode === 'build' || view.mode === 'preview') next.mode = view.mode
+    if (typeof view.sidebar === 'number' && Number.isFinite(view.sidebar)) next.sidebar = clamp(view.sidebar, 0, SIDEBAR_MAX)
+    if (typeof view.details === 'number' && Number.isFinite(view.details)) {
+      const max = Math.max(DETAILS_MIN, this.viewport > 0 ? this.viewport * DETAILS_MAX_RATIO : view.details)
+      next.details = clamp(view.details, 0, max)
+    }
+    this.publish(next)
+  }
+
+  /** Build or Preview; the panels keep their state and their content stays mounted. */
+  setMode(mode: FrameMode): void {
+    if (this.snapshot.mode === mode) return
+    this.publish({ ...this.snapshot, mode })
+  }
+
+  toggleMode(): void {
+    this.setMode(this.snapshot.mode === 'build' ? 'preview' : 'build')
   }
 
   subscribe(listener: () => void): () => void {

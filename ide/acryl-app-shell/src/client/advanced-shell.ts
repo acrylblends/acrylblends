@@ -12,6 +12,7 @@ import { DesktopLayoutState } from './layout-state.ts'
 import { provideDesktopLayout } from './layout-service.ts'
 import { installAdvancedStyles } from './styles.ts'
 import { DesktopThemePresenter } from './theme-presenter.ts'
+import { browserViewStorage, loadFrameView, startFrameViewPersistence } from './view-persistence.ts'
 
 function DefaultDesktopMain({ renderConversation }: DesktopMainOwnerProps) {
   return renderConversation()
@@ -55,10 +56,18 @@ export function applyAdvancedShell(ctx: ClientContext, environment: ShellEnviron
     throw new Error(`acryl-app-shell: advanced shell received mode ${JSON.stringify(environment.mode)}`)
   }
 
+  const frameStorage = browserViewStorage()
   const desktopLayout = new DesktopLayoutState()
+  // Build or Preview and the widths the person dragged to survive a reload; the right panel's own open state
+  // stays with the panel, which reports it through the layout service.
+  desktopLayout.restoreView(loadFrameView(frameStorage))
   ctx.effect(
     () => provideDesktopLayout(ctx, desktopLayout),
     'acryl-app-shell: layout service',
+  )
+  ctx.effect(
+    () => startFrameViewPersistence(desktopLayout, frameStorage),
+    'acryl-app-shell: view persistence',
   )
   // Upstream's sidebars and session views read the open keyed panel through the standard `usePanelInfo` hook, which the root supplies.
   ctx.effect(() => ctx.slots.provideRoot({ hooks: { panelInfo: desktopLayout.panelInfo } }), 'acryl-app-shell: panel info')

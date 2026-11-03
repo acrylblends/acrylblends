@@ -84,8 +84,6 @@ export interface WorktreeSessionEntry {
   readonly running?: boolean
   /** Whether this entry is the tab strip's selected tile right now, so the selected tab's row is highlighted. */
   readonly active?: boolean
-  /** A chat that is neither open in a tab nor running: history, listed only under "earlier chats". */
-  readonly earlier?: boolean
 }
 
 /** The worktree's currently active canvas tile, only as much as entry-highlighting needs. */
@@ -113,19 +111,19 @@ export function entriesForWorktree(
     .map(tile => ({ kind: 'agent', id: tile.id, label: tile.title, commandId: tile.commandId ?? 'shell', active: tile.id === active?.id }))
   // owningWorktree (deepest match), not a plain isInside: a linked worktree nested under this one claims
   // its own chats, and they must not also appear here.
-  // Every chat that ever ran in the folder is listed, but only the open ones (a tab here, running, or selected) up front: a CLI or TUI start
-  // leaves a session behind, so a busy folder collects dozens, and listing them all read as dozens of open chats nobody closed.
+  // Only open chats are rows: a tab here, running, or selected. Closed chats live in the chat tab's
+  // History; a CLI or TUI start leaves a session behind, and listing those here read as chats nobody closed.
   const openTabs = new Set(tiles.flatMap(tile => tile.kind === 'chat' && tile.chatSessionId !== undefined ? [tile.chatSessionId] : []))
   const ownChats: WorktreeSessionEntry[] = chats
     // A session restored from the Host's list can arrive before its summary carries a cwd; its open tab in this tab set is
     // then the one thing that places it, so the left pane lists it where the person is already looking at it.
     .filter(chat => chat.cwd === undefined ? openTabs.has(chat.id) : owningWorktree(repos, chat.cwd) === path)
+    .filter(chat => openTabs.has(chat.id) || chat.running || chat.id === active?.chatSessionId)
     .map((chat) => {
       const selected = chat.id === active?.chatSessionId
-      const open = openTabs.has(chat.id) || chat.running || selected
-      return { kind: 'chat' as const, id: chat.id, label: chatLabel(chat), running: chat.running, active: selected, ...(open ? {} : { earlier: true }) }
+      return { kind: 'chat' as const, id: chat.id, label: chatLabel(chat), running: chat.running, active: selected }
     })
-  return [...agents, ...ownChats.filter(entry => entry.earlier !== true), ...ownChats.filter(entry => entry.earlier === true)]
+  return [...agents, ...ownChats]
 }
 
 function basename(path: string): string {

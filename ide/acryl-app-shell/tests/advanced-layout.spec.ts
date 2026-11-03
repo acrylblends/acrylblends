@@ -108,10 +108,35 @@ describe('the shared advanced shell layout', () => {
     layout.openRightbar(true, false)
     layout.closeRightbar()
     expect(snapshots).toEqual([
-      { sidebar: 0, details: 0, narrow: false, narrowExpanded: false, detailsShown: false, detailsTrack: false, detailsFullscreen: false },
-      { sidebar: 0, details: 648, narrow: false, narrowExpanded: false, detailsShown: true, detailsTrack: true, detailsFullscreen: false },
-      { sidebar: 0, details: 648, narrow: false, narrowExpanded: false, detailsShown: false, detailsTrack: false, detailsFullscreen: false },
+      { sidebar: 0, details: 0, narrow: false, narrowExpanded: false, detailsShown: false, detailsTrack: false, detailsFullscreen: false, mode: 'build' },
+      { sidebar: 0, details: 648, narrow: false, narrowExpanded: false, detailsShown: true, detailsTrack: true, detailsFullscreen: false, mode: 'build' },
+      { sidebar: 0, details: 648, narrow: false, narrowExpanded: false, detailsShown: false, detailsTrack: false, detailsFullscreen: false, mode: 'build' },
     ])
+  })
+
+  it('Preview gives the app the whole window and Build restores the same widths, without touching the saved view', () => {
+    const layout = new DesktopLayoutState()
+    layout.setViewport(1440)
+    layout.setSidebar(320)
+    layout.openRightbar(true, false)
+    const build = solveFrame(1440, layout.getSnapshot(), SIDEBAR_COLLAPSED)
+    layout.setMode('preview')
+    const preview = solveFrame(1440, layout.getSnapshot(), SIDEBAR_COLLAPSED)
+    expect(preview.columns).toEqual({ sidebar: 0, center: 1440, details: 0 })
+    expect(preview.rightbar.canShow).toBe(false)
+    expect(layout.getSnapshot()).toMatchObject({ mode: 'preview', sidebar: 320, details: 648, detailsShown: true })
+    layout.toggleMode()
+    expect(solveFrame(1440, layout.getSnapshot(), SIDEBAR_COLLAPSED).columns).toEqual(build.columns)
+    expect(layout.getSnapshot().mode).toBe('build')
+  })
+
+  it('restores a saved view and ignores fields it cannot read', () => {
+    const layout = new DesktopLayoutState()
+    layout.setViewport(1200)
+    layout.restoreView({ mode: 'preview', sidebar: 0, details: 420 })
+    expect(layout.getSnapshot()).toMatchObject({ mode: 'preview', sidebar: 0, details: 420 })
+    layout.restoreView(undefined)
+    expect(layout.getSnapshot().mode).toBe('preview')
   })
 
   it('ignores a repeated report and a close while already closed', () => {

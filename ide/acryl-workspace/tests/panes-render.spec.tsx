@@ -146,10 +146,23 @@ function sidebarProps(shell: WorkspaceShellState, collapsed = false, projects: P
     shell,
     projects,
     chats: watchingChats(shell, groups, SESSIONS),
+    versions: { get: () => undefined, subscribe: () => () => {} },
   } as ProjectsSidebarProps
 }
 
 describe('ProjectsSidebar', () => {
+  it('renders the Versions plugin under the selected branch when it is present, and nothing without it', () => {
+    const shell = new WorkspaceShellState(api())
+    shell.select('/p/proj')
+    const Section = ({ path }: { path: string }) => <div data-testid="versions">{path}</div>
+    const service = { Section }
+    const versions = { get: () => service, subscribe: () => () => {} }
+    const { rerender } = render(<ProjectsSidebar {...sidebarProps(shell)} />)
+    expect(screen.queryByTestId('versions')).toBeNull()
+    rerender(<ProjectsSidebar {...sidebarProps(shell)} versions={versions} />)
+    expect(screen.getByTestId('versions').textContent).toBe('/p/proj')
+  })
+
   it('lists the pages DSH\'s plugins contribute (Plugins, Automation tasks) above Settings, marks the open one, and opens one on click', () => {
     const shell = new WorkspaceShellState(api())
     const panels = fakePanels([{ id: 'plugins', label: 'Plugins' }, { id: 'automation', label: 'Automation tasks' }], 'plugins')

@@ -35,6 +35,7 @@ import { adoptLegacyProjects, ProjectRegistryState } from './projects/registry-s
 import { createProjectsControl, desktopDirectorySeams } from './projects/projects-control.ts'
 import { createWorkspaceGitApi } from './git/git-api.ts'
 import { ProjectsSidebar } from './projects/ProjectsSidebar.tsx'
+import type { VersionsPort, VersionsService } from './projects/versions-port.ts'
 import { createUpstreamPanels, type PanelSlotRegistry } from './projects/upstream-panels.ts'
 import { DEFAULT_WORKSPACE_CAPABILITIES, loadWorkspaceCapabilities } from './capabilities/capabilities-api.ts'
 import { createWorkspaceAgentsApi } from './agents/agents-api.ts'
@@ -222,6 +223,27 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => followProjectRegistry(view => { projectRegistry.receive(view) }), 'acryl-workspace: follow the project list')
   // Projects that were chat workspaces before ACRYL owned the list are taken over once, when the chat's workspace list is known.
   ctx.inject(['workspaces'], child => { child.effect(() => adoptLegacyProjects(projectRegistry, child.workspaces.list), 'acryl-workspace: take over earlier projects') })
+  // Versions is its own plugin: the left pane reads it when the composition has it, and shows no section when
+  // an app without git does not. The service may arrive after this pane first renders, so it is a live port.
+  let versionsService: VersionsService | undefined
+  const versionsListeners = new Set<() => void>()
+  const setVersions = (next: VersionsService | undefined): void => {
+    if (versionsService === next) return
+    versionsService = next
+    for (const listener of [...versionsListeners]) listener()
+  }
+  const versionsPort: VersionsPort = {
+    get: () => versionsService,
+    subscribe(listener) {
+      versionsListeners.add(listener)
+      return () => { versionsListeners.delete(listener) }
+    },
+  }
+  ctx.inject(['acrylVersions'], child => {
+    const service = (child.get as (name: string) => VersionsService | undefined)('acrylVersions')
+    setVersions(service)
+    return () => { setVersions(undefined) }
+  })
   const projects = createProjectsControl({
     registry: projectRegistry,
     platform: environment.platform,
@@ -305,7 +327,7 @@ export function apply(ctx: ClientContext): void {
           removeSlot = ctx.slots.register({
             name: 'desktop.sidebar',
             priority: 0,
-            inject: () => ({ shell, projects, chats, groups, agents, status: agentStatus, panels: upstreamPanels }),
+            inject: () => ({ shell, projects, chats, groups, agents, status: agentStatus, panels: upstreamPanels, versions: versionsPort }),
           }, ProjectsSidebar)
         } catch (cause) {
           ctx.logger.warn(`acryl-workspace: could not register the left pane: ${cause instanceof Error ? cause.message : String(cause)}`)

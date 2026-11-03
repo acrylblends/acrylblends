@@ -18,6 +18,7 @@ import { buildProjectRows, entriesForWorktree, reposInWorkspace, type WorktreeSe
 import type { DesktopSidebarSurfaceOwnerProps } from 'acryl-app-shell/client'
 import type { WorkspaceShellState } from '../worktrees/shell-state.ts'
 import type { ChatSelection } from '../chat/chat-selection.ts'
+import type { VersionsPort } from './versions-port.ts'
 import { RepoSection } from './RepoSection.tsx'
 import { WorkspaceStrip } from './WorkspaceStrip.tsx'
 import { NewWorkspaceDialog, type NewWorkspaceInput } from './NewWorkspaceDialog.tsx'
@@ -40,6 +41,8 @@ export type ProjectsSidebarProps = Omit<PropsRuntime<'root'>, 'useSessions'> & P
   readonly status: AgentStatusState
   /** The pages DSH's own plugins contribute to its sidebar (Plugins, Automation tasks, ...), which this pane lists above Settings. */
   readonly panels: UpstreamPanels
+  /** The Versions plugin, when this composition has one: the section under the selected branch. */
+  readonly versions: VersionsPort
 }
 
 /**
@@ -49,12 +52,13 @@ export type ProjectsSidebarProps = Omit<PropsRuntime<'root'>, 'useSessions'> & P
  * be polluted the way a flat "everything open" list would be. The upstream sidebar (its search, and
  * anything else it owns) is mounted only to host Settings' trigger and dialog, never shown as a view.
  */
-export function ProjectsSidebar({ collapsed, renderUpstream, onToggleCollapse, useSessions, shell, projects, chats, groups, agents, status, panels }: ProjectsSidebarProps) {
+export function ProjectsSidebar({ collapsed, renderUpstream, onToggleCollapse, useSessions, shell, projects, chats, groups, agents, status, panels, versions }: ProjectsSidebarProps) {
   const subscribe = useCallback((listener: () => void) => shell.subscribe(listener), [shell])
   const snapshot = useSyncExternalStore(subscribe, () => shell.getSnapshot())
   const sessions = useSessions(state => state)
   const projectsKey = useSyncExternalStore(projects.subscribeProjects, () => projects.projectsKey())
   const upstreamPanels = useSyncExternalStore(panels.subscribe, panels.list)
+  const versionsService = useSyncExternalStore(versions.subscribe, versions.get)
   const activePanel = useSyncExternalStore(panels.subscribe, panels.active)
   const [notice, setNotice] = useState<string | null>(null)
   /** A neutral hint (not an error), for actions that continue in another part of the UI. */
@@ -351,6 +355,11 @@ export function ProjectsSidebar({ collapsed, renderUpstream, onToggleCollapse, u
             onCreate={(branch) => createWorktree(repo.root, branch)}
           />
         ))}
+        {versionsService !== undefined && snapshot.selectedPath !== undefined && (
+          <div className="dshWorkspaceVersionsHost">
+            <versionsService.Section path={snapshot.selectedPath} />
+          </div>
+        )}
         <div className="dshWorkspaceSideFoot">
           {upstreamPanels.map(panel => (
             <button

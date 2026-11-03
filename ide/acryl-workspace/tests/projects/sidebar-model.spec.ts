@@ -107,15 +107,14 @@ describe('entriesForWorktree', () => {
     ])
   })
 
-  it('lists chat sessions whose cwd is inside the worktree, by their real displayTitle; blank ones say "New chat"', () => {
+  it('lists the chats whose cwd is inside the worktree and that are open, by their real displayTitle', () => {
     const entries = entriesForWorktree('/p/proj/.worktrees/x', [REPO], [], chats)
     expect(entries).toEqual([
       { kind: 'chat', id: 's1', label: 'Explore the tools', running: true, active: false },
-      { kind: 'chat', id: 's2', label: 'New chat', running: false, active: false, earlier: true },
     ])
   })
 
-  it('lists open chats (a tab here, running, or selected) first and marks the rest earlier', () => {
+  it('lists only open chats (a tab here, running, or selected): closed chats are the History button\'s', () => {
     const history = [
       { id: 'h1', cwd: '/p/proj', blank: false, running: false, displayTitle: 'acryl' },
       { id: 'h2', cwd: '/p/proj', blank: false, running: false, displayTitle: 'acryl' },
@@ -125,9 +124,7 @@ describe('entriesForWorktree', () => {
     ]
     const chatTiles = [{ id: 'tile-1', kind: 'chat', title: 'Has a tab', chatSessionId: 'tabbed' }]
     const entries = entriesForWorktree('/p/proj', [REPO], chatTiles, history, { id: 'tile-2', chatSessionId: 'shown' })
-    expect(entries.map(entry => [entry.id, entry.earlier === true])).toEqual([
-      ['tabbed', false], ['busy', false], ['shown', false], ['h1', true], ['h2', true],
-    ])
+    expect(entries.map(entry => entry.id)).toEqual(['tabbed', 'busy', 'shown'])
   })
 
   it('lists a chat whose summary has no cwd yet when its tab lives in this worktree (a session restored from the Host list)', () => {
@@ -144,18 +141,18 @@ describe('entriesForWorktree', () => {
     const agentActive = entriesForWorktree('/p/proj/.worktrees/x', [REPO], tiles, [], { id: 't2' })
     expect(agentActive.map(e => e.active)).toEqual([false, true])
     const chatActive = entriesForWorktree('/p/proj/.worktrees/x', [REPO], [], chats, { id: 'tile-x', chatSessionId: 's1' })
-    expect(chatActive.map(e => e.active)).toEqual([true, false])
+    expect(chatActive.map(e => e.active)).toEqual([true])
   })
 
   it('does not treat a nested worktree, a sibling, or a chat with no cwd as inside', () => {
     // s1/s2 belong to the nested worktree /p/proj/.worktrees/x, not its parent /p/proj (owningWorktree,
     // not a plain path-prefix check, is what keeps a linked worktree's chats from also counting for main).
-    expect(entriesForWorktree('/p/proj', [REPO], [], chats).map(e => e.id)).toEqual(['s3'])
+    expect(entriesForWorktree('/p/proj', [REPO], [], chats).map(e => e.id)).toEqual([])
   })
 
   it('combines agents first, then chats, for one worktree', () => {
     const entries = entriesForWorktree('/p/proj/.worktrees/x', [REPO], tiles, chats)
-    expect(entries.map(e => e.kind)).toEqual(['agent', 'agent', 'chat', 'chat'])
+    expect(entries.map(e => e.kind)).toEqual(['agent', 'agent', 'chat'])
   })
 })
 

@@ -203,12 +203,10 @@ function WorktreeSessions({
   readonly onRenameEntry: (path: string, entry: WorktreeSessionEntry, title: string) => void
 }) {
   const [editing, setEditing] = useState<{ readonly key: string; readonly value: string } | null>(null)
-  const [showEarlier, setShowEarlier] = useState(false)
   if (entries.length === 0) {
     return <p className="dshWorkspaceSessionsEmpty">Nothing running here yet.</p>
   }
-  const earlier = entries.filter(entry => entry.earlier === true).length
-  const visible = showEarlier ? entries : entries.filter(entry => entry.earlier !== true)
+  const visible = entries
   return (
     <ul className="dshWorkspaceSessions">
       {visible.length === 0 && <li className="dshWorkspaceSessionsEmpty">Nothing open here.</li>}
@@ -265,13 +263,6 @@ function WorktreeSessions({
         </li>
         )
       })}
-      {earlier > 0 && (
-        <li className="dshWorkspaceSessionItem">
-          <button type="button" className="dshWorkspaceSessionRow dshWorkspaceSessionsMore" aria-expanded={showEarlier} onClick={() => { setShowEarlier(!showEarlier) }}>
-            {showEarlier ? 'Hide earlier chats' : `${String(earlier)} earlier ${earlier === 1 ? 'chat' : 'chats'}`}
-          </button>
-        </li>
-      )}
     </ul>
   )
 }

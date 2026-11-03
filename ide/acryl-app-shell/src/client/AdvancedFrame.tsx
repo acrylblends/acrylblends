@@ -30,6 +30,7 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
   const subscribeLayout = useCallback((listener: () => void) => layout.subscribe(listener), [layout])
   const readLayout = useCallback(() => layout.getSnapshot(), [layout])
   const panels = useSyncExternalStore(subscribeLayout, readLayout)
+  const preview = panels.mode === 'preview'
   // DSH 0.2 keyed `main` panels (settings, plugin manager, ...): while one is open it replaces the ACRYL main surface.
   const activePanelId = useSyncExternalStore(layout.panelInfo.subscribe, () => layout.panelInfo.getSnapshot().activePanelId)
   const frameRef = useRef<HTMLDivElement>(null)
@@ -98,16 +99,17 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
       ref={frameRef}
       className="dshDesktopFrame"
       data-desktop-platform={platform}
+      data-frame-mode={panels.mode}
       data-sidebar-collapsed={collapsed || undefined}
       data-details-collapsed={columns.details === 0 || undefined}
       data-details-fullscreen={panels.detailsFullscreen || undefined}
       data-dragging={dragging || undefined}
       style={{ gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` }}
     >
-      {platform === 'darwin' && collapsed && <div className="dshDesktopLeading" data-acryl-slot="shell.leading">{renderSlot('shell.leading', {})}</div>}
-      {platform === 'darwin' && <div className="dshDesktopMacCaptionRow" aria-hidden="true" />}
-      {platform === 'win32' && <div className="dshDesktopWindowsCaptionRow" aria-hidden="true" />}
-      <aside className="dshDesktopSidebarSurface">
+      {!preview && platform === 'darwin' && collapsed && <div className="dshDesktopLeading" data-acryl-slot="shell.leading">{renderSlot('shell.leading', {})}</div>}
+      {!preview && platform === 'darwin' && <div className="dshDesktopMacCaptionRow" aria-hidden="true" />}
+      {!preview && platform === 'win32' && <div className="dshDesktopWindowsCaptionRow" aria-hidden="true" />}
+      <aside className="dshDesktopSidebarSurface" hidden={preview || undefined}>
         <div className="dshDesktopUpstreamSidebar" data-acryl-slot="sidebar">
           {renderSlot('desktop.sidebar', {
             collapsed,
@@ -128,7 +130,7 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
           return wrapMain === undefined ? main : wrapMain(main)
         })()}
       </main>
-      <aside className="dshDesktopDetailsSurface" data-acryl-slot="rightbar">
+      <aside className="dshDesktopDetailsSurface" data-acryl-slot="rightbar" hidden={preview || undefined}>
         {/* Strict session entry: with no session there is no surface, and the
             column is an empty zero-width track (matches ui-layout's
             AppFrame/rightbar - SessionProvider withholds the strict entry
@@ -144,7 +146,19 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
       <div className="dshDesktopOverlay" data-shell-overlay>
         {renderSlot('shell.overlay', {})}
       </div>
-      {!collapsed && (
+      {preview
+        ? (
+            <button type="button" className="dshDesktopPreviewPill" onClick={() => { layout.setMode('build') }}>
+              Back to Build
+            </button>
+          )
+        : (
+            <div className="dshDesktopModeBar" role="group" aria-label="Frame mode">
+              <button type="button" aria-pressed="true" onClick={() => { layout.setMode('build') }}>Build</button>
+              <button type="button" aria-pressed="false" onClick={() => { layout.setMode('preview') }}>Preview</button>
+            </div>
+          )}
+      {!preview && !collapsed && (
         <ResizeHandle
           side="sidebar"
           left={columns.sidebar}
@@ -153,7 +167,7 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
           onEnd={onDragEnd}
         />
       )}
-      {panels.detailsShown && !panels.detailsFullscreen && normal.details > 0 && (
+      {!preview && panels.detailsShown && !panels.detailsFullscreen && normal.details > 0 && (
         <ResizeHandle
           side="details"
           left={viewport - normal.details}
