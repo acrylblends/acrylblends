@@ -102,6 +102,8 @@ describe('upgrading a pre-frame app to the host layout', () => {
   it('writes the launcher, the overlay, the runtime row and the frame row, and prints each change', async () => {
     const root = await preFrameApp('framed-later')
     const blendBefore = read(root, 'blend.yaml')
+    // src/routes.ts is the app's own from its first edit: the upgrade must leave it exactly as it was.
+    const routesBefore = read(root, 'src/routes.ts')
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { code, out } = await runUpgrade(root)
     expect(code).toBe(0)
@@ -129,9 +131,11 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(manifest.dependencies['acryl-app-shell']).toBe('file:/checkout/ide/acryl-app-shell')
     // The app's own configuration is untouched.
     expect(read(root, 'blend.yaml')).toBe(blendBefore)
+    expect(read(root, 'src/routes.ts')).toBe(routesBefore)
     const report = out()
     expect(report).toMatch(/frame\s+.*src\/frame\.ts added/u)
-    expect(report).toMatch(/src\/routes\.ts updated/u)
+    // Never written, never reported, never backed up: the app owns that file from its first edit.
+    expect(report).not.toMatch(/src\/routes\.ts/u)
     expect(report).toMatch(/scripts\/ide-host\.mjs added/u)
     expect(report).toMatch(/cordis\.patch\.yml added/u)
     expect(report).toMatch(/plugins\/acryl-page added/u)
