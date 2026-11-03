@@ -6,7 +6,7 @@ import type { PropsRuntime, UseSessions } from '@acryl/ui/frame'
 // a real type from it (rather than an empty `import type {}`, which some
 // compilations drop entirely) reliably pulls that augmentation into this
 // program even though nothing here holds a value of it.
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { AgentId } from '../../pty/contract.ts'
 import { TextDiffPane } from '../diff/TextDiffPane.tsx'
 import type { AgentBridge } from '../sessions/agent-bridge.ts'
@@ -166,8 +166,8 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
     return focusChatComposer()
   }, [activeChatId])
 
-  /** The pane for one tile, used for both the primary pane and the split pane. */
-  const renderTile = (tile: WorkspaceTile): ReactNode => {
+  /** The pane body for one tile; `renderTile` keys it. */
+  const renderTileBody = (tile: WorkspaceTile): ReactNode => {
     if (tile.kind === 'chat') return (
       <div className="dshWorkspaceChat">
         <ChatHistory
@@ -208,6 +208,13 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
     }
     return <TextDiffPane tile={tile} workspace={workspace} />
   }
+
+  /**
+   * The pane for one tile, used for both the primary pane and the split pane. Keyed by the tile: a pane's own state (a browser tab's frame and its
+   * load attempts, a terminal's view) belongs to its tab, so selecting another tab of the same kind mounts that tab's pane instead of handing it the
+   * previous one. Unkeyed, React kept one browser pane across two browser tabs and re-pointed the live app page's iframe at the other tab's address.
+   */
+  const renderTile = (tile: WorkspaceTile): ReactNode => <Fragment key={tile.id}>{renderTileBody(tile)}</Fragment>
 
   const openPty = useCallback(async (commandId: AgentId, title: string) => {
     const tile = workspace.addTile('pty', { commandId, title })

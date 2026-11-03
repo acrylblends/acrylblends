@@ -151,6 +151,36 @@ describe('acryl-node-server', () => {
     expect(nodeServer.isPortUnavailable(new Error('no code'), 'win32')).toBe(false)
   })
 
+  it('a port a browser refuses is skipped in the scan, and only that one, without widening the range', () => {
+    // The Fetch standard's bad ports: Chromium refuses a page there (ERR_UNSAFE_PORT), and Node's fetch answers "bad port". 3659 is inside the
+    // app port range (plugins/instance hashes into 3100..3999), which is how the gate met it.
+    expect(nodeServer.isRestrictedPort(1)).toBe(true)
+    expect(nodeServer.isRestrictedPort(3659)).toBe(true)
+    expect(nodeServer.isRestrictedPort(6000)).toBe(true)
+    expect(nodeServer.isRestrictedPort(3100)).toBe(false)
+    expect(nodeServer.isRestrictedPort(3660)).toBe(false)
+    expect(nodeServer.RESTRICTED_PORTS.size).toBe(82)
+    // The rest of the requested range is tried in order, and the skip does not extend it.
+    expect(nodeServer.portCandidates(3650, 20)).toEqual([
+      3650, 3651, 3652, 3653, 3654, 3655, 3656, 3657, 3658, 3660, 3661, 3662, 3663, 3664, 3665, 3666, 3667, 3668, 3669, 3670,
+    ])
+    expect(nodeServer.portCandidates(3650, 9)).toEqual([3650, 3651, 3652, 3653, 3654, 3655, 3656, 3657, 3658])
+    // A configured restricted port with no scan has nothing to try: the listener never binds it.
+    expect(nodeServer.portCandidates(3659, 0)).toEqual([])
+    // Port 0 is the system's choice, and the ports it hands out are above the restricted range.
+    expect(nodeServer.portCandidates(0, 20)).toEqual([0])
+  })
+
+  it('never binds a port a browser refuses: a restricted start moves to the next usable port, which fetch reaches', async () => {
+    const ctx = await boot({ port: 3659, scan: 20 })
+    ctx.router.route('/', new Acryl().get('/ok', c => c.text('ok')))
+    expect(nodeServer.isRestrictedPort(ctx.nodeServer.port)).toBe(false)
+    expect(ctx.nodeServer.port).toBeGreaterThan(3659)
+    expect(ctx.nodeServer.port).toBeLessThanOrEqual(3679)
+    // The very client that refused 3659 ("bad port") reaches the app where it actually listens.
+    expect(await (await fetch(`${ctx.nodeServer.url}/ok`)).text()).toBe('ok')
+  })
+
   it('scans past several taken ports and is ready when the plugin settles', async () => {
     const held: Array<{ port: number, release: () => Promise<void> }> = []
     try {
@@ -177,11 +207,18 @@ describe('acryl-node-server', () => {
       const ctx = await routed()
       const fiber = ctx.plugin(nodeServer, { port: taken.port, scan: 0 })
       // A settled fiber rejects with its startup error.
-      await expect(Promise.resolve(fiber)).rejects.toThrow(`no free port from ${String(taken.port)} to ${String(taken.port)}`)
+      await expect(Promise.resolve(fiber)).rejects.toThrow(`no usable port from ${String(taken.port)} to ${String(taken.port)}`)
       expect(fiber.state).toBe(3) // FAILED
     } finally {
       await taken.release()
     }
+  })
+
+  it('fails rather than binds a configured port a browser refuses when the scan may not move on', async () => {
+    const ctx = await routed()
+    const fiber = ctx.plugin(nodeServer, { port: 3659, scan: 0 })
+    await expect(Promise.resolve(fiber)).rejects.toThrow('no usable port from 3659 to 3659')
+    expect(fiber.state).toBe(3) // FAILED
   })
 
   it('on dispose ends open event streams and frees the port', async () => {
