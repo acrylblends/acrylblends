@@ -1,8 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { blankChatsFile, createBlankChatsStore, parseBlankChatsFile } from '../src/blank-chats.ts'
 import type { ChatRow } from '../src/client/LeftPanel.tsx'
 import { visibleChats } from '../src/client/chats.ts'
 import { type ChatLook, lookAtLog, RealChats } from '../src/real-chats.ts'
@@ -64,31 +60,5 @@ describe('RealChats', () => {
     now.t = 500
     expect(await real.read()).toEqual([{ id: 'a', title: 'DSH title' }])
     expect(asked).toEqual(['a', 'a'])
-  })
-
-  it('calls a session blank only when it exists and has no turn', async () => {
-    const real = make({ a: { hasTurn: true, title: 'x', named: true }, b: { hasTurn: false, title: undefined, named: false } }, [], { t: 0 })
-    expect(await real.isBlank('b')).toBe(true)
-    expect(await real.isBlank('a')).toBe(false)
-    expect(await real.isBlank('gone')).toBe(false)
-  })
-})
-
-describe('the blank chat store', () => {
-  it('keeps one blank chat per app folder and branch, and survives a corrupt file', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'blank-chats-'))
-    try {
-      const file = blankChatsFile(dir)
-      const store = createBlankChatsStore(file)
-      expect(await store.read('/app', 'main')).toBeUndefined()
-      await store.record('/app', 'main', 's1')
-      await store.record('/app', 'feature', 's2')
-      await store.record('/app', 'main', 's3')
-      expect(await createBlankChatsStore(file).read('/app', 'main')).toBe('s3')
-      expect(await store.read('/app', 'feature')).toBe('s2')
-      expect(parseBlankChatsFile('not json')).toEqual({})
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
   })
 })

@@ -126,6 +126,17 @@ describe('the auto-save', () => {
     expect(await store.forSession('s1')).toEqual([{ turn: 3, files: ['src/routes.ts', 'src/board.ts'], hash: 'hash1', version: 7, subject: 'Add due dates' }])
   })
 
+  it('saves a turn the person stopped: DSH announces its changes while stopping, before the turn ends', async () => {
+    const { auto, store, messages } = harness({ 10: ['src/hang-note.ts'] })
+    auto.observe('s1', { type: 'turn/start', seq: 7, data: { turn: 4 } })
+    auto.observe('s1', { type: 'user/message', seq: 8, data: { content: [{ type: 'text', text: 'Write the note, then run the tests.' }] } })
+    auto.observe('s1', { type: 'workspace/changes', seq: 10, data: { turn: 4 } })
+    auto.observe('s1', { type: 'turn/end', seq: 11, data: { turn: 4 } })
+    await auto.settled()
+    expect(messages).toEqual(['Write the note'])
+    expect(await store.forSession('s1')).toEqual([{ turn: 4, files: ['src/hang-note.ts'], hash: 'hash1', version: 7, subject: 'Write the note' }])
+  })
+
   it('makes no version for a turn that changed nothing', async () => {
     const { auto, store, messages } = harness({ 10: [] })
     turn(auto, 's1', 1, 'What is in the app?', 10)

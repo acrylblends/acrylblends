@@ -9,9 +9,10 @@ import type { FrameState } from '../contract.ts'
 import { FilesView } from './FilesView.tsx'
 import { FileView } from './FileView.tsx'
 import { GitView } from './GitView.tsx'
+import { NEW_CHAT } from './chats.ts'
 import type { ChatsPort } from './LeftPanel.tsx'
 import { historyGroups, type BranchChatsPort } from './branch-chats.ts'
-import { FILES_TAB, GIT_TAB, PTY_AGENTS, fileTab, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
+import { FILES_TAB, GIT_TAB, PTY_AGENTS, chatTab, fileTab, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
 import { TerminalView } from './TerminalView.tsx'
 import type { FrameTools } from './tools.ts'
 import { chatTime, type VersionsPort } from './versions.ts'
@@ -43,9 +44,11 @@ export interface RightPanelProps {
 
 const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 
-function TabLabel({ tab }: { readonly tab: FrameTab }) {
+function TabLabel({ tab, chatTitle }: { readonly tab: FrameTab; readonly chatTitle: string }) {
   switch (tab.kind) {
-    case 'chat': return <>Chat <span className="acrylBlendsTabKind">DeepSeek</span></>
+    case 'chat': return tab.session === undefined
+      ? <>Chat <span className="acrylBlendsTabKind">DeepSeek</span></>
+      : <><span className="acrylBlendsTabTitle">{chatTitle}</span> <span className="acrylBlendsTabKind">DeepSeek</span></>
     case 'pty': return <>{PTY_AGENTS.find(entry => entry.agent === tab.agent)?.tab} <span className="acrylBlendsTabKind">PTY</span></>
     case 'terminal': return <>Terminal</>
     case 'files': return <>Files</>
@@ -110,6 +113,34 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
     // Closing the shown tab may leave the strip on one of another branch's, which it does not draw: the chat is the fallback.
     const after = tabs.getSnapshot()
     if (!tabsForBranch(after, branch).some(tab => tab.id === after.active)) tabs.activate('chat')
+    // A chat tab closed while its chat was on screen: the base tab shows the branch's own chat again.
+    if (closed?.kind === 'chat' && tabs.getSnapshot().active === 'chat') chats.openPrimary(chatSessions())
+  }
+
+  /** The chats that have a tab of their own on this branch; the base tab shows none of them. */
+  const chatSessions = (): ReadonlySet<string> => new Set(visible.flatMap(tab => (tab.kind === 'chat' && tab.session !== undefined ? [tab.session] : [])))
+
+  const showTab = (tab: FrameTab) => {
+    tabs.activate(tab.id)
+    // A chat tab shows its own chat; the base tab shows the branch's chat that no other tab has.
+    if (tab.kind === 'chat') {
+      if (tab.session === undefined) chats.openPrimary(chatSessions())
+      else chats.open(tab.session)
+    }
+  }
+
+  // "+ then Chat": a chat of its own, on this branch, as its own tab. The chat on screen is reused while it has no turn (it already is a new chat).
+  const newChat = async () => {
+    setMenu(false)
+    setNotice(undefined)
+    try {
+      const started = await chats.startChat()
+      if (started === undefined) setNotice('A new chat could not be started.')
+      else if (started.made) tabs.open(chatTab(started.id))
+      else tabs.activate(tabs.chatTabId(started.id))
+    } catch (cause) {
+      setNotice(`A new chat could not be started: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
   }
 
   const openTool = (tab: FrameTab) => {
@@ -122,19 +153,19 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
       <div className="acrylBlendsTabs" ref={menuRef}>
         <div className="acrylBlendsTabStrip" role="tablist" aria-label="Agents and tools">
           {visible.map(tab => (
-            <div key={tab.id} className="acrylBlendsTabWrap" data-closable={tab.kind !== 'chat' || undefined}>
+            <div key={tab.id} className="acrylBlendsTabWrap" data-closable={tab.id !== 'chat' || undefined}>
               <button
                 type="button"
                 role="tab"
                 className="acrylBlendsTab"
                 aria-selected={tab.id === active?.id}
                 title={tab.kind === 'file' ? tab.path : undefined}
-                onClick={() => { tabs.activate(tab.id) }}
+                onClick={() => { showTab(tab) }}
                 onAuxClick={(event) => { if (event.button === 1) close(tab.id) }}
               >
-                <TabLabel tab={tab} />
+                <TabLabel tab={tab} chatTitle={rows.find(row => tab.kind === 'chat' && row.id === tab.session)?.title ?? NEW_CHAT} />
               </button>
-              {tab.kind !== 'chat' && (
+              {tab.id !== 'chat' && (
                 <button type="button" className="acrylBlendsTabClose" aria-label="Close tab" onClick={() => { close(tab.id) }}>×</button>
               )}
             </div>
@@ -153,8 +184,8 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
         {menu && (
           <div className="acrylBlendsMenu" role="menu">
             <div className="acrylBlendsMenuHead">Agents</div>
-            <button type="button" role="menuitem" className="acrylBlendsMenuItem" onClick={() => { openTool({ kind: 'chat', id: 'chat' }) }}>
-              Chat <small>your model</small>
+            <button type="button" role="menuitem" className="acrylBlendsMenuItem" onClick={() => { void newChat() }}>
+              Chat <small>a new chat, your model</small>
             </button>
             {PTY_AGENTS.map(entry => (
               <button key={entry.agent} type="button" role="menuitem" className="acrylBlendsMenuItem" onClick={() => { void start(entry.agent) }}>
@@ -214,8 +245,12 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
                     type="button"
                     className="acrylBlendsHistoryRow"
                     aria-current={row.current || undefined}
+                    // The chat on screen always belongs to the checked-out branch: another branch's chats are listed, and opened from that branch.
+                    disabled={group.branch !== undefined && group.branch !== branch}
+                    title={group.branch !== undefined && group.branch !== branch ? `On ${group.branch}: switch to that branch to open it.` : undefined}
                     onClick={() => {
                       chats.open(row.id)
+                      tabs.activate(tabs.chatTabId(row.id))
                       setHistory(false)
                     }}
                   >

@@ -21,7 +21,6 @@ import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
-import { blankChatsFile, createBlankChatsStore } from './blank-chats.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
 import { AppReloader, watchFolder, type AppRow } from './app-reload.ts'
@@ -33,7 +32,6 @@ import {
   branchNameProblem,
   FRAME_BRANCHES_NEW_PATH,
   FRAME_CHAT_SAVES_PATH,
-  FRAME_BLANK_CHAT_PATH,
   FRAME_REAL_CHATS_PATH,
   FRAME_BRANCH_CHATS_PATH,
   FRAME_BRANCHES_SWITCH_PATH,
@@ -280,13 +278,6 @@ export interface RealChatsPort {
   read(): Promise<readonly { readonly id: string; readonly title: string }[]>
 }
 
-/** The blank chat of the checked-out branch: the one handed out, and recording another that is found blank. */
-export interface BlankChatPort {
-  read(): Promise<string | undefined>
-  /** @returns false when the chat is not a blank one the Host knows. */
-  record(id: string): Promise<boolean>
-}
-
 /** The app's code as the Host runs it: what it runs now, and the answer once that changes. */
 export interface AppReloadPort {
   view(): AppReloadView
@@ -326,12 +317,11 @@ export interface FrameRoutesDeps {
   /** Which of the listed versions are also on another branch or the remote. */
   readonly shared?: (hashes: readonly string[]) => Promise<string[]>
   readonly realChats?: RealChatsPort
-  readonly blankChat?: BlankChatPort
   readonly gitSync?: GitSyncPort
   readonly appReload?: AppReloadPort
 }
 
-export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, blankChat, gitSync, appReload }: FrameRoutesDeps): Acryl {
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, gitSync, appReload }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
   if (appReload !== undefined) {
     app.get(FRAME_APP_PATH, ownPage, async (c) => {
@@ -360,27 +350,6 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(await gitSync.pull())
       } catch (cause) {
         return c.json(error(failed(cause, 'the branch could not be pulled')), 409)
-      }
-    })
-  }
-  if (blankChat !== undefined) {
-    app.get(FRAME_BLANK_CHAT_PATH, ownPage, async (c) => {
-      try {
-        return c.json({ id: (await blankChat.read()) ?? null })
-      } catch (cause) {
-        report(cause)
-        return c.json(error('the blank chat could not be read'), 500)
-      }
-    })
-    app.post(FRAME_BLANK_CHAT_PATH, ownPage, jsonBody(), async (c) => {
-      const body: unknown = await readJson(c)
-      const id = body !== null && typeof body === 'object' ? (body as { id?: unknown }).id : undefined
-      if (typeof id !== 'string' || !SESSION_ID.test(id)) return c.json(error('name the chat'), 400)
-      try {
-        return c.json({ recorded: await blankChat.record(id) })
-      } catch (cause) {
-        report(cause)
-        return c.json(error('the blank chat could not be recorded'), 500)
       }
     })
   }
@@ -688,20 +657,6 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       look: async id => lookAtLog((await sessionQueryOf(ctx.get('sessionQuery'))?.readSession(id))?.events ?? []),
       report,
     })
-    const blankChats = createBlankChatsStore(blankChatsFile(ctx.appInstance.home))
-    const blankChat: BlankChatPort = {
-      read: async () => {
-        const branch = (await readBranches(git, root)).find(entry => entry.current)?.name
-        const id = branch === undefined ? undefined : await blankChats.read(root, branch)
-        return id !== undefined && await realChatList.isBlank(id) ? id : undefined
-      },
-      record: async (id) => {
-        const branch = (await readBranches(git, root)).find(entry => entry.current)?.name
-        if (branch === undefined || !(await realChatList.isBlank(id))) return false
-        await blankChats.record(root, branch, id)
-        return true
-      },
-    }
     const chatSaves: ChatSavesPort = { read: async session => ({ saves: await store.forSession(session) }) }
     // The app's code, loaded again when its files change (./app-reload.ts), whoever changes them: a version restored, a branch switched, the chat, an
     // agent in a terminal, an editor. Only where the launcher installed the generation hook (./app-generation.ts); elsewhere the app's code is as it started.
@@ -758,7 +713,6 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       ...(appReload === undefined ? {} : { appReload }),
       shared: (hashes) => sharedVersions(git, root, hashes),
       realChats: { read: () => realChatList.read() },
-      blankChat,
       gitSync: new GitSync(git, root),
     }))
     ctx.routerHttp.mount(FRAME_API_PREFIX)

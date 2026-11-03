@@ -1,6 +1,6 @@
 /**
- * Which branch each chat was opened on, as the Host remembers it, and the frame's copy of that map. DSH knows no branches: a chat the frame has
- * not recorded yet is put on the checked-out branch when it is first seen, once, and stays there when the folder moves.
+ * Which branch each chat belongs to, as the Host remembers it, and the frame's copy of that map: the one source of truth for it. DSH knows no
+ * branches. A chat is recorded once - when the frame makes it, or when it is first seen with a turn - and never moved by a later switch.
  */
 
 import { FRAME_BRANCH_CHATS_PATH, parseBranchChats } from '../contract.ts'
@@ -46,6 +46,7 @@ export class BranchChatsStore implements BranchChatsPort {
   private chats: Readonly<Record<string, string>> = Object.freeze({})
   private readonly pending = new Set<string>()
   private readonly listeners = new Set<() => void>()
+  private loaded = false
 
   constructor(private readonly api: BranchChatsApi) {}
 
@@ -58,10 +59,16 @@ export class BranchChatsStore implements BranchChatsPort {
     return () => { this.listeners.delete(listener) }
   }
 
-  /** Read what the Host remembers; a failed read keeps the map the frame has and leaves new chats assignable. */
+  /** Whether the Host's map has been read: until then a chat that looks unrecorded may only be one the frame has not heard about. */
+  isLoaded(): boolean {
+    return this.loaded
+  }
+
+  /** Read what the Host remembers; a failed read keeps the map the frame has and is tried again by the next call. */
   async load(): Promise<void> {
     try {
       const recorded = await this.api.read()
+      this.loaded = true
       this.publish({ ...this.chats, ...recorded })
     } catch {
       // The Host answers again on the next page; until then a new chat is still put on its branch here.
