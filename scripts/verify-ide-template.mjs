@@ -1927,6 +1927,11 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           domain: cookie.domain,
           path: cookie.path,
         })
+      // The page is still open with the launch token in its URL, and the client can exchange that token again on a
+      // reconnect, staying admitted with no cookie: the banner would then never be due. A person whose session is
+      // gone has no fresh token to spend either, so the address drops it without a reload. The retries and the
+      // workspace probe then answer 401, which is the state this step is about.
+      await evaluate(`history.replaceState(null, '', location.pathname)`)
       const restartedUrl = await restartHost()
       if (restartedUrl === undefined) fail('the host did not restart for the session banner check')
       const banner = await until(async () => {
