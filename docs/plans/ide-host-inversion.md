@@ -1049,6 +1049,19 @@ and the candidates (the skip does not widen the range; port 0 stays the system's
 fetch, and the instance seed path (a project folder whose hash is 3659 boots on an address fetch reaches). `verify-upgrade-frame` passes again with the
 fix (`96afd061`).
 
+**The count's attempt 2 (two flakes, both unrelated to the port).** Attempt 1 on `91fe629a` was green; attempt 2 failed `packages (windows-latest, Node 24)` and
+`frame (macos-latest, agent)`. The Windows job was a fixture, not a product: the `ide/acryl-workspace` files spec's `beforeAll` starts git three times and vitest's
+10 s hook default expired on a runner carrying about a hundred test workers. A longer bound would be a bigger budget, not a cause, so the fixture does less: the
+file only asks `git rev-parse --show-toplevel` and `git check-ignore --`, and both answer in an initialized repository with no commit, so `git add` and `git
+commit` are gone and the hook starts one process (`85c6303d`, 20/20 tests pass). The macOS agent job was the panel again, with a new shape: the panel there was
+fresh (ready, empty log, no `agent-panel-reload` marker), the typed host and textarea were no longer current while the typed form was still connected to its old
+document, and the ask never reached the server. That is the app's page replaced with the ask in flight by something other than the panel (its own reload writes
+the marker first). The gate now records every iframe load in the frame's page (time, src, whether the document was readable), keeps the submit's iframe element,
+document and `performance.timeOrigin`, and lists the CDP's `Page.frameNavigated` events in the failure dump (`dc829324`), so the next red names the load that
+replaced the page. Seven local runs with the instrumentation (four plain, three under eight CPU hogs) passed on this Mac, so the actor is still unnamed; the rule
+it must be fixed against is that the frame never reloads the app page on its own while a run is going, and the count restarts on the head that carries the dump.
+The 125 redesign removes this class by moving the agent out of the app's iframe into the frame's right panel, where an app reload cannot touch a run.
+
 **State (2026-11-03, survives a compact).** Branch `124-panel-reload` from `542cfaf2`; commits `44d51a99` (draft, single host, diagnostics),
 `efa29230` (restore once, no retry, causes checked), `749b35b3` (reload decided when it happens, marker + tests), `f70c9c96` (jsdom types). Proven:
 the submit cannot navigate (preventDefault first, no form action, tested); the server records a run before answering the ask (no follow race); no
@@ -1056,7 +1069,7 @@ second `start()` caller exists (one tag per HTML response, one module execution 
 script has no watcher, so the frame's app server does not restart under a run; the panel's check-then-reload race is fixed and its tests pass (typing
 during the change window leaves the page and text alone; an idle empty composer records the marker before reloading). Also `e1f6617a`: a sent message blurs the composer, so a plugin-install run still reloads the page (verify:panel passes again).
 State at this edit: main `81bb14dc` (119 landed) merged into the branch as `7e2d208b` with no conflicts; the full check on the merged head (`5c3afee3`)
-found the restricted port above, fixed in `96afd061`; the full check runs again on the head that carries this note, then the push and three consecutive
-green CI runs count on that sha (the earlier count on `e1f6617a` was stopped when 119 landed, as the landing rule
-requires). The gate's panel step (on this branch) records the
-typed nodes' liveness and the reload marker, so a recurrence names a replaced page or an unwired form.
+found the restricted port above, fixed in `96afd061`; the full check is green on the head that carries this note; the first count on `91fe629a` was
+stopped by attempt 2's two flakes, both addressed above, and the count restarted on the head that carries the gate's load recorder (`dc829324`). The
+gate's panel step (on this branch) records the typed nodes' liveness, the reload marker and every iframe load under the submit, so a recurrence names a
+replaced page, a frame-initiated load or an unwired form.
