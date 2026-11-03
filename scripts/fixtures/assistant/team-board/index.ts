@@ -1,7 +1,8 @@
 /**
- * The Team Board of the Blends frame mockup (scenario 10), as a plugin an agent would have built into an app: a board at `/board`, and `/my-tasks` with a Due filter.
- * The Assistant gate installs it into an app made from the agent template, so a visitor's question has something to open and filter. Due dates are counted from the
- * day the page is served, so "this week" (today and the six days after it) always holds the same two of Ana's tasks.
+ * The Team Board of the Blends frame mockup (scenario 10), as a plugin an agent would have built into an app: a board at `/board` with a new-task form, and
+ * `/my-tasks` with a Due filter. The Assistant gate installs it into an app made from the agent template, so a visitor's question has something to open,
+ * filter and fill in. Due dates are counted from the day the page is served, so "this week" (today and the six days after it) always holds the same two of
+ * Ana's tasks.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Acryl } from 'acrylblends'
@@ -72,6 +73,12 @@ h1{font-size:18px;margin:0 0 12px}
 .bar [role=status]{margin-left:auto;color:#77736b}
 ul.mine{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-width:640px}
 ul.mine li[hidden]{display:none}
+.newtask{max-width:420px;margin:18px 0 0;background:#fff;border:1px solid #e3dfd5;border-radius:8px;padding:12px 14px;display:grid;gap:8px}
+.newtask h2{margin:0;font-size:14px}
+.newtask label{font-size:12px;color:#77736b}
+.newtask input{font:inherit;padding:6px 9px;border:1px solid #e3dfd5;border-radius:7px;background:#fff}
+.newtask button{justify-self:start;font:inherit;padding:6px 14px;border:1px solid #1d1c1a;border-radius:7px;background:#1d1c1a;color:#fff}
+.newtask [role=status]{margin:0;color:#77736b;font-size:12px}
 </style>`
 
 function page(title: string, current: '/board' | '/my-tasks', body: string): string {
@@ -96,7 +103,26 @@ function boardPage(today: Date): string {
       .join('')
     return `<section class="col" aria-label="${column}"><h2>${column}</h2>${cards}</section>`
   })
-  return page('Board', '/board', `<h1>Board</h1><div class="board">${columns.join('')}</div>`)
+  // The new-task form runs in the page: Save puts the card on the board and says so, and nobody else's click does it. An assistant that was asked to
+  // add a task fills the two fields and leaves Save to the person.
+  const script = `<script>(function(){
+var form=document.getElementById('new-task'),title=document.getElementById('new-title'),due=document.getElementById('new-due'),status=document.getElementById('new-status'),todo=document.querySelector('section[aria-label="To do"]');
+form.addEventListener('submit',function(event){
+  event.preventDefault();
+  var text=title.value.trim();
+  if(!text){status.textContent='A task needs a title.';return}
+  var card=document.createElement('div');card.className='task';card.append(text);
+  var who=document.createElement('div');who.className='who';who.textContent='${ME}'+(due.value.trim()?' · due '+due.value.trim():'');
+  card.append(who);todo.append(card);
+  title.value='';due.value='';
+  status.textContent='Saved "'+text+'".'
+})})()</script>`
+  const form = `<form id="new-task" class="newtask" aria-label="New task"><h2>New task</h2><label for="new-title">Title</label><input id="new-title" name="title" type="text" autocomplete="off" required><label for="new-due">Due</label><input id="new-due" name="due" type="text" autocomplete="off" placeholder="e.g. Friday"><button type="submit">Save</button><p id="new-status" role="status"></p></form>`
+  return page(
+    'Board',
+    '/board',
+    `<h1>Board</h1><div class="board">${columns.join('')}</div>${form}${script}`,
+  )
 }
 
 function myTasksPage(today: Date): string {
