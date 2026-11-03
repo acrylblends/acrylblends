@@ -5,7 +5,8 @@ const PACKAGE_NAME = 'acryl-blends-frame'
 export default defineConfig([
   {
     name: PACKAGE_NAME,
-    entry: { index: 'src/index.ts' },
+    // `app-generation` is the dev launcher's own entry (scripts/ide-host.mjs loads it before the app's code), so it is a file of its own.
+    entry: { index: 'src/index.ts', 'app-generation': 'src/app-generation.ts' },
     outDir: 'lib',
     format: 'esm',
     platform: 'node',

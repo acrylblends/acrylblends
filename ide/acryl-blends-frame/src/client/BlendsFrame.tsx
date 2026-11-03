@@ -12,6 +12,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { DesktopLayoutState } from 'acryl-app-shell/client'
 import type { AppCanvasState } from './canvas/app-canvas.ts'
 import { AppCanvas } from './canvas/AppCanvas.tsx'
+import type { AppReloadStore } from './app-reload.ts'
 import type { FrameStateStore } from './frame-state.ts'
 import type { SelectedElement, SelectionStore } from './selection.ts'
 import type { FrameViewState } from './view-state.ts'
@@ -28,6 +29,8 @@ export interface BlendsFrameInjected {
   readonly canvas: AppCanvasState
   readonly selection: SelectionStore
   readonly frameState: FrameStateStore
+  /** Whether the app's last code was refused (a syntax error): the bar says so while the canvas keeps the last good app. */
+  readonly appReload: AppReloadStore
   readonly view: FrameViewState
   readonly chats: ChatsPort
   readonly versions: VersionsPort
@@ -62,8 +65,9 @@ const SelectIcon = () => (
   </svg>
 )
 
-export function BlendsFrame({ layout, canvas, selection, frameState, view, chats, versions, gitSync, tabs, tools, feedback, branches, branchChats, renderSlot }: BlendsFrameProps) {
+export function BlendsFrame({ layout, canvas, selection, frameState, appReload, view, chats, versions, gitSync, tabs, tools, feedback, branches, branchChats, renderSlot }: BlendsFrameProps) {
   const state = useStore(frameState)
+  const appError = useStore(appReload).error
   const frameView = useStore(view)
   const activePanelId = useSyncExternalStore(layout.panelInfo.subscribe, () => layout.panelInfo.getSnapshot().activePanelId)
   const [versionLabel, setVersionLabel] = useState<string | undefined>(undefined)
@@ -122,6 +126,11 @@ export function BlendsFrame({ layout, canvas, selection, frameState, view, chats
           {appName}
           {barLabel !== '' && <small>{barLabel}</small>}
         </span>
+        {appError !== undefined && (
+          <span className="acrylBlendsAppError" role="alert" title={`The app keeps running its last working code: the new code was refused. ${appError}`}>
+            Not reloaded: {appError}
+          </span>
+        )}
         <span className="acrylBlendsGrow" />
         <div className="acrylBlendsModes" role="group" aria-label="Mode">
           <button type="button" aria-pressed={frameView.mode === 'build'} onClick={() => { view.setMode('build') }}>Build</button>

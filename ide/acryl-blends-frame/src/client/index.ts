@@ -19,6 +19,7 @@ import { BlendsFrame } from './BlendsFrame.tsx'
 import { AppCanvasState } from './canvas/app-canvas.ts'
 import { createBlankChatApi } from './blank-chat.ts'
 import { ChatsStore, createRealChatsApi, type MainViewNavigation, type WorkspaceRegistration } from './chats.ts'
+import { AppReloadStore } from './app-reload.ts'
 import { FrameStateStore } from './frame-state.ts'
 import { FILES_SEARCH_EVENT } from './FilesView.tsx'
 import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSharedPlugin } from 'acryl-workspace/ui'
@@ -83,6 +84,8 @@ export function apply(ctx: ClientContext): void {
   const canvas = new AppCanvasState()
   const selection = new SelectionStore()
   const frameState = new FrameStateStore()
+  // The app's code loaded again (a version restored, a file written by anyone): the canvas reloads on it, and the versions and unsaved count are read again.
+  const appReload = new AppReloadStore(() => { canvas.reload(); void frameState.refresh() })
   const view = new FrameViewState(pageStorage())
   // `uiWorkspace` (DSH's navigation) and `workspaces` (its workspace registry) are DSH services this package does not import the types of; the
   // small interfaces in `./chats.ts` describe the calls it makes, so a frame without them composed still works.
@@ -219,6 +222,12 @@ export function apply(ctx: ClientContext): void {
       document.removeEventListener('visibilitychange', read)
     }
   }, 'acryl-blends-frame: read the frame state')
+
+  ctx.effect(() => {
+    const controller = new AbortController()
+    void appReload.run(controller.signal)
+    return () => { controller.abort() }
+  }, "acryl-blends-frame: follow the app's code")
 
   // A chat belongs to the branch it was first seen on: DSH keeps no branches, so the frame records it in the app's home and the left panel can
   // list each branch's own chats. A chat already recorded keeps its branch when the folder moves.
@@ -380,6 +389,7 @@ export function apply(ctx: ClientContext): void {
       canvas,
       selection,
       frameState,
+      appReload,
       view,
       chats,
       versions: {

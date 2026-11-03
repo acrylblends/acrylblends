@@ -156,6 +156,20 @@ test("the launcher listens on the app's own stable port, so a restart keeps the 
   assert.doesNotMatch(plan.hostScript, /ACRYLBLENDS_PORT \?\? '0'/u)
 })
 
+test("the launcher installs the app's generation hook before DSH or any row of the app loads, so the app's code can be loaded again", () => {
+  const { hostScript } = ideProfilePlan(input)
+  const hook = hostScript.indexOf("import('acryl-blends-frame/app-generation')")
+  assert.ok(hook > 0, "the launcher loads the frame package's hook")
+  assert.match(hostScript, /installAppGeneration\(\{ appRoot \}\)/u)
+  assert.ok(
+    hook < hostScript.indexOf("import('@deepseek-ai/dsh-app-boot')"),
+    'before the boot imports any row',
+  )
+  // A frame package that predates the hook is a missing subpath: tolerated; any other failure is not.
+  assert.match(hostScript, /ERR_PACKAGE_PATH_NOT_EXPORTED/u)
+  assert.match(hostScript, /throw error/u)
+})
+
 test('applying twice changes nothing the second time', () => {
   const root = folder()
   const first = applyIdeProfile(root, input)

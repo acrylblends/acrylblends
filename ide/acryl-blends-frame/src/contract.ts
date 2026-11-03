@@ -376,3 +376,28 @@ export function parseBlankChat(value: unknown): string | undefined {
   if (!isRecord(value) || typeof value.id !== 'string' || value.id === '') return undefined
   return value.id
 }
+
+/**
+ * GET: the app's code as the Host runs it - `{ seq, generation, error }` (./app-reload.ts). With `?after=<seq>` the Host answers when `seq` differs
+ * from that (or after a while with the same answer), so the page hears of a new generation as it is up, without a timer.
+ */
+export const FRAME_APP_PATH = `${FRAME_API_PREFIX}/app`
+
+/** Which code the app runs: a new `generation` means the app's files were loaded again; `error` is why the last load was refused (the last good code runs on). */
+export interface AppReloadView {
+  /** Changes with every other field: the long poll's cursor. */
+  readonly seq: number
+  /** 0 for the code the host started with, plus one for each reload that took. */
+  readonly generation: number
+  readonly error: string | null
+}
+
+/** @throws an Error naming the field when the answer is not an app reload view. */
+export function parseAppReloadView(value: unknown): AppReloadView {
+  if (!isRecord(value)) throw new Error('app reload: not an object')
+  const { seq, generation, error } = value
+  if (typeof seq !== 'number' || !Number.isInteger(seq) || seq < 0) throw new Error('app reload: seq')
+  if (typeof generation !== 'number' || !Number.isInteger(generation) || generation < 0) throw new Error('app reload: generation')
+  if (error !== null && typeof error !== 'string') throw new Error('app reload: error')
+  return { seq, generation, error }
+}

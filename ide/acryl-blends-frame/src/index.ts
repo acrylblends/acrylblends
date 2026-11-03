@@ -7,6 +7,7 @@
  * Host half, since the frame, not the workbench, owns the page.
  */
 
+import { realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -18,14 +19,17 @@ import { INVALID_JSON, jsonBody, ownPage, privateApi, readJson } from 'acryl-loo
 import { GitRunner, Versions } from 'acryl-versions'
 import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
-import type {} from '@deepseek-ai/cordis-plugin-loader'
+import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
 import { blankChatsFile, createBlankChatsStore } from './blank-chats.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
+import { appGeneration } from './app-generation.ts'
+import { AppReloader, watchFolder, type AppRow } from './app-reload.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
 import { branchChatsFile, createBranchChatsStore } from './branch-chats.ts'
 import {
   FRAME_API_PREFIX,
+  FRAME_APP_PATH,
   branchNameProblem,
   FRAME_BRANCHES_NEW_PATH,
   FRAME_CHAT_SAVES_PATH,
@@ -45,6 +49,7 @@ import {
   FRAME_STATE_PATH,
   FRAME_VERSIONS_SHARED_PATH,
   type AppPluginKind,
+  type AppReloadView,
   type AppPluginsView,
   type ChatSavesView,
   type FeedbackView,
@@ -282,6 +287,15 @@ export interface BlankChatPort {
   record(id: string): Promise<boolean>
 }
 
+/** The app's code as the Host runs it: what it runs now, and the answer once that changes. */
+export interface AppReloadPort {
+  view(): AppReloadView
+  wait(after: number, timeoutMs: number): Promise<AppReloadView>
+}
+
+/** The longest a long poll of the app's code is held before it answers with what it has; the page asks again at once. */
+const APP_POLL_MS = 25_000
+
 /** A session id as DSH mints them: letters, digits and dashes, never a path. */
 const SESSION_ID = /^[A-Za-z0-9_-]{1,100}$/u
 
@@ -314,10 +328,17 @@ export interface FrameRoutesDeps {
   readonly realChats?: RealChatsPort
   readonly blankChat?: BlankChatPort
   readonly gitSync?: GitSyncPort
+  readonly appReload?: AppReloadPort
 }
 
-export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, blankChat, gitSync }: FrameRoutesDeps): Acryl {
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, blankChat, gitSync, appReload }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
+  if (appReload !== undefined) {
+    app.get(FRAME_APP_PATH, ownPage, async (c) => {
+      const after = Number(c.req.query('after'))
+      return c.json(c.req.query('after') !== undefined && Number.isInteger(after) ? await appReload.wait(after, APP_POLL_MS) : appReload.view())
+    })
+  }
   if (gitSync !== undefined) {
     const failed = (cause: unknown, fallback: string): string => cause instanceof Error && cause.message !== '' ? cause.message : fallback
     app.get(FRAME_GIT_REMOTE_PATH, ownPage, async (c) => {
@@ -527,6 +548,39 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
 
 /** The Loader row that runs the app's own plugins (the app's `cordis.patch.yml`). */
 const APP_PLUGINS_ROW = 'app-plugins'
+/** The row `src/frame.ts` makes (`packages/cli/src/frame-rows.ts`): the app's own routes. */
+const APP_ROUTES_ROW = 'app-routes'
+
+/**
+ * The app's rows, plugins first and routes after (the order they start in): each as the reloader drives it. A row's module is imported under the
+ * current generation (`./app-generation.ts`) by the loader itself, so `restart` stops the row's plugin and has the loader start the entry again - not
+ * `fiber.restart()`, which runs the module the row already has. The plugin leaves the registry (what DSH's own hot reload does) rather than its fiber
+ * being disposed: the loader reads a fiber disposed on its own as the person switching the row off, and writes that into the app's `cordis.yml`.
+ */
+export function appRowsOf(loader: Context['loader'] | undefined): AppRow[] {
+  if (loader === undefined) return []
+  return [APP_PLUGINS_ROW, APP_ROUTES_ROW].flatMap((id) => {
+    const entry: Entry | undefined = [...loader.entries()].find(row => row.options.id === id)
+    if (entry === undefined || entry.disabled) return []
+    return [{
+      id,
+      load: async () => { await entry.parent.tree.import(entry.options.name, entry.getOuterStack) },
+      restart: async () => {
+        const before = entry.fiber
+        const callback = before?.runtime?.callback
+        if (callback !== undefined) {
+          entry.ctx.registry.delete(callback)
+          await before?.await().catch(() => {})
+        }
+        await entry.init()
+        // An import that fails is logged by the loader and leaves the old (stopped) fiber in place: that is a row that did not start.
+        const fiber = entry.fiber
+        if (fiber === undefined || fiber === before) throw new Error(`the ${id} row could not be loaded`)
+        await fiber.await()
+      },
+    }]
+  })
+}
 
 /**
  * Save the app's folder as a version called `message`, and say which one it is (`v7`: how many versions the branch has then). Only a turn DSH says changed
@@ -649,6 +703,11 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       },
     }
     const chatSaves: ChatSavesPort = { read: async session => ({ saves: await store.forSession(session) }) }
+    // The app's code, loaded again when its files change (./app-reload.ts), whoever changes them: a version restored, a branch switched, the chat, an
+    // agent in a terminal, an editor. Only where the launcher installed the generation hook (./app-generation.ts); elsewhere the app's code is as it started.
+    const generation = appGeneration()
+    const appReload = generation === undefined ? undefined : new AppReloader({ generation, rows: () => appRowsOf(ctx.get('loader')), appRoot: realpathSync(root), report })
+    const stopWatching = appReload === undefined ? () => {} : watchFolder(join(root, 'src'), () => { void appReload.reload() }, { report })
     /** git's own line as the message a person reads: the runner keeps it as the failure's detail. */
     const gitReason = (cause: unknown, fallback: string): Error => {
       const detail = (cause as { detail?: unknown }).detail
@@ -688,6 +747,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
         assign: (id, branch) => chatsFile.assign(root, id, branch),
       },
       chatSaves,
+      ...(appReload === undefined ? {} : { appReload }),
       shared: (hashes) => sharedVersions(git, root, hashes),
       realChats: { read: () => realChatList.read() },
       blankChat,
@@ -696,6 +756,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     ctx.routerHttp.mount(FRAME_API_PREFIX)
     return () => {
       stopListening()
+      stopWatching()
       void autoSave.settled().then(() => git.dispose())
     }
   }, 'acryl-blends-frame: git runner and state route')
