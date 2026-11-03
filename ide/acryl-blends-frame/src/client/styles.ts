@@ -87,6 +87,12 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsCanvasPage { flex: 1; min-height: 0; display: flex; }
 .acrylAppCanvasFrame { flex: 1; display: block; width: 100%; height: 100%; border: 0; background: #fff; }
 .acrylBlendsBackbar { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px; background: var(--bf-accent); color: #fff; font-size: 12px; }
+.acrylBlendsCanvasTools { position: absolute; top: 10px; right: 10px; z-index: 4; display: flex; align-items: center; gap: 8px; }
+.acrylBlendsSelectButton { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #d8d4ca; border-radius: 7px; background: rgba(255,255,255,.96); color: #3a3a40; font-size: 12px; cursor: pointer; box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+.acrylBlendsSelectButton svg { width: 13px; height: 13px; }
+.acrylBlendsSelectButton:hover { background: #fff; border-color: #b9b3a4; }
+.acrylBlendsSelectButton[aria-pressed="true"] { background: #e0a43a; border-color: #e0a43a; color: #1d1c1a; }
+.acrylBlendsPickingHint { padding: 4px 9px; border-radius: 7px; background: rgba(29,28,26,.86); color: #fff; font-size: 11.5px; white-space: nowrap; }
 
 .acrylBlendsTabs { position: relative; flex: none; border-bottom: 1px solid var(--bf-border); }
 .acrylBlendsTabStrip { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; overflow-x: auto; scrollbar-width: none; }
@@ -157,6 +163,11 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsConversation { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .acrylBlendsConversation[hidden] { display: none; }
 .acrylBlendsConversation > * { flex: 1; min-height: 0; }
+.acrylBlendsSelectionDock { display: flex; width: 100%; max-width: var(--dsh-composer-card-max-width, 100%); box-sizing: border-box; margin: 0 auto; padding: 0 4px; }
+.acrylBlendsSelectionChip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 4px 3px 9px; border: 1px solid #4a4a52; border-radius: 99px; background: #26262b; color: #e8e8ea; font-size: 11.5px; }
+.acrylBlendsSelectionChipLabel { min-width: 0; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acrylBlendsSelectionChipClear { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #b9b9c0; font-size: 13px; line-height: 1; cursor: pointer; display: grid; place-items: center; flex: none; }
+.acrylBlendsSelectionChipClear:hover { background: #3a3a42; color: #fff; }
 
 .acrylBlendsPlugins { color: var(--bf-text, #e8e8ea); font-size: 13px; }
 .acrylBlendsFeedbackNew { margin-left: auto; color: var(--bf-warn); font-size: 11px; }

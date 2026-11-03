@@ -5,7 +5,7 @@
 
 import { cleanup, render } from '@testing-library/react'
 import { act } from 'react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppCanvasState } from '../../src/client/canvas/app-canvas.ts'
 import { AppCanvas } from '../../src/client/canvas/AppCanvas.tsx'
 
@@ -57,4 +57,47 @@ describe('AppCanvas', () => {
     })
     expect(canvas.pageWindow()).toBe('window-1')
   })
+
+  it('picks from the app document while the select control is on', () => {
+    const canvas = new AppCanvasState()
+    canvas.setAddress(`${window.location.origin}/app`)
+    const onPick = vi.fn()
+    const { container } = render(<AppCanvas canvas={canvas} picking onPick={onPick} />)
+    const iframe = frame(container)
+    const app = appDocument(iframe)
+    const card = app.createElement('div')
+    card.textContent = 'Fix the invite link'
+    app.body.append(card)
+    card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    expect(onPick).toHaveBeenCalledTimes(1)
+    expect(onPick.mock.calls[0]?.[0]).toEqual({
+      label: '"Fix the invite link"',
+      selector: 'body > div',
+      page: app.location.pathname + app.location.search,
+    })
+  })
+
+  it('leaves the app alone when the select control is off', () => {
+    const canvas = new AppCanvasState()
+    canvas.setAddress(`${window.location.origin}/app`)
+    const onPick = vi.fn()
+    const { container } = render(<AppCanvas canvas={canvas} onPick={onPick} />)
+    const app = appDocument(frame(container))
+    const card = app.createElement('div')
+    card.textContent = 'Fix the invite link'
+    app.body.append(card)
+    card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    expect(onPick).not.toHaveBeenCalled()
+  })
 })
+
+/** jsdom leaves a frame document empty until it is written; the load report then re-attaches the picker to the page that exists. */
+function appDocument(iframe: HTMLIFrameElement): Document {
+  const app = iframe.contentDocument
+  if (app === null) throw new Error('the canvas frame has no document')
+  app.open()
+  app.write('<!doctype html><html><body></body></html>')
+  app.close()
+  act(() => { iframe.dispatchEvent(new Event('load')) })
+  return app
+}

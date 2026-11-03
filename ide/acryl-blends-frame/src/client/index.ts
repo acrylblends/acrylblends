@@ -8,6 +8,9 @@
 import '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@acryl/ui/frame'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+// The conversation slot map (conversation.input.dock) and the scoped input events the send hook writes through.
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { SessionInput } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { DesktopLayoutState, DesktopThemePresenter, provideDesktopLayout, stripLaunchToken } from 'acryl-app-shell/client'
 import { createVersionsApi } from 'acryl-versions/client'
 import { BlendsFrame } from './BlendsFrame.tsx'
@@ -23,6 +26,8 @@ import { draftInChat } from './chat-draft.ts'
 import type { FeedbackPort } from './LeftPanel.tsx'
 import { appPluginRow, createAppPluginsApi, framePluginRow, type NavigatorPlugin } from './plugins-navigator.ts'
 import { PluginsSection } from './PluginsSection.tsx'
+import { SelectionChip, type SelectionChipInjected } from './SelectionChip.tsx'
+import { SelectionStore, contextToInsert } from './selection.ts'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
 import { FILES_TAB, FrameTabs, tabOfTerminal } from './tabs.ts'
@@ -63,6 +68,7 @@ function pageStorage(): ViewStorage | undefined {
 export function apply(ctx: ClientContext): void {
   const layout = new DesktopLayoutState()
   const canvas = new AppCanvasState()
+  const selection = new SelectionStore()
   const frameState = new FrameStateStore()
   const view = new FrameViewState(pageStorage())
   const chats = new ChatsStore(() => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'))
@@ -204,6 +210,50 @@ export function apply(ctx: ClientContext): void {
     child.effect(() => chats.watch(child.sessions), 'acryl-blends-frame: chats follow the sessions')
   })
 
+  // The element picked in the canvas is what the chat is about (docs/design/blends-frame-mockup.html, scenario 2): its chip sits above the
+  // composer, and a send writes its page and selector into the message the person is sending, without touching the words they typed.
+  ctx.plugin({
+    name: 'acryl-blends-frame-element-selection',
+    inject: ['slots', 'sessions'],
+    apply(child: ClientContext): void {
+      child.slots.inject('conversation.input.dock', () => child.slots.register({
+        name: 'conversation.input.dock',
+        id: 'element-selection',
+        order: 10,
+        inject: (sessionId): SelectionChipInjected => {
+          const actx = child.sessions.scope(sessionId)
+          const composer = (): SessionInput | undefined => {
+            if (actx === undefined) return undefined
+            return actx.get('conversation')?.input.for(actx)
+          }
+          return {
+            selection: {
+              get: () => selection.getSnapshot().selection,
+              subscribe: listener => selection.subscribe(listener),
+            },
+            clear: () => { selection.clear() },
+            focus: () => { composer()?.focus() },
+            send: () => {
+              const element = selection.getSnapshot().selection
+              const input = composer()
+              if (element === undefined || input === undefined || actx === undefined) return
+              const state = input.state.getSnapshot()
+              const text = contextToInsert(state.draft, element)
+              if (text === undefined) return
+              // Insert at the start of the draft, where the scoped insert-text event applies a plain-text edit and keeps the reference
+              // chips the person added after it. The send that triggered this reads the draft next, in the same gesture.
+              const applied = actx.bail(actx, 'slash/input-insert-text', {
+                text,
+                span: { start: 0, end: 0, draftRev: state.draftRev },
+              }) === true
+              if (applied) selection.clear()
+            },
+          }
+        },
+      }, SelectionChip))
+    },
+  })
+
   ctx.effect(() => ctx.slots.register({
     name: 'root',
     children: {
@@ -218,6 +268,7 @@ export function apply(ctx: ClientContext): void {
     inject: () => ({
       layout,
       canvas,
+      selection,
       frameState,
       view,
       chats,
