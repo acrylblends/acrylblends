@@ -79,8 +79,8 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsItem[aria-current] { background: var(--bf-accent-dim); color: #fff; }
 .acrylBlendsItemIcon { width: 16px; font: 10px ui-monospace, Menlo, monospace; color: var(--bf-dim); text-align: center; flex: none; }
 .acrylBlendsItemTitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.acrylBlendsItem .acrylBlendsItemTitle { flex: none; max-width: 60%; }
-.acrylBlendsItemMeta { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.acrylBlendsItem .acrylBlendsItemTitle { flex: 0 1 auto; }
+.acrylBlendsItemMeta { flex: 0 0 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
 
 .acrylBlendsVersion { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border-radius: 6px; color: #d4d4da; white-space: nowrap; }
 .acrylBlendsVersion[aria-current] { background: var(--bf-accent-dim); color: #fff; }

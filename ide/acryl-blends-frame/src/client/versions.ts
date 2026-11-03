@@ -62,3 +62,8 @@ export function shortTime(at: string, now: number = Date.now()): string {
   if (days < 7) return WEEKDAYS[new Date(time).getDay()] ?? ''
   return `${String(days)} d`
 }
+
+/** A chat's "last active" in the same short form as a version's time; empty when DSH did not say. */
+export function chatTime(updatedAt: number | undefined, now: number = Date.now()): string {
+  return updatedAt === undefined ? '' : shortTime(new Date(updatedAt).toISOString(), now)
+}

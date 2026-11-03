@@ -8,7 +8,7 @@ import { branchClick, createBranchesApi, saveBeforeSwitchMessage } from '../src/
 import { BranchChatsStore } from '../src/client/branch-chats.ts'
 import { createBranchChatsStore } from '../src/branch-chats.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
-import { savedLabel, shortTime, versionNumber } from '../src/client/versions.ts'
+import { chatTime, savedLabel, shortTime, versionNumber } from '../src/client/versions.ts'
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
 import { foldersAbove } from '../src/client/FilesView.tsx'
 import { highlightLine, languageOf } from '../src/client/highlight.ts'
@@ -384,6 +384,12 @@ describe('a version\'s time', () => {
     expect(shortTime('2026-11-01T12:00:00Z', now)).toBe('Sun')
     expect(shortTime('2026-10-20T12:00:00Z', now)).toBe('14 d')
     expect(shortTime('not a time', now)).toBe('')
+  })
+
+  it('reads the same for a chat\'s last activity, and nothing when DSH did not say', () => {
+    expect(chatTime(Date.parse('2026-11-03T17:59:50Z'), now)).toBe('now')
+    expect(chatTime(Date.parse('2026-11-03T17:00:00Z'), now)).toBe('1 h')
+    expect(chatTime(undefined, now)).toBe('')
   })
 })
 

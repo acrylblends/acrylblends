@@ -5,7 +5,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { formatRelativeTime } from 'acryl-versions/client'
 import type { FrameState } from '../contract.ts'
 import { FilesView } from './FilesView.tsx'
 import { FileView } from './FileView.tsx'
@@ -15,7 +14,7 @@ import type { BranchChatsPort } from './branch-chats.ts'
 import { FILES_TAB, GIT_TAB, PTY_AGENTS, fileTab, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
 import { TerminalView } from './TerminalView.tsx'
 import type { FrameTools } from './tools.ts'
-import type { VersionsPort } from './versions.ts'
+import { chatTime, type VersionsPort } from './versions.ts'
 
 const HistoryIcon = () => (
   <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -217,7 +216,7 @@ export function RightPanel({ chats, tabs, tools, versions, state, branchChats, r
                 }}
               >
                 {row.title}
-                <small>{[assignments[row.id], row.current ? 'open' : 'closed', row.updatedAt === undefined ? '' : formatRelativeTime(new Date(row.updatedAt).toISOString())].filter(part => part !== '' && part !== undefined).join(' · ')}</small>
+                <small>{[assignments[row.id], row.current ? 'open' : 'closed', chatTime(row.updatedAt)].filter(part => part !== '' && part !== undefined).join(' · ')}</small>
               </button>
             ))}
           </div>

@@ -5,7 +5,7 @@ import { formatRelativeTime } from 'acryl-versions/client'
 import { branchNameProblem, type FeedbackNoteView, type FeedbackView, type FrameBranch, type FrameState } from '../contract.ts'
 import type { VersionsLogView } from 'acryl-versions'
 import { PTY_AGENTS, terminalMeta, type FrameTabs } from './tabs.ts'
-import { shortTime, versionNumber, type VersionsPort } from './versions.ts'
+import { chatTime, shortTime, versionNumber, type VersionsPort } from './versions.ts'
 import { branchClick, saveBeforeSwitchMessage, type BranchesApi } from './branches.ts'
 import type { BranchChatsPort } from './branch-chats.ts'
 import { feedbackPlace, type FeedbackApi } from './feedback.ts'
@@ -381,6 +381,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
                   >
                     <span className="acrylBlendsItemIcon">◆</span>
                     <span className="acrylBlendsItemTitle">Chat · {item.title}</span>
+                    <span className="acrylBlendsMeta acrylBlendsItemMeta">{chatTime(item.updatedAt)}</span>
                   </button>
                   {askSwitch?.chat === item.id && askBox(askSwitch)}
                 </Fragment>
