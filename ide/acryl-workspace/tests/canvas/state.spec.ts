@@ -300,6 +300,16 @@ describe('WorkspaceState split pane', () => {
       expect(state.getSnapshot().activeId).toBe(tiles[2]?.id)
     })
 
+    it('opens a Git tab, titled Git, and a saved one comes back', () => {
+      const state = new WorkspaceState({ createId: counter() })
+      const git = state.addTile('git')
+      expect(git?.kind).toBe('git')
+      expect(git?.title).toBe('Git')
+      const restored = new WorkspaceState({ createId: counter(), chat: false })
+      restored.restore([{ kind: 'git', title: 'Git' }], 0)
+      expect(restored.getSnapshot().tiles.map(tile => tile.kind)).toContain('git')
+    })
+
     it('opens a Files tab, titled Files, and a saved one comes back', () => {
       const state = new WorkspaceState({ createId: counter() })
       const files = state.addTile('files')
