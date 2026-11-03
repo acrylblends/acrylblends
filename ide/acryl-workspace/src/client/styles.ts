@@ -297,7 +297,7 @@ body[data-ds-dark-theme] .dshWorkspaceAcrylMarkDark { display: block; }
 .dshWorkspaceSessionClose:hover { background: var(--dsw-alias-fill-hover, rgb(255 255 255 / 12%)); color: var(--dsw-alias-label-primary); }
 .dshWorkspaceWorktreeNew:hover { background: var(--dsw-alias-fill-hover, rgb(255 255 255 / 12%)); }
 .dshWorkspaceSideFoot { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; padding: 8px 8px 0; border-top: 1px solid var(--dsw-alias-border-l2); }
-.dshWorkspaceStrip { display: flex; flex: none; align-items: center; gap: 4px; padding: 6px 10px; border-top: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base, transparent); }
+.dshWorkspaceStrip { display: flex; flex: none; align-items: center; gap: 4px; padding: 6px 44px 6px 10px; border-top: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base, transparent); }
 .dshWorkspaceStripSpacer { flex: 1; }
 .dshWorkspaceStripButton { appearance: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font: 600 13px/1 ui-sans-serif, system-ui, sans-serif; }
 .dshWorkspaceStripButton:hover { background: var(--dsw-alias-fill-hover, rgb(127 127 127 / 12%)); color: var(--dsw-alias-label-primary); }

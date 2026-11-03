@@ -23,6 +23,7 @@ import { parseSavedThreads, REVIEW_STORAGE_KEY, ReviewStore, startReviewPersiste
 import { COMMENTS_STORAGE_KEY, CommentStore, parseSavedComments, startCommentPersistence } from './comments/comment-store.ts'
 import { WorkspaceState } from './canvas/state.ts'
 import { WorkspaceGroups } from './canvas/groups.ts'
+import { dropAppTabs } from './canvas/migrate.ts'
 import { frameSessionBannerFrom, probeAdmittedSession } from './connection/session-banner.ts'
 import { browserStorage, parseSavedWorkspace, STORAGE_KEY } from './canvas/persistence.ts'
 import { startWorkspacePersistence } from './canvas/persist.ts'
@@ -138,11 +139,7 @@ export function apply(ctx: ClientContext): void {
         } catch {
           return
         }
-        for (const key of groups.keys()) {
-          const state = groups.stateFor(key)
-          for (const tile of state.getSnapshot().tiles)
-            if (tile.kind === 'browser' && tile.url === url) state.closeTile(tile.id)
-        }
+        dropAppTabs(groups, url)
       })
       return () => {
         cancelled = true

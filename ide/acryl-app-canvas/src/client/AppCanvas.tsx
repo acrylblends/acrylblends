@@ -25,7 +25,6 @@ export function AppCanvas({ canvas }: { canvas: AppCanvasState }) {
       className="acrylAppCanvasFrame"
       title="App"
       src={snapshot.address}
-      sandbox="allow-scripts allow-forms allow-same-origin"
       onLoad={(event) => {
         const address = snapshot.address
         if (address === undefined) return

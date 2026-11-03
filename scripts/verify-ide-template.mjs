@@ -919,7 +919,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             const src = frame.getAttribute('src')
             try { if (src !== null && new URL(src, location.href).origin !== location.origin) window.__acrylTileOutside.push({ at: Date.now(), src }) } catch {}
           }
-          const isTile = (node) => node instanceof HTMLIFrameElement && node.classList.contains('dshWorkspaceBrowserFrame')
+          const isTile = (node) => node instanceof HTMLIFrameElement && (node.classList.contains('dshWorkspaceBrowserFrame') || node.classList.contains('acrylAppCanvasFrame'))
           new MutationObserver((records) => {
             for (const record of records) {
               if (record.type === 'attributes' && isTile(record.target)) {
@@ -1247,7 +1247,8 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             const bar = document.querySelector('[data-acryl-slot=rightbar]')
             if (bar === null) return undefined
             const tabs = [...bar.querySelectorAll('[role=tab]')].map(tab => tab.textContent.trim())
-            if (tabs.length === 0) return undefined
+            // The strip stays in the DOM while the panel's column is collapsed; only a column wider than 0 means it is on screen (125).
+            if (tabs.length === 0 || bar.getBoundingClientRect().width === 0) return undefined
             const labels = [...bar.querySelectorAll('button,[role=tab]')]
               .map(element => element.getAttribute('aria-label') ?? element.getAttribute('title') ?? element.textContent.trim())
               .filter(Boolean)
@@ -1257,29 +1258,42 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         await click('Show right panel')
         return undefined
       }, 20_000)
-      if (right === undefined) fail('the right panel did not show the workspace strip')
+      if (right === undefined) {
+        const dump = await evaluate(`(() => {
+          const frame = document.querySelector('.dshDesktopFrame')
+          const bar = document.querySelector('[data-acryl-slot=rightbar]')
+          const toggle = document.querySelector('.dshDesktopRightToggle')
+          return {
+            columns: frame?.style.gridTemplateColumns ?? null,
+            barFound: bar !== null,
+            barTabs: bar?.querySelectorAll('[role=tab]').length ?? 0,
+            barWidth: bar ? Math.round(bar.getBoundingClientRect().width) : null,
+            toggleLabel: toggle?.getAttribute('aria-label') ?? null,
+            dialogs: [...document.querySelectorAll('[role=dialog]')].map(d => d.getAttribute('aria-label') ?? '').slice(0, 3),
+          }
+        })()`)
+        fail(`the right panel did not show the workspace strip: ${JSON.stringify(dump)}`)
+      }
       log(`the right panel is the workspace strip with ${String(right.tabs.length)} tab(s)`)
       // The right panel's own control is in the frame's top bar (125) and is always reachable: hide the panel, and bring it back with the same
       // control. Without it a closed panel could not be reopened, because the panel's only toggle used to live inside the panel.
       const detailsWidth = () =>
-        evaluate(`(() => {
-          const frame = document.querySelector('.dshDesktopFrame')
-          const columns = (frame?.style.gridTemplateColumns ?? '').split(' ').filter(Boolean)
-          return columns.length === 3 ? columns[2] : null
-        })()`)
+        evaluate(
+          `(() => Math.round(document.querySelector('[data-acryl-slot=rightbar]')?.getBoundingClientRect().width ?? -1))()`,
+        )
       if ((await click('Hide right panel')) !== true)
         fail('the frame has no control to hide the right panel')
       const hiddenPanel = await until(
-        async () => ((await detailsWidth()) === '0px' ? true : undefined),
+        async () => ((await detailsWidth()) === 0 ? true : undefined),
         10_000,
       )
       if (hiddenPanel !== true)
-        fail(`the right panel did not hide: ${JSON.stringify(await detailsWidth())}`)
+        fail(`the right panel did not hide: width ${JSON.stringify(await detailsWidth())}`)
       if ((await click('Show right panel')) !== true)
         fail('the frame has no control to show the right panel again')
       const shownPanel = await until(async () => {
         const width = await detailsWidth()
-        return width !== null && width !== '0px' ? true : undefined
+        return typeof width === 'number' && width > 0 ? true : undefined
       }, 10_000)
       if (shownPanel !== true) fail('the right panel did not come back from the top-bar control')
       log('the right panel hides and comes back from the frame top bar')

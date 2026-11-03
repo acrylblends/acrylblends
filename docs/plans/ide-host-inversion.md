@@ -1204,6 +1204,17 @@ not built here. Fork3 should confirm this reading before slice 1 is called compl
   the divider and ratio modules and suites are deleted. The state's split API is unreachable and goes in the next pass.
 - `e7c2f4db` the **git status bar** left the frame (`StatusLine`/`buildStatusLine` and its specs deleted).
 
+**Fork3's review of f7137516, and what changed (the landing head carries these).**
+- The frame's right-panel toggle opened onto a closed panel on first run, and the gate's strip wait passed on a collapsed column. Fixed: the frame opens the
+  right panel once per page load (31 B.4's first run; remembering joins slice 2's shell state), the gate requires a panel column wider than 0 (measured,
+  not parsed from the grid style), and it hides and restores the panel through the toggle.
+- The toggle covered the strip's + button and sat on the macOS drag row. Fixed: the strip head reserves 44px on the right, and the toggle is
+  `-webkit-app-region: no-drag`.
+- The section 30 recorder now also matches `iframe.acrylAppCanvasFrame`, so a re-pointed canvas frame is caught like a tile frame.
+- New jsdom test: the canvas iframe is the same element while the frame around it hides/shows the right panel and switches right-panel tabs.
+- Cheaply: the canvas iframe's `sandbox` attribute is gone (same origin; it did nothing and Chrome warned), and the saved-app-tab drop is a tested helper
+  (`dropAppTabs`, tests/canvas/migrate.spec.ts) instead of inline code.
+
 **The five points from slice 1's review, with their owner and slice.**
 1. The right panel's open/close control: owner decision (both panels collapsible). Fixed here, in slice 1: the frame renders a top-right panel
    toggle bound to the shell's layout service, always reachable and clear of the Windows caption controls; the gate hides the panel and brings it
@@ -1214,6 +1225,12 @@ not built here. Fork3 should confirm this reading before slice 1 is called compl
    for drivers the frame does not mount).
 4. The state's split API (unreachable since the split UI left): cleanup with Fork3's verdict, next pass or slice 2.
 5. Storage key stays v1 (only the app tab needed migrating): version bump with the shell's view-state move in slice 2, per Fork3's verdict.
+6. acryl-agent-tabs and its run log are the next slice's work; stated openly: the in-app agent panel (a standalone app's page) is NOT yet immune to a page
+   replacement - immunity arrives with the agent tabs living in the frame.
+7. The door should aim its calls at `appCanvas.pageWindow()` rather than the page it saw last; recorded with the agent-tabs work.
+8. Hidden tabs: PTY, terminal, file and browser tabs stay mounted while hidden (so a terminal or an editor never reconnects on a tab switch); the chat tab
+   is the exception, because the one conversation is tied to the shown chat.
+
 
 Remaining for slice 1 (section 31.5): fuzzy search over every file behind a shortcut (the Files
 tab has the repository search; the mockup's `◘P` binding and fuzzy ranking are not wired); the chat run log on the Host (`.acrylblends/runs/<id>.jsonl`, rejoin and replay) moved from the app

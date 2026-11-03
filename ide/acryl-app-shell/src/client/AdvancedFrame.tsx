@@ -39,6 +39,9 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
     const element = frameRef.current
     if (element === null) return
     layout.setViewport(element.getBoundingClientRect().width)
+    // First run: both panels are open (31 B.4). Slice 2 adds remembering the state; until then a page load opens the right panel once, and a person
+    // who closes it keeps it closed for this page's life.
+    if (layout.getSnapshot().details === 0) layout.openRightbar(true, false)
     let raf: number | null = null
     const observer = new ResizeObserver(() => {
       raf ??= requestAnimationFrame(() => {

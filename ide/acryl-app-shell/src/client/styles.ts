@@ -12,7 +12,7 @@ const ADVANCED_STYLES = `
 html, body, #root { width: 100%; height: 100%; }
 body[data-dsh-desktop-mode="advanced"] { margin: 0; background: transparent !important; }
 .dshDesktopFrame { position: relative; display: grid; grid-template-rows: 100%; width: 100%; height: 100%; overflow: hidden; overflow: clip; background: transparent; transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out); }
-.dshDesktopRightToggle { position: absolute; top: 6px; right: 8px; z-index: 60; display: grid; place-items: center; width: 28px; height: 24px; padding: 0; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.dshDesktopRightToggle { -webkit-app-region: no-drag; position: absolute; top: 6px; right: 8px; z-index: 60; display: grid; place-items: center; width: 28px; height: 24px; padding: 0; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); cursor: pointer; }
 .dshDesktopRightToggle:hover { color: var(--dsw-alias-label-primary); }
 .dshDesktopRightToggle[aria-pressed="true"] { color: var(--dsw-alias-label-primary); }
 .dshDesktopRightToggle svg { width: 15px; height: 15px; }
