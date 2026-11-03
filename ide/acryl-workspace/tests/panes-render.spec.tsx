@@ -147,7 +147,7 @@ function sidebarProps(shell: WorkspaceShellState, collapsed = false, projects: P
     projects,
     chats: watchingChats(shell, groups, SESSIONS),
     versions: { get: () => undefined, subscribe: () => () => {} },
-  } as ProjectsSidebarProps
+  } as unknown as ProjectsSidebarProps
 }
 
 describe('ProjectsSidebar', () => {
