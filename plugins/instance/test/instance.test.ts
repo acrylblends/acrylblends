@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
+import * as nodeServer from 'acryl-node-server'
+import { Acryl, apply as routerApply, name as routerName } from 'acryl-router'
 import {
   instance,
   PORT_BASE,
@@ -69,6 +71,31 @@ test('PORT and HOST, the names hosting platforms set, are read when the ACRYLBLE
 
 test('an invalid port is refused', () => {
   assert.throws(() => withPort(projectInstance('/x'), 70_000), /port must be/)
+})
+
+test('an app whose stable port is one a browser refuses still comes up, because the server moves on', async () => {
+  // Every app's seed is hashed into 3100..3999, and 3659 is both inside that range and on the Fetch standard's bad ports: Chromium refuses the
+  // page (ERR_UNSAFE_PORT) and Node's fetch answers "bad port". The frame gate was refused at exactly 3659 on 2026-11-03. The listener must skip it.
+  let seeded = ''
+  for (let n = 0; n < 10_000 && seeded === ''; n += 1) {
+    const root = `/tmp/acryl-seed-${String(n)}`
+    if (projectInstance(root).port.start === 3659) seeded = root
+  }
+  assert.notEqual(seeded, '', 'a project folder whose stable port is 3659')
+  const chosen = projectInstance(seeded)
+  assert.equal(nodeServer.isRestrictedPort(chosen.port.start), true)
+  const root = new Context()
+  await root.plugin({ name: routerName, apply: routerApply })
+  const fiber = root.plugin(nodeServer, { port: chosen.port.start, scan: 20 })
+  await fiber
+  root.router.route(
+    '/',
+    new Acryl().get('/ok', (c) => c.text('ok')),
+  )
+  assert.equal(nodeServer.isRestrictedPort(root.nodeServer.port), false)
+  assert.ok(root.nodeServer.port > 3659)
+  assert.equal(await (await fetch(`${root.nodeServer.url}/ok`)).text(), 'ok')
+  await root.fiber.dispose()
 })
 
 test('the plugin provides the chosen instance', async () => {
