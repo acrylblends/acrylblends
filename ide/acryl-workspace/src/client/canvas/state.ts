@@ -4,7 +4,7 @@ import { labelForCommand } from '../terminal/agent-commands.ts'
 import { normalizeTabTitle } from './tab-title.ts'
 import type { AgentId } from '../../pty/contract.ts'
 
-export type WorkspaceTileKind = 'chat' | 'pty' | 'file' | 'browser' | 'diff' | 'kanban' | 'doc' | 'custom'
+export type WorkspaceTileKind = 'chat' | 'pty' | 'file' | 'files' | 'browser' | 'diff' | 'kanban' | 'doc' | 'custom'
 
 export interface KanbanCard {
   readonly id: string
@@ -91,6 +91,7 @@ const TITLES: Record<WorkspaceTileKind, string> = {
   chat: 'AcrylDSH Chat',
   pty: 'Terminal',
   file: 'untitled',
+  files: 'Files',
   browser: 'Browser',
   diff: 'Diff',
   kanban: 'Board',

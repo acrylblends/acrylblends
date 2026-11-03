@@ -111,6 +111,7 @@ function kindGlyph(kind: WorkspaceTile['kind']): string {
   if (kind === 'chat') return '◎'
   if (kind === 'pty') return '❯'
   if (kind === 'file') return '▤'
+  if (kind === 'files') return '▥'
   if (kind === 'diff') return '±'
   if (kind === 'kanban') return '▦'
   if (kind === 'doc') return '▧'

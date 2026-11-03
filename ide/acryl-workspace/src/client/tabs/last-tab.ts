@@ -4,12 +4,12 @@ export const LAST_TAB_KEY = 'acryl-workspace:last-tab'
 
 export type LastTab =
   | { readonly kind: 'agent'; readonly id: string; readonly label: string }
-  | { readonly kind: 'surface'; readonly surface: 'pty' | 'browser' | 'file' | 'diff' | 'kanban' | 'doc' }
+  | { readonly kind: 'surface'; readonly surface: 'pty' | 'browser' | 'file' | 'files' | 'diff' | 'kanban' | 'doc' }
   | { readonly kind: 'chat' }
 
 export const DEFAULT_LAST_TAB: LastTab = { kind: 'surface', surface: 'pty' }
 
-const SURFACES = ['pty', 'browser', 'file', 'diff', 'kanban', 'doc'] as const
+const SURFACES = ['pty', 'browser', 'file', 'files', 'diff', 'kanban', 'doc'] as const
 
 export function readLastTab(storage: Pick<Storage, 'getItem'> | undefined): LastTab {
   try {

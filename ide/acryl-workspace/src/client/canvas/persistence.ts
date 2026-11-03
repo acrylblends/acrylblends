@@ -31,7 +31,7 @@ const MAX_FORGOTTEN_ROOTS = 500
 const MAX_ROOT_LENGTH = 4096
 const MAX_DISMISSED_CHATS = 2000
 const MAX_CHAT_ID_LENGTH = 256
-const RESTORABLE_KINDS = ['file', 'browser', 'diff', 'kanban', 'doc', 'pty', 'custom'] as const
+const RESTORABLE_KINDS = ['file', 'files', 'browser', 'diff', 'kanban', 'doc', 'pty', 'custom'] as const
 
 export type SavedTileKind = (typeof RESTORABLE_KINDS)[number]
 

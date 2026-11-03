@@ -9,7 +9,7 @@ export interface WorkspaceAgentCommand {
 }
 
 export interface WorkspaceSurfaceAction {
-  readonly kind: 'pty' | 'file' | 'browser' | 'diff' | 'kanban' | 'doc'
+  readonly kind: 'pty' | 'file' | 'files' | 'browser' | 'diff' | 'kanban' | 'doc'
   readonly commandId?: WorkspacePtyCommandId
   readonly label: string
 }
@@ -18,6 +18,7 @@ export const WORKSPACE_SURFACE_ACTIONS: readonly WorkspaceSurfaceAction[] = [
   { kind: 'pty', commandId: 'shell', label: 'New Terminal' },
   { kind: 'browser', label: 'New Browser Tab' },
   { kind: 'file', label: 'New File' },
+  { kind: 'files', label: 'Files' },
   { kind: 'diff', label: 'New Diff' },
   { kind: 'kanban', label: 'New Board' },
   { kind: 'doc', label: 'New Doc' },

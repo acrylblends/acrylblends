@@ -4,7 +4,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import type { PropsRuntime } from '@acryl/ui/frame'
 import type { WorkspaceShellState } from '../worktrees/shell-state.ts'
 import type { GitSearchMode, GitSearchView } from '../../git/contract.ts'
 import type { WorkspaceGitApi } from '../git/git-api.ts'
@@ -14,7 +13,7 @@ import { visibleRows, type DirState, type TreeRow } from './tree-model.ts'
 import { FileTree, type FileTreeActions } from './FileTree.tsx'
 import { CollapseAllIcon, NewFileIcon, NewFolderIcon, ReloadIcon } from './file-icons.tsx'
 
-export type FilesBodyProps = PropsRuntime<'sidebar.right.pane.tab'> & {
+export type FilesBodyProps = {
   readonly shell: WorkspaceShellState
   readonly filesApi: WorkspaceFilesApi
   readonly gitApi: WorkspaceGitApi

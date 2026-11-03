@@ -16,6 +16,7 @@ import { SessionBoardPane } from '../board/SessionBoardPane.tsx'
 import type { ChatSelection } from '../chat/chat-selection.ts'
 import { focusChatComposer } from '../chat/composer-focus.ts'
 import { FileEditorPane } from '../files/FileEditorPane.tsx'
+import { FilesBody } from '../files/FilesBody.tsx'
 import type { WorkspaceFilesApi } from '../files/files-api.ts'
 import { GitDiffPane } from '../diff/GitDiffPane.tsx'
 import type { ReviewStore } from '../review/review-store.ts'
@@ -184,6 +185,7 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
     if (tile.kind === 'doc' && tile.docRel !== undefined) return <DocFilePane tile={tile} shell={shell} filesApi={filesApi} />
     if (tile.kind === 'file' && tile.fileRel !== undefined) return <FileEditorPane tile={tile} workspace={workspace} filesApi={filesApi} comments={comments} />
     if (tile.kind === 'file') return <ScratchFilePane tile={tile} workspace={workspace} />
+    if (tile.kind === 'files') return <FilesBody shell={shell} filesApi={filesApi} gitApi={gitApi} />
     if (tile.kind === 'browser') return <BrowserPane tile={tile} workspace={workspace} />
     if (tile.kind === 'kanban') return <SessionBoardPane tile={tile} workspace={workspace} shell={shell} useSessions={useSessions} navigator={chats} />
     if (tile.kind === 'doc') return <DocPane tile={tile} workspace={workspace} />
@@ -426,6 +428,7 @@ function glyph(kind: WorkspaceTile['kind']): string {
   if (kind === 'chat') return '◎'
   if (kind === 'pty') return '❯'
   if (kind === 'file') return '▤'
+  if (kind === 'files') return '▥'
   if (kind === 'diff') return '±'
   if (kind === 'kanban') return '▦'
   if (kind === 'doc') return '▧'

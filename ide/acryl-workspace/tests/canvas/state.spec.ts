@@ -300,6 +300,17 @@ describe('WorkspaceState split pane', () => {
       expect(state.getSnapshot().activeId).toBe(tiles[2]?.id)
     })
 
+    it('opens a Files tab, titled Files, and a saved one comes back', () => {
+      const state = new WorkspaceState({ createId: counter() })
+      const files = state.addTile('files')
+      expect(files?.kind).toBe('files')
+      expect(files?.title).toBe('Files')
+      // The tab is restorable: a saved tab of the kind comes back in the right panel after a reload.
+      const restored = new WorkspaceState({ createId: counter(), chat: false })
+      restored.restore([{ kind: 'files', title: 'Files' }], 0)
+      expect(restored.getSnapshot().tiles.map(tile => tile.kind)).toContain('files')
+    })
+
     it('restores chats as before when the chat is on', () => {
       const state = new WorkspaceState({ createId: counter() })
       state.restore([{ kind: 'chat', title: 'AcrylDSH Chat', chatSessionId: 's1' }], 0)
