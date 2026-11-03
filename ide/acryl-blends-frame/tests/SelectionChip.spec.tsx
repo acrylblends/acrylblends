@@ -5,7 +5,7 @@
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CHIP_GAP, SelectionChip, chipGeometry, type SelectionChipInjected } from '../src/client/SelectionChip.tsx'
+import { CHIP_GAP, CHIP_INSET_PROPERTY, SelectionChip, chipGeometry, type SelectionChipInjected } from '../src/client/SelectionChip.tsx'
 import { SelectionStore } from '../src/client/selection.ts'
 
 const PICKED = { label: 'Task card', selector: '#board > div', page: '/board' }
@@ -141,7 +141,9 @@ describe('SelectionChip', () => {
     const placeholder = container.querySelector('.placeholder') as HTMLElement
     expect(chip.style.left).toBe('24px')
     expect(chip.style.top).toBe('17px')
-    expect(editor.style.paddingLeft).toBe(`${String(14 + 80 + CHIP_GAP)}px`)
+    // Only the first line makes room for the chip: the pad stays, the indent is the chip and its gap.
+    expect(editor.style.paddingLeft).toBe('14px')
+    expect(editor.style.getPropertyValue(CHIP_INSET_PROPERTY)).toBe(`${String(80 + CHIP_GAP)}px`)
     expect(placeholder.style.left).toBe(`${String(14 + 80 + CHIP_GAP)}px`)
   })
 

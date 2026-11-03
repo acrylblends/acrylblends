@@ -181,6 +181,8 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsConversation { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .acrylBlendsConversation[hidden] { display: none; }
 .acrylBlendsConversation > * { flex: 1; min-height: 0; }
+/* With a chip, only the draft's first line makes room for it (SelectionChip sets the indent): the first paragraph, or the bare text. */
+[data-composer-input] > :first-child, [data-composer-input]:not(:has(> *)) { text-indent: var(--acrylBlendsChipInset, 0px); }
 .acrylBlendsSelectionChip { position: absolute; z-index: 2; display: inline-flex; align-items: center; gap: 4px; max-width: 60%; height: 18px; padding: 0 6px; border: 0; border-radius: 5px; background: var(--bf-surface-2); color: #c8c8d0; font-size: 11px; line-height: 18px; white-space: nowrap; }
 .acrylBlendsSelectionChipLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .acrylBlendsSelectionChipClear { width: 13px; height: 13px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #8b8b93; font-size: 12px; line-height: 1; cursor: pointer; display: grid; place-items: center; flex: none; opacity: 0; }
