@@ -1,13 +1,18 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { countChanges, parseBranches, parseBranchName, parseFrameState } from '../src/index.ts'
-import { FRAME_BRANCHES_NEW_PATH, FRAME_BRANCHES_SWITCH_PATH, branchNameProblem } from '../src/contract.ts'
+import { FRAME_BRANCHES_NEW_PATH, FRAME_BRANCHES_SWITCH_PATH, branchNameProblem, parseBranchChats } from '../src/contract.ts'
 import { branchClick, createBranchesApi, saveBeforeSwitchMessage } from '../src/client/branches.ts'
+import { BranchChatsStore } from '../src/client/branch-chats.ts'
+import { createBranchChatsStore } from '../src/branch-chats.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
 import { savedLabel, versionNumber } from '../src/client/versions.ts'
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
 import { foldersAbove } from '../src/client/FilesView.tsx'
 import { highlightLine, languageOf } from '../src/client/highlight.ts'
-import { FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, parseStoredTabs, ptyTab, terminalMeta } from '../src/client/tabs.ts'
+import { FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, parseStoredTabs, ptyTab, tabsForBranch, terminalMeta, terminalTab } from '../src/client/tabs.ts'
 import { FIRST_RUN_VIEW, FrameViewState, parseStoredView, type ViewStorage } from '../src/client/view-state.ts'
 
 describe('parseBranches', () => {
@@ -163,6 +168,115 @@ describe('the right panel tabs', () => {
     expect(parseStoredTabs('{"tabs":[{"kind":"pty","agent":"nope","terminalId":"x"},{"kind":"file","path":"src/a.ts"}],"active":"gone"}'))
       .toEqual({ tabs: [{ kind: 'chat', id: 'chat' }, fileTab('src/a.ts')], active: 'chat' })
     expect(parseStoredTabs('nonsense')).toBe(FIRST_RUN_TABS)
+  })
+
+  it('keeps the branch a remembered tab was opened on', () => {
+    const stored = JSON.stringify({ tabs: [{ kind: 'terminal', terminalId: 't1', branch: 'main' }], active: 'terminal:t1', branched: true })
+    expect(parseStoredTabs(stored).tabs[1]).toEqual({ kind: 'terminal', id: 'terminal:t1', terminalId: 't1', branch: 'main' })
+  })
+})
+
+describe('tabs per branch', () => {
+  it('opens a tab on the checked-out branch and shows only that branch\'s tabs', () => {
+    const storage = new MemoryStorage()
+    const tabs = new FrameTabs(storage)
+    tabs.setBranch('main')
+    tabs.open(terminalTab('t1'))
+    tabs.open(FILES_TAB)
+    expect(tabs.getSnapshot().tabs.map(tab => [tab.id, tab.branch])).toEqual([
+      ['chat', undefined],
+      ['terminal:t1', 'main'],
+      ['files', 'main'],
+    ])
+    tabs.setBranch('feature')
+    tabs.open(fileTab('src/a.ts'))
+    expect(tabsForBranch(tabs.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['chat', 'terminal:t1', 'files'])
+    expect(tabsForBranch(tabs.getSnapshot(), 'feature').map(tab => tab.id)).toEqual(['chat', 'file:src/a.ts'])
+    expect(tabsForBranch(tabs.getSnapshot(), undefined).map(tab => tab.id)).toEqual(['chat', 'terminal:t1', 'files', 'file:src/a.ts'])
+    // The strip comes back the same on the next page.
+    const again = new FrameTabs(storage)
+    again.setBranch('main')
+    expect(tabsForBranch(again.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['chat', 'terminal:t1', 'files'])
+  })
+
+  it('puts the tabs remembered before branches had their own lists on the first branch it sees, once', () => {
+    const storage = new MemoryStorage()
+    storage.setItem('acryl-blends-frame.tabs.v1', JSON.stringify({ tabs: [{ kind: 'terminal', terminalId: 'old' }], active: 'terminal:old' }))
+    const tabs = new FrameTabs(storage)
+    expect(tabs.getSnapshot().tabs[1]).toEqual({ kind: 'terminal', id: 'terminal:old', terminalId: 'old' })
+    tabs.setBranch('main')
+    expect(tabs.getSnapshot().tabs[1]).toEqual({ kind: 'terminal', id: 'terminal:old', terminalId: 'old', branch: 'main' })
+    tabs.setBranch('feature')
+    expect(tabs.getSnapshot().tabs[1]).toMatchObject({ branch: 'main' })
+  })
+})
+
+describe('a chat\'s branch', () => {
+  it('is the branch the chat was first seen on, and stays when the folder moves', () => {
+    const calls: string[] = []
+    const store = new BranchChatsStore({
+      read: async () => ({}),
+      assign: async (id, branch) => { calls.push(`${id}:${branch}`) },
+    })
+    store.adopt(['a', 'b'], 'main')
+    expect(store.getSnapshot()).toEqual({ a: 'main', b: 'main' })
+    store.adopt(['a', 'b', 'c'], 'feature')
+    expect(store.getSnapshot()).toEqual({ a: 'main', b: 'main', c: 'feature' })
+    expect(calls).toEqual(['a:main', 'b:main', 'c:feature'])
+  })
+
+  it('shows an assignment at once and drops it when the Host refuses, so the next look tries again', async () => {
+    let refuse = true
+    const calls: string[] = []
+    const store = new BranchChatsStore({
+      read: async () => ({}),
+      assign: async (id, branch) => {
+        calls.push(`${id}:${branch}`)
+        if (refuse) throw new Error('the Host said no')
+      },
+    })
+    store.adopt(['a'], 'main')
+    expect(store.getSnapshot()).toEqual({ a: 'main' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(store.getSnapshot()).toEqual({})
+    refuse = false
+    store.adopt(['a'], 'main')
+    expect(store.getSnapshot()).toEqual({ a: 'main' })
+    expect(calls).toEqual(['a:main', 'a:main'])
+  })
+
+  it('keeps a chat recorded before the page opened', async () => {
+    const store = new BranchChatsStore({ read: async () => ({ a: 'main' }), assign: async () => {} })
+    await store.load()
+    store.adopt(['a'], 'feature')
+    expect(store.getSnapshot()).toEqual({ a: 'main' })
+  })
+})
+
+describe('the branch chats file', () => {
+  it('reads what the Host was told', () => {
+    expect(parseBranchChats({ chats: { s1: 'main' } })).toEqual({ s1: 'main' })
+    expect(() => parseBranchChats({ chats: { s1: 7 } })).toThrow('entry')
+    expect(() => parseBranchChats({})).toThrow('not a map')
+  })
+
+  it('records a chat once per app folder, serializing writes', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'branch-chats-'))
+    try {
+      const store = createBranchChatsStore(join(dir, 'frame', 'branch-chats.json'))
+      expect(await store.read('/apps/a')).toEqual({})
+      await Promise.all([
+        store.assign('/apps/a', 's1', 'main'),
+        store.assign('/apps/a', 's2', 'feature'),
+        store.assign('/apps/b', 's1', 'other'),
+      ])
+      expect(await store.read('/apps/a')).toEqual({ s1: 'main', s2: 'feature' })
+      expect(await store.read('/apps/b')).toEqual({ s1: 'other' })
+      await store.assign('/apps/a', 's1', 'feature')
+      expect(await store.read('/apps/a')).toEqual({ s1: 'main', s2: 'feature' })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })
 
