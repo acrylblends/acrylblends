@@ -266,7 +266,8 @@ export class Extensions extends Service {
     ctx.effect(
       () => async () => {
         for (const entry of [...this.installed.values()].reverse())
-          await entry.fiber.dispose().catch(() => undefined)
+          // A fiber already being disposed (an app reload) can return nothing here, not a promise.
+          await Promise.resolve(entry.fiber.dispose()).catch(() => undefined)
         this.installed.clear()
       },
       'extensions: dispose mounted extensions',
