@@ -771,6 +771,23 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             awaitPromise: true,
           })
         ).result?.result?.value
+      // Every iframe load in the frame's page, kept so a panel failure can say whether the app's page was loaded again under the submit, and when. A
+      // panel-initiated reload leaves its marker behind; a load the frame itself starts leaves none, and the two must not be confused (a page replaced
+      // with an ask in flight loses that ask, and the dump has to name who replaced it).
+      await evaluate(`(() => {
+        window.__acrylTileLoads = []
+        document.addEventListener('load', (event) => {
+          const target = event.target
+          if (!(target instanceof HTMLIFrameElement)) return
+          let href = null
+          let readable = false
+          try { href = target.contentWindow?.location?.href ?? null; readable = target.contentDocument !== null } catch {}
+          const loads = window.__acrylTileLoads
+          loads.push({ at: Date.now(), src: target.getAttribute('src'), href, readable })
+          if (loads.length > 20) loads.shift()
+        }, true)
+        return true
+      })()`)
       const click = async (label) =>
         await evaluate(`(() => {
           const wanted = ${JSON.stringify(label)}
@@ -1232,7 +1249,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             textarea.dispatchEvent(new Event('input', { bubbles: true }))
             // Keep the very nodes this submit used: a failure then says whether they were still the panel's own (a remount or reload between typing and
             // submit leaves them disconnected, and a stale data-ready mark on a reused host would let the gate act before the new form is wired).
-            window.__acrylPanelGate = { host, root, textarea, form: root.querySelector('form'), typedAt: Date.now() }
+            window.__acrylPanelGate = { host, root, textarea, form: root.querySelector('form'), typedAt: Date.now(), iframe, view: iframe?.contentWindow, doc: iframe?.contentDocument ?? null, originAt: iframe?.contentWindow?.performance?.timeOrigin ?? null }
             root.querySelector('form').requestSubmit()
             return {
               drivers,
@@ -1289,12 +1306,30 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
               typedTextareaIsCurrent: gate === undefined || root === undefined || root === null ? null : gate.textarea === root.querySelector('textarea'),
               typedFormConnected: gate === undefined ? null : gate.form.isConnected,
               typedHostIsCurrent: gate === undefined ? null : gate.host === host,
+              // The document the submit was made in, against the one there now: a different origin time or document means the iframe navigated, and
+              // the loads below name when it happened (the panel's own reload would also carry the marker read next).
+              typedIframeIsCurrent: gate === undefined || iframe === undefined ? null : gate.iframe === iframe,
+              typedDocIsCurrent: gate === undefined || iframe === undefined || iframe === null ? null : gate.doc === iframe.contentDocument,
+              typedOriginAt: gate?.originAt ?? null,
+              originAt: iframe?.contentWindow?.performance?.timeOrigin ?? null,
+              href: iframe?.contentWindow?.location?.href ?? null,
+              loads: window.__acrylTileLoads?.slice(-10) ?? null,
               // A panel-initiated page reload (a run that changed a plugin) is recorded before it happens; a failure dump says whether one was involved.
               reload: iframe?.contentWindow?.sessionStorage?.getItem('agent-panel-reload') ?? null,
             }
           })()`)
+          // The CDP's own view of every frame navigation during this page: a subframe load the page script could not observe (or a top-level one) is
+          // named here, with the URL it went to.
+          const navigations = cdp
+            .events()
+            .filter((message) => message.method === 'Page.frameNavigated')
+            .slice(-10)
+            .map((message) => ({
+              frame: message.params?.frame?.id ?? null,
+              url: message.params?.frame?.url ?? null,
+            }))
           fail(
-            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}; at submit: ${JSON.stringify(panel)}; panel: ${JSON.stringify(detail)}`,
+            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}; at submit: ${JSON.stringify(panel)}; panel: ${JSON.stringify(detail)}; navigations: ${JSON.stringify(navigations)}`,
           )
         }
         log(
