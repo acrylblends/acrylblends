@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import type { DesktopMainOwnerProps, DesktopSidebarSurfaceOwnerProps } from './contracts.ts'
 import type { ShellEnvironment } from './environment.ts'
 import { AdvancedFrame } from './AdvancedFrame.tsx'
+import { stripLaunchToken } from './launch-token.ts'
 import { DesktopLayoutState } from './layout-state.ts'
 import { provideDesktopLayout } from './layout-service.ts'
 import { installAdvancedStyles } from './styles.ts'
@@ -67,15 +68,8 @@ export function applyAdvancedShell(ctx: ClientContext, environment: ShellEnviron
   // in history and a reconnect can spend it again, re-admitting a page whose cookie is gone - so the session-ended
   // banner would never be due. Drop it once, keeping the path, any other query field and the hash.
   ctx.effect(() => {
-    try {
-      const url = new URL(window.location.href)
-      if (url.searchParams.has('token')) {
-        url.searchParams.delete('token')
-        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
-      }
-    } catch {
-      // A page without a real address keeps whatever it has.
-    }
+    const stripped = stripLaunchToken(window.location.href)
+    if (stripped !== undefined) window.history.replaceState(window.history.state, '', stripped)
     return () => {}
   }, 'acryl-app-shell: strip the launch token')
 
