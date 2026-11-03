@@ -22,6 +22,10 @@ textarea:focus { outline: none; border-color: #c2410c; }
 .outline { position: fixed; z-index: 2147483645; pointer-events: none; border: 2px dashed #e0a43a; border-radius: 6px; display: none; }
 .outline[data-picked] { display: block; }
 .outline span { position: absolute; right: 6px; top: -11px; background: #e0a43a; color: #1d1c1a; font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
+.shotRow[hidden] { display: none; }
+.shot { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; color: #4b4b52; font-size: 12px; cursor: pointer; }
+.shot input { width: auto; margin: 0; accent-color: #c2410c; }
+.shotHint { margin: 2px 0 0; color: #8a867c; font-size: 11px; }
 `
 
 /** A short name for an element: what it says it is, else the words it shows, else its tag. */
@@ -95,6 +99,16 @@ export function shotSize(width, height, maxSide = 1280) {
 /** A screenshot is re-encoded below this size; the Host refuses more than 512 KB decoded. */
 export const SHOT_MAX_BYTES = 400 * 1024
 
+/**
+ * Whether this browser can capture the current tab. Chromium's getDisplayMedia takes `preferCurrentTab`; Firefox and Safari ignore it and would offer
+ * the whole screen, which is not what a visitor sending feedback means, so the form does not offer the option there at all.
+ */
+export function canCaptureTab(userAgent, hasDisplayCapture) {
+  if (hasDisplayCapture !== true) return false
+  if (/Android|iPhone|iPad|iPod/u.test(userAgent)) return false
+  return /Chrome\/|Chromium\/|Edg\/|OPR\//u.test(userAgent)
+}
+
 // biome-ignore lint/correctness/noUnusedVariables: ./index.ts serves this file with a call to start appended
 function start(prefix) {
   if (document.querySelector('acryl-feedback')) return
@@ -109,6 +123,10 @@ function start(prefix) {
     <button type="button" class="option" data-choice="page" aria-pressed="false">Nothing specific</button>
   </div>
   <textarea aria-label="Your note" placeholder="What happened, or what would help?" maxlength="2000"></textarea>
+  <div class="shotRow">
+    <label class="shot"><input type="checkbox" class="shotBox" checked> Attach a screenshot of this page</label>
+    <p class="shotHint">Your browser will ask to share this tab.</p>
+  </div>
   <div class="row"><span class="note">Pressing Feedback turns the picker on; click anything, or choose "Nothing specific".</span><button type="button" class="send" disabled>Send</button></div>
 </div>
 <button type="button" class="button" aria-expanded="false">Feedback</button>`
@@ -126,7 +144,15 @@ function start(prefix) {
   const hint = note.textContent
 
   /** @type {{ open: boolean, picking: boolean, picked: Element | null, choice: 'element' | 'page' }} */
-  const state = { open: false, picking: false, picked: null, choice: 'element' }
+  const state = { open: false, picking: false, picked: null, choice: 'element', attach: true }
+  const canShot = canCaptureTab(navigator.userAgent, typeof navigator.mediaDevices?.getDisplayMedia === 'function')
+  const shotRow = root.querySelector('.shotRow')
+  const shotBox = root.querySelector('.shotBox')
+  if (!canShot) {
+    shotRow.hidden = true
+    state.attach = false
+  }
+  shotBox.addEventListener('change', () => { state.attach = shotBox.checked })
 
   const place = (element, label) => {
     if (!element) {
@@ -201,7 +227,7 @@ function start(prefix) {
    * sends the note without an image.
    */
   const takeShot = async () => {
-    if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') return undefined
+    if (!canShot) return undefined
     let stream
     try {
       // Called from the Send click itself: the browser opens its picker only inside a gesture.
@@ -299,8 +325,8 @@ function start(prefix) {
       state.choice === 'element' && state.picked
         ? { selector: elementSelector(state.picked), label: elementLabel(state.picked) }
         : undefined
-    // The screenshot is taken here, inside the click; a refused capture still sends the note.
-    const screenshot = await takeShot()
+    // The screenshot is taken here, inside the click, only when the person left the option on; a refused capture still sends the note.
+    const screenshot = state.attach ? await takeShot() : undefined
     try {
       const response = await fetch(`${prefix}/notes`, {
         method: 'POST',
