@@ -20,7 +20,7 @@ const FALLBACK_SUBJECT = 'Changes from the chat'
 const STORE_LIMIT = 2000
 
 /** The person's request, shortened into a version's name: its first sentence or clause, one line, cut at a word. */
-export function requestSubject(request: string | undefined): string {
+export function requestSubject(request: string | undefined, limit: number = SUBJECT_LIMIT): string {
   const line = (request ?? '').split('\n').map(part => part.trim()).find(part => part !== '') ?? ''
   const words = line.replace(/\s+/gu, ' ')
   const sentence = /^.*?[.!?](?=\s|$)/u.exec(words)?.[0].replace(/[.!?]+$/u, '') ?? words
@@ -29,10 +29,10 @@ export function requestSubject(request: string | undefined): string {
   const trimmed = head.trim()
   if (trimmed === '') return FALLBACK_SUBJECT
   const cased = trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
-  if (cased.length <= SUBJECT_LIMIT) return cased
-  const cut = cased.slice(0, SUBJECT_LIMIT)
+  if (cased.length <= limit) return cased
+  const cut = cased.slice(0, limit)
   const space = cut.lastIndexOf(' ')
-  return `${(space > SUBJECT_LIMIT / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:]+$/u, '')}…`
+  return `${(space > limit / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:]+$/u, '')}…`
 }
 
 /** The text of a user message's blocks, in order; blocks that are not text (images) add nothing. */

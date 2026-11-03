@@ -245,15 +245,36 @@ export function parseChatSaves(value: unknown): ChatSavesView {
   }
 }
 
-/** GET: the chats that have at least one turn (`RealChatsView`); a chat nobody has written to is not a chat the frame lists. */
+/** GET: the chats that have at least one turn, each with its name (`RealChatsView`); a chat nobody has written to is not a chat the frame lists. */
 export const FRAME_REAL_CHATS_PATH = `${FRAME_API_PREFIX}/real-chats`
 
-export interface RealChatsView {
-  readonly sessions: readonly string[]
+export interface RealChatView {
+  readonly id: string
+  readonly title: string
 }
 
-/** @throws when the value is not a list of chat ids. */
+export interface RealChatsView {
+  readonly chats: readonly RealChatView[]
+}
+
+/** @throws when the value is not a list of chats. */
 export function parseRealChats(value: unknown): RealChatsView {
-  if (!isRecord(value) || !Array.isArray(value.sessions) || !value.sessions.every((id: unknown) => typeof id === 'string')) throw new Error('real chats: not a list')
-  return { sessions: value.sessions as string[] }
+  if (!isRecord(value) || !Array.isArray(value.chats)) throw new Error('real chats: not a list')
+  return {
+    chats: value.chats.map((entry: unknown) => {
+      if (!isRecord(entry) || typeof entry.id !== 'string' || typeof entry.title !== 'string') throw new Error('real chats: entry')
+      return { id: entry.id, title: entry.title }
+    }),
+  }
+}
+
+/**
+ * GET: the blank chat (no turn yet) the Host last handed out for the checked-out branch, `{ id }` or `{ id: null }`. POST `{ id }`: the Host records a
+ * chat it finds blank as that branch's blank chat. A frame load opens the blank chat instead of letting DSH create a session every time.
+ */
+export const FRAME_BLANK_CHAT_PATH = `${FRAME_API_PREFIX}/blank-chat`
+
+export function parseBlankChat(value: unknown): string | undefined {
+  if (!isRecord(value) || typeof value.id !== 'string' || value.id === '') return undefined
+  return value.id
 }

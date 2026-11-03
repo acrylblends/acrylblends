@@ -17,6 +17,7 @@ import { ChatSavesStore, createChatSavesApi } from './chat-saves.ts'
 import { TurnSaveFooter } from './TurnSaveFooter.tsx'
 import { BlendsFrame } from './BlendsFrame.tsx'
 import { AppCanvasState } from './canvas/app-canvas.ts'
+import { createBlankChatApi } from './blank-chat.ts'
 import { ChatsStore, createRealChatsApi, type MainViewNavigation, type WorkspaceRegistration } from './chats.ts'
 import { FrameStateStore } from './frame-state.ts'
 import { FILES_SEARCH_EVENT } from './FilesView.tsx'
@@ -88,6 +89,7 @@ export function apply(ctx: ClientContext): void {
     () => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'),
     () => (ctx.get as (name: string) => WorkspaceRegistration | undefined)('workspaces'),
     createRealChatsApi(),
+    createBlankChatApi(),
   )
   const versionsApi = createVersionsApi()
   const sharedVersionsApi = createSharedVersionsApi()

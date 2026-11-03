@@ -20,7 +20,8 @@ import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, switchAppPlugin, type FrameRow } from './app-plugins.ts'
-import { RealChats } from './real-chats.ts'
+import { blankChatsFile, createBlankChatsStore } from './blank-chats.ts'
+import { lookAtLog, RealChats } from './real-chats.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
 import { branchChatsFile, createBranchChatsStore } from './branch-chats.ts'
 import {
@@ -28,6 +29,7 @@ import {
   branchNameProblem,
   FRAME_BRANCHES_NEW_PATH,
   FRAME_CHAT_SAVES_PATH,
+  FRAME_BLANK_CHAT_PATH,
   FRAME_REAL_CHATS_PATH,
   FRAME_BRANCH_CHATS_PATH,
   FRAME_BRANCHES_SWITCH_PATH,
@@ -234,7 +236,14 @@ export interface ChatSavesPort {
 
 /** The chats that have a turn (the left panel lists only those, and the open one). */
 export interface RealChatsPort {
-  read(): Promise<readonly string[]>
+  read(): Promise<readonly { readonly id: string; readonly title: string }[]>
+}
+
+/** The blank chat of the checked-out branch: the one handed out, and recording another that is found blank. */
+export interface BlankChatPort {
+  read(): Promise<string | undefined>
+  /** @returns false when the chat is not a blank one the Host knows. */
+  record(id: string): Promise<boolean>
 }
 
 /** A session id as DSH mints them: letters, digits and dashes, never a path. */
@@ -267,14 +276,36 @@ export interface FrameRoutesDeps {
   /** Which of the listed versions are also on another branch or the remote. */
   readonly shared?: (hashes: readonly string[]) => Promise<string[]>
   readonly realChats?: RealChatsPort
+  readonly blankChat?: BlankChatPort
 }
 
-export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats }: FrameRoutesDeps): Acryl {
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, blankChat }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
+  if (blankChat !== undefined) {
+    app.get(FRAME_BLANK_CHAT_PATH, ownPage, async (c) => {
+      try {
+        return c.json({ id: (await blankChat.read()) ?? null })
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the blank chat could not be read'), 500)
+      }
+    })
+    app.post(FRAME_BLANK_CHAT_PATH, ownPage, jsonBody(), async (c) => {
+      const body: unknown = await readJson(c)
+      const id = body !== null && typeof body === 'object' ? (body as { id?: unknown }).id : undefined
+      if (typeof id !== 'string' || !SESSION_ID.test(id)) return c.json(error('name the chat'), 400)
+      try {
+        return c.json({ recorded: await blankChat.record(id) })
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the blank chat could not be recorded'), 500)
+      }
+    })
+  }
   if (realChats !== undefined) {
     app.get(FRAME_REAL_CHATS_PATH, ownPage, async (c) => {
       try {
-        return c.json({ sessions: await realChats.read() })
+        return c.json({ chats: await realChats.read() })
       } catch (cause) {
         report(cause)
         return c.json(error('the chats could not be read'), 500)
@@ -432,7 +463,7 @@ function workspaceChangesOf(value: unknown): WorkspaceChangesService | undefined
 /** DSH's `sessionQuery` as the frame uses it; undefined when the app composes without it. */
 interface SessionQueryService {
   listSessions(): Promise<readonly { readonly header: { readonly id: string } }[]>
-  readSession(id: string): Promise<{ readonly events: readonly { readonly type: string }[] }>
+  readSession(id: string): Promise<{ readonly events: readonly { readonly type: string; readonly data?: unknown }[] }>
 }
 
 function sessionQueryOf(value: unknown): SessionQueryService | undefined {
@@ -502,9 +533,23 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     const stopListening = (ctx as unknown as SessionEvents).on('session/event', (session, event) => { autoSave.observe(session.id, event) })
     const realChatList = new RealChats({
       list: async () => (await sessionQueryOf(ctx.get('sessionQuery'))?.listSessions() ?? []).map(record => record.header.id),
-      hasTurn: async id => ((await sessionQueryOf(ctx.get('sessionQuery'))?.readSession(id))?.events ?? []).some(event => event.type === 'turn/start'),
+      look: async id => lookAtLog((await sessionQueryOf(ctx.get('sessionQuery'))?.readSession(id))?.events ?? []),
       report,
     })
+    const blankChats = createBlankChatsStore(blankChatsFile(ctx.appInstance.home))
+    const blankChat: BlankChatPort = {
+      read: async () => {
+        const branch = (await readBranches(git, root)).find(entry => entry.current)?.name
+        const id = branch === undefined ? undefined : await blankChats.read(root, branch)
+        return id !== undefined && await realChatList.isBlank(id) ? id : undefined
+      },
+      record: async (id) => {
+        const branch = (await readBranches(git, root)).find(entry => entry.current)?.name
+        if (branch === undefined || !(await realChatList.isBlank(id))) return false
+        await blankChats.record(root, branch, id)
+        return true
+      },
+    }
     const chatSaves: ChatSavesPort = { read: async session => ({ saves: await store.forSession(session) }) }
     /** git's own line as the message a person reads: the runner keeps it as the failure's detail. */
     const gitReason = (cause: unknown, fallback: string): Error => {
@@ -547,6 +592,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       chatSaves,
       shared: (hashes) => sharedVersions(git, root, hashes),
       realChats: { read: () => realChatList.read() },
+      blankChat,
     }))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
     return () => {
