@@ -77,12 +77,19 @@ export interface Config {
   pageOnly?: boolean
   /** Reload the open pages after a live plugin change, so an agent that built a feature sees it on the page it has open. Default: true. */
   reloadOnChange?: boolean
+  /**
+   * Put the page script in the host's own index page (DSH's web UI) too, so an agent can drive that UI. Default: true. A host whose index is a frame
+   * around the app (the ACRYL Blends frame, whose centre shows the app's page) turns it off: the door then drives the app's page in the canvas, and an
+   * agent's `act navigate` or a reload after a plugin change never takes the person's tab out of the frame.
+   */
+  hostIndex?: boolean
 }
 
 export const Config: z<Config> = z.object({
   allowInProduction: z.boolean().default(false).description('Run in production too (NODE_ENV=production); ACRYL_DOOR=off still turns it off.'),
   pageOnly: z.boolean().default(false).description('Only the page and the look and act chat tools (a production assistant); runs in production.'),
   reloadOnChange: z.boolean().default(true).description('Reload the open pages after a plugin was added, removed or reloaded while the app runs.'),
+  hostIndex: z.boolean().default(true).description("Put the page script in the host's own index page too; off when that index is a frame around the app."),
   tools: z.object({
     // Not a `door_` name: those are the door's own verbs in the registry, never offered back as app tools.
     expose: z.array(z.string().pattern(/^(?!door_)[A-Za-z][A-Za-z0-9_-]{0,63}$/u)).description('App tools (from the tools registry) the door offers; none by default.'),
@@ -197,7 +204,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   else ctx.router.route('/', new Acryl().use('*', addScript as never))
   // DSH's own index.html is not a framework route, so `router.wrap` never sees it: the tag goes in through the web server's index-inject hook instead. The
   // tap is owned by this plugin's fiber, so unloading the door takes the tag with it, and the new activation's page routes answer under the new secret.
-  ctx.inject(['webServer'], inner => {
+  if (config.hostIndex !== false) ctx.inject(['webServer'], inner => {
     inner.effect(() => {
       const taps = inner.get('webServer') as unknown as { tapIndex?: (transform: (html: string) => string) => () => void } | undefined
       if (typeof taps?.tapIndex !== 'function') return () => {}

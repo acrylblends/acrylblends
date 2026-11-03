@@ -27,4 +27,14 @@ describe('the door page in DSH\'s index', () => {
       await running.close()
     }
   })
+
+  it('leaves the host index alone when the host says its index is a frame around the app (hostIndex: false)', async () => {
+    const running = await startApp({ config: { hostIndex: false } })
+    try {
+      // The Blends frame's index is not the app: only the app's own pages carry the script, so an agent drives the page in the canvas, not the frame.
+      expect(running.indexTaps).toHaveLength(0)
+    } finally {
+      await running.close()
+    }
+  })
 })

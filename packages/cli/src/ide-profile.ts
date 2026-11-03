@@ -621,7 +621,8 @@ function overlayOf(
     '- insert:',
     '    - id: app-instance',
     '      name: ./app/runtime.mjs',
-    ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts'] : []),
+    // The frame's index is not the app: the door drives the app's page in the canvas, never the frame around it (an agent's navigate would leave the frame).
+    ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts', '      config:', '        hostIndex: false'] : []),
     ...appRows.flatMap((row) => [
       `    - id: ${row.id}`,
       `      name: ${row.name}`,
