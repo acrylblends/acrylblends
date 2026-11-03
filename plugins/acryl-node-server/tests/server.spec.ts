@@ -184,10 +184,16 @@ describe('acryl-node-server', () => {
   it('scans past several taken ports and is ready when the plugin settles', async () => {
     const held: Array<{ port: number, release: () => Promise<void> }> = []
     try {
-      const first = await occupy()
+      // The scan needs room above the base port: an ephemeral port near 65535 would leave fewer than the
+      // 20 ports the server may try (and asking for port 65536 throws before the promise can catch it).
+      let first = await occupy()
+      for (let attempt = 0; attempt < 8 && first.port > 65535 - 21; attempt += 1) {
+        await first.release()
+        first = await occupy()
+      }
       held.push(first)
       // The next few ports too, where they are free to take: the server has to try each before it settles.
-      for (let port = first.port + 1; port <= first.port + 5; port += 1) {
+      for (let port = first.port + 1; port <= Math.min(first.port + 5, 65535); port += 1) {
         const blocker = createServer()
         const ok = await new Promise<boolean>(resolve => { blocker.once('error', () => { resolve(false) }); blocker.listen(port, '127.0.0.1', () => { resolve(true) }) })
         if (ok) held.push({ port, release: () => new Promise<void>(resolve => blocker.close(() => { resolve() })) })
