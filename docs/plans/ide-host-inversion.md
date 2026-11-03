@@ -1235,7 +1235,9 @@ Landed on the branch (rebased shas):
   `3b5bf2a1` the node-server port-scan test's headroom fix.
 
 Current base and head: rebased onto slice 1's head `1b4aaaa9` (which includes main `d33fa0cd`); the full check is green
-at `c404f937` (this note is a doc commit on top). Unpushed until the 126 count frees the runners.
+at `c404f937`, and `2c726d6e` fixes the versions share fixture at the platform cause (a CI runner's
+`init.defaultBranch` is master, so the bare remote now names main as HEAD and the clone pushes `HEAD:main`). Pushed;
+one CI green is enough for this feature slice, then it goes to Fork3 for review.
 
 Also on the branch: the gate now expects the frame's Settings sections (General, Models, Plugins, Agents, Support) and
 waits for Agents, since the separate Shortcuts section left; a remembered closed right panel keeps a width so slice 1's
