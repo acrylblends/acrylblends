@@ -157,7 +157,8 @@ test('the web templates leave the door and the live plugin install (extensions) 
   const agentText = read('agent')
   assert.match(
     agentText,
-    /NODE_ENV === 'production' \|\| process\.env\.ACRYL_DOOR === 'off'\)\s*leaveOut\.add\('acryl-door'\)/u,
+    /if \(!assistant && \(process\.env\.NODE_ENV === 'production' \|\| process\.env\.ACRYL_DOOR === 'off'\)\)\s*leaveOut\.add\('acryl-door'\)/u,
+    'the agent template leaves the door out in production unless the Assistant (page-only) needs it',
   )
   assert.doesNotMatch(
     agentText,
