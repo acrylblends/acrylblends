@@ -1,7 +1,7 @@
 /** Raw node handlers beside the router: exact and prefix paths, the longest prefix, duplicates, disposal, errors, and a claimed upgrade. */
 import { connect } from 'node:net'
 import { Context } from '@deepseek-ai/cordis'
-import { Acryl, apply as routerApply, name as routerName } from 'acryl-router'
+import { Acryl, apply as routerApply, name as routerName, type RouterEnv } from 'acryl-router'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as nodeServer from '../src/index.ts'
 
@@ -131,5 +131,42 @@ describe('raw node routes', () => {
     })
     expect(upgraded).toBe('/raw/socket')
     expect(routerUpgrade).toBe(false)
+  })
+})
+
+describe('a request gate', () => {
+  it('answers before raw routes and the router, passes the rest on, and goes when its remover runs', async () => {
+    const ctx = await boot()
+    const server = ctx.nodeServer
+    server.registerRaw({ kind: 'exact', path: '/', handler: (_req, res) => { res.end('page') } })
+    ctx.router.route('/', new Acryl().get('/router', c => c.text('router')))
+    const remove = server.gate(request => request.headers.get('x-gate') === 'yes'
+      ? new Response(null, { status: 307, headers: { location: '/app/x' } })
+      : undefined)
+    const answered = await fetch(`${server.url}/`, { headers: { 'x-gate': 'yes' }, redirect: 'manual' })
+    expect(answered.status).toBe(307)
+    expect(answered.headers.get('location')).toBe('/app/x')
+    expect(await (await fetch(`${server.url}/`)).text()).toBe('page')
+    expect(await (await fetch(`${server.url}/router`)).text()).toBe('router')
+    remove()
+    expect(await (await fetch(`${server.url}/`, { headers: { 'x-gate': 'yes' } })).text()).toBe('page')
+  })
+
+  it('may answer through the router ahead of a raw prefix, carrying the socket facts', async () => {
+    const ctx = await boot()
+    const server = ctx.nodeServer
+    server.registerRaw({ kind: 'prefix', path: '/api', handler: (_req, res) => { res.end('raw api') } })
+    ctx.router.route('/api', new Acryl<RouterEnv>().get('/who', c => c.json(c.env.connection)))
+    const remove = server.gate((request, connection) =>
+      new URL(request.url).pathname === '/api/who' ? server.throughRouter(request, connection) : undefined)
+    const answer = await fetch(`${server.url}/api/who`)
+    const body = await answer.text()
+    expect(answer.status, body).toBe(200)
+    const facts = JSON.parse(body) as { remoteAddress?: string; localPort?: number }
+    expect(facts.remoteAddress).toBeDefined()
+    expect(facts.localPort).toBe(Number(new URL(server.url).port))
+    // A path the gate passes on still goes to the raw prefix.
+    expect(await (await fetch(`${server.url}/api/other`)).text()).toBe('raw api')
+    remove()
   })
 })

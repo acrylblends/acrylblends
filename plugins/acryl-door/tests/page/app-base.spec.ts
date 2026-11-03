@@ -23,8 +23,11 @@ describe('the app base a page carries', () => {
   it('puts an app path under the base, leaving a path already under it alone', () => {
     expect(underAppBase('/app', '/board')).toBe('/app/board')
     expect(underAppBase('/app', 'board')).toBe('/app/board')
-    expect(underAppBase('/app', '/')).toBe('/app/')
+    // The app's root is its mount at the base, not '/app/', which the app answers with its 404 page; a query stays with it.
+    expect(underAppBase('/app', '/')).toBe('/app')
+    expect(underAppBase('/app', '/?x=1')).toBe('/app?x=1')
     expect(underAppBase('/app', '/app/settings')).toBe('/app/settings')
+    expect(underAppBase('/app', '/app?x=1')).toBe('/app?x=1')
     expect(underAppBase('', '/board')).toBe('/board')
   })
 })
