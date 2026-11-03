@@ -95,6 +95,13 @@ export function parseFrameState(value: unknown): FrameState {
 
 export const FRAME_PLUGINS_PATH = `${FRAME_API_PREFIX}/plugins`
 export const FRAME_PLUGINS_SWITCH_PATH = `${FRAME_API_PREFIX}/plugins/switch`
+export const FRAME_PLUGINS_SHARE_PATH = `${FRAME_API_PREFIX}/plugins/share`
+
+/** Where a shared plugin went: its GitHub repository and the released version other apps install. */
+export interface SharedPluginView {
+  readonly url: string
+  readonly version: string
+}
 
 /**
  * Where a plugin of the app comes from: a row of the app's `blend.yaml` (the library plugins the app was made with), or a plugin written into the
@@ -114,6 +121,8 @@ export interface AppPluginView {
   readonly unsaved?: boolean
   /** The library release a library row was copied from (`plugins/library.lock.json`). */
   readonly version?: string
+  /** A local plugin this app shared: where it went (a GitHub repository) and the version it released. */
+  readonly shared?: SharedPluginView
   readonly description: string
   readonly on: boolean
 }
@@ -151,6 +160,9 @@ export function parseAppPluginsView(value: unknown): AppPluginsView {
         ...(typeof entry.at === 'string' ? { at: entry.at } : {}),
         ...(entry.unsaved === true ? { unsaved: true } : {}),
         ...(typeof entry.version === 'string' ? { version: entry.version } : {}),
+        ...(isRecord(entry.shared) && typeof entry.shared.url === 'string' && typeof entry.shared.version === 'string'
+          ? { shared: { url: entry.shared.url, version: entry.shared.version } }
+          : {}),
         description: entry.description,
         on: entry.on,
       }

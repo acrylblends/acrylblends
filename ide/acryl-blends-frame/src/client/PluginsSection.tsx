@@ -63,6 +63,23 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
     }
   }
 
+  const share = async (plugin: NavigatorPlugin) => {
+    if (plugin.share === undefined || busy !== undefined) return
+    setBusy(plugin.key)
+    setFailure(undefined)
+    try {
+      const shared = await plugin.share()
+      // The row shows where it went without waiting for the Host to read the whole list again.
+      setLoad(current => current.status === 'ready'
+        ? { status: 'ready', plugins: current.plugins.map(row => row.key === plugin.key ? { ...row, shared } : row) }
+        : current)
+      setBusy(undefined)
+    } catch (cause) {
+      setFailure(`${plugin.name}: ${cause instanceof Error ? cause.message : String(cause)}`)
+      setBusy(undefined)
+    }
+  }
+
   return (
     <div className="acrylBlendsPlugins">
       <h3>Plugins</h3>
@@ -101,6 +118,27 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
             <small>
               {plugin.description}{plugin.description === '' ? '' : ' · '}
               <span className="acrylBlendsPlugState" data-state={plugin.state === 'active' ? 'ok' : plugin.state === 'off' ? 'off' : 'warn'}>{plugin.state}</span>
+              {plugin.shared !== undefined && (
+                <>
+                  {' · '}
+                  <a className="acrylBlendsShared" href={plugin.shared.url} target="_blank" rel="noreferrer">
+                    {plugin.shared.url.replace(/^https:\/\//u, '')} · v{plugin.shared.version}
+                  </a>
+                </>
+              )}
+              {plugin.share !== undefined && plugin.shared === undefined && (
+                <>
+                  {' · '}
+                  <button
+                    type="button"
+                    className="acrylBlendsShareButton"
+                    disabled={busy !== undefined}
+                    onClick={() => { void share(plugin) }}
+                  >
+                    {busy === plugin.key ? 'Sharing…' : 'Share'}
+                  </button>
+                </>
+              )}
             </small>
           </div>
         )
