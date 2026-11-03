@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { ownerChangeLines, registrationEntry, registrationImport, stripRegistrations, withRegistrations } from '../src/app-registration.ts'
 import { MOUNTED } from '../src/mount.ts'
+import { KEPT_BY_THE_APP } from '../src/upgrade.ts'
 
 const feedback = MOUNTED.find(plugin => plugin.name === 'feedback')
 if (feedback === undefined) throw new Error('the mounted feedback plugin is gone')
@@ -62,5 +63,12 @@ describe('the framework registration lines', () => {
     expect(ownerChangeLines(owned, target)).toEqual([{ line: 12, text: '  // The owner keeps the board title short.' }])
     // The framework's lines are not reported.
     expect(ownerChangeLines(app, target)).toEqual([])
+  })
+})
+
+describe('the app-owned scaffold files', () => {
+  it('never takes src/routes.ts as the template\'s, and takes src/app.ts only through the registration merge', () => {
+    expect(KEPT_BY_THE_APP.has('src/routes.ts')).toBe(true)
+    expect(KEPT_BY_THE_APP.has('src/app.ts')).toBe(false)
   })
 })

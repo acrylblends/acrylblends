@@ -128,6 +128,9 @@ interface FrameFileWrite {
   readonly state: 'add' | 'same' | 'update' | 'conflict'
 }
 
+/** Scaffold files the app owns from its first edit: the release's copy is only the starting point, and the upgrade never writes or refuses over it. */
+export const KEPT_BY_THE_APP = new Set(['src/routes.ts'])
+
 /** What `upgrade` does about the frame for one app: nothing (and why), or a plan computed before anything is written. */
 export type FrameStep =
   | { readonly kind: 'unidentified' }
@@ -182,11 +185,15 @@ export function planFrameStep(
   const specs = frameProfileForApp(appDir)
   if (specs === undefined) return { kind: 'unavailable', template }
   const released = readLegacy(appDir, template, name)
-  const files: FrameFileWrite[] = released.files.map((file) => ({
-    file: file.file,
-    text: file.text,
-    state: file.state,
-  }))
+  // src/routes.ts is the app's own from its first edit: it is never taken as the template's, never refused over, and never overwritten with
+  // --force (the backup list takes its files from this list too).
+  const files: FrameFileWrite[] = released.files
+    .filter((file) => !KEPT_BY_THE_APP.has(file.file))
+    .map((file) => ({
+      file: file.file,
+      text: file.text,
+      state: file.state,
+    }))
   // The framework's own `add` registration lines are not the owner's edits: keep them on the app.ts the upgrade writes, and report only the rest.
   const appIndex = files.findIndex((file) => file.file === 'src/app.ts')
   const appFile = appIndex < 0 ? undefined : files[appIndex]
