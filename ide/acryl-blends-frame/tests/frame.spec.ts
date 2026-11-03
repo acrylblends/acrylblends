@@ -3,6 +3,7 @@ import { countChanges, parseBranches, parseFrameState } from '../src/index.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
 import { savedLabel, versionNumber } from '../src/client/versions.ts'
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
+import { foldersAbove } from '../src/client/FilesView.tsx'
 import { highlightLine, languageOf } from '../src/client/highlight.ts'
 import { FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, parseStoredTabs, ptyTab, terminalMeta } from '../src/client/tabs.ts'
 import { FIRST_RUN_VIEW, FrameViewState, parseStoredView, type ViewStorage } from '../src/client/view-state.ts'
@@ -175,5 +176,12 @@ describe('fuzzy ranking', () => {
   it('puts letters close together above letters scattered over a long path', () => {
     const paths = ['docs/framework/cordis/migration-from-0-4.md', 'docs/framework/cordis/acryl-in-a-cordis-app.md', 'src/main.ts', 'plugins/agent-panel/client/main.ts']
     expect(fuzzySearch('mai', paths).map(match => match.path).slice(0, 2)).toEqual(['src/main.ts', 'plugins/agent-panel/client/main.ts'])
+  })
+})
+
+describe('the open file in the tree', () => {
+  it('opens every folder above it, outermost first', () => {
+    expect(foldersAbove('src/client/board.ts')).toEqual(['src', 'src/client'])
+    expect(foldersAbove('package.json')).toEqual([])
   })
 })

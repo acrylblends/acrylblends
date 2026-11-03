@@ -16,6 +16,8 @@ const MAX_INDEXED_FILES = 5000
 export interface FilesViewProps {
   readonly files: WorkspaceFilesApi
   readonly root: string
+  /** The file open as a tab, if any: its folders are expanded and its row marked. */
+  readonly current?: string | undefined
   readonly openFile: (path: string) => void
 }
 
@@ -39,12 +41,18 @@ async function indexFiles(files: WorkspaceFilesApi, root: string): Promise<strin
   return found
 }
 
-export function FilesView({ files, root, openFile }: FilesViewProps) {
+/** The folders above a file, outermost first: `src/a/b.ts` gives `src`, `src/a`. */
+export function foldersAbove(path: string): string[] {
+  const parts = path.split('/').slice(0, -1)
+  return parts.map((_, at) => parts.slice(0, at + 1).join('/'))
+}
+
+export function FilesView({ files, root, current, openFile }: FilesViewProps) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const [index, setIndex] = useState<readonly string[] | undefined>(undefined)
   const [dirs, setDirs] = useState<ReadonlyMap<string, readonly FileEntry[]>>(new Map())
-  const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(current === undefined ? [] : foldersAbove(current)))
   const [error, setError] = useState<string | undefined>(undefined)
   const search = useRef<HTMLInputElement>(null)
 
@@ -59,6 +67,7 @@ export function FilesView({ files, root, openFile }: FilesViewProps) {
 
   useEffect(() => {
     void readDir('')
+    for (const dir of open) void readDir(dir)
     let live = true
     indexFiles(files, root).then((found) => { if (live) setIndex(found) }, () => {})
     return () => { live = false }
@@ -99,7 +108,7 @@ export function FilesView({ files, root, openFile }: FilesViewProps) {
       ]
     }
     return [
-      <button key={path} type="button" className="acrylBlendsFrow" style={indent} onClick={() => { openFile(path) }}>{entry.name}</button>,
+      <button key={path} type="button" className="acrylBlendsFrow" style={indent} aria-current={path === current || undefined} onClick={() => { openFile(path) }}>{entry.name}</button>,
     ]
   })
 

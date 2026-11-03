@@ -125,7 +125,7 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsFrow { display: flex; gap: 8px; align-items: center; width: 100%; min-width: 0; padding: 4px 8px; border: 0; border-radius: 5px; background: transparent; color: #d4d4da; font-size: 13px; text-align: left; white-space: nowrap; }
 button.acrylBlendsFrow { cursor: pointer; }
 button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
-.acrylBlendsFrow[aria-selected="true"] { background: var(--bf-accent-dim); color: #fff; }
+.acrylBlendsFrow[aria-selected="true"], .acrylBlendsFrow[aria-current="true"] { background: var(--bf-accent-dim); color: #fff; }
 .acrylBlendsFrow b { color: var(--bf-warn); font-weight: 600; }
 .acrylBlendsFrowName { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .acrylBlendsHint { color: var(--bf-dim); font-size: 11.5px; padding: 10px 8px 0; margin: 0; }

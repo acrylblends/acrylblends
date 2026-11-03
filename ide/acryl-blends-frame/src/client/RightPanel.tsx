@@ -222,7 +222,13 @@ export function RightPanel({ chats, tabs, tools, versions, state, renderConversa
         </>
       )}
       {active?.kind === 'files' && root !== undefined && (
-        <FilesView files={tools.files} root={root} openFile={(path) => { tabs.open(fileTab(path)) }} />
+        <FilesView
+          files={tools.files}
+          root={root}
+          // The file open as a tab (the latest one): the tree shows where it is.
+          current={strip.tabs.findLast(tab => tab.kind === 'file')?.path}
+          openFile={(path) => { tabs.open(fileTab(path)) }}
+        />
       )}
       {active?.kind === 'file' && root !== undefined && <FileView key={active.path} files={tools.files} root={root} path={active.path} />}
       {active?.kind === 'git' && root !== undefined && (
