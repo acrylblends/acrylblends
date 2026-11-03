@@ -3,9 +3,13 @@
  * with `fetch`, no SDK. It provides the same `model` service as the scripted model, so the agent, its tools and the builder do not change.
  * Each step is stateless: the conversation is rebuilt from the run's question and tool-call trace.
  */
+
+import { readFileSync, statSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Model, ModelInput, Step } from '../agent/index.ts'
-import { SYSTEM_PROMPT } from './prompt.ts'
+import { ASSISTANT_PROMPT, SYSTEM_PROMPT } from './prompt.ts'
+
+export { ASSISTANT_PROMPT, SYSTEM_PROMPT }
 
 export interface OpenAIConfig {
   /** For example https://api.openai.com/v1, https://api.deepseek.com/v1, http://127.0.0.1:11434/v1 (Ollama). */
@@ -16,6 +20,54 @@ export interface OpenAIConfig {
   /** Replaces the default system prompt (how to write a Cordis plugin that installs). */
   system?: string
   temperature?: number
+  /** The most tokens one answer may use (`max_tokens`): what one step can cost at most. */
+  maxTokens?: number
+}
+
+const statMode = (path: string): number => statSync(path).mode
+
+/** The file in the app's home that holds the model when the environment names none: `{ "baseUrl", "model", "apiKey"? }`. Never committed (the home is ignored). */
+export const MODEL_FILE = 'model.json'
+
+/**
+ * The model configuration kept in a file, or `undefined` when there is no file. The key in it is the owner's: the file must be readable by its owner only (0600), and one that
+ * others can read is refused, as an SSH key would be.
+ * @throws when the file is not a model configuration, or is readable by others.
+ */
+export function modelConfigFromFile(
+  path: string,
+  platform: NodeJS.Platform = process.platform,
+): OpenAIConfig | undefined {
+  let text: string
+  let mode: number
+  try {
+    text = readFileSync(path, 'utf8')
+    mode = statMode(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  }
+  const parsed = JSON.parse(text) as Partial<Record<'baseUrl' | 'model' | 'apiKey', unknown>>
+  if (
+    typeof parsed.baseUrl !== 'string' ||
+    parsed.baseUrl.trim() === '' ||
+    typeof parsed.model !== 'string' ||
+    parsed.model.trim() === ''
+  )
+    throw new ModelError(`${path} needs "baseUrl" and "model" (and "apiKey" for a hosted API)`)
+  const apiKey =
+    typeof parsed.apiKey === 'string' && parsed.apiKey.trim() !== ''
+      ? parsed.apiKey.trim()
+      : undefined
+  if (apiKey !== undefined && platform !== 'win32' && (mode & 0o077) !== 0)
+    throw new ModelError(
+      `${path} holds a key and others can read it: make it readable by its owner only (chmod 600)`,
+    )
+  return {
+    baseUrl: parsed.baseUrl.trim(),
+    model: parsed.model.trim(),
+    ...(apiKey === undefined ? {} : { apiKey }),
+  }
 }
 
 /** The model configuration from an environment-shaped object, or `undefined` when none is set. Pass it `process.env` in main.ts. */
@@ -69,9 +121,13 @@ export function messagesFor(input: ModelInput, system: string): Message[] {
     messages.push({
       role: 'tool',
       tool_call_id: id,
-      content: JSON.stringify(
-        call.error === undefined ? (call.result ?? null) : { error: call.error },
-      ),
+      // Text goes as text (a page look reads as lines, not one quoted string of \n escapes); anything else as JSON.
+      content:
+        call.error === undefined && typeof call.result === 'string'
+          ? call.result
+          : JSON.stringify(
+              call.error === undefined ? (call.result ?? null) : { error: call.error },
+            ),
     })
   }
   return messages
@@ -96,6 +152,7 @@ export async function complete(
     body: JSON.stringify({
       model: config.model,
       temperature: config.temperature ?? 0,
+      ...(config.maxTokens === undefined ? {} : { max_tokens: config.maxTokens }),
       messages: messagesFor(input, config.system ?? SYSTEM_PROMPT),
       tools: (input.tools ?? []).map((tool) => ({
         type: 'function',
@@ -154,6 +211,8 @@ export const openai = {
   apply(ctx: Context, config: OpenAIConfig) {
     if (!config?.baseUrl || !config.model)
       throw new ModelError('openai needs { baseUrl, model } (and apiKey for hosted APIs)')
-    ctx.provide('model', { complete: (input) => complete(config, input) } satisfies Model)
+    ctx.provide('model', {
+      complete: (input) => complete(config, input, input.signal),
+    } satisfies Model)
   },
 }

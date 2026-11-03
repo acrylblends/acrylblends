@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { agent, memory, tools } from '../../agent/index.ts'
-import { messagesFor, modelConfigFrom, openai } from '../index.ts'
+import { messagesFor, modelConfigFrom, modelConfigFromFile, openai } from '../index.ts'
 
 /** A stand-in for an OpenAI-compatible server: answers with the scripted replies in order, and records what it was sent. */
 async function fakeApi(replies: unknown[]) {
@@ -67,15 +70,22 @@ test('messages carry each tool call and its result or error', () => {
       trace: [
         { tool: 'a', input: { x: 1 }, result: 3 },
         { tool: 'b', input: {}, error: 'nope' },
+        { tool: 'look', input: {}, result: 'Page: Board\n- link "My tasks" [ref=1.6]' },
       ],
     },
     'sys',
   )
   assert.deepEqual(
     messages.map((message) => message.role),
-    ['system', 'user', 'assistant', 'tool', 'assistant', 'tool'],
+    ['system', 'user', 'assistant', 'tool', 'assistant', 'tool', 'assistant', 'tool'],
   )
+  assert.equal((messages[3] as { content: string }).content, '3')
   assert.equal((messages[5] as { content: string }).content, '{"error":"nope"}')
+  // A text result reads as its lines, not as a quoted JSON string.
+  assert.equal(
+    (messages[7] as { content: string }).content,
+    'Page: Board\n- link "My tasks" [ref=1.6]',
+  )
 })
 
 test('the configuration comes from an environment-shaped object, and is absent when not set', () => {
@@ -87,4 +97,43 @@ test('the configuration comes from an environment-shaped object, and is absent w
     },
   )
   assert.equal(modelConfigFrom({}), undefined)
+})
+
+test("the configuration comes from the home's model file: absent when there is none, refused when it holds a key others can read", () => {
+  const home = mkdtempSync(join(tmpdir(), 'openai-model-'))
+  try {
+    const file = join(home, 'model.json')
+    assert.equal(modelConfigFromFile(file), undefined)
+    writeFileSync(
+      file,
+      JSON.stringify({ baseUrl: ' http://127.0.0.1:11435/v1 ', model: 'qwen2.5' }),
+    )
+    chmodSync(file, 0o644)
+    // No key: nothing secret, so any mode will do.
+    assert.deepEqual(modelConfigFromFile(file, 'darwin'), {
+      baseUrl: 'http://127.0.0.1:11435/v1',
+      model: 'qwen2.5',
+    })
+    writeFileSync(
+      file,
+      JSON.stringify({ baseUrl: 'https://api.example/v1', model: 'm', apiKey: 'k' }),
+    )
+    chmodSync(file, 0o644)
+    assert.throws(() => modelConfigFromFile(file, 'darwin'), /chmod 600/)
+    assert.deepEqual(modelConfigFromFile(file, 'win32'), {
+      baseUrl: 'https://api.example/v1',
+      model: 'm',
+      apiKey: 'k',
+    })
+    chmodSync(file, 0o600)
+    assert.deepEqual(modelConfigFromFile(file, 'darwin'), {
+      baseUrl: 'https://api.example/v1',
+      model: 'm',
+      apiKey: 'k',
+    })
+    writeFileSync(file, JSON.stringify({ model: 'm' }))
+    assert.throws(() => modelConfigFromFile(file, 'darwin'), /needs "baseUrl" and "model"/)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
 })
