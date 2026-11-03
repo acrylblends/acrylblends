@@ -3,7 +3,7 @@ import { appendFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, test } from 'node:test'
-import { canCaptureTab, frameViewOf, shotSize } from '../client.js'
+import { canCaptureTab, elementLabel, frameViewOf, shotSize } from '../client.js'
 import { FeedbackStore, LIMITS, parseNewNote, parseScreenshot } from '../store.ts'
 
 const dirs: string[] = []
@@ -165,5 +165,28 @@ describe('the screenshot option', () => {
     assert.equal(canCaptureTab(safari, true), false)
     assert.equal(canCaptureTab(android, true), false)
     assert.equal(canCaptureTab(chrome, false), false)
+  })
+})
+
+describe('the label of a picked element', () => {
+  /** Just enough of a DOM element for the label: attributes, a heading query, children and a tag. */
+  type Fake = { nodeType: number; tagName?: string; textContent?: string; childNodes?: Fake[]; heading?: Fake; attrs?: Record<string, string> }
+  const text = (value: string): Fake => ({ nodeType: 3, textContent: value })
+  const el = (tagName: string, childNodes: Fake[], extra: Partial<Fake> = {}): Fake => ({ nodeType: 1, tagName: tagName.toUpperCase(), childNodes, ...extra })
+  const dom = (fake: Fake): Element => ({
+    getAttribute: (name: string) => fake.attrs?.[name] ?? null,
+    querySelector: () => (fake.heading === undefined ? null : { textContent: fake.heading.textContent }),
+    childNodes: fake.childNodes ?? [],
+    tagName: fake.tagName,
+  }) as unknown as Element
+
+  test('a card is named by its first text, not by a bold name inside it', () => {
+    const card = el('div', [text('Fix the invite link'), el('div', [el('b', [text('Ben')]), text(' · due Thu')])])
+    assert.equal(elementLabel(dom(card)), '"Fix the invite link"')
+  })
+
+  test('an element that says what it is, or shows nothing, keeps that name', () => {
+    assert.equal(elementLabel(dom(el('div', [], { attrs: { 'aria-label': 'Task card' } }))), 'Task card')
+    assert.equal(elementLabel(dom(el('div', []))), 'div')
   })
 })
