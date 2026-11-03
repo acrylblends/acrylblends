@@ -50,7 +50,8 @@ export class SelectionStore {
 export function elementLabel(element: Element): string {
   const named = element.getAttribute('aria-label') ?? element.getAttribute('title') ?? element.getAttribute('alt')
   if (named !== null && named !== '') return clip(named)
-  const heading = element.querySelector('h1, h2, h3, h4, b, strong')
+  // A heading names its section; bold text inside does not (a card's bold person name is not the card), so it falls to the first text.
+  const heading = element.querySelector('h1, h2, h3, h4, h5, h6')
   const text = (heading?.textContent ?? firstText(element) ?? '').replace(/\s+/g, ' ').trim()
   return text === '' ? element.tagName.toLowerCase() : `"${clip(text)}"`
 }

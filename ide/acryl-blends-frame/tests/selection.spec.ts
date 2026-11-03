@@ -27,6 +27,8 @@ describe('elementLabel', () => {
     expect(elementLabel(target)).toBe('"Fix the invite link"')
     // A card with no heading is named by its first line, not by every line run together.
     expect(elementLabel(element('<div class="task">Fix the invite link<div class="who">Ben · due Thu</div></div>'))).toBe('"Fix the invite link"')
+    // A bold name inside the card is not its title.
+    expect(elementLabel(element('<div class="task">Fix the invite link<div class="who"><b>Ben</b> · due Thu</div></div>'))).toBe('"Fix the invite link"')
     const long = element(`<div>${'a'.repeat(40)}</div>`)
     expect(elementLabel(long)).toBe(`"${'a'.repeat(34)}…"`)
   })
