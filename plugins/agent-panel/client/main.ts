@@ -12,7 +12,8 @@ const DRAFT_KEY = 'agent-panel-draft'
 /** Set when a visitor closed the Assistant, so it stays closed on the next page. */
 const ASSISTANT_CLOSED_KEY = 'agent-panel-assistant-closed'
 /** What the Assistant tells a visitor first: what it can do, and that it cannot change the app. */
-export const ASSISTANT_NOTE = 'The assistant can use the app for you: open pages, filter, fill in forms. It cannot change the app.'
+export const ASSISTANT_NOTE =
+  'The assistant can use the app for you: open pages, filter, fill in forms. It cannot change the app.'
 
 /**
  * Why a submit does not send: nothing typed, or a run still going. The panel says it in its log instead of returning silently - a Send that does nothing and
@@ -274,7 +275,7 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
       <p class="notice">${ASSISTANT_NOTE}</p>
       <div id="log" role="log"></div>
       <div id="term" hidden></div>
-      <form><textarea aria-label="Message" placeholder="${assistant ? 'Ask for a change…' : 'What should the app do?'}"${assistant ? ' rows="1"' : ''}></textarea>
+      <form><textarea aria-label="Message" placeholder="${assistant ? 'Ask the assistant…' : 'What should the app do?'}"${assistant ? ' rows="1"' : ''}></textarea>
         <div class="row"><button class="send" type="submit">Send</button><button class="stop" type="button" disabled>Stop</button></div></form>
     </section>`
   const $ = <T extends Element>(selector: string): T => shadow.querySelector<T>(selector)!
@@ -383,9 +384,10 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
           root.style.getPropertyValue(property),
           root.style.getPropertyPriority(property),
         ])
+      // The panel's own width (the Assistant's is narrower than the builder's), so the page meets its edge with no gap.
       root.style.setProperty(
         'margin-right',
-        `${String(Math.min(380, Math.floor(window.innerWidth * 0.9)))}px`,
+        `${String(Math.ceil(panel.getBoundingClientRect().width))}px`,
         'important',
       )
     } else {

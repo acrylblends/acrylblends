@@ -37,7 +37,7 @@ export interface ExtensionsPort {
 /** The slice of acrylblends' `tools` registry (the `agent` plugin's) the tool verbs use, and where the built-in chat finds the verbs. */
 export interface ToolsPort {
   /** @returns the function that removes the tool. @throws when the name is taken. */
-  register(name: string, tool: { readonly description: string; readonly parameters?: Readonly<Record<string, unknown>>; run(input: unknown): unknown }): () => void
+  register(name: string, tool: { readonly description: string; readonly parameters?: Readonly<Record<string, unknown>>; run(input: unknown, options?: { signal?: AbortSignal; page?: string }): unknown }): () => void
   list(): ReadonlyArray<{ readonly name: string; readonly description: string }>
   call(name: string, input: unknown): Promise<unknown>
 }
@@ -58,6 +58,11 @@ export interface DoorDeps {
   readonly reloadOnChange?: boolean
   /** How long a reload or a move may take before the new page has connected again (tests shorten it). Default 15 s. */
   readonly pageBackMs?: number
+}
+
+/** Who a verb runs for: `page`, the door's id of the page a run was asked from; its look and act go to that page alone (followed into its tab), never to another one. */
+export interface VerbScope {
+  readonly page?: string
 }
 
 /** What one verb answered: the value for `--json` and programs, the text for an agent reading a terminal. */
@@ -96,16 +101,16 @@ export class Door {
   }
 
   /** Run one verb. @throws DoorError or UiControlError. */
-  async run(verb: string, args: unknown, signal: AbortSignal): Promise<VerbAnswer> {
+  async run(verb: string, args: unknown, signal: AbortSignal, scope: VerbScope = {}): Promise<VerbAnswer> {
     const input = (typeof args === 'object' && args !== null && !Array.isArray(args) ? args : {}) as Record<string, unknown>
     switch (verb) {
       case 'brief': return this.brief()
       case 'look': {
-        const snapshot = await this.look(input, signal)
+        const snapshot = await this.look(input, signal, scope)
         return { value: snapshot, text: renderSnapshot(snapshot, cursor => `run look --cursor ${String(cursor)}`) }
       }
       case 'act': {
-        const result = await this.act(input, signal)
+        const result = await this.act(input, signal, scope)
         return { value: result, text: `done${result.target === undefined ? '' : `: ${result.target.role} "${result.target.name}"`}${result.detail === undefined ? '' : ` (${result.detail})`}; look again before the next act` }
       }
       case 'plugin-list': return this.plugin(extensions => extensions.list(), false)
@@ -151,30 +156,47 @@ export class Door {
     return { value, text }
   }
 
-  look(input: Record<string, unknown>, signal: AbortSignal): Promise<UiSnapshot> {
-    const { window, rest } = this.windowOf(input)
+  look(input: Record<string, unknown>, signal: AbortSignal, scope: VerbScope = {}): Promise<UiSnapshot> {
+    const { window, rest } = this.windowOf(input, scope)
     const request = this.parse({ ...rest, op: 'snapshot' })
-    return this.callPage('look', request, signal, window) as Promise<UiSnapshot>
+    return this.callPage('look', request, signal, window, scope.page) as Promise<UiSnapshot>
   }
 
-  async act(input: Record<string, unknown>, signal: AbortSignal): Promise<UiActionResult> {
+  async act(input: Record<string, unknown>, signal: AbortSignal, scope: VerbScope = {}): Promise<UiActionResult> {
     if (input.op === 'snapshot') throw new DoorError('invalid', 'use look to see the page')
-    const { window, rest } = this.windowOf(input)
+    const { window, rest } = this.windowOf(input, scope)
     const request = this.parse(rest)
-    if (request.op !== 'reload' && request.op !== 'navigate') return await this.callPage(`act ${String(input.op)}`, request, signal, window) as UiActionResult
-    // The page is replaced: wait for the new one to connect, so the next look sees it. The page may drop before it has answered; that is the reload working.
-    const back = this.deps.channel.expectNewPage(this.deps.pageBackMs ?? PAGE_BACK_MS)
+    const page = scope.page
+    // A reload or a navigate replaces the page; a click, a key or typing may (a link, a form that submits), and the page says so when it does.
+    const moves = request.op === 'reload' || request.op === 'navigate'
+    if (!moves && request.op !== 'click' && request.op !== 'press' && request.op !== 'type')
+      return await this.callPage(`act ${String(input.op)}`, request, signal, window, page) as UiActionResult
+    // Wait for the new page to connect, so the next look sees it; the wait starts before the act, or a fast page is missed. The page may drop before it has answered;
+    // that is the move working. A run's own page comes back in its own tab; no other page that happens to connect meanwhile is taken for it.
+    const backMs = this.deps.pageBackMs ?? PAGE_BACK_MS
+    const stay = new AbortController()
+    const back = page === undefined ? this.deps.channel.expectNewPage(backMs, stay.signal) : this.deps.channel.expectPageBack(page, backMs, stay.signal)
     let answer: UiActionResult
+    let left = moves
     try {
-      answer = await this.callPage(`act ${request.op}`, request, signal, window) as UiActionResult
+      answer = await this.callPage(`act ${request.op}`, request, signal, window, page) as UiActionResult
+      left ||= answer.leaving === true
     } catch (cause) {
-      if (!(cause instanceof UiControlError && cause.code === 'disconnected')) { void back; throw cause }
-      answer = { ok: true, detail: request.op === 'reload' ? 'reloading' : `going to ${request.path}` }
+      if (!(cause instanceof UiControlError && cause.code === 'disconnected')) { stay.abort(); throw cause }
+      answer = { ok: true, detail: request.op === 'reload' ? 'reloading' : request.op === 'navigate' ? `going to ${request.path}` : 'the page is going to another address' }
+      left = true
+    }
+    if (!left) {
+      stay.abort()
+      return answer
     }
     const came = await back
-    // The page that came back is the one this agent was driving: it stays the target until the person focuses another page.
-    if (came !== undefined) this.deps.channel.prefer(came)
-    if (came === undefined) throw new UiControlError('timeout', request.op === 'reload' ? 'the page did not come back after the reload' : `the page did not come back after going to ${request.path}: is there a page at that path, and does it load the door's script?`)
+    // The page that came back is the one this agent was driving: it stays the target until the person focuses another page. A run that names its page follows that page's tab instead.
+    if (came !== undefined && page === undefined) this.deps.channel.prefer(came)
+    if (came === undefined)
+      throw new UiControlError('timeout', request.op === 'reload' ? 'the page did not come back after the reload'
+        : request.op === 'navigate' ? `the page did not come back after going to ${request.path}: is there a page at that path, and does it load the door's script?`
+        : `the ${request.op} took the page to another address, and no page came back: does the page there load the door's script?`)
     const landed = request.op === 'navigate' ? await this.statusAt(request.path) : undefined
     return { ...answer, detail: `${answer.detail ?? 'done'}${landed === undefined ? '' : `; ${landed}`}; the page is back: look again` }
   }
@@ -237,9 +259,11 @@ export class Door {
   }
 
   /** `window` on look and act: the desktop window (the number `window list` prints) whose page the call is for; without it, the page used last. */
-  private windowOf(input: Record<string, unknown>): { window: number | undefined; rest: Record<string, unknown> } {
+  private windowOf(input: Record<string, unknown>, scope: VerbScope = {}): { window: number | undefined; rest: Record<string, unknown> } {
     const { window, ...rest } = input
     if (window === undefined) return { window: undefined, rest }
+    // A run that is for one page cannot be pointed at a desktop window instead.
+    if (scope.page !== undefined) throw new DoorError('invalid', 'this run drives only the page it was asked from; window does not apply')
     if (typeof window !== 'number' || !Number.isSafeInteger(window) || window < 1) throw new DoorError('invalid', 'window must be the number `window list` prints for the window')
     return { window, rest }
   }
@@ -253,10 +277,10 @@ export class Door {
   }
 
   /** Run one call on the page and record it. The audit holds which control was touched and how it ended, never what was typed. */
-  private async callPage(verb: string, request: UiRequest, signal: AbortSignal, window?: number): Promise<UiResult> {
+  private async callPage(verb: string, request: UiRequest, signal: AbortSignal, window?: number, page?: string): Promise<UiResult> {
     const approval: AuditEntry['approval'] = 'token'
     try {
-      const value = await this.deps.channel.call(request, { signal, ...(window === undefined ? {} : { window }), ...(request.op === 'wait' ? { timeoutMs: (request.timeoutMs ?? 3000) + 5000 } : {}) })
+      const value = await this.deps.channel.call(request, { signal, ...(window === undefined ? {} : { window }), ...(page === undefined ? {} : { page }), ...(request.op === 'wait' ? { timeoutMs: (request.timeoutMs ?? 3000) + 5000 } : {}) })
       const target = 'target' in value ? value.target : undefined
       this.deps.audit.record({ at: new Date().toISOString(), tool: verb, ...(target === undefined ? {} : { target }), ...(window === undefined ? {} : { window }), outcome: 'ok', approval })
       return value

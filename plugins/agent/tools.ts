@@ -1,12 +1,18 @@
 import type { Context } from '@deepseek-ai/cordis'
 
+/** What a run passes with each call: its signal, and the door's id of the page it was asked from (the page tools drive only that page). */
+export interface CallOptions {
+  readonly signal?: AbortSignal
+  readonly page?: string
+}
+
 /** One tool: what it does (for the model) and how to run it. */
 export interface Tool {
   readonly description: string
   /** The JSON Schema of the input (an object schema), sent to a real model so it knows which fields the tool takes. A tool without one takes any object. */
   readonly parameters?: Readonly<Record<string, unknown>>
-  /** `options.signal` aborts when the run is cancelled; a tool that can stop its work listens to it. */
-  run(input: unknown, options?: { signal?: AbortSignal }): unknown | Promise<unknown>
+  /** `options.signal` aborts when the run is cancelled; a tool that can stop its work listens to it. `options.page` is the page the run was asked from, when it was. */
+  run(input: unknown, options?: CallOptions): unknown | Promise<unknown>
 }
 
 /** The tool registry. A plugin registers its tools inside `ctx.effect`, so they leave with it. */
@@ -18,7 +24,7 @@ export interface Tools {
     description: string
     parameters?: Readonly<Record<string, unknown>>
   }>
-  call(name: string, input: unknown, options?: { signal?: AbortSignal }): Promise<unknown>
+  call(name: string, input: unknown, options?: CallOptions): Promise<unknown>
 }
 
 declare module '@deepseek-ai/cordis' {

@@ -152,7 +152,8 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   if (!pageOnly) assertDoorIsFree(app.root)
   const secret = newSecret()
   // A look right after a navigate or reload waits up to two seconds for the page that is moving to register again, and a read-only call that no page acknowledged gives a page that just registered one more try.
-  const channel = new UiChannel({ attachWaitMs: 2000 })
+  // A page-only door serves every visitor of the app on one channel: each call goes to the page of the visitor whose run made it, never to another visitor's page.
+  const channel = new UiChannel({ attachWaitMs: 2000, requirePage: pageOnly })
   const shell = new ShellChannel()
   const audit = new AuditLog(auditPath(stateDir(app.root)))
   const door = new Door({

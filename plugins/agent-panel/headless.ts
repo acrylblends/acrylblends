@@ -112,8 +112,11 @@ export function agentDriver(ctx: Context): ChatDriver {
   return {
     kind: 'chat',
     name: 'agent',
-    async *start({ message, signal }) {
-      const result = await ctx.agent.run(message, { signal })
+    async *start({ message, signal, page }) {
+      const result = await ctx.agent.run(message, {
+        signal,
+        ...(page === undefined ? {} : { page }),
+      })
       for (const call of result.trace)
         yield {
           event: 'tool',

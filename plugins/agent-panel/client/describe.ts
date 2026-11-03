@@ -43,21 +43,59 @@ export function describeTool(data: Record<string, unknown>): string | undefined 
   return `${tool}${input}${failed}`
 }
 
-/** The Assistant's step on the page, as the person reads it under the answer: `ui.look()`, `ui.click(3.12)`, `ui.type(4.2, "Book the venue")`, `ui.navigate("/calendar")`. */
+/** What an act touched, from its result: the door's chat tool answers `done: link "My tasks" (detail); look again before the next act`, its verb `{ target }`. */
+function targetOf(result: unknown): { role?: string; name?: string } {
+  if (typeof result === 'string') {
+    const match = /^done: (\S+) "(.*)"(?: \(.*\))?; look again/u.exec(result)
+    return match === null ? {} : { role: match[1], name: match[2] }
+  }
+  if (typeof result !== 'object' || result === null) return {}
+  const target = (result as { target?: unknown }).target
+  if (typeof target !== 'object' || target === null) return {}
+  const { role, name } = target as { role?: unknown; name?: unknown }
+  return {
+    ...(typeof role === 'string' ? { role } : {}),
+    ...(typeof name === 'string' ? { name } : {}),
+  }
+}
+
+/**
+ * The Assistant's step on the page, as the person reads it under the answer: what it did, named the way the page names it. `ui.open("My tasks")`,
+ * `ui.fill("Due", "This week")`, `ui.click("Save")`, `ui.press("Enter")`. A look changes nothing, so it is left out unless it failed. The control's name comes from the
+ * act's result (the page says what it acted on); the ref is the fallback.
+ */
 export function describePageStep(data: Record<string, unknown>): string | undefined {
-  if (data.tool === 'door_look') return `ui.look()${data.error ? ' failed' : ''}`
+  const failed = data.error ? ' failed' : ''
+  if (data.tool === 'door_look') return failed === '' ? undefined : 'ui.look() failed'
   if (data.tool !== 'door_act') return describeTool(data)
-  const input = (typeof data.input === 'object' && data.input !== null ? data.input : {}) as Record<string, unknown>
+  const input = (typeof data.input === 'object' && data.input !== null ? data.input : {}) as Record<
+    string,
+    unknown
+  >
+  const target = targetOf(data.result)
   const quoted = (value: unknown): string => JSON.stringify(clip(String(value ?? '')))
   const op = typeof input.op === 'string' ? input.op : 'act'
-  const ref = typeof input.ref === 'string' ? input.ref : undefined
-  const args =
-    op === 'navigate' ? [quoted(input.path)]
-    : op === 'type' ? [ref, quoted(input.text)]
-    : op === 'select' ? [ref, quoted(input.option)]
-    : op === 'press' ? [quoted(input.key)]
-    : op === 'scroll' ? [input.direction === undefined ? undefined : quoted(input.direction)]
-    : op === 'wait' ? [quoted(input.text ?? input.name)]
-    : [ref]
-  return `ui.${op}(${args.filter((arg) => arg !== undefined).join(', ')})${data.error ? ' failed' : ''}`
+  const named =
+    typeof target.name === 'string' && target.name !== ''
+      ? quoted(target.name)
+      : typeof input.ref === 'string'
+        ? input.ref
+        : undefined
+  const [verb, args]: [string, readonly (string | undefined)[]] =
+    op === 'navigate'
+      ? ['open', [quoted(input.path)]]
+      : op === 'click' && target.role === 'link'
+        ? ['open', [named]]
+        : op === 'type'
+          ? ['fill', [named, quoted(input.text)]]
+          : op === 'select'
+            ? ['fill', [named, quoted(input.option)]]
+            : op === 'press'
+              ? ['press', [quoted(input.key)]]
+              : op === 'scroll'
+                ? ['scroll', [input.direction === undefined ? undefined : quoted(input.direction)]]
+                : op === 'wait'
+                  ? ['wait', [quoted(input.text ?? input.name)]]
+                  : [op, [named]]
+  return `ui.${verb}(${args.filter((arg) => arg !== undefined).join(', ')})${failed}`
 }

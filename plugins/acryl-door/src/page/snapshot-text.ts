@@ -11,7 +11,8 @@ export function renderSnapshot(snapshot: UiSnapshot, more: (cursor: number) => s
     const level = node.level === undefined ? '' : ` level=${String(node.level)}`
     const states = node.states.length === 0 ? '' : ` [${node.states.join(', ')}]`
     const value = node.value === undefined ? '' : ` value=${JSON.stringify(node.value)}`
-    return `${'  '.repeat(Math.min(node.depth, 8))}- ${node.role}${node.name === '' ? '' : ` ${JSON.stringify(node.name)}`}${level}${states}${value} [ref=${node.ref}]`
+    const options = node.options === undefined ? '' : ` options=${JSON.stringify(node.options)}`
+    return `${'  '.repeat(Math.min(node.depth, 8))}- ${node.role}${node.name === '' ? '' : ` ${JSON.stringify(node.name)}`}${level}${states}${value}${options} [ref=${node.ref}]`
   })
   const rest = snapshot.nextCursor === undefined ? '' : `\n(${String(snapshot.total - snapshot.nextCursor)} more elements; ${more(snapshot.nextCursor)})`
   return `Page: ${snapshot.title || '(untitled)'}\nSnapshot ${String(snapshot.generation)}, ${String(snapshot.nodes.length)} of ${String(snapshot.total)} elements:\n${lines.join('\n')}${rest}`

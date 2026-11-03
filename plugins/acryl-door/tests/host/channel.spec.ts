@@ -6,7 +6,7 @@ import { UiChannel, type PageStream } from '../../src/host/channel.ts'
  * A page. By default it only records the calls, and the test answers by hand. `reply` makes it answer by itself, as the page script does: 'ack' says it heard each call and nothing more
  * (a page whose work never finishes), 'full' acknowledges and then answers, at once.
  */
-function fakePage(channel: UiChannel, windowId: string, focused = true, shellWindow?: number, reply?: 'ack' | 'full') {
+function fakePage(channel: UiChannel, windowId: string, focused = true, shellWindow?: number, reply?: 'ack' | 'full', tab?: string) {
   const sent: ChannelToPage[] = []
   const notes: string[] = []
   const stream: PageStream & { closed: boolean } = {
@@ -23,7 +23,7 @@ function fakePage(channel: UiChannel, windowId: string, focused = true, shellWin
     },
     close() { this.closed = true },
   }
-  const end = channel.attach(windowId, focused, stream, shellWindow)
+  const end = channel.attach(windowId, focused, stream, shellWindow, tab)
   return { end, sent, notes, stream, answer: (message: Parameters<UiChannel['receive']>[1]) => { channel.receive(windowId, message) } }
 }
 
@@ -415,5 +415,49 @@ describe('waiting for pages to come back', () => {
       expect(await back).toBe('new')
       await expect(channel.expectNewPage(20)).resolves.toBeUndefined()
     })
+  })
+})
+
+describe('one page per visitor (the Assistant)', () => {
+  it('refuses a call that names no page, even with pages open', async () => {
+    const channel = new UiChannel({ requirePage: true })
+    const page = fakePage(channel, 'w1', true, undefined, 'full')
+    expect(await codeOf(channel.call(click))).toBe('no-window')
+    expect(page.sent).toHaveLength(0)
+    await expect(channel.call(click, { page: 'w1' })).resolves.toEqual({ ok: true, detail: 'w1' })
+  })
+
+  it("a run's calls go to its visitor's page alone, never to the page used last or another visitor's", async () => {
+    const channel = new UiChannel({ requirePage: true })
+    const a = fakePage(channel, 'wa', true, undefined, 'full', 'tab-a')
+    const b = fakePage(channel, 'wb', true, undefined, 'full', 'tab-b')
+    channel.prefer('wb')
+    const endA = channel.driveFor('wa')
+    await expect(channel.call(click, { page: 'wa' })).resolves.toEqual({ ok: true, detail: 'wa' })
+    expect(b.sent).toHaveLength(0)
+    expect(a.sent).toHaveLength(1)
+    endA()
+  })
+
+  it("follows the visitor's page into its next document in the same tab, and waits for it rather than taking another visitor's page", async () => {
+    const channel = new UiChannel({ requirePage: true, attachWaitMs: 200 })
+    const a = fakePage(channel, 'wa', true, undefined, 'full', 'tab-a')
+    const b = fakePage(channel, 'wb', true, undefined, 'full', 'tab-b')
+    const endA = channel.driveFor('wa')
+    // A's page leaves for /my-tasks; B's page is preferred meanwhile; A's next document arrives in A's tab.
+    const back = channel.expectPageBack('wa', 1000)
+    a.end()
+    channel.prefer('wb')
+    const pending = channel.call(click, { page: 'wa' })
+    const a2 = fakePage(channel, 'wa2', true, undefined, 'full', 'tab-a')
+    expect(await back).toBe('wa2')
+    await expect(pending).resolves.toEqual({ ok: true, detail: 'wa2' })
+    expect(b.sent).toHaveLength(0)
+    expect(a2.sent).toHaveLength(1)
+    // A's page closes for good: the run's call fails after the wait, and B's page is still not taken.
+    a2.end()
+    expect(await codeOf(channel.call(click, { page: 'wa' }))).toBe('no-window')
+    expect(b.sent).toHaveLength(0)
+    endA()
   })
 })

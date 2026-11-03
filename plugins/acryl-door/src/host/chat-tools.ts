@@ -22,9 +22,11 @@ export function registerChatTools(tools: ToolsPort, door: Door, verbs: readonly 
         description: VERB_SPECS[verb].description,
         // The model is told which fields the verb takes (an `act` needs its `op`), the same schema MCP lists.
         parameters: VERB_SPECS[verb].arguments as unknown as Readonly<Record<string, unknown>>,
-        run: async (input: unknown) => {
+        // The run's own signal and page come with the call: its look and act go to the page the run was asked from.
+        run: async (input: unknown, options?: { signal?: AbortSignal; page?: string }) => {
+          const signal = options?.signal === undefined ? running.signal : AbortSignal.any([running.signal, options.signal])
           try {
-            return (await door.run(verb, input ?? {}, running.signal)).text
+            return (await door.run(verb, input ?? {}, signal, options?.page === undefined ? {} : { page: options.page })).text
           } catch (cause) {
             if (cause instanceof DoorError || cause instanceof UiControlError) throw new Error(`${cause.code}: ${cause.message}`, { cause })
             throw cause

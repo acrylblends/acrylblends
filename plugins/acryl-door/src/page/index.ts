@@ -14,6 +14,26 @@ export const DOOR_BASE = '/api/acryl-door'
 /** The key on the page's `window` under which the door publishes `{ windowId }`: the agent panel in the same page sends it with a question, and the door drives that page for the run. */
 export const PAGE_KEY = Symbol.for('acryl.door.page')
 
+/** Where the page keeps its tab's id: per tab, kept across reloads and moves within the app, never shared with another tab. */
+const TAB_KEY = 'acryl-door-tab'
+
+/**
+ * This tab's id: the page that replaces this one in the same tab (a reload, a move to another path) says the same, so the Host keeps driving that tab for a run asked from it.
+ * `undefined` when the browser keeps no session storage.
+ */
+function tabOf(view: Window): string | undefined {
+  try {
+    const kept = view.sessionStorage.getItem(TAB_KEY)
+    if (kept !== null && /^[A-Za-z0-9-]{8,80}$/u.test(kept)) return kept
+    const made = typeof view.crypto?.randomUUID === 'function' ? view.crypto.randomUUID() : undefined
+    if (made === undefined) return undefined
+    view.sessionStorage.setItem(TAB_KEY, made)
+    return made
+  } catch {
+    return undefined
+  }
+}
+
 /** Start the door on `document`. @returns the disposer. */
 export function startDoor(document: Document, base: string = DOOR_BASE): () => void {
   const view = document.defaultView
@@ -22,6 +42,7 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
   const driver = new UiDriver({ document: () => document, msSinceUserInput: clock.msSince })
   const windowId = typeof view.crypto?.randomUUID === 'function' ? view.crypto.randomUUID() : `w-${String(Date.now())}-${String(Math.random()).slice(2, 8)}`
   Object.defineProperty(view, PAGE_KEY, { value: Object.freeze({ windowId }), configurable: true })
+  const tab = tabOf(view)
   const focused = (): boolean => document.visibilityState === 'visible' && document.hasFocus()
   const detachInput = clock.attach(document)
   const removeIndicator = mountIndicator(driver, document)
@@ -34,7 +55,7 @@ export function startDoor(document: Document, base: string = DOOR_BASE): () => v
       return 'auto'
     }
   })()
-  const channel = new PageChannel(driver, { windowId, focused, base, transport, onRun: running => { driver.setRunning(running) }, ...(Number.isSafeInteger(shellWindow) && shellWindow > 0 ? { shellWindow } : {}) })
+  const channel = new PageChannel(driver, { windowId, ...(tab === undefined ? {} : { tab }), focused, base, transport, onRun: running => { driver.setRunning(running) }, ...(Number.isSafeInteger(shellWindow) && shellWindow > 0 ? { shellWindow } : {}) })
   const reportFocus = (): void => { channel.reportFocus(focused()) }
   view.addEventListener('focus', reportFocus)
   view.addEventListener('blur', reportFocus)

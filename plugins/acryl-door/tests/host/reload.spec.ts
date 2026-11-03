@@ -53,6 +53,49 @@ function door(channel: UiChannel, extra: { extensions?: ExtensionsPort; reloadOn
   })
 }
 
+describe('an act that takes the page away', () => {
+  /** A page in a tab: a click on ref 1.1 is a link (the page says it is leaving, and the next page of the tab connects), a click on 1.2 is a button that stays. */
+  function tab(channel: UiChannel, name: string) {
+    const calls: string[] = []
+    let counter = 0
+    const open = (): string => {
+      counter += 1
+      const windowId = `${name}${String(counter)}`
+      const stream: PageStream = {
+        send(data) {
+          const frame = JSON.parse(data) as ChannelToPage
+          calls.push(`${windowId} ${frame.request.op}`)
+          const leaving = frame.request.op === 'click' && frame.request.ref === '1.1'
+          const value = frame.request.op === 'snapshot' ? { generation: 1, title: windowId, nodes: [], total: 0 }
+            : leaving ? { ok: true, leaving: true, detail: 'the page is going to another address' } : { ok: true }
+          channel.receive(windowId, { t: 'result', id: frame.id, value })
+          if (leaving) setTimeout(() => { end(); open() }, 20)
+        },
+        close() { /* nothing */ },
+      }
+      const end = channel.attach(windowId, true, stream, undefined, `tab-${name}`)
+      return windowId
+    }
+    return { first: open(), calls }
+  }
+
+  it("waits for the next page when a click leaves, so the look after it reads that page; a click that stays answers at once", async () => {
+    const channel = new UiChannel({ requirePage: true, attachWaitMs: 500 })
+    const a = tab(channel, 'a')
+    const b = tab(channel, 'b')
+    const stop = channel.driveFor(a.first)
+    const left = await door(channel).run('act', { op: 'click', ref: '1.1' }, never, { page: a.first })
+    expect(left.text).toContain('the page is back: look again')
+    await door(channel).run('look', {}, never, { page: a.first })
+    // The look went to the page that came back in A's tab, not to B's page, which connected last.
+    expect(a.calls).toEqual(['a1 click', 'a2 snapshot'])
+    expect(b.calls).toEqual([])
+    const stayed = await door(channel).run('act', { op: 'click', ref: '1.2' }, never, { page: a.first })
+    expect(stayed.text).not.toContain('the page is back')
+    stop()
+  })
+})
+
 describe('act reload and act navigate', () => {
   it('answer once the page is back, and say so', async () => {
     const channel = new UiChannel()
