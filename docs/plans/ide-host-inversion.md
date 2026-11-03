@@ -1059,7 +1059,7 @@ spawning) and 3 (the DSH chat and its history); the runs from `ide/acryl-control
 3. Effects: one socket per open view to follow its run, closed with the view; closing a tab does not stop its run (Stop does).
 4. Composition: Loader row `acryl-agent-tabs`; without drivers it is PENDING and the + menu lists none. The agent panel inside the app's page stays
    for a standalone app (no frame) and is not composed in the frame.
-5. Durability: a chat run appends its events to a run log on the Host (`.acryl/runs/<id>.jsonl`) as it streams; a view, a frame reload or a second
+5. Durability: a chat run appends its events to a run log on the Host, in the app's own git-ignored home (`.acrylblends/runs/<id>.jsonl`, or under `ACRYLBLENDS_HOME`), as it streams; a view, a frame reload or a second
    window rejoins by id and replays (section 29's open ticket). PTY runs replay through the registry's scrollback.
 6. Verification: a run started in a tab survives an app page reload, the door's `navigate`, a plugin install that recomposes the app's rows, and a
    frame page reload (rejoin and replay); Stop ends it; three remounts leave one socket each.
@@ -1098,7 +1098,7 @@ run). Production is not a mode of the frame (31.3 Q10).
 **G. Production feedback (slice 4): `acryl-feedback` (new, opt-in).** Ports from: ACRYL `plugins/acryl-mount-anchors` (`preciseElementAt`,
 `selectorFor`, `nearestSlot`, the overlay and its shortcut pattern; inventory part 7).
 1. Boundary: a production plugin of the app (it runs with the frame gone), opt-in per app.
-2. Host half: `POST /api/acryl-feedback/notes` (same-origin, size-bounded, rate-limited, stored as `.acryl/feedback/*.jsonl`) and a read route for
+2. Host half: `POST /api/acryl-feedback/notes` (same-origin, size-bounded, rate-limited, stored in the app home as `.acrylblends/feedback/*.jsonl`) and a read route for
    the frame. Client half: the Feedback button, the pinpoint tool (on only while Feedback is open) and "Nothing specific". The frame's left panel
    lists notes through a `workspaceTree` section; "Send to agent" opens an agent tab with the note, the page URL, the element's selector, text and
    bounding box.
