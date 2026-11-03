@@ -1003,8 +1003,15 @@ far, both commits with the frame booting and the blank gate green:
   run still selects the app's folder. `verify:ide-host` OK (73 rows active, PENDING/restore and two reloads clean), the blank frame gate OK end to
   end, workspace suites 837 passed / 1 skipped, typecheck clean.
 
-Remaining for slice 1 (section 31.5): Files as a strip tab with the tree, fuzzy search over every file and syntax highlighting in file tabs; the Git
-tab (changes; history with slice 2's Versions); the chat's History button over every chat, closed ones included, with search; the chat run log on the
-Host (`.acrylblends/runs/<id>.jsonl`, rejoin and replay) moved from the app panel; Review, Checks and Comments out of the frame (and `CodeEditor`'s
-comment gutter), the dock, the split and the status bar out of the right panel; tab persistence `v2` with the migration. The gate should check the
+- `d29206d4` **Files** is a right-panel tab kind: the existing `FilesBody` (lazy tree plus the one repository search that opens a hit in the
+  editor) moved out of DSH's sidebar into the strip, restorable, titled Files, in the + menu.
+- `f7a6358d` **Git** is a right-panel tab kind: the existing `ChangesBody` (changed files, stage, commit, open a diff), restorable, titled Git.
+  History joins it with slice 2's Versions.
+- `b341c944` the chat tab's **History**: every chat including the ones closed with the tab's x (badged), one search field over the titles, a pick
+  clears the dismissal (`shell.restoreChat`) and reopens the chat through the tree's own selection.
+- `e7c2f4db` the **git status bar** left the frame (`StatusLine`/`buildStatusLine` and its specs deleted).
+
+Remaining for slice 1 (section 31.5): fuzzy search over every file behind a shortcut (the Files tab has the repository search; the mockup's `◘P` binding and fuzzy ranking are not wired); the chat run log on the Host (`.acrylblends/runs/<id>.jsonl`, rejoin and replay) moved from the app
+panel; Review, Checks and Comments out of the frame (and `CodeEditor`'s comment gutter), the dock and the split out of the right panel; tab
+persistence `v2` with the migration. The gate should check the
 canvas iframe as the app's page (it still opens a Browser tab to prove the app page, which passes but no longer describes the product).
