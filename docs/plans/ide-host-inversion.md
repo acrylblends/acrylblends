@@ -987,3 +987,24 @@ trigger, both moving the same panel, so a second press in the same tick can togg
 dialog's own text, re-presses only when the dialog has vanished, and presses one trigger per attempt: the product's foot button first (its `openSettings`
 path activates the DSH trigger itself), the hidden trigger as the fallback. Blank and agent gates pass on the final code; the three-run count restarts on
 this push.
+
+## 32. Slice 1 status (branch 125-slice1, 2026-11-03)
+
+Branch `125-slice1` off `main` `81bb14dc` (it does not carry 122/124 yet; merge them before the slice's count if main moves first). Built and gated so
+far, both commits with the frame booting and the blank gate green:
+
+- `4e336845` **acryl-app-canvas** (boundary A): a new client package that provides `appCanvas` and takes `desktop.main` at priority -2 only when the
+  Host serves an app; the app page renders in a frame keyed by address and attempt, never re-pointed, with `navigate`/`reload`/`pageWindow` only
+  called by a person or the door. Capabilities come from `/api/acryl-workspace/capabilities`, the door window id from the page's `acryl.door.page`
+  key. 8 tests (state, component, no self-reload), package builds and typechecks. `FRAME_PACKAGES` mounts it.
+- `23c2f18d` **the right panel** (boundary B, first half): the workspace registers its strip and tabs into `rightbar` (priority -2) instead of
+  `desktop.main`; DSH's `ui-sidebar-right` row leaves the frame's client rows; the chat renders the one keyed `main` conversation through the new
+  `ConversationRendererProvider` the shell wraps the right column in; the first-run browser tile is gone (the centre is the app), while the first
+  run still selects the app's folder. `verify:ide-host` OK (73 rows active, PENDING/restore and two reloads clean), the blank frame gate OK end to
+  end, workspace suites 837 passed / 1 skipped, typecheck clean.
+
+Remaining for slice 1 (section 31.5): Files as a strip tab with the tree, fuzzy search over every file and syntax highlighting in file tabs; the Git
+tab (changes; history with slice 2's Versions); the chat's History button over every chat, closed ones included, with search; the chat run log on the
+Host (`.acrylblends/runs/<id>.jsonl`, rejoin and replay) moved from the app panel; Review, Checks and Comments out of the frame (and `CodeEditor`'s
+comment gutter), the dock, the split and the status bar out of the right panel; tab persistence `v2` with the migration. The gate should check the
+canvas iframe as the app's page (it still opens a Browser tab to prove the app page, which passes but no longer describes the product).
