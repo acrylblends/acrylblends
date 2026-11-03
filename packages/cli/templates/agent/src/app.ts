@@ -6,7 +6,7 @@ import * as door from '../plugins/acryl-door/src/index.ts'
 import * as nodeServer from '../plugins/acryl-node-server/src/index.ts'
 import * as router from '../plugins/acryl-router/src/index.ts'
 import * as state from '../plugins/acryl-state/src/index.ts'
-import { agent, memory, model, tools } from '../plugins/agent/index.ts'
+import { agent, memory, model, scripted, tools } from '../plugins/agent/index.ts'
 import * as panel from '../plugins/agent-panel/index.ts'
 import { builder } from '../plugins/builder/index.ts'
 import { extensions } from '../plugins/extensions/index.ts'
@@ -17,7 +17,7 @@ import {
   loadManifest,
   type ParameterValue,
 } from '../plugins/manifest/index.ts'
-import { type OpenAIConfig, openai } from '../plugins/openai/index.ts'
+import { ASSISTANT_PROMPT, type OpenAIConfig, openai } from '../plugins/openai/index.ts'
 import { sandboxPlugin } from '../plugins/sandbox/index.ts'
 import { save } from '../plugins/save/index.ts'
 import { tasks } from '../plugins/tasks/index.ts'
@@ -80,6 +80,16 @@ const DEVELOPMENT_ROWS: Record<string, string> = {
 /** The only tools the production Assistant's agent may call: look at the page and act on it. */
 const ASSISTANT_TOOLS = ['door_look', 'door_act']
 
+/** The most tokens one answer of the Assistant's model may use: with the step budget, what one visitor's question can cost at most. */
+const ASSISTANT_MAX_TOKENS = 1024
+
+/** Model calls per visitor question: look, open a page, look, filter, look and answer is six, with room for one wrong turn. */
+const ASSISTANT_STEPS = 10
+
+/** What the Assistant says while the app has no model: the scripted one cannot use the page. */
+export const ASSISTANT_NO_MODEL =
+  "This assistant is not set up yet: the app's owner has not chosen a model for it."
+
 /**
  * The app's rows in the manifest's order, composed into `ctx`: the app's own server calls this from `createApp`, and the generated frame layer mounts it
  * as one row, so the frame runs the app exactly as the app's own server does (same rows, same order, same config). `host: true` leaves the server and the
@@ -121,10 +131,7 @@ export async function composeInto(
     process.env.ACRYL_ASSISTANT === 'on' &&
     process.env.ACRYL_DOOR !== 'off' &&
     listen
-  if (
-    !assistant &&
-    (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off')
-  )
+  if (!assistant && (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off'))
     leaveOut.add('acryl-door')
   // Production: the rows that give a visitor power over the running app or the owner's model key are left out too. The agent (`POST /ask` spends the model key and runs tools),
   // the builder and the extensions (live plugin install runs code in this process, and `POST /extensions/approve` decides it) are development tools. `ACRYL_PRODUCTION_KEEP`
@@ -162,10 +169,23 @@ export async function composeInto(
     console.warn(
       'warning: extensions/ is the old folder for plugins the agent writes; move them to plugins/ ("git mv extensions/<name> plugins/<name>"). extensions/ is read for this release only.',
     )
+  // The Assistant's model is told it helps a visitor through the page alone, and each answer is capped, unless the app's model configuration says otherwise.
+  const modelConfig =
+    options.model && assistant
+      ? {
+          ...options.model,
+          system: options.model.system ?? ASSISTANT_PROMPT,
+          maxTokens: options.model.maxTokens ?? ASSISTANT_MAX_TOKENS,
+        }
+      : options.model
+  if (assistant && !options.model)
+    console.warn(
+      `WARNING: the Assistant has no model, so it answers every visitor "${ASSISTANT_NO_MODEL}" Set the app's model (ACRYLBLENDS_MODEL_URL and ACRYLBLENDS_MODEL, or model.json in the app's home).`,
+    )
   const fibers: Fiber[] = [
     // The `model` row mounts the scripted model, or the real one when a model is configured.
-    ...(await compose(ctx, manifest, options.model ? { ...registry, model: openai } : registry, {
-      ...(options.model ? { model: { ...options.model } } : {}),
+    ...(await compose(ctx, manifest, modelConfig ? { ...registry, model: openai } : registry, {
+      ...(modelConfig ? { model: { ...modelConfig } } : {}),
       // Runtime values the manifest cannot hold: the manifest's own digest (every task records it), and who may install.
       tasks: { manifest: `sha256:${manifest.digest}` },
       // The `approval` parameter in blend.yaml (the extensions row) turns this source into one that asks.
@@ -179,7 +199,8 @@ export async function composeInto(
       builder: { dir: extensionsDir },
       ...(assistant
         ? {
-            agent: { tools: ASSISTANT_TOOLS },
+            // Every answer comes right after a look, so it says what the visitor's page shows now.
+            agent: { tools: ASSISTANT_TOOLS, steps: ASSISTANT_STEPS, answerAfter: 'door_look' },
             'acryl-door': { pageOnly: true },
             'agent-panel': { assistant: true },
             // The visitor reaches the agent through the panel only: no /ask, /tasks or /extensions routes.
@@ -207,6 +228,11 @@ export async function composeInto(
           }),
     })),
   ]
+  // Without a model the scripted one would echo the visitor's words back: it says in one sentence that the Assistant is not set up.
+  if (assistant && !options.model)
+    scripted(ctx.get('model') as Parameters<typeof scripted>[0])?.teach(() => ({
+      text: ASSISTANT_NO_MODEL,
+    }))
   return fibers
 }
 
