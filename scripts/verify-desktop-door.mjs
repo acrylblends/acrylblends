@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { FIRST_PAGE_MARKER } from '../packages/cli/templates/blank/src/first-page.ts'
 import { devtools } from './lib/door-probe.mjs'
 import { assertFrame, evaluator } from './lib/frame-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
@@ -526,7 +527,7 @@ try {
     }
     const frameAcryl = acrylAt(frameApp)
     // The blank template's page at /app answers its JSON; that text in the tile is the app's own page inside the frame.
-    const appText = '"ok":true'
+    const appText = FIRST_PAGE_MARKER
     const listening = (origin) =>
       fetch(origin, { redirect: 'manual', signal: AbortSignal.timeout(1500) }).then(
         () => true,

@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { Acryl } from '../plugins/acryl-router/src/index.ts'
 import { aboutPage } from './about.tsx'
+import { FIRST_PAGE_MARKER } from './first-page.ts'
 
 export const APP_NAME = '__APP_NAME__'
 
@@ -36,7 +37,7 @@ const homePage = (name: string): string => `<!doctype html>
   <body>
     <main>
       <h1>${escapeHtml(name)}</h1>
-      <p>Your app is running. This is the page the ACRYL frame opens first; edit <code>src/routes.ts</code> to change it.</p>
+      <p>Your app is running. ${FIRST_PAGE_MARKER}; edit <code>src/routes.ts</code> to change it.</p>
       <p><a href="./about">About</a></p>
     </main>
   </body>
