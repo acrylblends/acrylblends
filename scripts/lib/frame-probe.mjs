@@ -60,10 +60,12 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
   if (left === undefined)
     throw new Error(`the left panel has no Projects/session rows: ${JSON.stringify(await body())}`)
 
+  // 125: the centre is the app's own page (iframe.acrylAppCanvasFrame); a browser tile is still accepted for a frame composed the old way.
+  const appFrames = `document.querySelector('iframe.acrylAppCanvasFrame') ?? document.querySelector('iframe.dshWorkspaceBrowserFrame')`
   const tile = await until(
     () =>
       evaluate(`(() => {
-        const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+        const frame = ${appFrames}
         const text = frame?.contentDocument?.body?.innerText ?? ''
         return text.includes(${JSON.stringify(appText)}) ? text.slice(0, 120) : undefined
       })()`),
@@ -71,9 +73,9 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
   )
   if (tile === undefined)
     throw new Error(
-      `the app's page is not in the frame's browser tile: ${JSON.stringify(
+      `the app's page is not in the frame's canvas or browser tile: ${JSON.stringify(
         await evaluate(`(() => {
-          const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+          const frame = ${appFrames}
           return { src: frame?.getAttribute('src') ?? null, text: frame?.contentDocument?.body?.innerText?.slice(0, 200) ?? null }
         })()`),
       )}`,
