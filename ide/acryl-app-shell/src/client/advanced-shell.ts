@@ -63,6 +63,22 @@ export function applyAdvancedShell(ctx: ClientContext, environment: ShellEnviron
   // Upstream's sidebars and session views read the open keyed panel through the standard `usePanelInfo` hook, which the root supplies.
   ctx.effect(() => ctx.slots.provideRoot({ hooks: { panelInfo: desktopLayout.panelInfo } }), 'acryl-app-shell: panel info')
 
+  // The launch token was exchanged for the browser's cookie before this client ran. Left in the address bar it stays
+  // in history and a reconnect can spend it again, re-admitting a page whose cookie is gone - so the session-ended
+  // banner would never be due. Drop it once, keeping the path, any other query field and the hash.
+  ctx.effect(() => {
+    try {
+      const url = new URL(window.location.href)
+      if (url.searchParams.has('token')) {
+        url.searchParams.delete('token')
+        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+      }
+    } catch {
+      // A page without a real address keeps whatever it has.
+    }
+    return () => {}
+  }, 'acryl-app-shell: strip the launch token')
+
   ctx.effect(() => {
     document.body.dataset.dshDesktopMode = 'advanced'
     document.body.dataset.dshDesktopPlatform = environment.platform
