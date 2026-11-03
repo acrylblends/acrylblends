@@ -176,6 +176,15 @@ export class FrameTabs {
     return tab
   }
 
+  /** Close the chat tabs of chats that are not open (a chat closed on another page, or before this strip was remembered). @returns whether any closed. */
+  closeChatsNotIn(open: ReadonlySet<string>): boolean {
+    const tabs = this.snapshot.tabs.filter(tab => tab.kind !== 'chat' || tab.session === undefined || open.has(tab.session))
+    if (tabs.length === this.snapshot.tabs.length) return false
+    const active = tabs.some(tab => tab.id === this.snapshot.active) ? this.snapshot.active : CHAT.id
+    this.set({ tabs, active })
+    return true
+  }
+
   /** A terminal's program set its title. */
   setTitle(terminalId: string, title: string): void {
     if (this.snapshot.titles?.[terminalId] === title) return

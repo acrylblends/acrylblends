@@ -12,6 +12,7 @@ import { GitView } from './GitView.tsx'
 import { NEW_CHAT } from './chats.ts'
 import type { ChatsPort } from './LeftPanel.tsx'
 import { historyGroups, type BranchChatsPort } from './branch-chats.ts'
+import type { SwitchRequests } from './switch-request.ts'
 import { FILES_TAB, GIT_TAB, PTY_AGENTS, chatTab, fileTab, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
 import { TerminalView } from './TerminalView.tsx'
 import type { FrameTools } from './tools.ts'
@@ -39,6 +40,8 @@ export interface RightPanelProps {
   readonly state: FrameState | undefined
   /** Which branch each chat was opened on, for the history's rows. */
   readonly branchChats: BranchChatsPort
+  /** Where a chat of another branch is asked for: the left panel offers the switch first. */
+  readonly switchRequests: SwitchRequests
   readonly renderConversation: () => ReactNode
 }
 
@@ -57,13 +60,16 @@ function TabLabel({ tab, chatTitle }: { readonly tab: FrameTab; readonly chatTit
   }
 }
 
-export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branchChats, renderConversation }: RightPanelProps) {
+export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branchChats, switchRequests, renderConversation }: RightPanelProps) {
   const subscribeChats = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const rows = useSyncExternalStore(subscribeChats, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
   const strip = useSyncExternalStore(subscribeTabs, () => tabs.getSnapshot())
   const subscribeAssignments = useCallback((listener: () => void) => branchChats.subscribe(listener), [branchChats])
   const assignments = useSyncExternalStore(subscribeAssignments, () => branchChats.getSnapshot())
+  const subscribeOpen = useCallback((listener: () => void) => branchChats.subscribe(listener), [branchChats])
+  const open = useSyncExternalStore(subscribeOpen, () => branchChats.getOpen())
+  const openKnown = branchChats.isOpenKnown()
   const [history, setHistory] = useState(false)
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState(false)
@@ -113,12 +119,17 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
     // Closing the shown tab may leave the strip on one of another branch's, which it does not draw: the chat is the fallback.
     const after = tabs.getSnapshot()
     if (!tabsForBranch(after, branch).some(tab => tab.id === after.active)) tabs.activate('chat')
-    // A chat tab closed while its chat was on screen: the base tab shows the branch's own chat again.
-    if (closed?.kind === 'chat' && tabs.getSnapshot().active === 'chat') chats.openPrimary(chatSessions())
+    // A chat tab closed closes the chat: it leaves the left panel and waits in History. When it was on screen, the view moves to the chat of the tab now
+    // shown, else to the base tab's chat (or a new one).
+    if (closed?.kind === 'chat' && closed.session !== undefined) {
+      const now = tabs.getSnapshot()
+      const shown = tabsForBranch(now, branch).find(tab => tab.id === now.active)
+      chats.closeChat(closed.session, chatSessions(), shown?.kind === 'chat' ? shown.session : undefined)
+    }
   }
 
   /** The chats that have a tab of their own on this branch; the base tab shows none of them. */
-  const chatSessions = (): ReadonlySet<string> => new Set(visible.flatMap(tab => (tab.kind === 'chat' && tab.session !== undefined ? [tab.session] : [])))
+  const chatSessions = (): ReadonlySet<string> => new Set(tabsForBranch(tabs.getSnapshot(), branch).flatMap(tab => (tab.kind === 'chat' && tab.session !== undefined ? [tab.session] : [])))
 
   const showTab = (tab: FrameTab) => {
     tabs.activate(tab.id)
@@ -235,29 +246,33 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
               onChange={(event) => { setQuery(event.target.value) }}
             />
             {shownChats.length === 0 && <p className="acrylBlendsNote">No chats match.</p>}
-            {/* Every chat of the app, grouped by the branch it was opened on, the checked-out branch first. */}
+            {/* Every chat of the app, open or closed, grouped by the branch it was opened on, the checked-out branch first. A closed chat opens as a tab. */}
             {historyGroups(shownChats, assignments, branch).map(group => (
               <Fragment key={group.branch ?? ''}>
                 <div className="acrylBlendsHistoryGroup">{group.branch ?? 'No branch'}</div>
-                {group.rows.map(row => (
-                  <button
-                    key={row.id}
-                    type="button"
-                    className="acrylBlendsHistoryRow"
-                    aria-current={row.current || undefined}
-                    // The chat on screen always belongs to the checked-out branch: another branch's chats are listed, and opened from that branch.
-                    disabled={group.branch !== undefined && group.branch !== branch}
-                    title={group.branch !== undefined && group.branch !== branch ? `On ${group.branch}: switch to that branch to open it.` : undefined}
-                    onClick={() => {
-                      chats.open(row.id)
-                      tabs.activate(tabs.chatTabId(row.id))
-                      setHistory(false)
-                    }}
-                  >
-                    {row.title}
-                    <small>{[row.current ? 'open' : 'closed', chatTime(row.updatedAt)].filter(part => part !== '').join(' · ')}</small>
-                  </button>
-                ))}
+                {group.rows.map((row) => {
+                  // The chat on screen always belongs to the checked-out branch: one of another branch is opened through the switch, which the left panel offers.
+                  const elsewhere = group.branch !== undefined && group.branch !== branch
+                  const isOpen = row.current || !openKnown || open.has(row.id)
+                  return (
+                    <button
+                      key={row.id}
+                      type="button"
+                      className="acrylBlendsHistoryRow"
+                      aria-current={row.current || undefined}
+                      data-closed={!isOpen || undefined}
+                      title={elsewhere ? `On ${group.branch}: switch to that branch to open it.` : isOpen ? undefined : 'Open it as a tab'}
+                      onClick={() => {
+                        if (elsewhere && group.branch !== undefined) switchRequests.request({ branch: group.branch, chat: row.id })
+                        else chats.show(row.id)
+                        setHistory(false)
+                      }}
+                    >
+                      {row.title}
+                      <small>{[isOpen ? 'open' : 'closed', chatTime(row.updatedAt), isOpen || elsewhere ? '' : 'opens as a tab'].filter(part => part !== '').join(' · ')}</small>
+                    </button>
+                  )
+                })}
               </Fragment>
             ))}
           </div>

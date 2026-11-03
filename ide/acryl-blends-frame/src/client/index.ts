@@ -37,6 +37,7 @@ import { SelectionStore, carriesSelection, handOffSelection } from './selection.
 import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
 import { FILES_TAB, FrameTabs, tabOfTerminal } from './tabs.ts'
+import { SwitchRequests } from './switch-request.ts'
 import { createFrameTools, installXtermStyles } from './tools.ts'
 import { createSharedVersionsApi } from './versions.ts'
 import { createGitSyncApi, type GitSyncPort } from './git-sync.ts'
@@ -90,6 +91,7 @@ export function apply(ctx: ClientContext): void {
   // small interfaces in `./chats.ts` describe the calls it makes, so a frame without them composed still works.
   const branchChats = new BranchChatsStore(createBranchChatsApi())
   const tabs = new FrameTabs(pageStorage())
+  const switchRequests = new SwitchRequests()
   const checkedOut = (): string | undefined => {
     const current = frameState.getSnapshot()
     return current.status === 'ready' ? current.state.branches.find(branch => branch.current)?.name : undefined
@@ -99,6 +101,7 @@ export function apply(ctx: ClientContext): void {
     workspaceFor: () => (ctx.get as (name: string) => WorkspaceRegistration | undefined)('workspaces'),
     realChats: createRealChatsApi(),
     branchChats,
+    tabs,
     branch: checkedOut,
     appRoot: () => { const current = frameState.getSnapshot(); return current.status === 'ready' ? current.state.appRoot : undefined },
     // A chat tab of the strip that is showing on the checked-out branch asks for its own chat to be the one on screen.
@@ -259,12 +262,17 @@ export function apply(ctx: ClientContext): void {
       if (strip.tabs.find(tab => tab.id === strip.active)?.kind === 'chat') tabs.activate(tabs.chatTabId(current))
     }
     const offChats = chats.subscribe(follow)
+    // A chat that is not open has no tab: the strip drops the tabs of chats closed elsewhere (another page, or before chats could be closed).
+    const prune = () => { if (branchChats.isOpenKnown()) tabs.closeChatsNotIn(branchChats.getOpen()) }
+    const offPrune = branchChats.subscribe(prune)
+    prune()
     reconcile()
     return () => {
       offState()
       offMap()
       offTabs()
       offChats()
+      offPrune()
     }
   }, 'acryl-blends-frame: the chat on screen is the checked-out branch\'s')
 
@@ -425,6 +433,7 @@ export function apply(ctx: ClientContext): void {
       tools,
       feedback,
       branchChats,
+      switchRequests,
       branches: {
         api: branchesApi,
         changed: () => frameState.refresh(),

@@ -3,15 +3,17 @@
  * navigation (`uiWorkspace`) when it is composed, so DSH stays the one owner of which session is shown (the reason is in acryl-workspace's
  * `sessions/main-session.ts`); without it, the frame holds the main-view reference itself.
  *
- * Which branch a chat belongs to is the branch-chats map (`./branch-chats.ts`), the one source of truth. The rule this store keeps: the chat on
- * screen always belongs to the checked-out branch (docs/design/blends-frame-mockup.html, scenarios 2 and 5). Whatever moves the folder to another
- * branch - the left panel, the New button, the Git tab, a terminal - the chat on screen then becomes that branch's own (`decideChat`).
+ * Which branch a chat belongs to, and which chats are open, is the branch-chats record (`./branch-chats.ts`), the one source of truth. The rule this
+ * store keeps: the chat on screen always belongs to the checked-out branch (docs/design/blends-frame-mockup.html, scenarios 2 and 5). Whatever
+ * moves the folder to another branch - the left panel, the New button, the Git tab, a terminal - the chat on screen then becomes that branch's own
+ * (`decideChat`). A chat is open while it has a tab or is on screen: the left panel lists only those, and the rest are closed, found in History.
  */
 
 import type { ISessions, SessionListState, SessionReference } from '@acryl/ui/frame'
 import { FRAME_REAL_CHATS_PATH, parseRealChats, type RealChatView } from '../contract.ts'
 import type { BranchChatsStore } from './branch-chats.ts'
 import type { ChatRow, ChatsPort } from './LeftPanel.tsx'
+import { chatTab, type FrameTabs } from './tabs.ts'
 
 type SessionId = Parameters<ISessions['retain']>[0]
 /** The options DSH's session creation takes (the workspace it belongs to is one of them). */
@@ -80,19 +82,40 @@ export interface ChatsView {
   readonly branch: string
   /** The chat a tab of the strip asks for on this branch, shown instead of the branch's newest. */
   readonly preferred?: string | undefined
+  /** The chats that are open; a closed chat is never the branch's to show. Undefined: no chat is closed. */
+  readonly open?: ReadonlySet<string> | undefined
 }
 
 const byNewest = (a: ChatRow, b: ChatRow): number => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
 
 /**
- * The chat the checked-out branch shows: the tab's chat when it is the branch's, else its newest chat with a turn, else one of its chats still
- * blank. Undefined when the branch has none.
+ * The chat the checked-out branch shows: the tab's chat when it is the branch's, else its newest open chat with a turn, else one of its open chats
+ * still blank. Undefined when the branch has none open (its closed chats stay in History).
  */
 export function branchChat(view: ChatsView, exclude: ReadonlySet<string> = new Set()): ChatRow | undefined {
-  const own = view.rows.filter(row => view.assignments[row.id] === view.branch && !exclude.has(row.id)).sort(byNewest)
+  const own = view.rows.filter(row => view.assignments[row.id] === view.branch && !exclude.has(row.id) && (view.open === undefined || view.open.has(row.id))).sort(byNewest)
   const used = (row: ChatRow): boolean => view.real.has(row.id) || view.running.has(row.id)
   const wanted = view.preferred === undefined ? undefined : own.find(row => row.id === view.preferred)
   return wanted ?? own.find(used) ?? own[0]
+}
+
+/**
+ * The chats that are open when nobody decided yet (an app that already has many chats, or one from before chats could be closed): the latest chat with
+ * a turn of each branch, the chat on screen, and the chats that already have a tab. Everything else is closed, found in History.
+ */
+export function initialOpenChats(view: Pick<ChatsView, 'rows' | 'real' | 'running' | 'assignments'>, tabbed: ReadonlySet<string> = new Set()): string[] {
+  const used = (row: ChatRow): boolean => view.real.has(row.id) || view.running.has(row.id)
+  const latest = new Map<string, string>()
+  for (const row of [...view.rows].sort(byNewest)) {
+    const branch = view.assignments[row.id]
+    if (branch !== undefined && used(row) && !latest.has(branch)) latest.set(branch, row.id)
+  }
+  const open = new Set(latest.values())
+  for (const row of view.rows) {
+    // The chat on screen is open by definition; one nobody recorded for a branch yet and with no turn is a stray session DSH made on load, not a chat.
+    if ((row.current && (view.assignments[row.id] !== undefined || used(row))) || tabbed.has(row.id)) open.add(row.id)
+  }
+  return view.rows.filter(row => open.has(row.id)).map(row => row.id)
 }
 
 /**
@@ -148,6 +171,8 @@ export interface ChatsDeps {
   readonly appRoot?: () => string | undefined
   /** The chat the strip's active tab asks for on the checked-out branch, if it is a tab of one. */
   readonly preferred?: () => string | undefined
+  /** The right panel's strip: a chat opened from a list gets a tab of its own, unless it is the one the base tab shows. */
+  readonly tabs?: FrameTabs
 }
 
 export class ChatsStore implements ChatsPort {
@@ -253,10 +278,29 @@ export class ChatsStore implements ChatsPort {
     const pending = this.pending
     if (pending !== undefined && (shown === pending.id || pending.branch !== branch || (shown !== undefined && shown !== pending.from) || Date.now() - pending.at > PENDING_MS)) this.pending = undefined
     if (this.pending !== undefined && shown === undefined) return
-    const decision = decideChat({ rows: this.all, real: this.real, running: this.running, assignments: map.getSnapshot(), branch, preferred: this.deps.preferred?.() })
+    // Which chats are open: decided once, from what the app has now (`initialOpenChats`), and then only by opening and closing a chat.
+    if (!map.isOpenKnown()) {
+      // DSH's list is empty until it has restored its sessions: deciding then would close every chat the app has.
+      if (this.all.length === 0) return
+      map.initOpen(initialOpenChats({ rows: this.all, real: this.real, running: this.running, assignments: map.getSnapshot() }, this.tabbed()))
+      this.reconcile()
+      return
+    }
+    const decision = decideChat({ rows: this.all, real: this.real, running: this.running, assignments: map.getSnapshot(), branch, preferred: this.deps.preferred?.(), open: map.getOpen() })
     if (decision.action === 'open') this.open(decision.id)
     else if (decision.action === 'adopt') map.adopt([decision.id], branch)
     else if (decision.action === 'create') void this.create().catch(() => {})
+    else if (shown !== undefined && this.pending === undefined && this.creating === undefined && map.getSnapshot()[shown] === branch) {
+      // The chat on screen is open by definition. Not while a move is on its way: closing the chat on screen moves the view off it, and until it has
+      // moved the chat is still the one shown.
+      map.setOpen(shown, true)
+    }
+  }
+
+  /** The chats that have a tab of their own. */
+  private tabbed(): ReadonlySet<string> {
+    const strip = this.deps.tabs?.getSnapshot()
+    return new Set(strip === undefined ? [] : strip.tabs.flatMap(tab => (tab.kind === 'chat' && tab.session !== undefined ? [tab.session] : [])))
   }
 
   /**
@@ -280,6 +324,7 @@ export class ChatsStore implements ChatsPort {
     const workspace = workspaces === undefined ? undefined : await workspaces.create({ path: cwd }).catch(() => undefined)
     const id = await sessions.create({ cwd, ...(workspace === undefined ? {} : { workspaceId: workspace.workspaceId }) })
     this.deps.branchChats?.adopt([id], branch)
+    this.deps.branchChats?.setOpen(id, true)
     this.open(id)
     return id
   }
@@ -298,14 +343,55 @@ export class ChatsStore implements ChatsPort {
   }
 
   /**
-   * The base tab's chat: the checked-out branch's newest chat that has no tab of its own, shown. Nothing changes when the branch has no such chat.
+   * The base tab's chat: the checked-out branch's newest open chat that has no tab of its own, shown; a new chat when the branch has none open.
    */
   openPrimary(exclude: ReadonlySet<string>): void {
     const branch = this.deps.branch?.()
     const map = this.deps.branchChats
     if (branch === undefined || map === undefined) return
-    const chat = branchChat({ rows: this.all, real: this.real, running: this.running, assignments: map.getSnapshot(), branch }, exclude)
+    const chat = branchChat({ rows: this.all, real: this.real, running: this.running, assignments: map.getSnapshot(), branch, open: this.openSet() }, exclude)
     if (chat !== undefined) this.open(chat.id)
+    else if (map.isOpenKnown()) void this.create().catch(() => {})
+  }
+
+  private openSet(): ReadonlySet<string> | undefined {
+    const map = this.deps.branchChats
+    return map !== undefined && map.isOpenKnown() ? map.getOpen() : undefined
+  }
+
+  /**
+   * Open a chat of the checked-out branch from a list (History): a closed chat is open from now on, as a tab of its own; either way it is shown.
+   */
+  show(id: string): void {
+    const map = this.deps.branchChats
+    const tabs = this.deps.tabs
+    if (map === undefined || !map.isOpen(id)) {
+      map?.setOpen(id, true)
+      const branch = this.deps.branch?.()
+      if (tabs !== undefined && !tabs.getSnapshot().tabs.some(tab => tab.kind === 'chat' && tab.session === id)) {
+        tabs.open(branch === undefined ? chatTab(id) : { ...chatTab(id), branch })
+      }
+    }
+    this.open(id)
+    tabs?.activate(tabs.chatTabId(id))
+  }
+
+  /**
+   * Close a chat (its tab's x): it leaves the open chats and waits in History. When it is the chat on screen the view moves off it first: to `prefer`
+   * (the chat of the tab the strip shows now), else the base tab's chat (the branch's newest open chat that has no tab of its own, among all but
+   * `tabbed`), else a new chat.
+   */
+  closeChat(id: string, tabbed: ReadonlySet<string>, prefer?: string): void {
+    const map = this.deps.branchChats
+    if (map === undefined) return
+    map.setOpen(id, false)
+    if (this.all.find(row => row.current)?.id !== id) return
+    const branch = this.deps.branch?.()
+    if (branch === undefined) return
+    const view: ChatsView = { rows: this.all, real: this.real, running: this.running, assignments: map.getSnapshot(), branch, open: map.getOpen() }
+    const next = (prefer === undefined ? undefined : view.rows.find(row => row.id === prefer && map.isOpen(row.id))) ?? branchChat(view, tabbed)
+    if (next !== undefined) this.open(next.id)
+    else void this.create().catch(() => {})
   }
 
   /** Ask the Host which chats have a turn; a read that comes in while one runs asks once more afterwards, and a failed read keeps what was known. */

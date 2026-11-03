@@ -8,6 +8,7 @@ import { PTY_AGENTS, terminalMeta, type FrameTabs } from './tabs.ts'
 import { backText, backToMessage, chatTime, saveBeforeBackMessage, shortTime, versionNumber, type VersionsPort } from './versions.ts'
 import { branchClick, saveBeforeSwitchMessage, type BranchesApi } from './branches.ts'
 import type { BranchChatsPort } from './branch-chats.ts'
+import type { SwitchRequests } from './switch-request.ts'
 import { feedbackPlace, type FeedbackApi } from './feedback.ts'
 
 /** A chat on the branch, as the left panel lists it. */
@@ -28,8 +29,12 @@ export interface ChatsPort {
   create(): Promise<string | undefined>
   /** "+ then Chat": a chat of its own on the checked-out branch (the one on screen is reused while it has no turn). */
   startChat(): Promise<{ readonly id: string; readonly made: boolean } | undefined>
-  /** Show the checked-out branch's chat for the base tab, one that has no tab of its own. */
+  /** Show the checked-out branch's chat for the base tab: its newest open chat that has no tab of its own, else a new one. */
   openPrimary(exclude: ReadonlySet<string>): void
+  /** Open a chat of the checked-out branch from History: a closed chat becomes open, as a tab of its own, and is shown. */
+  show(id: string): void
+  /** Close a chat (its tab's x); when it is on screen the view moves to `prefer`, else to the base tab's chat, else to a new chat. */
+  closeChat(id: string, tabbed: ReadonlySet<string>, prefer?: string): void
 }
 
 /** Feedback from users: the notes, and handing one to an agent (the chat's composer). */
@@ -85,19 +90,23 @@ export interface LeftPanelProps {
   readonly branches: BranchesPort
   /** Which branch each chat was opened on (DSH keeps none; the Host records it). */
   readonly branchChats: BranchChatsPort
+  /** A chat of another branch asked for from the chat's History: the switch is offered here, with the same guard as a click on the panel's own rows. */
+  readonly switchRequests: SwitchRequests
   /** Show a right panel tab (opening the panel when it is closed). */
   readonly showTab: (id: string) => void
   /** Told the newest version's label ("v7"), for the top bar. */
   readonly onVersionLabel: (label: string | undefined) => void
 }
 
-export function LeftPanel({ state, chats, versions, tabs, feedback, branches, branchChats, showTab, onVersionLabel }: LeftPanelProps) {
+export function LeftPanel({ state, chats, versions, tabs, feedback, branches, branchChats, switchRequests, showTab, onVersionLabel }: LeftPanelProps) {
   const subscribe = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const chatRows = useSyncExternalStore(subscribe, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
   const strip = useSyncExternalStore(subscribeTabs, () => tabs.getSnapshot())
   const subscribeAssignments = useCallback((listener: () => void) => branchChats.subscribe(listener), [branchChats])
   const assignments = useSyncExternalStore(subscribeAssignments, () => branchChats.getSnapshot())
+  const open = useSyncExternalStore(subscribeAssignments, () => branchChats.getOpen())
+  const openKnown = branchChats.isOpenKnown()
   const terminals = strip.tabs.flatMap(tab => (tab.kind === 'pty' || tab.kind === 'terminal' ? [tab] : []))
   const currentBranch = state.branches.find(branch => branch.current)?.name
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(state.branches.filter(b => b.current).map(b => b.name)))
@@ -119,6 +128,19 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
   const [switchNote, setSwitchNote] = useState<{ readonly branch: string; readonly message: string } | undefined>(undefined)
   const [notes, setNotes] = useState<FeedbackView>({ available: false, notes: [] })
   const [handNote, setHandNote] = useState<string | undefined>(undefined)
+
+  // A chat the History could not open here, because it is on another branch: the same ask as a click on one of this panel's rows.
+  const request = useSyncExternalStore(
+    useCallback((listener: () => void) => switchRequests.subscribe(listener), [switchRequests]),
+    () => switchRequests.getSnapshot(),
+  )
+  useEffect(() => {
+    if (request === undefined || busySwitch !== undefined) return
+    switchRequests.clear()
+    setSwitchNote(undefined)
+    setAskSwitch({ branch: request.branch, chat: request.chat })
+    setExpanded(current => new Set(current).add(request.branch))
+  }, [request, switchRequests, busySwitch])
 
   const readFeedback = useCallback(async () => {
     try {
@@ -233,7 +255,8 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
       // What the click meant: that chat, that terminal, or the branch's own conversation. The chat on screen becomes the branch's own by itself
       // (`ChatsStore.reconcile`, on the state this switch re-read), whoever moved the folder; here only the item that was clicked is opened.
       if (ask.chat !== undefined) {
-        chats.open(ask.chat)
+        // A closed chat (picked in History) opens as a tab of its own; an open one is shown.
+        chats.show(ask.chat)
         showTab(tabs.chatTabId(ask.chat))
       } else if (ask.tab !== undefined) {
         showTab(ask.tab)
@@ -347,11 +370,14 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
         {state.branches.map(branch => {
           // Every branch opens onto what is open on it: its own chats, and the terminals and agents opened there. A branch with nothing open
           // stays closed: an open caret always has its rows under it.
-          const ownChats = chatRows.filter(row => (assignments[row.id] ?? currentBranch) === branch.name)
+          // Only the open chats are listed (a chat with a tab, or on screen); the rest are closed, found in the chat's History.
+          const ownChats = chatRows.filter(row => (assignments[row.id] ?? currentBranch) === branch.name && (!openKnown || open.has(row.id)))
           const ownTerminals = terminals.filter(tab => tab.branch === branch.name)
           const count = ownChats.length + ownTerminals.length
-          const open = expanded.has(branch.name) && count > 0
-          const branchAsk = askSwitch !== undefined && askSwitch.branch === branch.name && askSwitch.chat === undefined && askSwitch.tab === undefined
+          const unfolded = expanded.has(branch.name) && count > 0
+          // The ask sits under its item; one with no row here (a branch row, or a closed chat picked in History) sits under the branch.
+          const branchAsk = askSwitch !== undefined && askSwitch.branch === branch.name
+            && (askSwitch.chat === undefined ? askSwitch.tab === undefined : !ownChats.some(row => row.id === askSwitch.chat))
           return (
             <div key={branch.name} className="acrylBlendsBranchGroup">
               <div className="acrylBlendsBranchRow">
@@ -359,12 +385,12 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
                   <button
                     type="button"
                     className="acrylBlendsCaretButton"
-                    aria-expanded={open}
-                    aria-label={`${open ? 'Hide' : 'Show'} what is open on ${branch.name}`}
-                    title={`${open ? 'Hide' : 'Show'} what is open on ${branch.name}`}
+                    aria-expanded={unfolded}
+                    aria-label={`${unfolded ? 'Hide' : 'Show'} what is open on ${branch.name}`}
+                    title={`${unfolded ? 'Hide' : 'Show'} what is open on ${branch.name}`}
                     onClick={() => { toggle(branch.name) }}
                   >
-                    <svg className="acrylBlendsCaret" data-open={open || undefined} viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2l3 3-3 3" /></svg>
+                    <svg className="acrylBlendsCaret" data-open={unfolded || undefined} viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2l3 3-3 3" /></svg>
                   </button>
                 ) : (
                   <span className="acrylBlendsCaretSpace" aria-hidden="true" />
@@ -384,7 +410,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
               </div>
               {branchAsk && askBox(askSwitch)}
               {switchNote?.branch === branch.name && <p className="acrylBlendsNote" data-error>{switchNote.message}</p>}
-              {open && ownChats.map(item => (
+              {unfolded && ownChats.map(item => (
                 <Fragment key={item.id}>
                   <button
                     type="button"
@@ -406,7 +432,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
                   {askSwitch?.chat === item.id && askBox(askSwitch)}
                 </Fragment>
               ))}
-              {open && ownTerminals.map(tab => (
+              {unfolded && ownTerminals.map(tab => (
                 <Fragment key={tab.id}>
                   <button
                     type="button"

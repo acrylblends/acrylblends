@@ -51,6 +51,19 @@ The chat on screen always belongs to the checked-out branch (`src/client/chats.t
 branch in the left panel lists its own chats; History in the right panel opens the checked-out branch's. `+` then **Chat** starts a new chat of its own on
 the current branch as a tab (the one on screen is reused while it has no turn); the base tab and each `chat:<id>` tab follow the chat on screen.
 
+### Open and closed chats
+
+A chat is **open** while it has a tab or is the chat on screen; every other chat is **closed**. The left panel lists only open chats (a branch's "N open"
+counts only those), and History lists all of them: `open · now`, or `closed · 1 h · opens as a tab`. Picking a closed chat of the checked-out branch opens
+it as a tab and it joins the left panel; picking one of another branch hands the request to the left panel, which offers the switch first through the
+same guard as its own rows. Closing a chat's tab (the x) closes the chat; when it was on screen the view moves to the chat of the tab now shown, else to the
+base tab's chat. The base tab (never closed) shows the branch's newest open chat that has no tab of its own, or a new chat when there is none.
+
+Which chats are open is remembered per app in the same Host file: `open` maps the app's root to the open chat ids (`POST {id, open}` opens or closes one,
+`POST {opened: [ids]}` records the first decision; the Host keeps the first). While the file has no `open` entry for the app, nobody decided: the frame
+decides once - the latest chat with a turn of each branch, the chat on screen and the chats that already have a tab (`initialOpenChats`) - so an app that
+already has many chats opens with only one per branch and the rest in History. A tab left in a remembered strip whose chat is not open is dropped.
+
 DSH moves its main view in steps and finishes a move it started even when something else moved the view meanwhile, so the frame asks for a chat only
 after the call that told it has ended, asks once while that move is on its way, and never from inside DSH's start-up.
 

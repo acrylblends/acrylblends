@@ -91,15 +91,23 @@ export function parseSharedVersions(value: unknown): string[] {
   })
 }
 
-/** @throws when the answer is not a map of chat id to branch name. */
-export function parseBranchChats(value: unknown): Record<string, string> {
+/** What the Host remembers of the chats: the branch each belongs to, and which are open (null until they were first decided). */
+export interface BranchChatsView {
+  readonly chats: Record<string, string>
+  readonly open: string[] | null
+}
+
+/** @throws when the answer is not a map of chat id to branch name with the list of open chats. */
+export function parseBranchChats(value: unknown): BranchChatsView {
   if (!isRecord(value) || !isRecord(value.chats)) throw new Error('branch chats: not a map')
   const chats: Record<string, string> = {}
   for (const [id, branch] of Object.entries(value.chats)) {
     if (id === '' || typeof branch !== 'string' || branch === '') throw new Error('branch chats: entry')
     chats[id] = branch
   }
-  return chats
+  if (value.open === null || value.open === undefined) return { chats, open: null }
+  if (!Array.isArray(value.open) || value.open.some((id: unknown) => typeof id !== 'string' || id === '')) throw new Error('branch chats: open')
+  return { chats, open: value.open as string[] }
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { BranchChatsStore } from '../src/client/branch-chats.ts'
-import { branchChat, ChatsStore, decideChat, type ChatsView } from '../src/client/chats.ts'
+import { branchChat, ChatsStore, decideChat, initialOpenChats, type ChatsView } from '../src/client/chats.ts'
 import type { ChatRow } from '../src/client/LeftPanel.tsx'
 import { chatTab, FrameTabs, parseStoredTabs, tabsForBranch } from '../src/client/tabs.ts'
 
@@ -72,6 +72,191 @@ describe('decideChat: the chat on screen belongs to the checked-out branch', () 
   })
 })
 
+describe('open and closed chats', () => {
+  const closedMix = {
+    rows: [row('a', { current: true, updatedAt: 3 }), row('b', { updatedAt: 2 }), row('c', { updatedAt: 1 })],
+    real: new Map([['a', 'x'], ['b', 'x'], ['c', 'x']]),
+    assignments: { a: 'main', b: 'main', c: 'main' },
+    branch: 'main',
+  }
+
+  it("never shows a closed chat as the branch's own", () => {
+    const open = new Set(['c'])
+    expect(branchChat(view({ ...closedMix, open }))?.id).toBe('c')
+    expect(branchChat(view({ ...closedMix, open: new Set() }))).toBeUndefined()
+    // No set at all: nothing is closed.
+    expect(branchChat(view(closedMix))?.id).toBe('a')
+  })
+
+  it('makes a chat for a branch whose chats are all closed', () => {
+    const onFeature = { ...closedMix, rows: [row('a', { updatedAt: 3 }), row('f', { current: true, updatedAt: 1 })], assignments: { a: 'main', f: 'feature' } }
+    expect(decideChat(view({ ...onFeature, branch: 'main', open: new Set(['f']) }))).toEqual({ action: 'create' })
+    expect(decideChat(view({ ...onFeature, branch: 'main', open: new Set(['a', 'f']) }))).toEqual({ action: 'open', id: 'a' })
+  })
+
+  it('opens the latest chat with a turn of each branch, the chat on screen and the chats with a tab; the rest is closed', () => {
+    const rows = [row('m2', { updatedAt: 5 }), row('f2', { current: true, updatedAt: 4 }), row('m1', { updatedAt: 3 }), row('f1', { updatedAt: 2 }), row('t', { updatedAt: 1 })]
+    const real = new Map(['m2', 'f2', 'm1', 'f1', 't'].map(id => [id, 'x']))
+    const assignments = { m2: 'main', m1: 'main', f2: 'feature', f1: 'feature', t: 'main' }
+    expect(initialOpenChats({ rows, real, running: new Set(), assignments })).toEqual(['m2', 'f2'])
+    expect(initialOpenChats({ rows, real, running: new Set(), assignments }, new Set(['t']))).toEqual(['m2', 'f2', 't'])
+  })
+
+  it('does not open a blank stray session nobody recorded', () => {
+    const rows = [row('stray', { current: true, updatedAt: 9 }), row('m1', { updatedAt: 1 })]
+    expect(initialOpenChats({ rows, real: new Map([['m1', 'x']]), running: new Set(), assignments: { m1: 'main' } })).toEqual(['m1'])
+  })
+
+  it('an app with many chats and no decision opens with only the latest chat per branch', async () => {
+    const t = setup({ ids: ['m3', 'm2', 'm1', 'f1'], recorded: { m3: 'main', m2: 'main', m1: 'main', f1: 'feature' }, real: ['m3', 'm2', 'm1', 'f1'], open: null })
+    await t.start()
+    expect([...t.map.getOpen()].sort()).toEqual(['f1', 'm3'])
+    expect(t.openWrites).toEqual([['m3', 'f1']])
+    expect(t.dsh.opened.at(-1)).toBe('m3')
+  })
+
+  it('shows a closed chat of the branch as a tab and keeps it open from then on', async () => {
+    const tabs = new FrameTabs()
+    tabs.setBranch('main')
+    const t = setup({ ids: ['m2', 'm1'], recorded: { m2: 'main', m1: 'main' }, real: ['m2', 'm1'], open: ['m2'], tabs })
+    await t.start()
+    expect(t.map.isOpen('m1')).toBe(false)
+    t.chats.show('m1')
+    await settle()
+    expect(t.map.isOpen('m1')).toBe(true)
+    expect(t.openWrites).toContainEqual(['m1', true])
+    expect(tabs.getSnapshot().tabs.map(tab => tab.id)).toEqual(['chat', 'chat:m1'])
+    expect(tabs.getSnapshot().active).toBe('chat:m1')
+    expect(t.dsh.shown()).toBe('m1')
+  })
+
+  it('closing the chat on screen closes it and shows the base tab\'s chat, and the chat stays closed', async () => {
+    const tabs = new FrameTabs()
+    tabs.setBranch('main')
+    const t = setup({ ids: ['m2', 'm1'], recorded: { m2: 'main', m1: 'main' }, real: ['m2', 'm1'], open: ['m2', 'm1'], tabs })
+    await t.start()
+    t.chats.show('m1')
+    await settle()
+    expect(t.dsh.shown()).toBe('m1')
+    t.prefer(undefined)
+    tabs.close('chat:m1')
+    t.chats.closeChat('m1', new Set())
+    await settle()
+    expect(t.map.isOpen('m1')).toBe(false)
+    expect(t.dsh.shown()).toBe('m2')
+    expect(t.openWrites).toContainEqual(['m1', false])
+    // Reconciling again never reopens it.
+    t.chats.reconcile()
+    await settle()
+    expect(t.map.isOpen('m1')).toBe(false)
+  })
+
+  it('closing the only open chat on screen makes a new chat for the base tab', async () => {
+    const tabs = new FrameTabs()
+    tabs.setBranch('main')
+    const t = setup({ ids: ['m1'], recorded: { m1: 'main' }, real: ['m1'], open: ['m1'], tabs })
+    await t.start()
+    t.chats.closeChat('m1', new Set())
+    await settle()
+    expect(t.map.isOpen('m1')).toBe(false)
+    expect(t.dsh.created).toHaveBeenCalledTimes(1)
+    expect(t.dsh.shown()).toBe('s2')
+    expect(t.map.isOpen('s2')).toBe(true)
+  })
+
+  it('closing a chat that is not on screen only closes it', async () => {
+    const tabs = new FrameTabs()
+    tabs.setBranch('main')
+    const t = setup({ ids: ['m2', 'm1'], recorded: { m2: 'main', m1: 'main' }, real: ['m2', 'm1'], open: ['m2', 'm1'], tabs })
+    await t.start()
+    const shown = t.dsh.shown()
+    t.chats.closeChat('m1', new Set())
+    await settle()
+    expect(t.dsh.shown()).toBe(shown)
+    expect(t.map.isOpen('m1')).toBe(false)
+  })
+
+  it('the chat on screen is open', async () => {
+    const t = setup({ ids: ['m2', 'm1'], recorded: { m2: 'main', m1: 'main' }, real: ['m2', 'm1'], open: ['m2'] })
+    await t.start()
+    t.dsh.show('m1')
+    await settle()
+    expect(t.map.isOpen('m1')).toBe(true)
+  })
+
+  it('a chat tab of a chat that is not open is dropped from the strip', () => {
+    const tabs = new FrameTabs()
+    tabs.setBranch('main')
+    tabs.open(chatTab('a'))
+    tabs.open(chatTab('b'))
+    tabs.open({ kind: 'files', id: 'files' })
+    expect(tabs.closeChatsNotIn(new Set(['a']))).toBe(true)
+    expect(tabs.getSnapshot().tabs.map(tab => tab.id)).toEqual(['chat', 'chat:a', 'files'])
+    expect(tabs.closeChatsNotIn(new Set(['a']))).toBe(false)
+    tabs.activate('chat:a')
+    tabs.closeChatsNotIn(new Set())
+    expect(tabs.getSnapshot().active).toBe('chat')
+  })
+})
+
+describe('BranchChatsStore: open chats', () => {
+  const api = (open: string[] | null) => {
+    const writes: unknown[] = []
+    let fail = false
+    return {
+      writes,
+      failWrites: () => { fail = true },
+      api: {
+        read: async () => ({ chats: { a: 'main' }, open }),
+        assign: async () => {},
+        setOpen: async (id: string, on: boolean) => { if (fail) throw new Error('no'); writes.push([id, on]) },
+        initOpen: async (ids: readonly string[]) => { writes.push([...ids]) },
+      },
+    }
+  }
+
+  it("takes the Host's open chats, and decides only when the Host has none", async () => {
+    const known = api(['a'])
+    const map = new BranchChatsStore(known.api)
+    await map.load()
+    expect(map.isOpenKnown()).toBe(true)
+    map.initOpen(['z'])
+    expect([...map.getOpen()]).toEqual(['a'])
+    const fresh = api(null)
+    const undecided = new BranchChatsStore(fresh.api)
+    await undecided.load()
+    expect(undecided.isOpenKnown()).toBe(false)
+    undecided.initOpen(['x', 'y'])
+    undecided.initOpen(['other'])
+    expect([...undecided.getOpen()]).toEqual(['x', 'y'])
+    expect(fresh.writes).toEqual([['x', 'y']])
+  })
+
+  it('opens and closes at once, writes it, and puts a refused write back', async () => {
+    const host = api(['a'])
+    const map = new BranchChatsStore(host.api)
+    await map.load()
+    let told = 0
+    map.subscribe(() => { told += 1 })
+    map.setOpen('b', true)
+    expect(map.isOpen('b')).toBe(true)
+    map.setOpen('b', true)
+    expect(told).toBe(1)
+    host.failWrites()
+    map.setOpen('a', false)
+    expect(map.isOpen('a')).toBe(false)
+    await settle()
+    expect(map.isOpen('a')).toBe(true)
+    expect(host.writes).toEqual([['b', true]])
+  })
+
+  it('a chat opened or closed before the open chats are known is left to the first decision', async () => {
+    const map = new BranchChatsStore(api(null).api)
+    map.setOpen('a', true)
+    expect(map.isOpenKnown()).toBe(false)
+  })
+})
+
 /** DSH's sessions as the store sees them: a list that tells its subscribers, creation, and the navigation that moves the main view. */
 function fakeDsh(initial: string[] = [], stepwise = false) {
   const ids = [...initial]
@@ -114,12 +299,16 @@ async function settle(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 0))
 }
 
-function setup(options: { ids?: string[]; recorded?: Record<string, string>; real?: string[]; branch?: string; stepwise?: boolean } = {}) {
+function setup(options: { ids?: string[]; recorded?: Record<string, string>; real?: string[]; branch?: string; stepwise?: boolean; open?: string[] | null; tabs?: FrameTabs } = {}) {
   const dsh = fakeDsh(options.ids ?? [], options.stepwise)
   const written: Array<[string, string]> = []
+  const openWrites: Array<[string, boolean] | string[]> = []
+  // Unless a test says which chats are open, every chat the app has is (the model before chats could be closed).
   const map = new BranchChatsStore({
-    read: async () => ({ ...options.recorded }),
+    read: async () => ({ chats: { ...options.recorded }, open: options.open === undefined ? [...(options.ids ?? [])] : options.open }),
     assign: async (id, branch) => { written.push([id, branch]) },
+    setOpen: async (id, open) => { openWrites.push([id, open]) },
+    initOpen: async ids => { openWrites.push([...ids]) },
   })
   let branch = options.branch ?? 'main'
   let preferred: string | undefined
@@ -131,9 +320,10 @@ function setup(options: { ids?: string[]; recorded?: Record<string, string>; rea
     branch: () => branch,
     appRoot: () => '/app',
     preferred: () => preferred,
+    ...(options.tabs === undefined ? {} : { tabs: options.tabs }),
   })
   return {
-    dsh, map, chats, written, real,
+    dsh, map, chats, written, real, openWrites,
     switchTo: (next: string) => { branch = next; chats.reconcile() },
     prefer: (id: string | undefined) => { preferred = id },
     start: async () => { await map.load(); chats.watch(dsh.sessions); await settle() },
@@ -300,7 +490,12 @@ describe('chat tabs', () => {
 describe('BranchChatsStore.isLoaded', () => {
   it('is false until the Host answers, and a failed read leaves it false', async () => {
     let fail = true
-    const map = new BranchChatsStore({ read: async () => { if (fail) throw new Error('down'); return { a: 'main' } }, assign: async () => {} })
+    const map = new BranchChatsStore({
+      read: async () => { if (fail) throw new Error('down'); return { chats: { a: 'main' }, open: null } },
+      assign: async () => {},
+      setOpen: async () => {},
+      initOpen: async () => {},
+    })
     expect(map.isLoaded()).toBe(false)
     await map.load()
     expect(map.isLoaded()).toBe(false)

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -215,7 +215,9 @@ describe('a chat\'s branch', () => {
   it('is the branch the chat was first seen on, and stays when the folder moves', () => {
     const calls: string[] = []
     const store = new BranchChatsStore({
-      read: async () => ({}),
+      read: async () => ({ chats: {}, open: null }),
+      setOpen: async () => {},
+      initOpen: async () => {},
       assign: async (id, branch) => { calls.push(`${id}:${branch}`) },
     })
     store.adopt(['a', 'b'], 'main')
@@ -229,7 +231,9 @@ describe('a chat\'s branch', () => {
     let refuse = true
     const calls: string[] = []
     const store = new BranchChatsStore({
-      read: async () => ({}),
+      read: async () => ({ chats: {}, open: null }),
+      setOpen: async () => {},
+      initOpen: async () => {},
       assign: async (id, branch) => {
         calls.push(`${id}:${branch}`)
         if (refuse) throw new Error('the Host said no')
@@ -246,7 +250,7 @@ describe('a chat\'s branch', () => {
   })
 
   it('keeps a chat recorded before the page opened', async () => {
-    const store = new BranchChatsStore({ read: async () => ({ a: 'main' }), assign: async () => {} })
+    const store = new BranchChatsStore({ read: async () => ({ chats: { a: 'main' }, open: null }), assign: async () => {}, setOpen: async () => {}, initOpen: async () => {} })
     await store.load()
     store.adopt(['a'], 'feature')
     expect(store.getSnapshot()).toEqual({ a: 'main' })
@@ -255,8 +259,10 @@ describe('a chat\'s branch', () => {
 
 describe('the branch chats file', () => {
   it('reads what the Host was told', () => {
-    expect(parseBranchChats({ chats: { s1: 'main' } })).toEqual({ s1: 'main' })
+    expect(parseBranchChats({ chats: { s1: 'main' } })).toEqual({ chats: { s1: 'main' }, open: null })
+    expect(parseBranchChats({ chats: { s1: 'main' }, open: ['s1'] })).toEqual({ chats: { s1: 'main' }, open: ['s1'] })
     expect(() => parseBranchChats({ chats: { s1: 7 } })).toThrow('entry')
+    expect(() => parseBranchChats({ chats: {}, open: [3] })).toThrow('open')
     expect(() => parseBranchChats({})).toThrow('not a map')
   })
 
@@ -264,16 +270,45 @@ describe('the branch chats file', () => {
     const dir = await mkdtemp(join(tmpdir(), 'branch-chats-'))
     try {
       const store = createBranchChatsStore(join(dir, 'frame', 'branch-chats.json'))
-      expect(await store.read('/apps/a')).toEqual({})
+      expect(await store.read('/apps/a')).toEqual({ chats: {}, open: null })
       await Promise.all([
         store.assign('/apps/a', 's1', 'main'),
         store.assign('/apps/a', 's2', 'feature'),
         store.assign('/apps/b', 's1', 'other'),
       ])
-      expect(await store.read('/apps/a')).toEqual({ s1: 'main', s2: 'feature' })
-      expect(await store.read('/apps/b')).toEqual({ s1: 'other' })
+      expect((await store.read('/apps/a')).chats).toEqual({ s1: 'main', s2: 'feature' })
+      expect((await store.read('/apps/b')).chats).toEqual({ s1: 'other' })
       await store.assign('/apps/a', 's1', 'feature')
-      expect(await store.read('/apps/a')).toEqual({ s1: 'main', s2: 'feature' })
+      expect((await store.read('/apps/a')).chats).toEqual({ s1: 'main', s2: 'feature' })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps which chats are open per app folder: decided once, then one chat at a time, across a restart', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'branch-chats-'))
+    try {
+      const file = join(dir, 'frame', 'branch-chats.json')
+      const store = createBranchChatsStore(file)
+      // Nobody decided yet.
+      expect((await store.read('/apps/a')).open).toBeNull()
+      expect(await store.initOpen('/apps/a', ['s1', 's2', 's1'])).toBe(true)
+      // The first decision stands: a second page's is refused.
+      expect(await store.initOpen('/apps/a', ['s9'])).toBe(false)
+      await store.setOpen('/apps/a', 's3', true)
+      await store.setOpen('/apps/a', 's1', false)
+      await store.setOpen('/apps/a', 's3', true)
+      expect((await store.read('/apps/a')).open).toEqual(['s2', 's3'])
+      // Another app folder has its own.
+      expect((await store.read('/apps/b')).open).toBeNull()
+      // A restart reads the same file.
+      expect((await createBranchChatsStore(file).read('/apps/a')).open).toEqual(['s2', 's3'])
+      // A file from before the open chats were kept has no list: nobody decided.
+      await writeFile(file, JSON.stringify({ roots: { '/apps/a': { s1: 'main' } } }))
+      expect(await createBranchChatsStore(file).read('/apps/a')).toEqual({ chats: { s1: 'main' }, open: null })
+      // Closing a chat before anyone decided decides that none else is open.
+      await createBranchChatsStore(file).setOpen('/apps/a', 's1', false)
+      expect((await createBranchChatsStore(file).read('/apps/a')).open).toEqual([])
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

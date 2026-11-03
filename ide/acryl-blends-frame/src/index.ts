@@ -27,7 +27,7 @@ import { AppReloader, watchFolder, type AppRow } from './app-reload.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
 import { guardToolCalls, type ToolCallEvents } from './tool-call-guard.ts'
 import { installSelectionContext, parseSelectionContext, SelectionInbox, sessionOf } from './selection-context.ts'
-import { branchChatsFile, createBranchChatsStore } from './branch-chats.ts'
+import { branchChatsFile, createBranchChatsStore, type BranchChatsRecord } from './branch-chats.ts'
 import {
   FRAME_API_PREFIX,
   FRAME_APP_PATH,
@@ -301,11 +301,15 @@ export function parseBranchName(body: unknown): { name: string } | { problem: st
   return problem === undefined ? { name } : { problem }
 }
 
-/** Which branch each chat was opened on (the frame lists a branch's own chats; DSH itself knows no branches). */
+/** Which branch each chat was opened on (the frame lists a branch's own chats; DSH itself knows no branches), and which chats are open. */
 export interface BranchChatsPort {
-  read(): Promise<Record<string, string>>
+  read(): Promise<BranchChatsRecord>
   /** Records a chat's branch once; a chat stays where it was opened. */
   assign(id: string, branch: string): Promise<void>
+  /** Opens or closes one chat. */
+  setOpen(id: string, open: boolean): Promise<void>
+  /** Decides which chats are open when nobody has yet. */
+  initOpen(ids: readonly string[]): Promise<void>
 }
 
 export interface FrameRoutesDeps {
@@ -405,20 +409,31 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
   if (branchChats !== undefined) {
     app.get(FRAME_BRANCH_CHATS_PATH, ownPage, async (c) => {
       try {
-        return c.json({ chats: await branchChats.read() })
+        return c.json(await branchChats.read())
       } catch (cause) {
         report(cause)
         return c.json(error('the branch chats could not be read'), 500)
       }
     })
+    // Three writes on one path: `{id, branch}` records a chat's branch, `{id, open}` opens or closes a chat, `{opened: [ids]}` decides the open chats
+    // once (a decision already made is kept).
     app.post(FRAME_BRANCH_CHATS_PATH, ownPage, jsonBody(), async (c) => {
       const body = await readJson(c)
-      const record = body !== null && typeof body === 'object' ? (body as { id?: unknown; branch?: unknown }) : {}
-      if (typeof record.id !== 'string' || record.id === '' || record.id.length > 200) return c.json(error('invalid chat'), 400)
-      if (typeof record.branch !== 'string') return c.json(error('Name the branch.'), 400)
-      const problem = branchNameProblem(record.branch)
-      if (problem !== undefined) return c.json(error(problem), 400)
+      const record = body !== null && typeof body === 'object' ? (body as { id?: unknown; branch?: unknown; open?: unknown; opened?: unknown }) : {}
       try {
+        if (Array.isArray(record.opened)) {
+          if (record.opened.length > 5000 || record.opened.some((id: unknown) => typeof id !== 'string' || id === '' || id.length > 200)) return c.json(error('invalid chats'), 400)
+          await branchChats.initOpen(record.opened as string[])
+          return c.json({ ok: true })
+        }
+        if (typeof record.id !== 'string' || record.id === '' || record.id.length > 200) return c.json(error('invalid chat'), 400)
+        if (typeof record.open === 'boolean') {
+          await branchChats.setOpen(record.id, record.open)
+          return c.json({ ok: true })
+        }
+        if (typeof record.branch !== 'string') return c.json(error('Name the branch.'), 400)
+        const problem = branchNameProblem(record.branch)
+        if (problem !== undefined) return c.json(error(problem), 400)
         await branchChats.assign(record.id, record.branch)
         return c.json({ ok: true })
       } catch (cause) {
@@ -737,6 +752,8 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       branchChats: {
         read: () => chatsFile.read(root),
         assign: (id, branch) => chatsFile.assign(root, id, branch),
+        setOpen: (id, open) => chatsFile.setOpen(root, id, open),
+        initOpen: async (ids) => { await chatsFile.initOpen(root, ids) },
       },
       chatSaves,
       ...(appReload === undefined ? {} : { appReload }),
