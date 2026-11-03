@@ -571,6 +571,17 @@ body [data-sidebar-right-guide] { flex: 1 1 auto; min-height: 0; overflow-y: aut
 .dshWorkspaceGitDiffComposerActions button:disabled { opacity: .5; cursor: default; }
 .dshWorkspaceGitDiffComposerError { flex: 1; color: #fca5a5; font-size: 12px; }
 .dshWorkspaceGitDiffSent { margin: 2px 12px 6px 36px; padding: 4px 8px; border-left: 2px solid #4ade80; color: var(--dsw-alias-label-secondary); font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; white-space: normal; }
+.dshWorkspaceChatHistory { position: relative; display: flex; justify-content: flex-start; padding: 6px 8px 0; }
+.dshWorkspaceChatHistoryButton { font: inherit; font-size: 12px; padding: 3px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.dshWorkspaceChatHistoryPanel { position: absolute; top: 30px; left: 8px; z-index: 20; width: min(320px, 90%); max-height: 60vh; overflow: auto; padding: 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #18181b); box-shadow: 0 12px 30px #0006; }
+.dshWorkspaceChatHistoryPanel input { width: 100%; box-sizing: border-box; margin: 0 0 6px; padding: 5px 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; }
+.dshWorkspaceChatHistoryPanel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.dshWorkspaceChatHistoryPanel li button { display: flex; width: 100%; align-items: center; gap: 8px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.dshWorkspaceChatHistoryPanel li button:hover { background: var(--dsw-alias-bg-layer-2, #222226); }
+.dshWorkspaceChatHistoryPanel li button.on { background: color-mix(in srgb, currentColor 12%, transparent); }
+.dshWorkspaceChatHistoryTitle { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dshWorkspaceChatHistoryClosed { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.dshWorkspaceChatHistoryEmpty { margin: 4px 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 `
 
 /** Install styles owned by one Workspace Client Fiber. */

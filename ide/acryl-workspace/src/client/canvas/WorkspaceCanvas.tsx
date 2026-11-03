@@ -18,6 +18,7 @@ import { focusChatComposer } from '../chat/composer-focus.ts'
 import { FileEditorPane } from '../files/FileEditorPane.tsx'
 import { FilesBody } from '../files/FilesBody.tsx'
 import { ChangesBody } from '../changes/ChangesBody.tsx'
+import { ChatHistory } from '../chat/ChatHistory.tsx'
 import type { WorkspaceFilesApi } from '../files/files-api.ts'
 import { GitDiffPane } from '../diff/GitDiffPane.tsx'
 import type { ReviewStore } from '../review/review-store.ts'
@@ -168,6 +169,8 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
   // The conversation comes from the frame: a prop from `desktop.main` (its old home) or the shell's context (the right panel's chat tab).
   const conversationFromFrame = useConversationRenderer()
   const renderConversation = conversationProp ?? conversationFromFrame
+  // Every chat, closed ones included, for the chat tab's History (section 31, Q7).
+  const sessionList = useSessions(state => state)
   const activeChatId = active?.kind === 'chat' ? active.id : undefined
   useEffect(() => {
     if (activeChatId === undefined) return
@@ -178,6 +181,12 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
   const renderTile = (tile: WorkspaceTile): ReactNode => {
     if (tile.kind === 'chat') return (
       <div className="dshWorkspaceChat">
+        <ChatHistory
+          sessions={sessionList}
+          current={tile.chatSessionId}
+          shell={shell}
+          onPick={(id) => { shell.restoreChat(id); chats.open(id) }}
+        />
         {connectModel !== undefined && tile.id === snapshot.activeId && <ModelConnect control={connectModel} />}
         {renderConversation === undefined ? <p className="dshWorkspaceNotice">The chat is not available on this surface.</p> : renderConversation()}
       </div>
