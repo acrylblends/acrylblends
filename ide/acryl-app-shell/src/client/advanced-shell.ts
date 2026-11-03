@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import type { DesktopMainOwnerProps, DesktopSidebarSurfaceOwnerProps } from './contracts.ts'
 import type { ShellEnvironment } from './environment.ts'
 import { AdvancedFrame } from './AdvancedFrame.tsx'
+import { stripLaunchToken } from './launch-token.ts'
 import { DesktopLayoutState } from './layout-state.ts'
 import { provideDesktopLayout } from './layout-service.ts'
 import { installAdvancedStyles } from './styles.ts'
@@ -62,6 +63,15 @@ export function applyAdvancedShell(ctx: ClientContext, environment: ShellEnviron
   )
   // Upstream's sidebars and session views read the open keyed panel through the standard `usePanelInfo` hook, which the root supplies.
   ctx.effect(() => ctx.slots.provideRoot({ hooks: { panelInfo: desktopLayout.panelInfo } }), 'acryl-app-shell: panel info')
+
+  // The launch token was exchanged for the browser's cookie before this client ran. Left in the address bar it stays
+  // in history and a reconnect can spend it again, re-admitting a page whose cookie is gone - so the session-ended
+  // banner would never be due. Drop it once, keeping the path, any other query field and the hash.
+  ctx.effect(() => {
+    const stripped = stripLaunchToken(window.location.href)
+    if (stripped !== undefined) window.history.replaceState(window.history.state, '', stripped)
+    return () => {}
+  }, 'acryl-app-shell: strip the launch token')
 
   ctx.effect(() => {
     document.body.dataset.dshDesktopMode = 'advanced'

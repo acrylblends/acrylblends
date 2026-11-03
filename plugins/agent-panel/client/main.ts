@@ -2,6 +2,7 @@
 // agent through POST <prefix>/ask, shows the answer as it arrives, and reloads the page after a run that installed or removed a plugin. `panel.js` calls
 // `start` with the prefix the app is served under (the root of its own server, or `/app` when the ACRYL frame hosts it).
 import { describeTool } from './describe.ts'
+import { createPickGeneration } from './driver-pick.ts'
 import { renderMarkdown } from './markdown.ts'
 
 let PREFIX = '/api/agent-panel'
@@ -265,17 +266,22 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   const kindOf = (name: string): 'chat' | 'terminal' =>
     session.drivers.find((d) => d.name === name)?.kind ?? 'chat'
   let terminal: { detach(): void; stop(): Promise<void> } | undefined
+  // A pick can land while an earlier pick's terminal is still loading (the page also restores a remembered terminal at
+  // start). Only the latest pick may apply its result; a stale terminal must never replace the form the person chose.
+  const picks = createPickGeneration()
   // A terminal driver swaps the chat for the driver's own terminal (loaded from the plugin that provides it, only when asked for).
   const choose = async (): Promise<void> => {
+    const generation = picks.begin()
+    const name = driver.value
     terminal?.detach()
     terminal = undefined
-    const isTerminal = kindOf(driver.value) === 'terminal'
+    const isTerminal = kindOf(name) === 'terminal'
     log.hidden = isTerminal
     form.hidden = isTerminal
     term.hidden = !isTerminal
     termStop.hidden = !isTerminal
     if (!isTerminal) return
-    const selected = session.drivers.find((entry) => entry.name === driver.value)
+    const selected = session.drivers.find((entry) => entry.name === name)
     if (selected?.view === undefined) {
       line('This terminal driver does not provide its view.', 'err')
       return
@@ -293,10 +299,10 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
         }): Promise<{ detach(): void; stop(): Promise<void> }>
       }
       await refreshSession()
-      terminal = await openTerminal({
+      const opened = await openTerminal({
         container: term,
         token: session.token,
-        driver: driver.value,
+        driver: name,
         prefix: selected.view.prefix,
         status: (text) => line(text, 'tool'),
         onChange: (change) => {
@@ -305,7 +311,13 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
           setTimeout(() => location.reload(), 900)
         },
       })
+      if (!picks.isCurrent(generation)) {
+        opened.detach()
+        return
+      }
+      terminal = opened
     } catch (error) {
+      if (!picks.isCurrent(generation)) return
       line(
         `The terminal could not open: ${error instanceof Error ? error.message : String(error)}`,
         'err',
