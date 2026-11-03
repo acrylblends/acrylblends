@@ -168,11 +168,16 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsConversation { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .acrylBlendsConversation[hidden] { display: none; }
 .acrylBlendsConversation > * { flex: 1; min-height: 0; }
-.acrylBlendsSelectionDock { display: flex; width: 100%; max-width: var(--dsh-composer-card-max-width, 100%); box-sizing: border-box; margin: 0 auto; padding: 0 4px; }
-.acrylBlendsSelectionChip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 4px 3px 9px; border: 1px solid #4a4a52; border-radius: 99px; background: #26262b; color: #e8e8ea; font-size: 11.5px; }
-.acrylBlendsSelectionChipLabel { min-width: 0; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.acrylBlendsSelectionChipClear { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #b9b9c0; font-size: 13px; line-height: 1; cursor: pointer; display: grid; place-items: center; flex: none; }
-.acrylBlendsSelectionChipClear:hover { background: #3a3a42; color: #fff; }
+.acrylBlendsSelectionChip { position: absolute; z-index: 2; display: inline-flex; align-items: center; gap: 4px; max-width: 60%; height: 18px; padding: 0 6px; border: 0; border-radius: 5px; background: var(--bf-surface-2); color: #c8c8d0; font-size: 11px; line-height: 18px; white-space: nowrap; }
+.acrylBlendsSelectionChipLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.acrylBlendsSelectionChipClear { width: 13px; height: 13px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #8b8b93; font-size: 12px; line-height: 1; cursor: pointer; display: grid; place-items: center; flex: none; opacity: 0; }
+.acrylBlendsSelectionChip:hover .acrylBlendsSelectionChipClear, .acrylBlendsSelectionChipClear:focus-visible { opacity: 1; }
+.acrylBlendsSelectionChipClear:hover { background: #34343a; color: #fff; }
+/* First run (docs/design/blends-frame-mockup.html, scenario 1): a blank chat keeps the frame's shape, with DSH's composer at the bottom and none of
+   its centered hero chrome (brand, headline, workspace picker). The composer is still DSH's own; only the blank-session presentation changes. */
+.acrylBlendsConversation [data-phase="hero"] div:has(> [data-slot="conversation.composer"]) { margin-top: auto; }
+.acrylBlendsConversation [data-phase="hero"] div:has(> [data-slot="conversation.composer.bar"]) { padding-bottom: 8px; }
+.acrylBlendsConversation [data-phase="hero"] div:has(> [data-slot="conversation.composer.bar"]) > :not([data-slot="conversation.composer.bar"]):not([data-slot="conversation.input.dock"]) { display: none; }
 
 .acrylBlendsPlugins { color: var(--bf-text, #e8e8ea); font-size: 13px; }
 .acrylBlendsFeedbackNew { margin-left: auto; color: var(--bf-warn); font-size: 11px; }

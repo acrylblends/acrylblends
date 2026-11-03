@@ -8,7 +8,7 @@
 import '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@acryl/ui/frame'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-// The conversation slot map (conversation.input.dock) and the scoped input events the send hook writes through.
+// The conversation slot maps (the composer overlay the chip sits in) and the scoped input events the send hook writes through.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionInput } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { DesktopLayoutState, DesktopThemePresenter, provideDesktopLayout, stripLaunchToken } from 'acryl-app-shell/client'
@@ -60,6 +60,11 @@ export const name = 'acryl-blends-frame-client'
 const FRAME_STATE_INTERVAL_MS = 5000
 // `theme` is read by the theme presenter; Cordis rejects reading a service a plugin did not declare.
 export const inject = ['slots', 'theme']
+
+/** The frame's own first run: a step that stays pending and renders nothing, so DSH's blocking steps never mount inside the frame. */
+function NoOnboarding(): null {
+  return null
+}
 
 function pageStorage(): ViewStorage | undefined {
   try {
@@ -254,14 +259,14 @@ export function apply(ctx: ClientContext): void {
     child.effect(() => chats.watch(child.sessions), 'acryl-blends-frame: chats follow the sessions')
   })
 
-  // The element picked in the canvas is what the chat is about (docs/design/blends-frame-mockup.html, scenario 2): its chip sits above the
-  // composer, and a send writes its page and selector into the message the person is sending, without touching the words they typed.
+  // The element picked in the canvas is what the chat is about (docs/design/blends-frame-mockup.html, scenario 2): its chip sits at the left of
+  // the composer's input row, and a send writes its page and selector into the message the person is sending, without touching their words.
   ctx.plugin({
     name: 'acryl-blends-frame-element-selection',
     inject: ['slots', 'sessions'],
     apply(child: ClientContext): void {
-      child.slots.inject('conversation.input.dock', () => child.slots.register({
-        name: 'conversation.input.dock',
+      child.slots.inject('conversation.input.overlay', () => child.slots.register({
+        name: 'conversation.input.overlay',
         id: 'element-selection',
         order: 10,
         inject: (sessionId): SelectionChipInjected => {
@@ -297,6 +302,15 @@ export function apply(ctx: ClientContext): void {
       }, SelectionChip))
     },
   })
+
+  // The mockup's first run is the frame itself (docs/design/blends-frame-mockup.html, scenario 1): DSH's preview notice and credential prompt are
+  // blocking modals over the app, so the frame keeps one pending step that renders nothing while the chat is blank. Setting up a model lives in
+  // Settings > Models, where the frame's Settings has it; nothing blocks the app's first screen.
+  ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+    name: 'settings.onboarding',
+    id: 'acryl-blends-first-run',
+    order: -1000,
+  }, NoOnboarding))
 
   ctx.effect(() => ctx.slots.register({
     name: 'root',
