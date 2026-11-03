@@ -72,7 +72,7 @@ export function makeApp(prefix = ''): Acryl {
       .get('/', (c) =>
         (c.req.header('accept') ?? '').includes('text/html')
           ? c.html(
-              `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${APP_NAME}</title>${APPEARANCE_STYLE}${appearanceScript(prefix)}</head><body><h1>${APP_NAME}</h1><p>This app runs an agent unless it is switched off (production switches it off, see ACRYL_PRODUCTION_KEEP in AGENTS.md). Ask it for a feature in the agent panel on this page (or with <code>POST /ask</code>).</p>${DOOR_TAG}</body></html>`,
+              `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${APP_NAME}</title>${APPEARANCE_STYLE}${appearanceScript(prefix)}</head><body><h1>${APP_NAME}</h1><p>This app runs an agent unless it is switched off (production switches it off, see ACRYL_PRODUCTION_KEEP in AGENTS.md). In ACRYL, ask it for a change in the chat beside the app (or with <code>POST /ask</code>); published with the assistant on, it helps visitors use the app without changing it.</p>${DOOR_TAG}</body></html>`,
             )
           : c.json({ app: APP_NAME, ok: true }),
       )
