@@ -106,9 +106,19 @@ export function entriesForWorktree(
   chats: readonly ChatSessionLike[],
   active?: ActiveTileLike,
 ): WorktreeSessionEntry[] {
+  // A branch lists every open agent session: a PTY tab (Claude, Codex, Pi, a plain terminal) or a driver's
+  // own agent tab. Never a file, browser, diff, board or doc tab: those belong to the tabs, not to the tree.
   const agents: WorktreeSessionEntry[] = tiles
-    .filter(tile => tile.kind === 'pty')
-    .map(tile => ({ kind: 'agent', id: tile.id, label: tile.title, commandId: tile.commandId ?? 'shell', active: tile.id === active?.id }))
+    .filter(tile => tile.kind === 'pty' || tile.kind === 'agent')
+    .map(tile => ({
+      kind: 'agent' as const,
+      id: tile.id,
+      label: tile.title,
+      ...(tile.commandId === undefined
+        ? (tile.kind === 'pty' ? { commandId: 'shell' } : {})
+        : { commandId: tile.commandId }),
+      active: tile.id === active?.id,
+    }))
   // owningWorktree (deepest match), not a plain isInside: a linked worktree nested under this one claims
   // its own chats, and they must not also appear here.
   // Only open chats are rows: a tab here, running, or selected. Closed chats live in the chat tab's

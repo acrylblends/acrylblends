@@ -107,6 +107,17 @@ describe('entriesForWorktree', () => {
     ])
   })
 
+  it('lists a driver agent tab as an open agent session, and still never a file tab', () => {
+    const mixed = [
+      { id: 'a1', kind: 'agent', title: 'Builder run' },
+      { id: 'f1', kind: 'file', title: 'app.ts' },
+      { id: 'b1', kind: 'browser', title: 'Browser' },
+    ]
+    expect(entriesForWorktree('/p/proj/.worktrees/x', [REPO], mixed, [])).toEqual([
+      { kind: 'agent', id: 'a1', label: 'Builder run', active: false },
+    ])
+  })
+
   it('lists the chats whose cwd is inside the worktree and that are open, by their real displayTitle', () => {
     const entries = entriesForWorktree('/p/proj/.worktrees/x', [REPO], [], chats)
     expect(entries).toEqual([

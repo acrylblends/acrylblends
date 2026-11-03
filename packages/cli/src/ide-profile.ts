@@ -54,6 +54,7 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
   { name: 'acryl-app-shell', spec: '' },
   { name: 'acryl-app-canvas', spec: '' },
   { name: 'acryl-workspace', spec: '' },
+  { name: 'acryl-versions', spec: '' },
   { name: 'acryl-plugin-admin', spec: '' },
   { name: 'acryl-support', spec: '' },
   { name: 'acryl-sign-in', spec: '' },
