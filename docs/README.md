@@ -53,6 +53,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [IDE port, slice 0: the decision record](plans/ide-slice0.md) - the spike: DSH hosts, the framework as profile rows, measured cost, the DSH pin and its upgrade routine
 - [IDE port: the host inversion](plans/ide-host-inversion.md) - owner decision 2026-10-31: our own framework hosts the app, DSH packages are rows of our composition; what it replaces and what it keeps
 - [IDE port: where it stands](plans/ide-port-status.md) - live status: what is landed, the slice 6 decisions, the next steps and the open question
+- [The 125 frame redesign: the port inventory](plans/125-port-inventory.md) - where every part of the approved mockup lives today, its tests, what changes per slice, and the questions the design must settle
 - [IDE port, slice 1 against ACRYL's desktop](plans/ide-slice1-frame-comparison.md) - the first frame comparison: the numbers, what matches, and what each difference belongs to
 - [IDE port, slice 2: the frame comparison](plans/ide-slice2-frame-comparison.md) - 18 views, 13 within 2%: the frame, both themes, the collapsed sidebar and the terminal pass; the one desktop-only right-panel row and the remaining Settings diffs
 - [IDE port, slice 3: chat, models and sessions](plans/ide-slice3-chat.md) - the connect-a-model card, where the key goes, the gate that proves the chat uses it and that a session survives a restart, and the frame numbers
