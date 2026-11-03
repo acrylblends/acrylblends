@@ -32,8 +32,6 @@ import { Toasts } from '../notifications/Toasts.tsx'
 import { ModelConnect } from '../models/ModelConnect.tsx'
 import type { ModelConnectControl } from '../models/model-connect.ts'
 import { describeFinish, type ToastState, type ToastTarget } from '../notifications/toast-state.ts'
-import { StatusLine } from '../chrome/StatusLine.tsx'
-import { buildStatusLine } from '../chrome/status-line.ts'
 import type { AgentsState } from '../agents/agents-state.ts'
 import { TabStrip } from '../tabs/TabStrip.tsx'
 import { SplitDivider } from './SplitDivider.tsx'
@@ -277,7 +275,6 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
     if (target.workspace === groups.workspace()) { show(); return }
     void projects.switchWorkspace(target.workspace).then((result) => { if (result.ok) show() })
   }, [shell, chats, groups, projects])
-  const [noticePermission, setNoticePermission] = useState(() => notices.permission())
 
   // Every open agent tab keeps its stream (also in a worktree that is not shown), and an agent that
   // ends raises a notice that leads back to its tab.
@@ -337,18 +334,6 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
 
   const customAgents = useSyncExternalStore(agentsState.subscribe, agentsState.getSnapshot)
   const agentSettings = useSyncExternalStore(agentsState.subscribe, agentsState.getSettings)
-  // Primitives only, so git polling that changes nothing here does not re-render the canvas.
-  const changedFiles = useSyncExternalStore(subscribeShell, () => shell.selectedWorktree()?.changes.length ?? 0)
-  const addedLines = useSyncExternalStore(subscribeShell, () => shell.selectedWorktree()?.added ?? 0)
-  const removedLines = useSyncExternalStore(subscribeShell, () => shell.selectedWorktree()?.removed ?? 0)
-  const statusSegments = buildStatusLine({
-    branch: groupKey === GLOBAL_GROUP ? undefined : groupBranch,
-    changedFiles,
-    added: addedLines,
-    removed: removedLines,
-    runningAgents: countRunning(sessions.ids.flatMap((id) => { const row = sessions.byId[id]; return row === undefined ? [] : [row] })),
-    terminals: snapshot.tiles.filter(tile => tile.kind === 'pty').length,
-  })
   const palette = useWorkspacePalette({
     workspace, groups, groupKey, snapshot, shell, gitApi, toasts, agentSettings, customAgents, tabTypes, tabRegistry, dock, config: paletteConfig, rightPanel,
     openPty: (commandId, title) => { void openPty(commandId, title) },
@@ -420,12 +405,6 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
           </div>
         )}
       </div>
-      <StatusLine
-        segments={statusSegments}
-        {...(noticePermission === 'default'
-          ? { action: { label: 'Enable notifications', title: 'Get a system notice when an agent finishes while you are in another app', run: () => { void notices.request().then(setNoticePermission) } } }
-          : {})}
-      />
       <CommandPalette palette={palette} />
       <Toasts
         state={toasts}

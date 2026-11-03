@@ -117,7 +117,6 @@ const WORKSPACE_STYLES = `
 .dshWorkspaceToastOpen { appearance: none; padding: 3px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 999px; background: transparent; color: inherit; cursor: pointer; font: inherit; }
 .dshWorkspaceToastOpen:hover { border-color: #4d6bfe; color: #4d6bfe; }
 .dshWorkspaceToastClose { appearance: none; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 15px; line-height: 1; }
-.dshWorkspaceStatusLine { display: flex; align-items: center; gap: 14px; flex: none; min-height: 24px; padding: 0 12px; border-top: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); font: 11.5px/1 ui-sans-serif, system-ui, sans-serif; overflow: hidden; white-space: nowrap; }
 .dshWorkspaceStatusAction { appearance: none; margin-left: auto; padding: 2px 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 999px; background: transparent; color: inherit; cursor: pointer; font: inherit; }
 .dshWorkspaceStatusAction:hover { border-color: #4d6bfe; color: #4d6bfe; }
 .dshWorkspaceStatusSegment[data-segment="branch"] { color: #a5b4fc; font-weight: 600; }
