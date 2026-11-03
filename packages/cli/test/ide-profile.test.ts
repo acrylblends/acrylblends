@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, test } from 'vitest'
 import {
   applyIdeProfile,
+  CLIENT_ROWS,
   DRIVER_ROWS,
   FRAME_PACKAGES,
   ideProfilePlan,
@@ -45,11 +46,10 @@ test('one profile per app, named from the app and safe for a DSH profile', () =>
   )
 })
 
-test("the workspace row is told the app's page, so the frame opens it on first run", () => {
-  assert.match(
-    ideProfilePlan(input).overlay,
-    /- id: acryl-workspace\n {6}name: acryl-workspace\n {6}config:\n {8}appPage: \/app/u,
-  )
+test("the frame's row is told the app's page, and the IDE's workbench is not mounted", () => {
+  const overlay = ideProfilePlan(input).overlay
+  assert.match(overlay, /- id: acryl-blends-frame\n {6}name: acryl-blends-frame\n {6}config:\n {8}appPage: \/app/u)
+  assert.doesNotMatch(overlay, /acryl-workspace/u)
 })
 
 test("the overlay mounts the frame rows and leaves DSH's own brand row out", () => {
@@ -78,6 +78,12 @@ test('the driver rows carry no DSH web surface: our node server and page serve t
     assert.ok(!DRIVER_ROWS.includes(id), `${id} must not be a driver row`)
   assert.doesNotMatch(ideProfilePlan(input).overlay, /- id: ui-layout/u)
   assert.doesNotMatch(ideProfilePlan(input).overlay, /- id: webserver/u)
+})
+
+test("the frame draws both side panels, so DSH's sidebars are not mounted, and the chat starts dark like the frame", () => {
+  const ids = CLIENT_ROWS.map((row) => row.id)
+  assert.ok(!ids.includes('ui-sidebar') && !ids.includes('ui-sidebar-right'))
+  assert.deepEqual(CLIENT_ROWS.find((row) => row.id === 'ui-theme')?.config, { preference: 'dark' })
 })
 
 test("the overlay keeps the first chat's workspace in the app's own data home", () => {

@@ -52,7 +52,9 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
   { name: 'acryl-settings', spec: '' },
   { name: 'acryl-shortcuts', spec: '' },
   { name: 'acryl-app-shell', spec: '' },
-  { name: 'acryl-workspace', spec: '' },
+  { name: 'acryl-versions', spec: '' },
+  // The page's root: the Blends frame (docs/design/blends-frame-mockup.html), never the IDE's workbench (`acryl-workspace`).
+  { name: 'acryl-blends-frame', spec: '' },
   { name: 'acryl-plugin-admin', spec: '' },
   { name: 'acryl-support', spec: '' },
   { name: 'acryl-sign-in', spec: '' },
@@ -65,8 +67,8 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
 ]
 
 /**
- * Where every template's frame row mounts the app (`FRAME_MOUNT_PREFIX` in the template's own source, `/app`). The overlay tells the workspace row, so
- * the frame opens the app's page in a browser tile on first run; `init-frame` asserts the templates still agree with this constant.
+ * Where every template's frame row mounts the app (`FRAME_MOUNT_PREFIX` in the template's own source, `/app`). The overlay tells the frame's row, so
+ * the frame shows the app's page in its centre; `init-frame` asserts the templates still agree with this constant.
  */
 export const FRAME_PAGE_PREFIX = '/app'
 
@@ -162,12 +164,13 @@ export const DRIVER_ROWS: readonly string[] = [
  * the failure the old overlay avoided by disabling the row); the only layout client row mounted is `acryl-app-shell`, so the document renders
  * the ACRYL frame.
  */
-export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string }[] = [
+export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string; readonly config?: Readonly<Record<string, unknown>> }[] = [
   { id: 'client-modules', name: '@deepseek-ai/dsh-client-modules' },
   { id: 'client-locale', name: '@deepseek-ai/dsh-client-locale' },
   { id: 'client-shortcuts', name: '@deepseek-ai/dsh-client-shortcuts' },
   { id: 'ui-renderer', name: '@deepseek-ai/dsh-client-ui-renderer' },
-  { id: 'ui-theme', name: '@deepseek-ai/dsh-client-ui-theme' },
+  // Dark by default, as the Blends frame is drawn (docs/design/blends-frame-mockup.html); a Settings Appearance change still wins over it.
+  { id: 'ui-theme', name: '@deepseek-ai/dsh-client-ui-theme', config: { preference: 'dark' } },
   { id: 'ui-settings', name: '@deepseek-ai/dsh-client-ui-settings' },
   // The settings surface itself (the dialog, its sections list and the trigger). Without this row the page has no Settings trigger or dialog at all:
   // ui-settings and ui-settings-models only contribute pages into it.
@@ -176,8 +179,9 @@ export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string 
   { id: 'ui-settings-plugins', name: '@deepseek-ai/dsh-client-ui-settings-plugins' },
   { id: 'ui-settings-models', name: '@deepseek-ai/dsh-client-ui-settings-models' },
   { id: 'ui-session', name: '@deepseek-ai/dsh-client-ui-session' },
-  { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
-  { id: 'ui-sidebar-right', name: '@deepseek-ai/dsh-client-ui-sidebar-right' },
+  // No `ui-sidebar` or `ui-sidebar-right`: the Blends frame draws both side panels itself (branches and versions on the left, the agents as tabs on
+  // the right). DSH's sidebars would be second, unreachable panels, and its left one also claims the `sidebar.settings` seat the frame's top bar
+  // renders DSH's Settings in.
   { id: 'ui-commands', name: '@deepseek-ai/dsh-client-ui-commands' },
   { id: 'ui-workspace', name: '@deepseek-ai/dsh-client-ui-workspace' },
   { id: 'ui-conversation', name: '@deepseek-ai/dsh-client-ui-conversation' },
@@ -485,8 +489,8 @@ function overlayOf(
   ]
   for (const entry of rows) {
     lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${yamlName(entry.name)}`)
-    // The app's page, so the frame opens it in a browser tile on first run instead of an empty canvas.
-    if ((entry.row ?? entry.name) === 'acryl-workspace')
+    // The app's page, which the frame shows in its centre.
+    if ((entry.row ?? entry.name) === 'acryl-blends-frame')
       lines.push('      config:', `        appPage: ${FRAME_PAGE_PREFIX}`)
   }
   // The chat driver's connection registers node routes on the framework's webServer port; it needs no DSH web runtime, so the row's
