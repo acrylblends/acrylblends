@@ -18,6 +18,7 @@ import { FILES_SEARCH_EVENT } from './FilesView.tsx'
 import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSharedPlugin } from 'acryl-workspace/ui'
 import { ShortcutsRow } from './ShortcutsRow.tsx'
 import { createBranchesApi } from './branches.ts'
+import { BranchChatsStore, createBranchChatsApi } from './branch-chats.ts'
 import { createFeedbackApi, feedbackTask } from './feedback.ts'
 import { draftInChat } from './chat-draft.ts'
 import type { FeedbackPort } from './LeftPanel.tsx'
@@ -68,6 +69,7 @@ export function apply(ctx: ClientContext): void {
   const chats = new ChatsStore(() => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'))
   const versionsApi = createVersionsApi()
   const branchesApi = createBranchesApi()
+  const branchChats = new BranchChatsStore(createBranchChatsApi())
   const tabs = new FrameTabs(pageStorage())
   const tools = createFrameTools()
   // Feedback from users: the notes, and handing one to the chat as a task the builder reads and sends.
@@ -149,6 +151,26 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'acryl-blends-frame: read the frame state')
 
+  // A chat belongs to the branch it was first seen on: DSH keeps no branches, so the frame records it in the app's home and the left panel can
+  // list each branch's own chats. A chat already recorded keeps its branch when the folder moves.
+  ctx.effect(() => {
+    void branchChats.load()
+    const adopt = () => {
+      const view = frameState.getSnapshot()
+      if (view.status !== 'ready') return
+      const current = view.state.branches.find(branch => branch.current)?.name
+      if (current === undefined) return
+      branchChats.adopt(chats.getSnapshot().map(row => row.id), current)
+    }
+    const offState = frameState.subscribe(adopt)
+    const offChats = chats.subscribe(adopt)
+    adopt()
+    return () => {
+      offState()
+      offChats()
+    }
+  }, 'acryl-blends-frame: chats belong to the branch they were opened on')
+
   // Settings → Agents: the workspace's own section, on the workspace Host's agent routes.
   const agents = new AgentsState(createWorkspaceAgentsApi())
   ctx.effect(() => { void agents.refresh(); return () => {} }, 'acryl-blends-frame: load the agents')
@@ -225,6 +247,7 @@ export function apply(ctx: ClientContext): void {
       tabs,
       tools,
       feedback,
+      branchChats,
       branches: {
         api: branchesApi,
         changed: () => frameState.refresh(),

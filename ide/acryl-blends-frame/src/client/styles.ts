@@ -56,10 +56,13 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsDot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #55555c; flex: none; }
 .acrylBlendsDot[data-live] { background: var(--bf-ok); }
 
-.acrylBlendsBranch { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #e2e2e6; font-weight: 600; white-space: nowrap; cursor: pointer; text-align: left; }
+.acrylBlendsBranchRow { display: flex; align-items: center; }
+.acrylBlendsCaretButton { display: flex; align-items: center; justify-content: center; width: 18px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--bf-dim); cursor: pointer; flex: none; }
+.acrylBlendsCaretButton:hover { background: var(--bf-surface-2); color: #e2e2e6; }
+.acrylBlendsBranch { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #e2e2e6; font-weight: 600; white-space: nowrap; cursor: pointer; text-align: left; }
 .acrylBlendsBranch:hover { background: var(--bf-surface-2); }
 .acrylBlendsBranch svg { width: 13px; height: 13px; color: var(--bf-dim); flex: none; }
-.acrylBlendsBranch .acrylBlendsCaret { width: 10px; height: 10px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.4; color: var(--bf-dim); transition: transform .12s ease; }
+.acrylBlendsCaret { width: 10px; height: 10px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.4; transition: transform .12s ease; }
 .acrylBlendsCaret[data-open] { transform: rotate(90deg); }
 .acrylBlendsBranchName { overflow: hidden; text-overflow: ellipsis; }
 .acrylBlendsAsk { margin: 2px 8px 6px 22px; padding: 7px 8px; border: 1px solid #34343a; border-radius: 6px; background: var(--bf-surface-2); }

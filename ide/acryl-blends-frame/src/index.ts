@@ -20,10 +20,12 @@ import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, switchAppPlugin, type FrameRow } from './app-plugins.ts'
+import { branchChatsFile, createBranchChatsStore } from './branch-chats.ts'
 import {
   FRAME_API_PREFIX,
   branchNameProblem,
   FRAME_BRANCHES_NEW_PATH,
+  FRAME_BRANCH_CHATS_PATH,
   FRAME_BRANCHES_SWITCH_PATH,
   FRAME_FEEDBACK_PATH,
   FRAME_FEEDBACK_SEEN_PATH,
@@ -188,7 +190,23 @@ export function parseBranchName(body: unknown): { name: string } | { problem: st
   return problem === undefined ? { name } : { problem }
 }
 
-export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort, feedback?: FeedbackPort, branches?: BranchesPort): Acryl {
+/** Which branch each chat was opened on (the frame lists a branch's own chats; DSH itself knows no branches). */
+export interface BranchChatsPort {
+  read(): Promise<Record<string, string>>
+  /** Records a chat's branch once; a chat stays where it was opened. */
+  assign(id: string, branch: string): Promise<void>
+}
+
+export interface FrameRoutesDeps {
+  readonly state: () => Promise<FrameState>
+  readonly report?: (cause: unknown) => void
+  readonly plugins?: PluginsPort
+  readonly feedback?: FeedbackPort
+  readonly branches?: BranchesPort
+  readonly branchChats?: BranchChatsPort
+}
+
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
   if (branches !== undefined) {
     app.post(FRAME_BRANCHES_NEW_PATH, ownPage, jsonBody(), async (c) => {
@@ -209,6 +227,30 @@ export function frameRoutes(state: () => Promise<FrameState>, report: (cause: un
         return c.json({ ok: true })
       } catch (cause) {
         return c.json(error(cause instanceof Error ? cause.message : 'the branch could not be switched to'), 409)
+      }
+    })
+  }
+  if (branchChats !== undefined) {
+    app.get(FRAME_BRANCH_CHATS_PATH, ownPage, async (c) => {
+      try {
+        return c.json({ chats: await branchChats.read() })
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the branch chats could not be read'), 500)
+      }
+    })
+    app.post(FRAME_BRANCH_CHATS_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const record = body !== null && typeof body === 'object' ? (body as { id?: unknown; branch?: unknown }) : {}
+      if (typeof record.id !== 'string' || record.id === '' || record.id.length > 200) return c.json(error('invalid chat'), 400)
+      if (typeof record.branch !== 'string') return c.json(error('Name the branch.'), 400)
+      const problem = branchNameProblem(record.branch)
+      if (problem !== undefined) return c.json(error(problem), 400)
+      try {
+        await branchChats.assign(record.id, record.branch)
+        return c.json({ ok: true })
+      } catch (cause) {
+        return c.json(error(cause instanceof Error ? cause.message : 'the chat could not be recorded'), 409)
       }
     })
   }
@@ -271,6 +313,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
   ctx.plugin(workspaceHost, appPage === undefined ? {} : { appPage })
   ctx.effect(() => {
     const git = new GitRunner()
+    const chatsFile = createBranchChatsStore(branchChatsFile(ctx.appInstance.home))
     const state = async (): Promise<FrameState> => {
       const [appName, branches, worktree] = await Promise.all([readAppName(root), readBranches(git, root), readWorktree(git, root)])
       return { appName, appRoot: root, ...(appPage === undefined ? {} : { appPage }), branches, ...worktree }
@@ -299,28 +342,38 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       const detail = (cause as { detail?: unknown }).detail
       return new Error(typeof detail === 'string' && detail !== '' ? detail : fallback)
     }
-    ctx.router.route('/', frameRoutes(state, (cause) => {
-      ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
-    }, plugins, feedbackPort(() => ctx.get('feedback')), {
-      create: async (name) => {
-        // git's own rule for a branch name, then the branch from HEAD, switched to: the working files, saved or not, stay as they are.
-        try {
-          await git.run(['check-ref-format', '--branch', name], root)
-          await git.run(['switch', '--create', name], root)
-        } catch (cause) {
-          throw gitReason(cause, 'git could not make the branch')
-        }
+    ctx.router.route('/', frameRoutes({
+      state,
+      report: (cause) => {
+        ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
       },
-      switchTo: async (name) => {
-        // Only a local branch is switched to: a commit or `HEAD~2` would leave the folder on no branch, which the frame cannot show.
-        const target = (await readBranches(git, root)).find(branch => branch.name === name)
-        if (target === undefined) throw new Error(`There is no branch named ${name}.`)
-        if (target.current) return
-        try {
-          await git.run(['switch', name], root)
-        } catch (cause) {
-          throw gitReason(cause, 'git could not switch branches')
-        }
+      plugins,
+      feedback: feedbackPort(() => ctx.get('feedback')),
+      branches: {
+        create: async (name) => {
+          // git's own rule for a branch name, then the branch from HEAD, switched to: the working files, saved or not, stay as they are.
+          try {
+            await git.run(['check-ref-format', '--branch', name], root)
+            await git.run(['switch', '--create', name], root)
+          } catch (cause) {
+            throw gitReason(cause, 'git could not make the branch')
+          }
+        },
+        switchTo: async (name) => {
+          // Only a local branch is switched to: a commit or `HEAD~2` would leave the folder on no branch, which the frame cannot show.
+          const target = (await readBranches(git, root)).find(branch => branch.name === name)
+          if (target === undefined) throw new Error(`There is no branch named ${name}.`)
+          if (target.current) return
+          try {
+            await git.run(['switch', name], root)
+          } catch (cause) {
+            throw gitReason(cause, 'git could not switch branches')
+          }
+        },
+      },
+      branchChats: {
+        read: () => chatsFile.read(root),
+        assign: (id, branch) => chatsFile.assign(root, id, branch),
       },
     }))
     ctx.routerHttp.mount(FRAME_API_PREFIX)

@@ -15,6 +15,7 @@ import { AppCanvas } from './canvas/AppCanvas.tsx'
 import type { FrameStateStore } from './frame-state.ts'
 import type { FrameViewState } from './view-state.ts'
 import { LeftPanel, type BranchesPort, type ChatsPort, type FeedbackPort } from './LeftPanel.tsx'
+import type { BranchChatsPort } from './branch-chats.ts'
 import { savedLabel, type VersionsPort } from './versions.ts'
 import { RightPanel } from './RightPanel.tsx'
 import type { FrameTabs } from './tabs.ts'
@@ -31,6 +32,8 @@ export interface BlendsFrameInjected {
   readonly tools: FrameTools
   readonly feedback: FeedbackPort
   readonly branches: BranchesPort
+  /** Which branch each chat was opened on (DSH keeps no branches; the Host records it). */
+  readonly branchChats: BranchChatsPort
 }
 
 export type BlendsFrameProps = PropsRuntime<'root'> & PropsRenderSlots<'main' | 'shell.overlay' | 'sidebar.settings'> & BlendsFrameInjected
@@ -47,7 +50,7 @@ const PanelIcon = ({ side }: { side: 'left' | 'right' }) => (
   </svg>
 )
 
-export function BlendsFrame({ layout, canvas, frameState, view, chats, versions, tabs, tools, feedback, branches, renderSlot }: BlendsFrameProps) {
+export function BlendsFrame({ layout, canvas, frameState, view, chats, versions, tabs, tools, feedback, branches, branchChats, renderSlot }: BlendsFrameProps) {
   const state = useStore(frameState)
   const frameView = useStore(view)
   const activePanelId = useSyncExternalStore(layout.panelInfo.subscribe, () => layout.panelInfo.getSnapshot().activePanelId)
@@ -58,6 +61,11 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
       canvas.setAddress(new URL(state.state.appPage, window.location.origin).href)
     }
   }, [state, canvas])
+
+  // The checked-out branch: the right panel's strip shows its tabs, and a tab opened now belongs to it.
+  useEffect(() => {
+    if (state.status === 'ready') tabs.setBranch(state.state.branches.find(branch => branch.current)?.name)
+  }, [state, tabs])
 
   const appName = state.status === 'ready' ? state.state.appName : ''
   const saved = state.status === 'ready' ? savedLabel(state.state.unsaved) : undefined
@@ -120,6 +128,7 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
               tabs={tabs}
               feedback={feedback}
               branches={branches}
+              branchChats={branchChats}
               showTab={(id) => {
                 tabs.activate(id)
                 view.showRight()
@@ -147,6 +156,7 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
             tools={tools}
             versions={versions}
             state={state.status === 'ready' ? state.state : undefined}
+            branchChats={branchChats}
             renderConversation={(): ReactNode => renderSlot('main', {}, { entryKey: 'conversation' })}
           />
         </aside>

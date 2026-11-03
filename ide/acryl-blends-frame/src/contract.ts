@@ -6,6 +6,19 @@ export const FRAME_STATE_PATH = `${FRAME_API_PREFIX}/state`
 export const FRAME_BRANCHES_NEW_PATH = `${FRAME_API_PREFIX}/branches/new`
 /** POST `{ name }`: the app's folder moves to an existing local branch. */
 export const FRAME_BRANCHES_SWITCH_PATH = `${FRAME_API_PREFIX}/branches/switch`
+/** GET: `{ chats: { <session id>: <branch> } }`; POST `{ id, branch }`: record which branch a chat was opened on. */
+export const FRAME_BRANCH_CHATS_PATH = `${FRAME_API_PREFIX}/branches/chats`
+
+/** @throws when the answer is not a map of chat id to branch name. */
+export function parseBranchChats(value: unknown): Record<string, string> {
+  if (!isRecord(value) || !isRecord(value.chats)) throw new Error('branch chats: not a map')
+  const chats: Record<string, string> = {}
+  for (const [id, branch] of Object.entries(value.chats)) {
+    if (id === '' || typeof branch !== 'string' || branch === '') throw new Error('branch chats: entry')
+    chats[id] = branch
+  }
+  return chats
+}
 
 /**
  * Why a name cannot be a new branch, in words for the person typing it; `undefined` when it can. The Host asks git as well
