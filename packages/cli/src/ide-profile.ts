@@ -178,7 +178,8 @@ export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string 
   { id: 'ui-settings-models', name: '@deepseek-ai/dsh-client-ui-settings-models' },
   { id: 'ui-session', name: '@deepseek-ai/dsh-client-ui-session' },
   { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
-  { id: 'ui-sidebar-right', name: '@deepseek-ai/dsh-client-ui-sidebar-right' },
+  // 125: the right column is the workspace's own strip (acryl-workspace, registered into `rightbar`); DSH's session-scoped sidebar-right tabs (Files,
+  // Changes, Review, Checks, Comments) are no longer composed into the frame. Files and the changes view are workspace tab kinds now.
   { id: 'ui-commands', name: '@deepseek-ai/dsh-client-ui-commands' },
   { id: 'ui-workspace', name: '@deepseek-ai/dsh-client-ui-workspace' },
   { id: 'ui-conversation', name: '@deepseek-ai/dsh-client-ui-conversation' },

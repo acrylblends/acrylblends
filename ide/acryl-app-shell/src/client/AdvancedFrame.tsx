@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime } from '@acryl/ui/frame'
+import { ConversationRendererProvider } from './conversation.tsx'
 import type {} from './contracts.ts'
 import type { ShellPlatform } from './environment.ts'
 import { DesktopLayoutState, MACOS_SIDEBAR_COLLAPSED, SIDEBAR_COLLAPSED, solveFrame } from './layout-state.ts'
@@ -86,6 +87,12 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
     layout.setDetails(detailsBase.current - dx)
   }, [layout])
 
+  // One renderer for the one conversation: the centre's `desktop.main` receives it as before, and the right column's chat tab reads it from the
+  // provider below, so the chat can move into the right panel without a second conversation (docs/plans/ide-host-inversion.md section 31, Q2).
+  const conversation = () => (
+    <div data-acryl-slot="conversation">{renderSlot('main', {}, { entryKey: 'conversation' })}</div>
+  )
+
   return (
     <div
       ref={frameRef}
@@ -116,7 +123,7 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
             ? renderSlot('main', {}, { entryKey: activePanelId })
             : renderSlot('desktop.main', {
               // 0.2 serves the conversation as the keyed `main` panel `conversation`.
-              renderConversation: () => <div data-acryl-slot="conversation">{renderSlot('main', {}, { entryKey: 'conversation' })}</div>,
+              renderConversation: conversation,
             })
           return wrapMain === undefined ? main : wrapMain(main)
         })()}
@@ -127,10 +134,12 @@ export function AdvancedFrame({ layout, platform, wrapMain, wrapRightbar, render
             AppFrame/rightbar - SessionProvider withholds the strict entry
             while no session is current instead of rendering it into a
             scope with no binding, which throws SlotAssemblyError). */}
-        {(() => {
-          const panel = renderSlot('rightbar', rightbar)
-          return wrapRightbar === undefined ? panel : wrapRightbar(panel)
-        })()}
+        <ConversationRendererProvider render={conversation}>
+          {(() => {
+            const panel = renderSlot('rightbar', rightbar)
+            return wrapRightbar === undefined ? panel : wrapRightbar(panel)
+          })()}
+        </ConversationRendererProvider>
       </aside>
       <div className="dshDesktopOverlay" data-shell-overlay>
         {renderSlot('shell.overlay', {})}

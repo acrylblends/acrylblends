@@ -51,6 +51,7 @@ import type { PaletteConfigState } from '../palette/palette-config.ts'
 import { useWorkspacePalette } from '../palette/use-workspace-palette.ts'
 import type { TabTypesState } from '../tabs/tab-types-state.ts'
 import { BrowserPane } from '../browser/BrowserPane.tsx'
+import { useConversationRenderer } from 'acryl-app-shell/client'
 import { type FrameSessionBanner, FRAME_SESSION_ENDED_MESSAGE } from '../connection/session-banner.ts'
 import { ScratchFilePane } from '../files/ScratchFilePane.tsx'
 import { createWorkspacePtyApi, type WorkspacePtyApi } from '../terminal/pty-api.ts'
@@ -58,7 +59,8 @@ import type { ProjectsControl } from '../projects/projects-control.ts'
 import type { WorkspaceTile } from './state.ts'
 
 export type WorkspaceCanvasProps = Omit<PropsRuntime<'root'>, 'useSessions'> & {
-  readonly renderConversation: () => ReactNode
+  /** The conversation renderer handed down by the frame's `desktop.main`; in the right panel it arrives through the shell's context instead. */
+  readonly renderConversation?: () => ReactNode
   readonly ptyApi?: WorkspacePtyApi
   /** The live terminals, owned by the composition root so they end with the plugin, not with a render. */
   readonly terminals: TerminalRegistry
@@ -110,7 +112,7 @@ export type WorkspaceCanvasProps = Omit<PropsRuntime<'root'>, 'useSessions'> & {
  * Diff/Kanban/Doc (new, spec 040).
  * @param props.renderConversation - upstream Chat slot, rendered by the Chat tile.
  */
-export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, agentStatus, agents: agentsState, tabTypes, tabRegistry, paletteConfig, toasts, notices, useSessions, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel, frameSession }: WorkspaceCanvasProps) {
+export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, terminals, dock, agentStatus, agents: agentsState, tabTypes, tabRegistry, paletteConfig, toasts, notices, useSessions, shell, groups, gitApi, filesApi, agent, chats, review, comments, rightPanel, projects, connectModel, frameSession }: WorkspaceCanvasProps) {
   // One tab workspace per selected worktree: picking a branch swaps the whole set of tabs, and the
   // tabs of the branch you left (terminals, agents) keep running until they are closed.
   // Subscribe to primitives, not the whole shell snapshot: git polling updates that snapshot often,
@@ -161,6 +163,9 @@ export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, a
   // A reload mounts the chat surface before DSH's composer and nothing focuses the message box, so the page lands on the body and an attendee
   // clicks before typing; the worktree restore can also replace the focused node. The watch runs while a chat is the shown tab and only takes
   // focus when the page itself has it (see focusChatComposer).
+  // The conversation comes from the frame: a prop from `desktop.main` (its old home) or the shell's context (the right panel's chat tab).
+  const conversationFromFrame = useConversationRenderer()
+  const renderConversation = conversationProp ?? conversationFromFrame
   const activeChatId = active?.kind === 'chat' ? active.id : undefined
   useEffect(() => {
     if (activeChatId === undefined) return
@@ -172,7 +177,7 @@ export function WorkspaceCanvas({ renderConversation, ptyApi, terminals, dock, a
     if (tile.kind === 'chat') return (
       <div className="dshWorkspaceChat">
         {connectModel !== undefined && tile.id === snapshot.activeId && <ModelConnect control={connectModel} />}
-        {renderConversation()}
+        {renderConversation === undefined ? <p className="dshWorkspaceNotice">The chat is not available on this surface.</p> : renderConversation()}
       </div>
     )
     if (tile.kind === 'pty') return <PtyPane tile={tile} terminals={terminals} />
