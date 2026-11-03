@@ -19,7 +19,7 @@ import { GitRunner, Versions } from 'acryl-versions'
 import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
-import { readAppPlugins, readFramePlugins, switchAppPlugin, type FrameRow } from './app-plugins.ts'
+import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow } from './app-plugins.ts'
 import { blankChatsFile, createBlankChatsStore } from './blank-chats.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
@@ -36,11 +36,13 @@ import {
   FRAME_FEEDBACK_PATH,
   FRAME_FEEDBACK_SEEN_PATH,
   FRAME_PLUGINS_PATH,
+  FRAME_PLUGINS_SHARE_PATH,
   FRAME_PLUGINS_SWITCH_PATH,
   FRAME_STATE_PATH,
   FRAME_VERSIONS_SHARED_PATH,
   type AppPluginKind,
   type AppPluginsView,
+  type SharedPluginView,
   type ChatSavesView,
   type FeedbackView,
   parseFeedbackNotes,
@@ -66,6 +68,8 @@ declare module '@deepseek-ai/cordis' {
 export interface FrameConfig {
   /** Where the app's own page is served (`/app`); the frame shows no app without it. */
   readonly appPage?: string
+  /** The GitHub account or organization a local plugin is shared to; the signed-in `gh` account when absent. */
+  readonly shareOwner?: string
 }
 
 export const name = 'acryl-blends-frame'
@@ -169,10 +173,12 @@ async function readAppName(root: string): Promise<string> {
   return basename(root)
 }
 
-/** Settings → Plugins: the app's plugins, and switching one in `blend.yaml`. */
+/** Settings → Plugins: the app's plugins, switching one in `blend.yaml`, and sharing a local one. */
 export interface PluginsPort {
   read(): Promise<AppPluginsView>
   switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
+  /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path. */
+  share(name: string): Promise<SharedPluginView & { readonly owner: string; readonly repo: string; readonly tag: string }>
 }
 
 function parseSwitch(body: unknown): { kind: AppPluginKind; name: string; on: boolean } | undefined {
@@ -407,6 +413,17 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be switched'), 409)
       }
     })
+    app.post(FRAME_PLUGINS_SHARE_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const name = body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : (body as { name?: unknown }).name
+      if (typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/u.test(name)) return c.json(error('name one local plugin'), 400)
+      try {
+        return c.json(await plugins.share(name))
+      } catch (cause) {
+        report(cause)
+        return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be shared'), 409)
+      }
+    })
   }
   if (shared !== undefined) {
     app.post(FRAME_VERSIONS_SHARED_PATH, ownPage, jsonBody(), async (c) => {
@@ -477,6 +494,8 @@ interface SessionEvents {
 
 export function apply(ctx: Context, config: FrameConfig = {}): void {
   const appPage = typeof config.appPage === 'string' && config.appPage.startsWith('/') ? config.appPage : undefined
+  // The app's GitHub owner for shares; the signed-in gh account when the app names none.
+  const shareOwner = typeof config.shareOwner === 'string' && /^[A-Za-z0-9-]+$/u.test(config.shareOwner) ? config.shareOwner : undefined
   const root = (ctx.appInstance as { readonly root?: unknown }).root
   if (typeof root !== 'string') throw new Error('acryl-blends-frame: the app instance has no app folder (root)')
   ctx.plugin(workspaceHost, appPage === undefined ? {} : { appPage })
@@ -508,7 +527,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     }
     const plugins: PluginsPort = {
       read: async () => {
-        const [app, frame] = await Promise.all([readAppPlugins(root, git), readFramePlugins(root, frameRows())])
+        const [app, frame] = await Promise.all([readAppPlugins(root, git, join(ctx.appInstance.home, 'shared-plugins.json')), readFramePlugins(root, frameRows())])
         return { plugins: app, frame }
       },
       switch: async (kind, name, on) => {
@@ -519,6 +538,9 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
         const entry = loader === undefined ? undefined : [...loader.entries()].find(row => row.options.id === APP_PLUGINS_ROW)
         if (entry?.fiber !== undefined) await entry.fiber.restart()
       },
+      // A local plugin goes to GitHub through the plugin-hub path: the same pack, secret check, repository, release and local store an
+      // ACRYL plugin share uses, with the user's own gh and git doing the publishing.
+      share: async (name) => shareAppPlugin(root, ctx.appInstance.home, name, shareOwner === undefined ? {} : { owner: shareOwner }),
     }
     // The chat's agent finished a turn that changed files: save a version by itself (./auto-save.ts), and remember which turn it was.
     const store = new SaveStore(join(ctx.appInstance.dshHome, 'chat-saves.json'), report)

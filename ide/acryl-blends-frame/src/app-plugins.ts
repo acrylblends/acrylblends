@@ -5,12 +5,13 @@
  * switch when its Loader row (`app-plugins`) loads again, which the client asks for.
  */
 
-import { existsSync } from 'node:fs'
-import { readFile, readdir, writeFile } from 'node:fs/promises'
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
-import type { AppPluginView, FramePluginState, FramePluginView } from './contract.ts'
+import { gitCli, githubCli, PluginStore, sharePlugin, storeRootOf } from '@webboxes/plugin-hub'
+import type { AppPluginView, FramePluginState, FramePluginView, SharedPluginView } from './contract.ts'
 
 /** One row of `blend.yaml`'s `spec.rows`: where its block starts and ends (line indexes, end exclusive). */
 export interface BlendRow {
@@ -207,10 +208,11 @@ async function libraryVersions(root: string): Promise<Map<string, string>> {
 }
 
 /** Every plugin of the app: the `blend.yaml` rows in their order, then the plugins written into `plugins/`. */
-export async function readAppPlugins(root: string, git: GitPort): Promise<AppPluginView[]> {
+export async function readAppPlugins(root: string, git: GitPort, sharedFile?: string): Promise<AppPluginView[]> {
   const text = await readFile(join(root, 'blend.yaml'), 'utf8')
   const off = new Set(extensionsOff(text))
   const versions = await libraryVersions(root)
+  const shareRecords = await readSharedRecords(sharedFile)
   const rows = await Promise.all(parseBlendRows(text).map(async (row): Promise<AppPluginView> => {
     const description = row.comment !== '' ? firstSentence(row.comment) : await packageDescription(join(root, 'plugins', row.name))
     const version = versions.get(row.name)
@@ -218,10 +220,12 @@ export async function readAppPlugins(root: string, git: GitPort): Promise<AppPlu
   }))
   const made = await Promise.all((await madePlugins(root)).map(async (name): Promise<AppPluginView> => {
     const [description, first] = await Promise.all([packageDescription(join(root, 'plugins', name)), firstCommit(git, root, `plugins/${name}`)])
+    const shared = shareRecords[name]
     return {
       name,
       kind: 'made',
       ...(first === undefined ? { unsaved: true } : { by: first.by, at: first.at }),
+      ...(shared === undefined ? {} : { shared }),
       description,
       on: !off.has(name),
     }
@@ -302,4 +306,110 @@ export async function readFramePlugins(root: string, rows: readonly FrameRow[]):
       state: frameRowState(row),
     }
   }))
+}
+
+/** The package.json a local plugin is shared with: the fields the builder's package_plugin writes (plugins/builder/index.ts), plus the Loader
+ * patch the plugin-hub's share requires so the package can also be installed as a row. */
+export function pluginPackageManifest(name: string, description: string, version = '0.1.0'): Record<string, unknown> {
+  return {
+    name,
+    version,
+    description,
+    type: 'module',
+    exports: { '.': './index.ts', './package.json': './package.json' },
+    files: ['*.ts', '**/*.ts', 'README.md', 'cordis.patch.yml'],
+    // A host package under dependencies brings a second copy of the framework and its services stop matching after a restart (ACRYL measured it);
+    // a peer names the version and installs nothing.
+    peerDependencies: { '@deepseek-ai/cordis': '4.0.4' },
+    keywords: ['cordis', 'cordis-plugin', 'acrylblends'],
+    // The plugin-hub refuses a package it cannot install; this names the row that mounts the plugin in a Loader app.
+    dsh: { bundle: { patch: './cordis.patch.yml' } },
+  }
+}
+
+/**
+ * The shares this app completed, from its own home (`shared-plugins.json`). The record is written only after the hub's whole share succeeded: a
+ * package.json can name a repository before the release exists, because the hub prepares it before its guards, and a refused share must not look
+ * shared.
+ */
+export async function readSharedRecords(file: string | undefined): Promise<Readonly<Record<string, SharedPluginView>>> {
+  if (file === undefined) return {}
+  try {
+    const parsed = JSON.parse(await readFile(file, 'utf8')) as unknown
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const records: Record<string, SharedPluginView> = {}
+    for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (value === null || typeof value !== 'object') continue
+      const { url, version } = value as { url?: unknown; version?: unknown }
+      if (typeof url === 'string' && typeof version === 'string') records[name] = { url, version }
+    }
+    return records
+  } catch {
+    return {}
+  }
+}
+
+/** Remember one completed share in the app's own record. */
+export async function recordShare(file: string, name: string, shared: SharedPluginView): Promise<void> {
+  const records = { ...(await readSharedRecords(file)), [name]: shared }
+  await mkdir(dirname(file), { recursive: true })
+  await writeFile(file, `${JSON.stringify(records, null, 2)}\n`)
+}
+
+/** Copy one local plugin into its package folder, the way the builder's package_plugin does; answers the folder. */
+export async function packageAppPlugin(root: string, name: string): Promise<string> {
+  if (!(await madePlugins(root)).includes(name)) throw new Error(`plugins/ has no local plugin "${name}"`)
+  const source = join(root, 'plugins', name)
+  const target = join(root, 'plugin-packages', name)
+  let version = '0.1.0'
+  try {
+    const previous = JSON.parse(await readFile(join(target, 'package.json'), 'utf8')) as { version?: unknown }
+    // A version already released stays: the plugin-hub refuses a release twice, and a person bumps it deliberately.
+    if (typeof previous.version === 'string') version = previous.version
+  } catch {
+    // No earlier package: the first version.
+  }
+  rmSync(target, { recursive: true, force: true })
+  mkdirSync(target, { recursive: true })
+  cpSync(source, target, {
+    recursive: true,
+    filter: (path) => !/(^|[\\/])(node_modules|\.git)([\\/]|$)/u.test(path.slice(source.length)),
+  })
+  const description = await packageDescription(source)
+  writeFileSync(join(target, 'package.json'), `${JSON.stringify(pluginPackageManifest(name, description, version), null, 2)}\n`)
+  // The row a Loader install mounts (the plugin-hub reads this patch); a Blends app adds the folder through its extensions row instead.
+  writeFileSync(join(target, 'cordis.patch.yml'), `- insert:\n    - id: ${name}\n      name: ./index.ts\n`)
+  if (!existsSync(join(target, 'README.md'))) {
+    writeFileSync(join(target, 'README.md'), `# ${name}\n\n${description}\n\nA Cordis plugin. In an ACRYLBLENDS app: \`acrylblends add <this folder>\`.\n`)
+  }
+  return target
+}
+
+/**
+ * Share one local plugin through the plugin-hub path: package it, then publish the package to its own GitHub repository with a release. The user's
+ * own `gh` and `git` do the publishing (the hub reads no token), and the local store keeps the tarball as it does for every share.
+ * @param root - the app folder.
+ * @param home - the app's home (the hub's store lives under it).
+ * @param name - the local plugin's folder name.
+ * @param options - the repository owner (the signed-in account when absent) and the visibility (the plugin's own when absent).
+ */
+export async function shareAppPlugin(
+  root: string,
+  home: string,
+  name: string,
+  options: { readonly owner?: string; readonly visibility?: 'private' | 'public' } = {},
+): Promise<SharedPluginView & { readonly owner: string; readonly repo: string; readonly tag: string }> {
+  const dir = await packageAppPlugin(root, name)
+  const result = await sharePlugin(
+    dir,
+    {
+      ...(options.owner === undefined ? {} : { owner: options.owner }),
+      ...(options.visibility === undefined ? {} : { visibility: options.visibility }),
+    },
+    { host: githubCli(), git: gitCli(), store: new PluginStore(storeRootOf(home)) },
+  )
+  if (result.status === 'refused') throw new Error(result.reason)
+  // Only a completed share is remembered: the hub prepares the package.json repository before its guards, so that field alone does not prove a release.
+  await recordShare(join(home, 'shared-plugins.json'), name, { url: result.url, version: result.version })
+  return { url: result.url, version: result.version, owner: result.owner, repo: result.repo, tag: result.tag }
 }

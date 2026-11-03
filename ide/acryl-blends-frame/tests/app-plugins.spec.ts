@@ -1,8 +1,14 @@
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, parseBlendRows, setMadeOn, setRowOn } from '../src/app-plugins.ts'
-import { filterPlugins, framePluginRow, madeWhen } from '../src/client/plugins-navigator.ts'
+import {
+  commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, packageAppPlugin, parseBlendRows, pluginPackageManifest,
+  readSharedRecords, recordShare, setMadeOn, setRowOn,
+} from '../src/app-plugins.ts'
+import { appPluginRow, createAppPluginsApi, filterPlugins, framePluginRow, madeWhen } from '../src/client/plugins-navigator.ts'
 import { feedbackPlace, feedbackTask } from '../src/client/feedback.ts'
-import { parseFeedbackView } from '../src/contract.ts'
+import { parseAppPluginsView, parseFeedbackView } from '../src/contract.ts'
 
 const BLEND = `spec:
   runtime: cordis
@@ -83,6 +89,66 @@ describe('the plugins navigator', () => {
     expect(docSummary('/**\n * The extensions service (`ctx.extensions`): install and reload plugins. More here.\n *\n * Later.\n */\nexport {}'))
       .toBe('The extensions service (ctx.extensions): install and reload plugins.')
     expect(docSummary('export const x = 1')).toBe('')
+  })
+})
+
+describe('sharing a local plugin', () => {
+  const plugin = { name: 'hello-share', kind: 'made' as const, by: 'Ana', at: '2026-11-03T09:00:00', description: 'A shared plugin', on: true }
+  const where = { url: 'https://github.com/inboxxobni/hello-share', version: '0.1.0' }
+
+  it('offers Share on a local row, and a shared row shows where it went', () => {
+    const share = () => Promise.resolve(where)
+    expect(appPluginRow(plugin, () => Promise.resolve(), share).share).toBe(share)
+    expect(appPluginRow({ ...plugin, shared: where }, () => Promise.resolve()).shared).toEqual(where)
+    // A library row is already published by its library; it is not shared from the app.
+    const library = { name: 'tasks', kind: 'row' as const, description: 'Tasks', version: '1.0.0', on: true }
+    expect(appPluginRow(library, () => Promise.resolve(), share).share).toBeUndefined()
+  })
+
+  it('packages a local plugin the way the builder does, and remembers only a completed share', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'frame-share-'))
+    try {
+      mkdirSync(join(root, 'plugins', 'hello-share'), { recursive: true })
+      writeFileSync(join(root, 'plugins', 'hello-share', 'index.ts'), '/** A shared plugin: says hello. */\nexport function apply() {}\n')
+      writeFileSync(join(root, 'plugins', 'library.json'), '{"plugins":[]}\n')
+      const dir = await packageAppPlugin(root, 'hello-share')
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as Record<string, unknown>
+      expect(manifest.name).toBe('hello-share')
+      expect(manifest.version).toBe('0.1.0')
+      expect(manifest.peerDependencies).toEqual({ '@deepseek-ai/cordis': '4.0.4' })
+      expect(manifest.dsh).toEqual({ bundle: { patch: './cordis.patch.yml' } })
+      expect(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')).toContain('id: hello-share')
+      expect(readFileSync(join(dir, 'index.ts'), 'utf8')).toContain('A shared plugin')
+      const records = join(root, 'shared-plugins.json')
+      expect(await readSharedRecords(records)).toEqual({})
+      await recordShare(records, 'hello-share', where)
+      expect(await readSharedRecords(records)).toEqual({ 'hello-share': where })
+      expect(await readSharedRecords(join(root, 'missing.json'))).toEqual({})
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+    expect(pluginPackageManifest('hello-share', 'd').keywords).toEqual(['cordis', 'cordis-plugin', 'acrylblends'])
+  })
+
+  it('posts a share and keeps only the repository and version the Host answers', async () => {
+    const calls: Array<{ url: string; body: string }> = []
+    const api = createAppPluginsApi(async (url, init) => {
+      calls.push({ url, body: String(init?.body) })
+      return new Response(JSON.stringify({ url: where.url, version: where.version, owner: 'inboxxobni', repo: 'hello-share', tag: 'v0.1.0' }), { status: 200 })
+    })
+    expect(await api.share('hello-share')).toEqual(where)
+    expect(calls[0]?.url).toBe('/api/acryl-blends-frame/plugins/share')
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ name: 'hello-share' })
+    const failed = createAppPluginsApi(async () => new Response(JSON.stringify({ error: 'already has release v0.1.0' }), { status: 409 }))
+    await expect(failed.share('hello-share')).rejects.toThrow('already has release')
+  })
+
+  it('keeps the share record in the plugin list the page reads', () => {
+    const view = parseAppPluginsView({
+      plugins: [{ name: 'hello-share', kind: 'made', description: 'A shared plugin', on: true, shared: where }],
+      frame: [],
+    })
+    expect(view.plugins[0]?.shared).toEqual(where)
   })
 })
 

@@ -206,6 +206,11 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsPlugBy { font-size: 10.5px; color: #8b8b93; border: 1px solid #34343a; border-radius: 4px; padding: 1px 6px; grid-row: 1 / span 2; grid-column: 2; white-space: nowrap; }
 .acrylBlendsPlugFixed { grid-row: 1 / span 2; grid-column: 3; font-size: 10.5px; color: #66666e; }
 .acrylBlendsPlugState[data-state="ok"] { color: #3fb67b; } .acrylBlendsPlugState[data-state="warn"] { color: #e0a43a; }
+.acrylBlendsShareButton { padding: 0; border: 0; background: transparent; color: var(--bf-accent); font: inherit; font-size: 11.5px; cursor: pointer; }
+.acrylBlendsShareButton:hover:not(:disabled) { text-decoration: underline; }
+.acrylBlendsShareButton:disabled { color: #66666e; cursor: default; }
+.acrylBlendsShared { color: #8fb0ff; text-decoration: none; }
+.acrylBlendsShared:hover { text-decoration: underline; }
 .acrylBlendsTog { grid-row: 1 / span 2; grid-column: 3; width: 30px; height: 17px; border: 0; padding: 0; border-radius: 99px; background: #3a3a40; position: relative; cursor: pointer; }
 .acrylBlendsTog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: left .12s ease; }
 .acrylBlendsTog[aria-checked="true"] { background: #5468ff; }

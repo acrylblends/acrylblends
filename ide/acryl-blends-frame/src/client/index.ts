@@ -217,10 +217,14 @@ export function apply(ctx: ClientContext): void {
   const loadPlugins = async (): Promise<readonly NavigatorPlugin[]> => {
     const view = await appPlugins.read()
     return [
-      ...view.plugins.map(plugin => appPluginRow(plugin, async (on) => {
-        await appPlugins.switch(plugin.kind, plugin.name, on)
-        canvas.reload()
-      })),
+      ...view.plugins.map(plugin => appPluginRow(
+        plugin,
+        async (on) => {
+          await appPlugins.switch(plugin.kind, plugin.name, on)
+          canvas.reload()
+        },
+        plugin.kind === 'made' ? () => appPlugins.share(plugin.name) : undefined,
+      )),
       ...view.frame.map(framePluginRow),
     ]
   }

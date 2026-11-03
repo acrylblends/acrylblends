@@ -55,8 +55,9 @@
     "prepack": "pnpm run check"
   },
   "dependencies": {
-    "acryl-loopback-http": "workspace:*",
+    "@webboxes/plugin-hub": "0.1.0",
     "acryl-app-shell": "workspace:*",
+    "acryl-loopback-http": "workspace:*",
     "acryl-versions": "workspace:*",
     "acryl-workspace": "workspace:*"
   },

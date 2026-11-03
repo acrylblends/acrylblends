@@ -4,7 +4,7 @@
  * chosen; the Host then starts the app's plugins again, and the canvas loads the app page again.
  */
 
-import { FRAME_PLUGINS_PATH, FRAME_PLUGINS_SWITCH_PATH, parseAppPluginsView, type AppPluginKind, type AppPluginsView, type AppPluginView, type FramePluginView } from '../contract.ts'
+import { FRAME_PLUGINS_PATH, FRAME_PLUGINS_SHARE_PATH, FRAME_PLUGINS_SWITCH_PATH, parseAppPluginsView, type AppPluginKind, type AppPluginsView, type AppPluginView, type FramePluginView, type SharedPluginView } from '../contract.ts'
 
 /** Which filter chip a plugin falls under. */
 export type PluginGroup = 'made' | 'registry' | 'frame'
@@ -20,6 +20,10 @@ export interface NavigatorPlugin {
   readonly on: boolean
   /** Shown after the description: "active", "off", "not saved yet", "failed". */
   readonly state: string
+  /** Where a local plugin was shared: its repository and released version. */
+  readonly shared?: SharedPluginView
+  /** Publish this local plugin so another app can install it; absent when the row cannot be shared here. */
+  readonly share?: () => Promise<SharedPluginView>
   /** Absent when the plugin cannot be switched here (the frame's protected rows). */
   readonly toggle?: (on: boolean) => Promise<void>
 }
@@ -38,7 +42,7 @@ export function madeWhen(at: string, now: Date = new Date()): string {
   return when.toLocaleDateString('en', { day: 'numeric', month: 'short' })
 }
 
-export function appPluginRow(plugin: AppPluginView, toggle: (on: boolean) => Promise<void>, now?: Date): NavigatorPlugin {
+export function appPluginRow(plugin: AppPluginView, toggle: (on: boolean) => Promise<void>, share?: () => Promise<SharedPluginView>, now?: Date): NavigatorPlugin {
   const made = plugin.kind === 'made'
   const by = made
     ? plugin.by === undefined ? 'not saved yet' : [plugin.by, plugin.at === undefined ? '' : madeWhen(plugin.at, now)].filter(part => part !== '').join(' · ')
@@ -51,6 +55,8 @@ export function appPluginRow(plugin: AppPluginView, toggle: (on: boolean) => Pro
     description: plugin.description,
     on: plugin.on,
     state: plugin.on ? 'active' : 'off',
+    ...(plugin.shared === undefined ? {} : { shared: plugin.shared }),
+    ...(made && share !== undefined ? { share } : {}),
     toggle,
   }
 }
@@ -82,6 +88,8 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export interface AppPluginsApi {
   read(): Promise<AppPluginsView>
   switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
+  /** Share one local plugin; answers where it went and the released version. */
+  share(name: string): Promise<SharedPluginView>
 }
 
 async function errorOf(response: Response): Promise<string> {
@@ -109,6 +117,18 @@ export function createAppPluginsApi(fetcher: FetchLike = (input, init) => fetch(
         body: JSON.stringify({ kind, name, on }),
       })
       if (!response.ok) throw new Error(await errorOf(response))
+    },
+    async share(name) {
+      const response = await fetcher(FRAME_PLUGINS_SHARE_PATH, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (!response.ok) throw new Error(await errorOf(response))
+      const body = await response.json() as { url?: unknown; version?: unknown }
+      if (typeof body.url !== 'string' || typeof body.version !== 'string') throw new Error('the share answered without its repository')
+      return { url: body.url, version: body.version }
     },
   }
 }
