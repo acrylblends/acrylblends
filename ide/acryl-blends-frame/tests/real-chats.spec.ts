@@ -1,31 +1,94 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { blankChatsFile, createBlankChatsStore, parseBlankChatsFile } from '../src/blank-chats.ts'
 import type { ChatRow } from '../src/client/LeftPanel.tsx'
 import { visibleChats } from '../src/client/chats.ts'
-import { RealChats } from '../src/real-chats.ts'
+import { type ChatLook, lookAtLog, RealChats } from '../src/real-chats.ts'
 
-const row = (id: string, current = false): ChatRow => ({ id, title: 'New chat', current })
+const row = (id: string, title = 'New chat', current = false): ChatRow => ({ id, title, current })
+const user = (text: string) => ({ type: 'user/message', data: { content: [{ type: 'text', text }] } })
 
-describe('the left panel lists only real chats', () => {
-  it('hides a chat with no turn unless it is the open one or is running', () => {
-    const rows = [row('a'), row('b', true), row('c'), row('d')]
-    expect(visibleChats(rows, new Set(['c']), new Set(['d'])).map(r => r.id)).toEqual(['b', 'c', 'd'])
-    expect(visibleChats(rows, new Set()).map(r => r.id)).toEqual(['b'])
+describe('the left panel lists only real chats, named', () => {
+  it('hides a chat with no turn unless it is the open one or is running, and names an unloaded one from the Host', () => {
+    const rows = [row('a'), row('b', 'New chat', true), row('c'), row('d'), row('e', 'Own title')]
+    const real = new Map([['c', 'Add due dates'], ['e', 'From the log']])
+    expect(visibleChats(rows, real, new Set(['d'])).map(r => [r.id, r.title])).toEqual([['b', 'New chat'], ['c', 'Add due dates'], ['d', 'New chat'], ['e', 'Own title']])
+    expect(visibleChats(rows, new Map()).map(r => r.id)).toEqual(['b'])
+  })
+})
+
+describe('what the Host reads from a session log', () => {
+  it("takes DSH's own title (the latest) over the first message", () => {
+    const look = lookAtLog([user('Add due dates to the cards'), { type: 'turn/start' }, { type: 'session/title', data: { title: 'Old' } }, { type: 'session/title', data: { title: 'Due dates' } }])
+    expect(look).toEqual({ hasTurn: true, title: 'Due dates', named: true })
   })
 
-  it('asks the Host once for a chat that has a turn and keeps asking only about the ones that do not', async () => {
+  it('falls back to the first user message cut short, and to nothing for an empty log', () => {
+    const look = lookAtLog([user('Show the due date on every card and sort the board by it. Then more.'), { type: 'turn/start' }])
+    expect(look.hasTurn).toBe(true)
+    expect(look.named).toBe(false)
+    expect(look.title).toBe('Show the due date on every card…')
+    expect(lookAtLog([])).toEqual({ hasTurn: false, title: undefined, named: false })
+  })
+})
+
+describe('RealChats', () => {
+  const make = (looks: Record<string, ChatLook>, asked: string[], now: { t: number }) => new RealChats({
+    list: async () => Object.keys(looks),
+    look: async (id) => { asked.push(id); return looks[id] as ChatLook },
+    now: () => now.t,
+    refreshMs: 100,
+  })
+
+  it('lists the chats with a turn with their titles, and reads a named chat only once', async () => {
     const asked: string[] = []
-    const turns = new Set(['a'])
-    const real = new RealChats({ list: async () => ['a', 'b'], hasTurn: async (id) => { asked.push(id); return turns.has(id) } })
-    expect(await real.read()).toEqual(['a'])
-    turns.add('b')
-    expect(await real.read()).toEqual(['a', 'b'])
+    const now = { t: 0 }
+    const real = make({ a: { hasTurn: true, title: 'Due dates', named: true }, b: { hasTurn: false, title: undefined, named: false } }, asked, now)
+    expect(await real.read()).toEqual([{ id: 'a', title: 'Due dates' }])
+    now.t = 10_000
+    await real.read()
     expect(asked).toEqual(['a', 'b', 'b'])
   })
 
-  it('leaves out a chat that cannot be read and says why', async () => {
-    const reported: unknown[] = []
-    const real = new RealChats({ list: async () => ['a', 'b'], hasTurn: async (id) => { if (id === 'a') throw new Error('no log'); return true }, report: (c) => { reported.push(c) } })
-    expect(await real.read()).toEqual(['b'])
-    expect(reported).toHaveLength(1)
+  it('reads a chat named from its first message again after a while, so DSH title can replace it', async () => {
+    const asked: string[] = []
+    const now = { t: 0 }
+    const looks: Record<string, ChatLook> = { a: { hasTurn: true, title: 'First message', named: false } }
+    const real = make(looks, asked, now)
+    await real.read()
+    now.t = 50
+    await real.read()
+    looks.a = { hasTurn: true, title: 'DSH title', named: true }
+    now.t = 500
+    expect(await real.read()).toEqual([{ id: 'a', title: 'DSH title' }])
+    expect(asked).toEqual(['a', 'a'])
+  })
+
+  it('calls a session blank only when it exists and has no turn', async () => {
+    const real = make({ a: { hasTurn: true, title: 'x', named: true }, b: { hasTurn: false, title: undefined, named: false } }, [], { t: 0 })
+    expect(await real.isBlank('b')).toBe(true)
+    expect(await real.isBlank('a')).toBe(false)
+    expect(await real.isBlank('gone')).toBe(false)
+  })
+})
+
+describe('the blank chat store', () => {
+  it('keeps one blank chat per app folder and branch, and survives a corrupt file', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'blank-chats-'))
+    try {
+      const file = blankChatsFile(dir)
+      const store = createBlankChatsStore(file)
+      expect(await store.read('/app', 'main')).toBeUndefined()
+      await store.record('/app', 'main', 's1')
+      await store.record('/app', 'feature', 's2')
+      await store.record('/app', 'main', 's3')
+      expect(await createBlankChatsStore(file).read('/app', 'main')).toBe('s3')
+      expect(await store.read('/app', 'feature')).toBe('s2')
+      expect(parseBlankChatsFile('not json')).toEqual({})
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
