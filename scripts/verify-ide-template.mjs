@@ -75,6 +75,119 @@ function filesContaining(folder, needle, include = () => true) {
 }
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
+
+/**
+ * Every process on the machine as pid, parent pid and name, from the platform's own tool; empty when the tool cannot answer. A gate that stops a host has
+ * to know what the host started, because killing the host does not kill its grandchildren - the PTY's shell and its conhost outlive it on Windows, and the
+ * shell's working folder is the app inside the gate's scratch, which then cannot be removed (EPERM after the gate printed OK, run 41560156835, 2026-11-03).
+ */
+function processSnapshot() {
+  const run =
+    process.platform === 'win32'
+      ? spawnSync(
+          'powershell',
+          [
+            '-NoProfile',
+            '-Command',
+            'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json -Compress',
+          ],
+          { encoding: 'utf8', windowsHide: true },
+        )
+      : spawnSync('ps', ['-eo', 'pid=,ppid=,comm='], { encoding: 'utf8' })
+  if (run.status !== 0 || typeof run.stdout !== 'string' || run.stdout.trim() === '') return []
+  try {
+    if (process.platform === 'win32') {
+      const parsed = JSON.parse(run.stdout)
+      const list = Array.isArray(parsed) ? parsed : [parsed]
+      return list.map((entry) => ({
+        pid: Number(entry.ProcessId),
+        ppid: Number(entry.ParentProcessId),
+        name: String(entry.Name ?? '?'),
+      }))
+    }
+    return run.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '')
+      .map((line) => {
+        const [pid, ppid, ...rest] = line.split(/\s+/u)
+        return { pid: Number(pid), ppid: Number(ppid), name: rest.join(' ') || '?' }
+      })
+  } catch {
+    return []
+  }
+}
+
+/** The processes below `rootPid` in one snapshot: children, grandchildren, and so on. */
+function processTree(rootPid) {
+  const snapshot = processSnapshot()
+  const found = []
+  const queue = [rootPid]
+  while (queue.length > 0) {
+    const parent = queue.pop()
+    for (const entry of snapshot) {
+      if (entry.ppid !== parent) continue
+      found.push(entry)
+      queue.push(entry.pid)
+    }
+  }
+  return found
+}
+
+const processNames = (entries) =>
+  entries.length === 0 ? 'none' : entries.map((entry) => `${entry.name} (${entry.pid})`).join(', ')
+
+/**
+ * Stop a child and everything it started, and wait for all of it to be gone. The child is a process group on POSIX (spawned detached), and Windows gets
+ * `taskkill /T`, which ends the tree; either way the wait is on the processes the snapshot saw, not only on the direct child, because a tree kill is
+ * asynchronous and a surviving shell holds the scratch. Returns whatever outlived the kill, so the caller can name it.
+ */
+async function stopTree(child) {
+  if (child === undefined || child === null) return []
+  const watched = processTree(child.pid)
+  const kill = (signal) => {
+    if (process.platform === 'win32')
+      spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      })
+    else {
+      try {
+        process.kill(-child.pid, signal)
+      } catch {
+        child.kill(signal)
+      }
+    }
+  }
+  const exited = async () =>
+    child.exitCode !== null || child.signalCode !== null ? true : undefined
+  if ((await exited()) !== true) {
+    kill('SIGTERM')
+    if ((await until(exited, 15_000)) !== true) {
+      kill('SIGKILL')
+      await until(exited, 5_000)
+    }
+  }
+  let survivors = []
+  for (const bound of [15_000, 5_000]) {
+    const gone = await until(async () => {
+      const alive = new Set(processSnapshot().map((entry) => entry.pid))
+      survivors = watched.filter((entry) => alive.has(entry.pid))
+      return survivors.length === 0 ? true : undefined
+    }, bound)
+    if (gone === true) break
+    // They are this gate's and they hold the scratch: end them by pid, then look again.
+    for (const entry of survivors) {
+      try {
+        process.kill(entry.pid, 'SIGKILL')
+      } catch {
+        // Already gone.
+      }
+    }
+  }
+  return survivors
+}
+
 async function until(fn, ms, every = 300) {
   const end = Date.now() + ms
   while (Date.now() < end) {
@@ -199,6 +312,10 @@ const scratch = mkdtempSync(join(tmpdir(), `ide-template-${template}-`))
 const app = existing === undefined ? join(scratch, `${template}-app`) : resolve(existing)
 let server
 let mock
+/** The gate's own failure, kept so cleanup trouble is reported beside it instead of replacing it in the runner's log. */
+let failure
+/** Cleanup trouble of its own, thrown only when the gate itself passed. */
+let cleanupError
 try {
   const env = {
     ...process.env,
@@ -322,7 +439,13 @@ ${composition.stdout}`)
     server = spawn(
       process.execPath,
       ['--import', './plugins/acryl-node-server/src/register.ts', 'scripts/ide-host.mjs'],
-      { cwd: app, env: bootEnv, stdio: ['ignore', 'pipe', 'pipe'] },
+      {
+        cwd: app,
+        env: bootEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        // Its own process group on POSIX, so a stop reaches the PTYs the host starts as well as the host (see stopTree). Windows uses taskkill /T.
+        detached: process.platform !== 'win32',
+      },
     )
     server.stdout.on('data', (chunk) => (output += chunk))
     server.stderr.on('data', (chunk) => (output += chunk))
@@ -336,11 +459,15 @@ ${composition.stdout}`)
   }
   const stopServer = async () => {
     if (server === null || server === undefined) return
-    server.kill('SIGTERM')
-    await until(async () => (server.exitCode !== null ? true : undefined), 15_000)
-    if (server.exitCode === null) server.kill('SIGKILL')
+    // The whole tree, waited for, not only the host: the PTY's shell outlives a killed host on Windows and goes on holding the app folder.
+    const started = processTree(server.pid)
+    const survivors = await stopTree(server)
+    if (survivors.length > 0)
+      fail(
+        `the host stopped, but processes it started are still running: ${processNames(survivors)} (at the stop: ${processNames(started)})`,
+      )
     const port = new URL(serverUrl).port
-    // Windows has no lsof: the process ended is the check that matters there, and the helper must not crash on a missing tool.
+    // Windows has no lsof: the processes watched above are the check that matters there, and the helper must not crash on a missing tool.
     const holder = () => {
       const found = spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], {
         encoding: 'utf8',
@@ -666,19 +793,32 @@ ${composition.stdout}`)
     `the key is in the host's own store (${keyFiles.map((file) => relative(bootEnv.ACRYLBLENDS_HOME, file)).join(', ')}) and in no profile file, patch file or app file`,
   )
   log('OK')
+} catch (error) {
+  failure = error
 } finally {
   if (mock !== undefined) await mock.close()
-  if (server) {
-    server.kill('SIGTERM')
-    await until(async () => (server.exitCode !== null ? true : undefined), 15_000)
-    if (server.exitCode === null) {
-      server.kill('SIGKILL')
-      await until(async () => (server.exitCode !== null ? true : undefined), 5_000)
+  // What the host started, named before it is stopped: a survivor is what holds the scratch folder open on Windows.
+  const started = server === null || server === undefined ? [] : processTree(server.pid)
+  if (started.length > 0)
+    log(`the host started ${String(started.length)} process(es): ${processNames(started)}`)
+  const survivors = await stopTree(server)
+  if (keep) console.error(`verify-ide-template: kept ${scratch}`)
+  else {
+    // Windows releases a process's handles asynchronously after it ends: the bounded retries cover that delay. A folder that is still held fails with the
+    // processes that outlived the host named, instead of a bare EPERM with nothing to look for.
+    try {
+      rmSync(scratch, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
+    } catch (error) {
+      const detail = `the scratch ${scratch} could not be removed (${error instanceof Error ? error.message : String(error)}); processes that outlived the host: ${processNames(survivors)}; the gate's own children now: ${processNames(processTree(process.pid))}`
+      // Decided after the block, never thrown from it: a throw here would replace the gate's own failure in the runner's log.
+      if (failure === undefined)
+        cleanupError = new Error(`verify-ide-template(${template}): ${detail}`)
+      else console.error(`verify-ide-template(${template}): ${detail}`)
     }
   }
-  if (keep) console.error(`verify-ide-template: kept ${scratch}`)
-  else rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 }
+if (failure !== undefined) throw failure
+if (cleanupError !== undefined) throw cleanupError
 
 /** The cookies curl was given by the token URL, in the shape the DevTools protocol sets on a browser. */
 function cookiesOf(jar) {

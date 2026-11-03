@@ -922,6 +922,46 @@ The Windows frame timings from the three green runs on `af583d6c` (measure only,
 4m44 / 5m07 / 6m49, notes 4m16 / 5m05 / 7m09, chat 4m34 / 5m33 / 7m07, nodejs 4m16 / 5m41 / 6m29. Every step grows roughly together rather than one path
 growing, which reads as runner and install/network slowness (each step scaffolds and installs from scratch), not a gate code regression; not fixed here.
 
+## 27. The desktop window opens the frame (design, branch 122, 2026-11-02)
+
+`npm run desktop` opened only the app's page: it ran the bare `src/app.ts` `createApp`, or attached to a running dev server and loaded its root. The
+web surface already has the whole ACRYL frame (`npm run dev` boots `scripts/ide-host.mjs`). The desktop window now shows that same frame. It does not
+build a second one: the host is the one `npm run dev` runs, and the window is one more surface on it.
+
+1. **Capability and plugin boundary.** The window is a surface, not a Cordis plugin: it is not a row of the composition, and it owns nothing a row
+   provides. `plugins/desktop` stays the only place that imports Electron (`check-deps` enforces it). The frame host stays the one owner of the
+   frame: the composition, the driver rows, the PTY, the chat and the app under `/app`. ACRYL Desktop draws the same line: its shell generation
+   loads the workspace URL into a locked-down window and owns only the window, the menu and the navigation policy
+   (`apps/acryl-desktop/src/shell/electron-shell-generation.ts`).
+2. **Provides and consumes.** It consumes the host's printed address (`acrylblends host: <url>`, the token included) from a host it started, and
+   the host's address record (`.acrylblends/frame-url.json`, owner-only, written by the host since 119) to attach to one that already runs. It
+   provides the door's window and menu port (`door-shell.ts`), unchanged. An app without `scripts/ide-host.mjs` (made before the frame) keeps the
+   old path: `createApp`, or attach through `.acryl/door.json`.
+3. **Effects and disposal.** It owns one effect: the host child it started. The child is `npm run dev`, run by the same npm and Node that ran
+   `npm run desktop` (`npm_execpath`, `npm_node_execpath`), never by Electron's Node: node-pty and DSH's rows are built for Node's ABI, not
+   Electron's. On shutdown, the order is: the door shell stops, then the child tree gets SIGTERM (its process group on macOS and Linux,
+   `taskkill /T` on Windows), and the window ends once the child is gone (bounded wait, then a forced kill). A host the window attached to is
+   never stopped; closing the window leaves it running, as before. Ctrl-C reaches the same quit: the launcher starts Electron as the leader of its own
+   process group (macOS, Linux) and passes on exactly one SIGINT, SIGTERM or SIGHUP, because Electron is killed outright by a second one before its quit
+   code runs, and a terminal's Ctrl-C reaches both the launcher's group and, through npm, the launcher a second time. A host that exits before it prints its address ends the desktop run with its
+   output and exit code.
+4. **Configuration and composition.** No new Loader row and no change to the host's composition or row ids. The frame mode is chosen by one fact:
+   `scripts/ide-host.mjs` exists in the app. The window keeps ACRYL Desktop's secure options and its navigation rules: only a main-frame
+   navigation is checked, so the app tile's iframe navigates freely. The frame's own origin stays in the window; any other `http(s)` or `mailto`
+   address opens in the system browser, and nothing else is opened. `window.open` is always denied in the window, and its `http(s)` and `mailto`
+   targets go to the system browser. The menu keeps `Settings...` (`CmdOrCtrl+,`; the app menu on macOS, the File menu elsewhere). In a frame
+   window it dispatches the window event `acryl:open-settings`, which the frame's workspace answers by opening its own Settings dialog, the same
+   one as the left panel's Settings button. There is no second Settings window, and `acrylblends.desktopPath` does not apply to a frame app.
+5. **Events and durability.** The one durable fact is the host's address record, which the host owns; the window only reads it. A record counts
+   only while its host listens. A stale record (the host stopped) is ignored, and the window starts a host of its own. The single-instance lock
+   is unchanged: a second `npm run desktop` focuses the first window.
+6. **Verification.** Unit tests for the pure parts: the frame-mode choice, the ready line, the record check and the navigation decision. Real
+   Electron in `verify:desktop`: a framed app, `npm run desktop`, then through the window's DevTools port, the left panel (Projects), the right
+   panel (Files/Changes/Review), Settings with its sections, the menu's `Settings...` opening that same dialog, and the app's page in the browser
+   tile. It also checks that closing the window stops
+   the host it started (the port is free), that Ctrl-C (SIGINT to `npm run desktop`'s process group) does too, and that a window attached to a running `npm run dev` leaves that host running. The desktop CI job
+   runs on macOS, Windows and Linux (xvfb).
+
 ## 28. The Windows notice-check Chrome launch (branch 123, 2026-11-02)
 
 Run 41440407757 on `d0e0561c` failed frame (windows-latest) at the blank gate: "headless Chrome did not open for the notice check (exit null)" after about two

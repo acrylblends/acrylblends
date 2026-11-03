@@ -1,0 +1,231 @@
+/**
+ * The desktop window on the ACRYL frame (docs/plans/ide-host-inversion.md, section 27). An app with `scripts/ide-host.mjs` runs inside the frame on `npm run dev`;
+ * `npm run desktop` shows that same frame: it attaches to a host that already runs (the host's address record, `.acrylblends/frame-url.json`), or starts the host
+ * the way `npm run dev` does and loads the address it prints. Nothing here imports electron: `main.ts` decides with these functions and owns the window.
+ */
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
+import { connect } from 'node:net'
+import { join, resolve } from 'node:path'
+
+/** The launcher every frame app has; without it the app runs on its own server (made before the frame). */
+export const HOST_SCRIPT = join('scripts', 'ide-host.mjs')
+
+/** The line the host prints once it serves the frame, with the launch token in the address. */
+const HOST_LINE = /acrylblends host: (http:\/\/\S+)/u
+
+const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]'])
+
+/** How long a stopping host gets before its tree is killed. */
+export const HOST_STOP_GRACE_MS = 5_000
+
+export function isFrameApp(root: string, exists: (path: string) => boolean = existsSync): boolean {
+  return exists(join(root, HOST_SCRIPT))
+}
+
+/** The app home the host uses: `ACRYLBLENDS_HOME` when set, else `<app>/.acrylblends` (the launcher's own rule). */
+export function frameHome(root: string, env: Record<string, string | undefined>): string {
+  const pinned = env.ACRYLBLENDS_HOME?.trim()
+  return pinned === undefined || pinned === ''
+    ? join(resolve(root), '.acrylblends')
+    : resolve(pinned)
+}
+
+/** The frame address in the host's output so far, or `undefined` while it has not printed it. */
+export function hostAddress(output: string): string | undefined {
+  return HOST_LINE.exec(output)?.[1]
+}
+
+/** A loopback `http:` address, or `undefined` for anything else: the window only ever opens a frame on this machine. */
+export function loopbackAddress(url: unknown): URL | undefined {
+  if (typeof url !== 'string') return undefined
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' && LOOPBACK.has(parsed.hostname) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export interface RecordDeps {
+  readonly read?: (file: string) => string
+  /** Whether something accepts a connection at the address. */
+  readonly listening?: (url: URL) => Promise<boolean>
+}
+
+const tcpListening = (url: URL, timeoutMs = 500): Promise<boolean> =>
+  new Promise((done) => {
+    const socket = connect({
+      host: url.hostname.replace(/^\[|\]$/gu, ''),
+      port: Number(url.port || 80),
+    })
+    const finish = (listening: boolean) => {
+      socket.destroy()
+      done(listening)
+    }
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => finish(true))
+    socket.once('timeout', () => finish(false))
+    socket.once('error', () => finish(false))
+  })
+
+/**
+ * The frame that already runs for this app: the host's address record, when it names a loopback address and something listens there. A record a stopped host
+ * left behind is not a running frame.
+ */
+export async function runningFrame(
+  home: string,
+  deps: RecordDeps = {},
+): Promise<string | undefined> {
+  const read = deps.read ?? ((file: string) => readFileSync(file, 'utf8'))
+  let record: { url?: unknown }
+  try {
+    record = JSON.parse(read(join(home, 'frame-url.json'))) as { url?: unknown }
+  } catch {
+    return undefined
+  }
+  const url = loopbackAddress(record.url)
+  if (url === undefined) return undefined
+  return (await (deps.listening ?? tcpListening)(url)) ? url.href : undefined
+}
+
+/** An address as the door may show it: the frame's launch token removed (the token is the way into the frame, so it never goes to a log). */
+export function withoutToken(href: string): string {
+  try {
+    const parsed = new URL(href)
+    if (!parsed.searchParams.has('token')) return href
+    parsed.searchParams.delete('token')
+    return parsed.href
+  } catch {
+    return href
+  }
+}
+
+/**
+ * What the Settings... menu item runs in a frame window: the window event the frame's workspace opens its own Settings on (`acryl-workspace`,
+ * `OPEN_SETTINGS_EVENT`; keep the string in step). The same dialog as the left panel's Settings button, never a second one.
+ */
+export const openFrameSettings = "window.dispatchEvent(new Event('acryl:open-settings'))"
+
+/** What the window does with a navigation: stay on the frame's origin, hand the address to the system browser, or refuse it. */
+export type Navigation = 'stay' | 'external' | 'block'
+
+/**
+ * ACRYL Desktop's rule (`electron-shell-generation.ts`): only the main frame is checked, so the frame's tiles (the app's page in an iframe) navigate freely;
+ * the frame's own origin stays in the window, an `http(s)` or `mailto` address goes to the system browser, anything else is refused.
+ */
+export function navigation(target: string, origin: string, mainFrame = true): Navigation {
+  if (!mainFrame) return 'stay'
+  let parsed: URL
+  try {
+    parsed = new URL(target)
+  } catch {
+    return 'block'
+  }
+  if (parsed.origin === origin) return 'stay'
+  return parsed.protocol === 'http:' ||
+    parsed.protocol === 'https:' ||
+    parsed.protocol === 'mailto:'
+    ? 'external'
+    : 'block'
+}
+
+/** How the host is started: the npm and Node that ran `npm run desktop`, never Electron's Node (node-pty and DSH's rows are built for Node's ABI). */
+export function hostCommand(
+  env: Record<string, string | undefined>,
+  platform: NodeJS.Platform,
+): { file: string; args: string[]; shell: boolean } {
+  const node = env.npm_node_execpath
+  const npm = env.npm_execpath
+  if (node !== undefined && node !== '' && npm !== undefined && npm !== '')
+    return /\.c?js$/u.test(npm)
+      ? { file: node, args: [npm, 'run', 'dev'], shell: false }
+      : { file: npm, args: ['run', 'dev'], shell: platform === 'win32' }
+  // Started without npm (Electron run by hand): npm from the PATH, `npm.cmd` through the shell on Windows (scripts/lib/platform.mjs, npmSpawn).
+  return platform === 'win32'
+    ? { file: 'npm.cmd', args: ['run', 'dev'], shell: true }
+    : { file: 'npm', args: ['run', 'dev'], shell: false }
+}
+
+export interface FrameHost {
+  /** The frame address the host printed, or a rejection with the host's output when it ended first. */
+  readonly ready: Promise<string>
+  /** Stop the host and what it started; resolves once it has exited. */
+  stop(): Promise<void>
+}
+
+/** Start the app's frame host as `npm run dev` does, in the app folder; its output is passed through to `write`. */
+export function startFrameHost(
+  root: string,
+  env: NodeJS.ProcessEnv,
+  write: (text: string) => void,
+  platform: NodeJS.Platform = process.platform,
+): FrameHost {
+  const command = hostCommand(env, platform)
+  // The host leads its own process group on macOS and Linux, so a stop reaches npm, the host and every terminal it runs; Windows stops the tree with taskkill.
+  const child: ChildProcess = spawn(command.file, command.args, {
+    cwd: root,
+    env: { ...env, ELECTRON_RUN_AS_NODE: undefined },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: command.shell,
+    detached: platform !== 'win32',
+    windowsHide: true,
+  })
+  let output = ''
+  let exited = false
+  const exit = new Promise<void>((done) => {
+    child.once('exit', () => {
+      exited = true
+      done()
+    })
+    child.once('error', () => {
+      exited = true
+      done()
+    })
+  })
+  const ready = new Promise<string>((done, fail) => {
+    const take = (chunk: Buffer) => {
+      const text = chunk.toString()
+      write(text)
+      if (output.length < 200_000) output += text
+      const address = hostAddress(output)
+      if (address !== undefined) done(address)
+    }
+    child.stdout?.on('data', take)
+    child.stderr?.on('data', take)
+    void exit.then(() =>
+      fail(new Error(`the frame host ended before it served the frame:\n${output.slice(-3000)}`)),
+    )
+  })
+  const signal = (name: NodeJS.Signals) => {
+    if (child.pid === undefined) return
+    // Windows has no process groups and no SIGTERM a console process can answer: the whole tree (npm, the host, its terminals) is ended at once.
+    if (platform === 'win32') {
+      spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      })
+      return
+    }
+    try {
+      process.kill(-child.pid, name)
+    } catch {
+      // The group is already gone.
+    }
+  }
+  return {
+    ready,
+    async stop() {
+      if (exited) return
+      signal('SIGTERM')
+      const graceful = await Promise.race([
+        exit.then(() => true),
+        new Promise<boolean>((done) => setTimeout(() => done(false), HOST_STOP_GRACE_MS).unref()),
+      ])
+      if (!graceful) {
+        signal('SIGKILL')
+        await exit
+      }
+    },
+  }
+}
