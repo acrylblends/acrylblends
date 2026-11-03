@@ -8,9 +8,17 @@ import type { ISessions, SessionListState, SessionReference } from '@acryl/ui/fr
 import type { ChatRow, ChatsPort } from './LeftPanel.tsx'
 
 type SessionId = Parameters<ISessions['retain']>[0]
+/** The options DSH's session creation takes (the workspace it belongs to is one of them). */
+type SessionCreateOptions = NonNullable<Parameters<ISessions['create']>[0]>
+type WorkspaceId = NonNullable<SessionCreateOptions['workspaceId']>
 
 export interface MainViewNavigation {
   openSession(target: SessionId): void
+}
+
+/** The share of DSH's `workspaces` service used here: register a folder as a workspace, so a chat made in it is bound to it. */
+export interface WorkspaceRegistration {
+  create(input: { readonly path: string }): Promise<{ readonly workspaceId: WorkspaceId }>
 }
 
 /** A chat's name: its own title once it has one, else "New chat" (DSH's display title falls back to the project folder's name, which names no chat). */
@@ -36,7 +44,10 @@ export class ChatsStore implements ChatsPort {
   private held: SessionReference | undefined
   private readonly listeners = new Set<() => void>()
 
-  constructor(private readonly navigation: () => MainViewNavigation | undefined) {}
+  constructor(
+    private readonly navigation: () => MainViewNavigation | undefined,
+    private readonly workspaceFor: () => WorkspaceRegistration | undefined = () => undefined,
+  ) {}
 
   getSnapshot(): readonly ChatRow[] {
     return this.rows
@@ -76,6 +87,19 @@ export class ChatsStore implements ChatsPort {
     const previous = this.held
     this.held = next
     previous?.release()
+  }
+
+  /** A new chat for the folder (DSH creates the session on the Host) and the one the main view shows; undefined without the sessions service. */
+  async create(cwd: string): Promise<string | undefined> {
+    const sessions = this.sessions
+    if (sessions === undefined) return undefined
+    // A DSH chat works in a workspace: register the app's folder first (DSH resolves an existing registration), so the new session is bound to
+    // it instead of opening onto a workspace chooser. Without the workspace service the session is still made, unbound.
+    const workspaces = this.workspaceFor()
+    const workspace = workspaces === undefined ? undefined : await workspaces.create({ path: cwd }).catch(() => undefined)
+    const id = await sessions.create({ cwd, ...(workspace === undefined ? {} : { workspaceId: workspace.workspaceId }) })
+    this.open(id)
+    return id
   }
 
   private publish(rows: readonly ChatRow[]): void {

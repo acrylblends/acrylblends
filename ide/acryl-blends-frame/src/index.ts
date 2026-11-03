@@ -34,6 +34,7 @@ import {
   FRAME_PLUGINS_PATH,
   FRAME_PLUGINS_SWITCH_PATH,
   FRAME_STATE_PATH,
+  FRAME_VERSIONS_SHARED_PATH,
   type AppPluginKind,
   type AppPluginsView,
   type ChatSavesView,
@@ -72,7 +73,12 @@ export function parseBranches(stdout: string): FrameBranch[] {
   return branches.sort((a, b) => (a.current === b.current ? a.name.localeCompare(b.name) : a.current ? -1 : 1))
 }
 
-async function readBranches(git: GitRunner, root: string): Promise<FrameBranch[]> {
+/** A git call as the state and the shared-versions check use it: the versions runner satisfies it, and a test stands in for it. */
+export interface GitLike {
+  run(args: readonly string[], cwd: string): Promise<{ readonly stdout: string }>
+}
+
+async function readBranches(git: GitLike, root: string): Promise<FrameBranch[]> {
   try {
     const result = await git.run(['for-each-ref', '--format=%(HEAD) %(refname:short)', 'refs/heads'], root)
     return parseBranches(result.stdout)
@@ -80,6 +86,40 @@ async function readBranches(git: GitRunner, root: string): Promise<FrameBranch[]
     // Not a repository (or git missing): the frame shows no branches rather than failing the whole state.
     return []
   }
+}
+
+/**
+ * The versions that are also on another local branch or a remote-tracking branch: another line of work has them, or they are on the remote, so
+ * the list marks them "shared". The current branch's own ref is left out (being on it is not sharing); one `rev-list` per other ref, then an
+ * intersection with the listed versions.
+ */
+export async function sharedVersions(git: GitLike, root: string, hashes: readonly string[]): Promise<string[]> {
+  if (hashes.length === 0) return []
+  let refs: string[]
+  try {
+    const current = (await readBranches(git, root)).find(branch => branch.current)?.name
+    const currentRef = current === undefined ? undefined : `refs/heads/${current}`
+    refs = (await git.run(['for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes'], root)).stdout
+      .split('\n')
+      .filter(ref => ref !== '' && ref !== currentRef)
+  } catch {
+    return []
+  }
+  const wanted = new Set(hashes)
+  const shared = new Set<string>()
+  for (const ref of refs) {
+    let stdout: string
+    try {
+      stdout = (await git.run(['rev-list', ref], root)).stdout
+    } catch {
+      continue
+    }
+    for (const line of stdout.split('\n')) {
+      const hash = line.trim()
+      if (wanted.has(hash)) shared.add(hash)
+    }
+  }
+  return [...shared]
 }
 
 /** `git status --porcelain -z` entries: one per changed path (a rename's second, NUL-separated path is not counted twice). */
@@ -217,9 +257,11 @@ export interface FrameRoutesDeps {
   readonly branchChats?: BranchChatsPort
   /** What each turn of a chat saved (the auto-save), for the line under the answer. */
   readonly chatSaves?: ChatSavesPort
+  /** Which of the listed versions are also on another branch or the remote. */
+  readonly shared?: (hashes: readonly string[]) => Promise<string[]>
 }
 
-export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves }: FrameRoutesDeps): Acryl {
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
   if (chatSaves !== undefined) {
     app.get(FRAME_CHAT_SAVES_PATH, ownPage, async (c) => {
@@ -314,6 +356,22 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json({ ok: true })
       } catch (cause) {
         return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be switched'), 409)
+      }
+    })
+  }
+  if (shared !== undefined) {
+    app.post(FRAME_VERSIONS_SHARED_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const hashes = body !== null && typeof body === 'object' ? (body as { hashes?: unknown }).hashes : undefined
+      if (!Array.isArray(hashes) || hashes.length > 100
+        || !hashes.every((hash): hash is string => typeof hash === 'string' && /^[0-9a-f]{7,40}$/iu.test(hash))) {
+        return c.json(error('invalid versions request'), 400)
+      }
+      try {
+        return c.json({ shared: await shared(hashes) })
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the shared versions could not be read'), 500)
       }
     })
   }
@@ -454,6 +512,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
         assign: (id, branch) => chatsFile.assign(root, id, branch),
       },
       chatSaves,
+      shared: (hashes) => sharedVersions(git, root, hashes),
     }))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
     return () => {

@@ -2,13 +2,13 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { countChanges, parseBranches, parseBranchName, parseFrameState } from '../src/index.ts'
-import { FRAME_BRANCHES_NEW_PATH, FRAME_BRANCHES_SWITCH_PATH, branchNameProblem, parseBranchChats } from '../src/contract.ts'
+import { countChanges, parseBranches, parseBranchName, parseFrameState, sharedVersions } from '../src/index.ts'
+import { FRAME_BRANCHES_NEW_PATH, FRAME_BRANCHES_SWITCH_PATH, branchNameProblem, parseBranchChats, parseSharedVersions } from '../src/contract.ts'
 import { branchClick, createBranchesApi, saveBeforeSwitchMessage } from '../src/client/branches.ts'
 import { BranchChatsStore } from '../src/client/branch-chats.ts'
 import { createBranchChatsStore } from '../src/branch-chats.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
-import { savedLabel, versionNumber } from '../src/client/versions.ts'
+import { savedLabel, shortTime, versionNumber } from '../src/client/versions.ts'
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
 import { foldersAbove } from '../src/client/FilesView.tsx'
 import { highlightLine, languageOf } from '../src/client/highlight.ts'
@@ -371,5 +371,53 @@ describe('the branch API', () => {
   it('answers a refusal without JSON with a plain line', async () => {
     const api = createBranchesApi(async () => new Response('nope', { status: 502 }))
     await expect(api.switchTo('feature')).rejects.toThrow('the branch could not be switched to (HTTP 502)')
+  })
+})
+
+describe('a version\'s time', () => {
+  const now = Date.parse('2026-11-03T18:00:00Z')
+
+  it('reads short: now, minutes, hours, the weekday, then days', () => {
+    expect(shortTime('2026-11-03T17:59:40Z', now)).toBe('now')
+    expect(shortTime('2026-11-03T17:58:00Z', now)).toBe('2 min')
+    expect(shortTime('2026-11-03T16:00:00Z', now)).toBe('2 h')
+    expect(shortTime('2026-11-01T12:00:00Z', now)).toBe('Sun')
+    expect(shortTime('2026-10-20T12:00:00Z', now)).toBe('14 d')
+    expect(shortTime('not a time', now)).toBe('')
+  })
+})
+
+describe('shared versions', () => {
+  it('marks the versions on another branch or the remote, never the current branch\'s own', async () => {
+    const answers: Record<string, string> = {
+      'for-each-ref --format=%(HEAD) %(refname:short) refs/heads': '* main\n  feature\n',
+      'for-each-ref --format=%(refname) refs/heads refs/remotes': 'refs/heads/main\nrefs/heads/feature\nrefs/remotes/origin/main\n',
+      'rev-list refs/heads/main': 'ddd\naaa\n',
+      'rev-list refs/heads/feature': 'bbb\naaa\n',
+      'rev-list refs/remotes/origin/main': 'ccc\nbbb\n',
+    }
+    const asked: string[] = []
+    const git = {
+      run: async (args: readonly string[]) => {
+        const key = args.join(' ')
+        asked.push(key)
+        if (!(key in answers)) throw new Error(`unexpected git call: ${key}`)
+        return { stdout: answers[key] ?? '' }
+      },
+    }
+    expect((await sharedVersions(git, '/apps/a', ['aaa', 'bbb', 'ccc', 'ddd'])).sort()).toEqual(['aaa', 'bbb', 'ccc'])
+    expect(asked).not.toContain('rev-list refs/heads/main')
+  })
+
+  it('answers nothing without versions, and nothing rather than failing when git refuses', async () => {
+    expect(await sharedVersions({ run: async () => ({ stdout: '' }) }, '/apps/a', [])).toEqual([])
+    const failing = { run: async () => { throw new Error('no git') } }
+    expect(await sharedVersions(failing, '/apps/a', ['aaa'])).toEqual([])
+  })
+
+  it('reads only a list of hashes', () => {
+    expect(parseSharedVersions({ shared: ['aaa'] })).toEqual(['aaa'])
+    expect(() => parseSharedVersions({ shared: [7] })).toThrow('entry')
+    expect(() => parseSharedVersions({})).toThrow('not a list')
   })
 })

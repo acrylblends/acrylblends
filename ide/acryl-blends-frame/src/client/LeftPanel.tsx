@@ -5,7 +5,7 @@ import { formatRelativeTime } from 'acryl-versions/client'
 import { branchNameProblem, type FeedbackNoteView, type FeedbackView, type FrameBranch, type FrameState } from '../contract.ts'
 import type { VersionsLogView } from 'acryl-versions'
 import { PTY_AGENTS, terminalMeta, type FrameTabs } from './tabs.ts'
-import { versionNumber, type VersionsPort } from './versions.ts'
+import { shortTime, versionNumber, type VersionsPort } from './versions.ts'
 import { branchClick, saveBeforeSwitchMessage, type BranchesApi } from './branches.ts'
 import type { BranchChatsPort } from './branch-chats.ts'
 import { feedbackPlace, type FeedbackApi } from './feedback.ts'
@@ -24,6 +24,8 @@ export interface ChatsPort {
   getSnapshot(): readonly ChatRow[]
   subscribe(listener: () => void): () => void
   open(id: string): void
+  /** A new chat for the folder (a DSH session opened on the branch checked out there); undefined without DSH's sessions service. */
+  create(cwd: string): Promise<string | undefined>
 }
 
 /** Feedback from users: the notes, and handing one to an agent (the chat's composer). */
@@ -96,6 +98,8 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
   const currentBranch = state.branches.find(branch => branch.current)?.name
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(state.branches.filter(b => b.current).map(b => b.name)))
   const [load, setLoad] = useState<VersionsLoad>({ status: 'loading' })
+  /** The versions also on another branch or the remote, marked "shared". */
+  const [shared, setShared] = useState<ReadonlySet<string>>(() => new Set())
   const [saving, setSaving] = useState<string | undefined>(undefined)
   // The new branch's name while it is typed, and why the last try failed.
   const [naming, setNaming] = useState<string | undefined>(undefined)
@@ -133,6 +137,8 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
     try {
       const log = await versions.log(state.appRoot)
       setLoad({ status: 'ready', log })
+      // The shared marks are another Host read: the list shows at once, the marks follow; a failed check leaves the times.
+      setShared(new Set(await versions.shared(log.entries.map(entry => entry.hash)).catch(() => [])))
     } catch (cause) {
       setLoad({ status: 'error', message: cause instanceof Error ? cause.message : 'The versions could not be read.' })
     }
@@ -196,7 +202,8 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
       await branches.switchTo(ask.branch)
       setAskSwitch(undefined)
       setExpanded(current => new Set(current).add(ask.branch))
-      // What the click meant: that chat, that terminal, or the branch's own newest chat, so the panel shows the new branch's work.
+      // What the click meant: that chat, that terminal, or the branch's own conversation - its newest chat, or a new one, so the chat the
+      // panel shows is always one this branch lists.
       if (ask.chat !== undefined) {
         chats.open(ask.chat)
         showTab('chat')
@@ -204,10 +211,17 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
         showTab(ask.tab)
       } else {
         const own = chatRows.find(row => assignments[row.id] === ask.branch)
-        if (own !== undefined) {
-          chats.open(own.id)
-          showTab('chat')
+        if (own !== undefined) chats.open(own.id)
+        else {
+          // A branch with no chat gets its own conversation, so the chat on screen is always one the branch lists.
+          try {
+            const created = await chats.create(state.appRoot)
+            if (created === undefined) setSwitchNote({ branch: ask.branch, message: 'A chat for this branch could not be started.' })
+          } catch (cause) {
+            setSwitchNote({ branch: ask.branch, message: cause instanceof Error ? cause.message : 'A chat for this branch could not be started.' })
+          }
         }
+        showTab('chat')
       }
     } catch (cause) {
       setSwitchNote({ branch: ask.branch, message: cause instanceof Error ? cause.message : 'The branch could not be switched to.' })
@@ -311,25 +325,30 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
       <div className="acrylBlendsList">
         {state.branches.length === 0 && <p className="acrylBlendsNote">This app's folder is not a git repository.</p>}
         {state.branches.map(branch => {
-          // Every branch opens onto what is open on it: its own chats, and the terminals and agents opened there.
-          const open = expanded.has(branch.name)
+          // Every branch opens onto what is open on it: its own chats, and the terminals and agents opened there. A branch with nothing open
+          // stays closed: an open caret always has its rows under it.
           const ownChats = chatRows.filter(row => (assignments[row.id] ?? currentBranch) === branch.name)
           const ownTerminals = terminals.filter(tab => tab.branch === branch.name)
           const count = ownChats.length + ownTerminals.length
+          const open = expanded.has(branch.name) && count > 0
           const branchAsk = askSwitch !== undefined && askSwitch.branch === branch.name && askSwitch.chat === undefined && askSwitch.tab === undefined
           return (
             <div key={branch.name} className="acrylBlendsBranchGroup">
               <div className="acrylBlendsBranchRow">
-                <button
-                  type="button"
-                  className="acrylBlendsCaretButton"
-                  aria-expanded={open}
-                  aria-label={`${open ? 'Hide' : 'Show'} what is open on ${branch.name}`}
-                  title={`${open ? 'Hide' : 'Show'} what is open on ${branch.name}`}
-                  onClick={() => { toggle(branch.name) }}
-                >
-                  <svg className="acrylBlendsCaret" data-open={open || undefined} viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2l3 3-3 3" /></svg>
-                </button>
+                {count > 0 ? (
+                  <button
+                    type="button"
+                    className="acrylBlendsCaretButton"
+                    aria-expanded={open}
+                    aria-label={`${open ? 'Hide' : 'Show'} what is open on ${branch.name}`}
+                    title={`${open ? 'Hide' : 'Show'} what is open on ${branch.name}`}
+                    onClick={() => { toggle(branch.name) }}
+                  >
+                    <svg className="acrylBlendsCaret" data-open={open || undefined} viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2l3 3-3 3" /></svg>
+                  </button>
+                ) : (
+                  <span className="acrylBlendsCaretSpace" aria-hidden="true" />
+                )}
                 <button
                   type="button"
                   className="acrylBlendsBranch"
@@ -390,7 +409,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
       </div>
       <div className="acrylBlendsSep" />
       <div className="acrylBlendsPaneHead">
-        <span className="acrylBlendsLabel">Versions</span>
+        <span className="acrylBlendsLabel">Versions of this branch</span>
         <button type="button" className="acrylBlendsSmallButton" onClick={() => { setSaving(current => (current === undefined ? '' : undefined)) }}>
           Save point
         </button>
@@ -416,7 +435,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
             <span className="acrylBlendsItemTitle">
               v{String(versionNumber(load.log.entries, index))} · {entry.subject}{index === 0 ? ' (current)' : ''}
             </span>
-            <span className="acrylBlendsMeta">{formatRelativeTime(entry.at)}</span>
+            <span className="acrylBlendsMeta">{shared.has(entry.hash) ? 'shared' : shortTime(entry.at)}</span>
           </div>
         ))}
       </div>

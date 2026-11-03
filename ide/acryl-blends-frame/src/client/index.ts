@@ -17,7 +17,7 @@ import { ChatSavesStore, createChatSavesApi } from './chat-saves.ts'
 import { TurnSaveFooter } from './TurnSaveFooter.tsx'
 import { BlendsFrame } from './BlendsFrame.tsx'
 import { AppCanvasState } from './canvas/app-canvas.ts'
-import { ChatsStore, type MainViewNavigation } from './chats.ts'
+import { ChatsStore, type MainViewNavigation, type WorkspaceRegistration } from './chats.ts'
 import { FrameStateStore } from './frame-state.ts'
 import { FILES_SEARCH_EVENT } from './FilesView.tsx'
 import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSharedPlugin } from 'acryl-workspace/ui'
@@ -36,6 +36,7 @@ import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
 import { FILES_TAB, FrameTabs, tabOfTerminal } from './tabs.ts'
 import { createFrameTools, installXtermStyles } from './tools.ts'
+import { createSharedVersionsApi } from './versions.ts'
 import { FrameViewState, type ViewStorage } from './view-state.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -80,8 +81,14 @@ export function apply(ctx: ClientContext): void {
   const selection = new SelectionStore()
   const frameState = new FrameStateStore()
   const view = new FrameViewState(pageStorage())
-  const chats = new ChatsStore(() => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'))
+  // `uiWorkspace` (DSH's navigation) and `workspaces` (its workspace registry) are DSH services this package does not import the types of; the
+  // small interfaces in `./chats.ts` describe the calls it makes, so a frame without them composed still works.
+  const chats = new ChatsStore(
+    () => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'),
+    () => (ctx.get as (name: string) => WorkspaceRegistration | undefined)('workspaces'),
+  )
   const versionsApi = createVersionsApi()
+  const sharedVersionsApi = createSharedVersionsApi()
   const branchesApi = createBranchesApi()
   const branchChats = new BranchChatsStore(createBranchChatsApi())
   const tabs = new FrameTabs(pageStorage())
@@ -330,7 +337,11 @@ export function apply(ctx: ClientContext): void {
       frameState,
       view,
       chats,
-      versions: { log: (path: string) => versionsApi.log(path), save: (path: string, message: string) => versionsApi.save(path, message) },
+      versions: {
+        log: (path: string) => versionsApi.log(path),
+        save: (path: string, message: string) => versionsApi.save(path, message),
+        shared: (hashes: readonly string[]) => sharedVersionsApi.shared(hashes),
+      },
       tabs,
       tools,
       feedback,
