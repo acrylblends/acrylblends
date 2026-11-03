@@ -611,7 +611,9 @@ describe('add agent-panel and driver-pty', () => {
     ).toBe(0)
     const dir = join(scratch, 'agent-panel-app')
     const shipped = readFileSync(join(dir, 'blend.yaml'), 'utf8')
-    expect(shipped).toMatch(/- id: agent-panel\n {6}name: agent-panel\n(?: {4}#[^\n]*\n)* {4}- id: routes\n/u)
+    expect(shipped).toMatch(
+      /- id: agent-panel\n {6}name: agent-panel\n(?: {4}#[^\n]*\n)* {4}- id: routes\n/u,
+    )
     expect(readFileSync(join(dir, 'src/app.ts'), 'utf8')).toContain("'agent-panel': panel,")
     expect(existsSync(join(dir, 'plugins/agent-panel/index.ts'))).toBe(true)
     const again = fakeIo()
