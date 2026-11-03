@@ -531,7 +531,9 @@ ${composition.stdout}`)
       // 120 s: on a loaded machine (two frame gates at once) the notice has taken past a minute to mount; alone it is quick. A failure here names the
       // parallel-gate case, which was the whole difference between a red and a green run on the same tree (125-slice2's finding, 2026-11-03).
       if (notice === undefined)
-        fail('the Preview Notice did not appear on a fresh profile (is another frame gate running on this machine?)')
+        fail(
+          'the Preview Notice did not appear on a fresh profile (is another frame gate running on this machine?)',
+        )
       const noticeScroll = await evaluate(
         `Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)`,
       )
