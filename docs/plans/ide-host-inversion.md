@@ -1009,6 +1009,14 @@ far, both commits with the frame booting and the blank gate green:
   History joins it with slice 2's Versions.
 - `b341c944` the chat tab's **History**: every chat including the ones closed with the tab's x (badged), one search field over the titles, a pick
   clears the dismissal (`shell.restoreChat`) and reopens the chat through the tree's own selection.
+- `b6cd161f` a saved workspace **drops the app's browser tab on load** (the first-run tile the centre used to open); every other saved tab stays,
+  now in the right panel. The storage key stays v1 because the tab model did not change.
+
+**C.5's run log, read against what the frame actually mounts.** In the frame the chat tab renders DSH's own session, whose transcript DSH already
+keeps durably: a frame reload rejoins that session and replays it, and the PTY tabs replay through the terminal registry's scrollback. The extra
+`runs/<id>.jsonl` log is needed for a chat driver the frame does not mount (the standalone app's agent panel, and any non-DSH chat driver); it is
+not built here. Fork3 should confirm this reading before slice 1 is called complete.
+
 - `2b63cde4` the **terminal dock** left the frame: the shell gets no dock wrappers, the strip's dock buttons and the palette's three terminal-layout
   commands are gone, and terminals are PTY tabs in the right panel. The PTY registry is untouched. With those buttons gone the panel has no in-strip
   open/close control, so it stays shown until the shell's top-bar toggles arrive.
