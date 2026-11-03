@@ -183,6 +183,8 @@ export function parseAppPluginsView(value: unknown): AppPluginsView {
 
 export const FRAME_FEEDBACK_PATH = `${FRAME_API_PREFIX}/feedback`
 export const FRAME_FEEDBACK_SEEN_PATH = `${FRAME_API_PREFIX}/feedback/seen`
+/** GET `?id=`: one note's screenshot, served by the frame so the left panel and the chat hand-off never depend on the app's mount. */
+export const FRAME_FEEDBACK_SHOT_PATH = `${FRAME_API_PREFIX}/feedback/shot`
 
 /** One note a person sent from the app (the `feedback` plugin), as the left panel shows it. */
 export interface FeedbackNoteView {
@@ -194,6 +196,8 @@ export interface FeedbackNoteView {
   readonly page: string
   /** The element it was pinned on; absent for "Nothing specific". */
   readonly element?: { readonly selector: string; readonly label: string }
+  /** What the person saw when they sent it; absent when the browser refused the capture. */
+  readonly screenshot?: { readonly mediaType: 'image/webp' | 'image/png'; readonly width: number; readonly height: number }
   readonly seen: boolean
 }
 
@@ -213,7 +217,14 @@ export function parseFeedbackNotes(value: unknown): FeedbackNoteView[] {
     const pinned = isRecord(element) && typeof element.selector === 'string' && typeof element.label === 'string'
       ? { element: { selector: element.selector, label: element.label } }
       : {}
-    return { id: entry.id, at: entry.at, text: entry.text, page: entry.page, ...pinned, seen: entry.seen }
+    const shot = entry.screenshot
+    let screenshot: Pick<FeedbackNoteView, 'screenshot'> = {}
+    if (isRecord(shot) && (shot['mediaType'] === 'image/webp' || shot['mediaType'] === 'image/png')
+      && typeof shot['width'] === 'number' && typeof shot['height'] === 'number') {
+      screenshot = { screenshot: { mediaType: shot['mediaType'], width: shot['width'], height: shot['height'] } }
+    }
+    const note: FeedbackNoteView = { id: entry.id, at: entry.at, text: entry.text, page: entry.page, ...pinned, ...screenshot, seen: entry.seen }
+    return note
   })
 }
 

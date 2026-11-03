@@ -4,6 +4,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { DraftAttachmentId } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ISessions } from '@acryl/ui/frame'
 
 type SessionId = Parameters<ISessions['scope']>[0]
@@ -32,4 +33,28 @@ export function draftInChat(ctx: Context, sessionId: string, text: string): bool
   composer.setDraft(text)
   composer.focus()
   return true
+}
+
+/** DSH's browser attachment intake (ConversationController.createDrafts), the seam ui-attachment uses; IConversation's public face does not list it. */
+interface DraftIntake {
+  createDrafts(sessionId: SessionId, files: readonly File[]): readonly { readonly id: DraftAttachmentId }[]
+}
+
+/**
+ * Attach one browser file to a chat's composer as DSH's own draft attachment, so the composer shows it and sending includes it.
+ * @param ctx - the frame's client context.
+ * @param sessionId - the chat to attach it to.
+ * @param file - the browser file (an image keeps its type and bytes for the model).
+ * @returns false when the page holds no attachment intake or no composer for that chat.
+ */
+export function attachDraft(ctx: Context, sessionId: string, file: File): boolean {
+  const scope = ctx.get('sessions')?.scope(sessionId as SessionId)
+  if (scope === undefined) return false
+  const conversation = scope.get('conversation')
+  if (conversation === undefined) return false
+  const create = (conversation as unknown as Partial<DraftIntake>).createDrafts
+  if (typeof create !== 'function') return false
+  const drafts = create.call(conversation, sessionId as SessionId, [file])
+  const composer = conversation.input.for(scope)
+  return drafts.length > 0 && composer.addAttachments(drafts.map(draft => draft.id))
 }

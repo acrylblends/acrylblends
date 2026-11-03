@@ -28,7 +28,7 @@ import { createBranchesApi } from './branches.ts'
 import { BranchChatsStore, createBranchChatsApi } from './branch-chats.ts'
 import { createFeedbackApi, feedbackTask } from './feedback.ts'
 import { installFrameView } from './frame-view.ts'
-import { draftInChat } from './chat-draft.ts'
+import { attachDraft, draftInChat } from './chat-draft.ts'
 import type { FeedbackPort } from './LeftPanel.tsx'
 import { appPluginRow, createAppPluginsApi, framePluginRow, type NavigatorPlugin } from './plugins-navigator.ts'
 import { PluginsSection } from './PluginsSection.tsx'
@@ -100,13 +100,28 @@ export function apply(ctx: ClientContext): void {
   // The line under an answer that changed the app: what the Host's auto-save made of the turn. A new save changes the versions and the unsaved count, so the frame reads its state again.
   const chatSaves = new ChatSavesStore(createChatSavesApi(), () => { void frameState.refresh() })
   // Feedback from users: the notes, and handing one to the chat as a task the builder reads and sends.
+  const feedbackApi = createFeedbackApi()
   const feedback: FeedbackPort = {
-    api: createFeedbackApi(),
-    hand(note) {
+    api: feedbackApi,
+    async hand(note) {
       const current = chats.getSnapshot().find(row => row.current)
+      if (current === undefined) return false
       tabs.activate('chat')
       view.showRight()
-      return current !== undefined && draftInChat(ctx, current.id, feedbackTask(note))
+      // The screenshot becomes a real attachment of the message (DSH's own draft intake), so the agent sees it with the text.
+      if (note.screenshot !== undefined) {
+        try {
+          const response = await fetch(feedbackApi.shotUrl(note.id), { credentials: 'same-origin', cache: 'no-store' })
+          if (response.ok) {
+            const blob = await response.blob()
+            const extension = note.screenshot.mediaType === 'image/png' ? 'png' : 'webp'
+            attachDraft(ctx, current.id, new File([blob], `feedback-${note.id}.${extension}`, { type: note.screenshot.mediaType }))
+          }
+        } catch {
+          // A screenshot that cannot be read does not stop the note: the page and selector still reach the chat.
+        }
+      }
+      return draftInChat(ctx, current.id, feedbackTask(note))
     },
   }
 
@@ -223,7 +238,7 @@ export function apply(ctx: ClientContext): void {
           await appPlugins.switch(plugin.kind, plugin.name, on)
           canvas.reload()
         },
-        plugin.kind === 'made' ? () => appPlugins.share(plugin.name) : undefined,
+        plugin.kind === 'made' ? options => appPlugins.share(plugin.name, options) : undefined,
       )),
       ...view.frame.map(framePluginRow),
     ]

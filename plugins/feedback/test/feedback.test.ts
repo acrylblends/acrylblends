@@ -3,8 +3,8 @@ import { appendFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, test } from 'node:test'
-import { frameViewOf } from '../client.js'
-import { FeedbackStore, parseNewNote } from '../store.ts'
+import { frameViewOf, shotSize } from '../client.js'
+import { FeedbackStore, LIMITS, parseNewNote, parseScreenshot } from '../store.ts'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -99,5 +99,54 @@ describe('the frame view', () => {
       },
     }
     assert.equal(frameViewOf(crossOrigin), undefined)
+  })
+})
+
+describe('a screenshot with a note', () => {
+  const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.from([0, 0, 0, 0]), Buffer.from('WEBP'), Buffer.from([0, 0, 0, 0])])
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+  const dataUrl = (type: string, bytes: Buffer) => `data:${type};base64,${bytes.toString('base64')}`
+
+  test('reads a WebP or PNG with its size, and refuses anything else with a reason', () => {
+    const shot = parseScreenshot({ data: dataUrl('image/webp', webp), width: 800, height: 600 })
+    assert.equal(typeof shot === 'string' ? shot : shot.mediaType, 'image/webp')
+    assert.deepEqual(parseScreenshot({ data: dataUrl('image/png', png), width: 10, height: 12 }), {
+      mediaType: 'image/png', width: 10, height: 12, data: png,
+    })
+    assert.match(String(parseScreenshot({ data: dataUrl('image/gif', png), width: 1, height: 1 })), /WebP or PNG/)
+    assert.match(String(parseScreenshot({ data: dataUrl('image/webp', png), width: 1, height: 1 })), /not the image/)
+    assert.match(String(parseScreenshot({ data: dataUrl('image/webp', webp), width: 0, height: 1 })), /size/)
+    assert.match(String(parseScreenshot({ data: `data:image/webp;base64,${Buffer.alloc(LIMITS.screenshotBytes + 1).toString('base64')}`, width: 1, height: 1 })), /at most/)
+  })
+
+  test('a note carries its screenshot to the store, which serves the bytes back', async () => {
+    const dir = directory()
+    const store = new FeedbackStore(dir)
+    const note = parseNewNote({ text: 'the button is cut', page: '/app/', screenshot: { data: dataUrl('image/webp', webp), width: 800, height: 600 } })
+    assert.equal(typeof note, 'object')
+    const stored = await store.add(note as Exclude<typeof note, string>)
+    assert.equal(stored.screenshot?.mediaType, 'image/webp')
+    assert.equal(stored.screenshot?.width, 800)
+    assert.equal(stored.screenshot?.bytes, webp.length)
+    const listed = await store.list()
+    assert.deepEqual(listed[0]?.screenshot, stored.screenshot)
+    assert.deepEqual(await store.screenshot(stored.id), { bytes: webp, mediaType: 'image/webp' })
+    assert.equal(await store.screenshot('not-an-id'), undefined)
+  })
+
+  test('a note without a screenshot stays exactly as it was', async () => {
+    const dir = directory()
+    const store = new FeedbackStore(dir)
+    const stored = await store.add({ text: 'no picture', page: '/' })
+    assert.equal(stored.screenshot, undefined)
+    assert.equal(await store.screenshot(stored.id), undefined)
+  })
+})
+
+describe('the screenshot size', () => {
+  test('downscales the long side to 1280 and leaves a smaller view alone', () => {
+    assert.deepEqual(shotSize(2560, 1440), { width: 1280, height: 720 })
+    assert.deepEqual(shotSize(800, 600), { width: 800, height: 600 })
+    assert.deepEqual(shotSize(100, 2000), { width: 64, height: 1280 })
   })
 })

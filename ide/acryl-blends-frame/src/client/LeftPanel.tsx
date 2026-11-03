@@ -32,7 +32,7 @@ export interface ChatsPort {
 export interface FeedbackPort {
   readonly api: FeedbackApi
   /** @returns false when there is no chat to hand it to. */
-  hand(note: FeedbackNoteView): boolean
+  hand(note: FeedbackNoteView): Promise<boolean>
 }
 
 /** How often the left panel asks for new feedback. */
@@ -130,7 +130,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
   }, [readFeedback])
 
   const hand = async (note: FeedbackNoteView) => {
-    setHandNote(feedback.hand(note) ? undefined : 'Open a chat first, then hand the note to it.')
+    setHandNote(await feedback.hand(note) ? undefined : 'Open a chat first, then hand the note to it.')
     if (!note.seen) {
       await feedback.api.markSeen([note.id]).catch(() => {})
       await readFeedback()
@@ -515,6 +515,9 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
               >
                 <span><b>{feedbackPlace(note, state.appPage ?? '')}</b> · "{note.text}"</span>
                 <small>{note.element === undefined ? 'nothing specific' : `pinned on ${note.element.label}`} · {formatRelativeTime(note.at)}</small>
+                {note.screenshot !== undefined && (
+                  <img className="acrylBlendsFeedbackThumb" src={feedback.api.shotUrl(note.id)} alt="" loading="lazy" />
+                )}
               </button>
             ))}
           </div>
