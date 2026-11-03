@@ -1027,3 +1027,133 @@ trigger, both moving the same panel, so a second press in the same tick can togg
 dialog's own text, re-presses only when the dialog has vanished, and presses one trigger per attempt: the product's foot button first (its `openSettings`
 path activates the DSH trigger itself), the hidden trigger as the fallback. Blank and agent gates pass on the final code; the three-run count restarts on
 this push.
+
+## 29. The agent panel in a page that is replaced (branch 124, 2026-11-03)
+
+The frame gate's macOS agent job failed on main (run 41536717281) at the panel step: the submit state had an empty composer, no "me" line and no refusal, and
+the surviving panel was a fresh one (ready `1`, Send enabled, Stop disabled). Two candidates were checked, as the coordinator framed them.
+
+**The submit does not navigate the page.** The submit handler's first statement is `preventDefault()` (it has been since the visible-guards change), and
+the form names no action. A jsdom test now pins both: the submit event is `defaultPrevented` and the form has no `action`, so a missed guard could only
+submit to this page, never leave it.
+
+**The page is replaced under the panel.** A run that changes files reloads the page (the panel's own post-run reload), and a mount replaces the panel; a
+page that comes back must show the run it lost and keep the composer's draft. Two changes in `plugins/agent-panel/client/main.ts`: `start()` closes the
+previous instance's run socket and removes the previous `#agent-panel` host, so one live panel exists and the readiness mark belongs to the instance being
+wired now; and the composer's draft lives in `sessionStorage`, is restored before the form is wired and cleared when a submit sends it.
+
+The two causes behind those guards were checked, as the coordinator asked. **A second `start()` on one page was not found**: the panel script is one tag per
+HTML response (the middleware inserts it only when the response does not already carry `${PREFIX}/panel.js`), a module executes once per document, and
+neither the router wrap, the door, nor the agent template names the script again - so the host removal stays as a defence, not a fix for a named caller.
+**The follow does not race the record**: the server creates the run and its `current` before the ask response answers (`startRun`, then `follow` in
+`plugins/agent-panel/index.ts`), so a page that reloads after that response always finds it in one question; the client's timed retry was removed rather
+than kept. What a follow genuinely cannot recover is a run the app server restarted away - a file change the run made kills the in-memory run with the
+process - and the answer then lives only in the page that was replaced; that is recorded as a known property, not papered over.
+
+The gate's panel step now records what it submitted with: `typedAt`, the typed textarea's and form's `isConnected`, whether that textarea is still the
+panel's current one, whether the host is the current `#agent-panel`, and the panel's log at submit and at failure. A recurrence then names a replaced page
+or an unwired form instead of leaving an empty dump.
+
+Tests: `plugins/agent-panel/test/panel-client.test.ts` (node:test with jsdom, pinned as a root devDependency at the lockfile's version). A submit is
+prevented and says "Type a message first."; a remount leaves one host and keeps the draft; a page replaced mid-run shows the question and the answer again
+from the one follow the server can answer.
+
+State: branch `124-panel-reload` from `542cfaf2`; the full check and the three-run count follow.
+
+**The panel's own reload, and the check-then-reload race.** The panel reloads the app's page after a run that installed or removed a plugin, because the new
+feature is served by the running app. It decided that at the end of the run and reloaded 900 ms later, so a person (or the frame gate) who started typing in
+that window had the page replaced under their text - exactly the empty-composer dump. The panel lives inside the app's own page (it cannot refresh the
+frame's canvas from inside), so the page reload is the app's refresh; but the decision is now made at the moment of reloading, in
+`reloadDecision({ value, focused, following })`: the composer must be empty, unfocused and no run still going. Every panel-initiated reload is recorded
+before it happens - a warning the page's error report and the gate both see, and a marker in `sessionStorage` (`agent-panel-reload`, reason and time) that
+the reloaded page keeps; the gate's panel snapshot and failure dump now read that marker.
+
+Tests: `reloadDecision` is pinned for typing, focus and a running run; a change event while the composer holds text leaves the page and the text alone (no
+marker); a change event with an idle, empty composer records the marker before reloading.
+
+**Open ticket, not 124 work: the standalone app's `node --watch`.** The frame's generated dev script has no watcher
+(`packages/cli/src/ide-profile.ts`: `dev: node --import ... scripts/ide-host.mjs`), so a run's file edits do not restart the frame's app server. The
+template's own `npm run dev` for a standalone app runs `node --watch`, where a run that edits a watched file would restart the server and kill the
+in-memory run; the panel would come back with no run to follow. That is a ticket for the standalone path (a durable run log, or the run in a process the
+watcher does not restart), not this branch.
+
+**A port no browser opens (the merged-head check's second defect).** The full check on the merged head (`5c3afee3`) stopped in `verify-frame-token`:
+boot 1 printed `http://127.0.0.1:3659/` and the gate's `fetch` threw `TypeError: fetch failed` with cause `bad port`, and that same nested gate failed
+`verify-upgrade-frame`. The cause was not the gate. `stablePort` hashes every app's address into 3100..3999 (`plugins/instance`), and 3659 is one of the
+Fetch standard's bad ports, which Chromium refuses for a page too (ERR_UNSAFE_PORT): that app's address could never have been opened by a person. The
+listener now skips them: `acryl-node-server` carries the standard's 82 ports (probed against Node 24 port by port on 2026-11-03), and `portCandidates`
+leaves them out of the scan like a taken port, configured or scanned. The address record, the profile row and the printed URL already carry the bound
+port, so the stable address simply becomes the next usable one (3660 for 3659) and a restart keeps it; a configured restricted port with no scan left to
+move to fails with `no usable port from X to Y: each is taken, or one a browser refuses` instead of binding an address no browser opens. Tests: the list
+and the candidates (the skip does not widen the range; port 0 stays the system's choice), a real socket asked for 3659 binding 3660 and answering a
+fetch, and the instance seed path (a project folder whose hash is 3659 boots on an address fetch reaches). `verify-upgrade-frame` passes again with the
+fix (`96afd061`).
+
+**The count's attempt 2 (two flakes, both unrelated to the port).** Attempt 1 on `91fe629a` was green; attempt 2 failed `packages (windows-latest, Node 24)` and
+`frame (macos-latest, agent)`. The Windows job was a fixture, not a product: the `ide/acryl-workspace` files spec's `beforeAll` starts git three times and vitest's
+10 s hook default expired on a runner carrying about a hundred test workers. A longer bound would be a bigger budget, not a cause, so the fixture does less: the
+file only asks `git rev-parse --show-toplevel` and `git check-ignore --`, and both answer in an initialized repository with no commit, so `git add` and `git
+commit` are gone and the hook starts one process (`85c6303d`, 20/20 tests pass). The macOS agent job was the panel again, with a new shape: the panel there was
+fresh (ready, empty log, no `agent-panel-reload` marker), the typed host and textarea were no longer current while the typed form was still connected to its old
+document, and the ask never reached the server. That is the app's page replaced with the ask in flight by something other than the panel (its own reload writes
+the marker first). The gate now records every iframe load in the frame's page (time, src, whether the document was readable), keeps the submit's iframe element,
+document and `performance.timeOrigin`, and lists the CDP's `Page.frameNavigated` events in the failure dump (`dc829324`), so the next red names the load that
+replaced the page. Seven local runs with the instrumentation (four plain, three under eight CPU hogs) passed on this Mac, so the actor is still unnamed; the rule
+it must be fixed against is that the frame never reloads the app page on its own while a run is going, and the count restarts on the head that carries the dump.
+The 125 redesign removes this class by moving the agent out of the app's iframe into the frame's right panel, where an app reload cannot touch a run.
+
+**State (2026-11-03, survives a compact).** Branch `124-panel-reload` from `542cfaf2`; commits `44d51a99` (draft, single host, diagnostics),
+`efa29230` (restore once, no retry, causes checked), `749b35b3` (reload decided when it happens, marker + tests), `f70c9c96` (jsdom types). Proven:
+the submit cannot navigate (preventDefault first, no form action, tested); the server records a run before answering the ask (no follow race); no
+second `start()` caller exists (one tag per HTML response, one module execution per document - host removal is defence); the frame's generated dev
+script has no watcher, so the frame's app server does not restart under a run; the panel's check-then-reload race is fixed and its tests pass (typing
+during the change window leaves the page and text alone; an idle empty composer records the marker before reloading). Also `e1f6617a`: a sent message blurs the composer, so a plugin-install run still reloads the page (verify:panel passes again).
+State at this edit: main `81bb14dc` (119 landed) merged into the branch as `7e2d208b` with no conflicts; the full check on the merged head (`5c3afee3`)
+found the restricted port above, fixed in `96afd061`; the full check is green on the head that carries this note; the first count on `91fe629a` was
+stopped by attempt 2's two flakes, both addressed above, and the macOS one's cause and fix are section 30 (merged from `124-rootcause`: `dabceeb5`,
+`9fbbf209`); the count runs on the head that carries them. The gate's panel step records the typed nodes' liveness, the reload marker, every iframe
+load under the submit and every tile frame re-pointed in place or made for an outside site, so a recurrence names a replaced page, a frame-initiated
+load, a re-pointed tile or an unwired form.
+
+## 30. The tile that replaced the app page: the agent-panel failure's cause (branch 124, 2026-11-03)
+
+Section 29's macOS agent-job failure (run 41559207908: the panel took the submit, wrote "add 2 3", cleared the composer, and a moment later a fresh panel
+stood in a fresh document with the ask lost) had one actor: the frame's browser tile. Neither the panel, the door, the router nor Chrome reloaded the page.
+
+**What happened.** The canvas shows only the active tab, and `renderTile` returned an unkeyed `<BrowserPane>`, so React kept one pane - one iframe, one
+attempt counter, one retry timer - for whichever browser tab was in front. The gate's path is the workshop's: the app's own tab ("agent-app", `/app`)
+is in front, then "New Browser Tab", then the app's address and Go. A local probe (a MutationObserver installed on every new document) recorded the
+same iframe element being pointed in place from `/app` to the new tab's default `https://example.com`, then about 100 ms later to `/app/settings`, on
+every run. When the outside page commits before Go replaces it (a runner with a fast network: a CDN answers in tens of milliseconds), its load event
+fires while the element's `src` already reads `/app/settings`. `shouldRetryBrowserLoad` read `src` from the element, saw an unreadable document (a
+cross-origin page hides it, like Chrome's error page does) for one of the frame's own addresses, and scheduled a "retry": 250 ms later it remounted the
+iframe, replacing the app page the gate had just typed into. Whether the remount landed before or after the submit decided green or red.
+
+**The rule it broke**, and the fix at the source (`ide/acryl-workspace`): the frame never reloads the app page on its own.
+- Every canvas pane is keyed by its tab (`WorkspaceCanvas.renderTile`): a pane's own state belongs to its tab, and selecting another tab of the same
+  kind mounts that tab's pane.
+- A browser tab's frame is made for one address and one attempt (`key` is both): a frame is never re-pointed, so a late load from an earlier address
+  cannot land on the current one.
+- The retry answers only for a frame's first load (`shouldRetryBrowserLoad({ firstLoad })`). A later load is the page's own move (a link it followed,
+  its own reload, a door navigation) and is never undone, unreadable or not. A pending retry is cancelled when the address changes.
+- A new browser tab opens at the app's own page when the Host serves one, else empty with the address bar waiting (`WorkspaceStateOptions.browserHome`);
+  it never loads an outside site nobody asked for.
+
+**Tests.** `tests/browser/browser-pane.spec.tsx` (jsdom): a late load from the address the frame showed before does not replace the page it shows now
+(the CI failure, deterministic with fake timers); a page that navigates itself somewhere unreadable is left there; the first load's error page is still
+loaded again; a reload pending for one address never lands on the next. Four of them fail on the old pane. `tests/canvas/state.spec.ts`: a new browser
+tab opens at the app page or empty. The frame gate records every tile frame re-pointed in place and every tile frame made for an outside site, and fails
+on either when the app page is shown and again after the panel's run; the old code re-pointed on every run, so the gate fails it every time, not one
+run in N.
+
+**A second way the app page is taken away, not fixed here (a scope question for 125).** The same probe showed the app's tab losing the front to the
+chat tab with no click: `synchronizeWorkspaceWithSessionNavigation` treats every session-list update while the shown chat is blank as "New Session"
+and selects the chat tab, and a fresh app's chat is always blank. The canvas unmounts the tab that leaves the front, so the app page (and any panel
+run in it) is gone; coming back loads it again. The 125 redesign moves the agent out of the app's iframe, which removes the run loss; whether the
+canvas should also keep browser tabs mounted, and the New Session signal become an event instead of list state, is recorded for 125.
+
+**Open item: a graceful stop on Windows (a branch after 124 and 122).** On Windows a signal is `TerminateProcess`: nothing runs the host's disposal
+(the persistence flush, PTY reaping, the graceful stop 121 built) when the gate stops it, and probably not when the desktop app closes either. 122's
+gate fix ends the host's whole tree instead of relying on the host to end its own children; the product fix is a stop request the host can act on
+before any tree kill - Ctrl-C/CTRL_BREAK, or a loopback shutdown route that the owner token guards - so a Windows stop settles like a POSIX one.
+Not fixed on 122; it gets its own branch after 124 and 122 land.

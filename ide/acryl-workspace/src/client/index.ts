@@ -98,7 +98,16 @@ export function apply(ctx: ClientContext): void {
   // The session banner: if the browser's session ends, the retry loop cannot recover it, so the page names the way back in instead of spinning.
   const frameSession = frameSessionBannerFrom(ctx, signal => probeAdmittedSession(signal))
   ctx.effect(() => () => frameSession.dispose(), 'acryl-workspace: the frame session banner')
-  const groups = new WorkspaceGroups(() => new WorkspaceState({ chat: capabilities.chat }), saved?.groups)
+  // A new browser tab opens at the app's own page when the Host serves one, else empty.
+  const browserHome = (): string | undefined => {
+    if (capabilities.appPage === undefined) return undefined
+    try {
+      return new URL(capabilities.appPage, window.location.origin).href
+    } catch {
+      return undefined
+    }
+  }
+  const groups = new WorkspaceGroups(() => new WorkspaceState({ chat: capabilities.chat, browserHome }), saved?.groups)
   if (saved !== undefined) shell.setMode(saved.mode)
   // The terminals and the dock are shared by the frame (which places the dock) and the canvas (its terminal tabs).
   const terminalStack = advanced ? createTerminalStack(ctx, storage, shell) : undefined

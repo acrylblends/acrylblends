@@ -6,8 +6,9 @@
  * One adapter per runtime: a plugin keeps asking `ctx.inject(['routerHttp'], ...)` for a mount, which simply never fires here, because this
  * adapter serves the whole router.
  *
- * A configured port that is taken is followed by the next free one, at most `scan` further ports; port 0 lets the system choose. Disposal ends
- * open streams, closes every connection and returns once the port is free.
+ * A configured port that is taken is followed by the next free one, at most `scan` further ports; port 0 lets the system choose. A port a
+ * browser refuses to open (`RESTRICTED_PORTS`) is skipped like a taken one. Disposal ends open streams, closes every connection and returns
+ * once the port is free.
  */
 
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
@@ -66,8 +67,8 @@ export interface Config {
 /** Every field has a default, so a caller passes only what it changes: `ctx.plugin(plugin, { ... })` takes the partial shape. */
 export const Config: z<Partial<Config>, Config> = z.object({
   hostname: z.string().default('127.0.0.1').description('Address to bind. Loopback by default; binding elsewhere exposes the app to the network.'),
-  port: z.number().min(0).max(65535).default(0).description('Port to listen on; 0 lets the system choose. A taken port is followed by the next free one.'),
-  scan: z.number().min(0).default(20).description('How many further ports to try when the configured one is taken.'),
+  port: z.number().min(0).max(65535).default(0).description('Port to listen on; 0 lets the system choose. A taken port, or one a browser refuses, is followed by the next usable one.'),
+  scan: z.number().min(0).default(20).description('How many further ports to try when the configured one is taken or a browser refuses it.'),
   websocket: z
     .object({
       maxPayload: z.number().min(1).default(1024 * 1024).description('The largest WebSocket frame accepted, in bytes; a bigger one closes the socket with 1009.'),
@@ -323,11 +324,11 @@ export class NodeServer extends Service {
     return `http://${this.hostname.includes(':') ? `[${this.hostname}]` : this.hostname}:${String(this.bound)}`
   }
 
-  /** Bind, scanning past taken ports. */
+  /** Bind, scanning past taken ports and past the ports a browser refuses. */
   async listen(): Promise<void> {
     const { port, scan, hostname } = this.config
-    const last = port === 0 ? 0 : Math.min(65535, port + scan)
-    for (let candidate = port; candidate <= last; candidate += 1) {
+    const last = port === 0 ? 0 : Math.min(65_535, port + scan)
+    for (const candidate of portCandidates(port, scan)) {
       try {
         await new Promise<void>((resolve, reject) => {
           const onError = (error: Error): void => { reject(error) }
@@ -340,8 +341,39 @@ export class NodeServer extends Service {
         if (!isPortUnavailable(error)) throw error
       }
     }
-    throw new Error(`acryl-node-server: no free port from ${String(port)} to ${String(last)} on ${hostname}`)
+    throw new Error(`acryl-node-server: no usable port from ${String(port)} to ${String(last)} on ${hostname}: each is taken, or one a browser refuses`)
   }
+}
+
+/**
+ * The ports every Fetch client refuses to connect to: the Fetch standard's bad ports (https://fetch.spec.whatwg.org/#port-blocking). Chromium
+ * refuses a page on one (ERR_UNSAFE_PORT) and Node's fetch answers "bad port"; the list below is the one Node 24 reports, probed port by port
+ * on 2026-11-03 (82 ports, 1 to 10080). An app's stable port is hashed into 3100..3999, and 3659 is on the list: without this rule one app in
+ * 900 would come up on an address no browser may open, which the frame gate caught that day (verify-frame-token was refused at 3659).
+ */
+export const RESTRICTED_PORTS: ReadonlySet<number> = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104,
+  109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515,
+  526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049,
+  3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+])
+
+/** Whether a browser refuses to open this port. */
+export function isRestrictedPort(port: number): boolean {
+  return RESTRICTED_PORTS.has(port)
+}
+
+/**
+ * The ports `listen` may try, in order: `port` with at most `scan` further ones, without the ports a browser refuses. Port 0 stays alone: the
+ * system chooses it, and the ports it hands out are above the restricted range.
+ */
+export function portCandidates(port: number, scan: number): number[] {
+  const last = port === 0 ? 0 : Math.min(65_535, port + scan)
+  const candidates: number[] = []
+  for (let candidate = port; candidate <= last; candidate += 1) {
+    if (!isRestrictedPort(candidate)) candidates.push(candidate)
+  }
+  return candidates
 }
 
 /**

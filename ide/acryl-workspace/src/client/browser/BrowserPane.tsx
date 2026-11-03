@@ -15,14 +15,19 @@ export const BROWSER_LOAD_RETRY_MS = 250
  * A same-origin document always exposes `contentDocument`; null therefore means Chrome put its error page there (the request was reset or
  * refused), never a real page. A cross-origin page also hides its document, and is never retried: a healthy external page would otherwise
  * load twice. The attempt budget keeps a genuinely dead address from looping; it settles on the browser's error page.
+ *
+ * Only a frame's first load answers for its `src`. Every later load is the page's own doing (a link it followed, its own reload, a door
+ * navigation), and an unreadable one there is a page the person or the app went to, not an error to undo: reloading it would replace a live
+ * page, with whatever run it holds, by the address the tab was opened at.
  */
 export function shouldRetryBrowserLoad(options: {
   readonly src: string | null
   readonly topOrigin: string
   readonly documentReadable: boolean
   readonly retries: number
+  readonly firstLoad: boolean
 }): boolean {
-  if (options.documentReadable || options.src === null) return false
+  if (!options.firstLoad || options.documentReadable || options.src === null) return false
   if (options.retries >= BROWSER_LOAD_ATTEMPTS - 1) return false
   let origin: string
   try {
@@ -45,10 +50,18 @@ export function BrowserPane({
   const [attempt, setAttempt] = useState(0)
   const retries = useRef(0)
   const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  useEffect(() => () => {
-    if (retryTimer.current !== undefined) clearTimeout(retryTimer.current)
-  }, [])
+  // The frames whose first load has been seen: a frame is made for one address and one attempt (its key), so its first load is that address's
+  // answer and any later one is the page navigating itself.
+  const loadedFrames = useRef(new WeakSet<HTMLIFrameElement>())
   const href = tile.url ?? ''
+  // A new address starts with a fresh budget, and a reload still pending for the previous one never lands on it.
+  useEffect(() => {
+    retries.current = 0
+    return () => {
+      if (retryTimer.current !== undefined) clearTimeout(retryTimer.current)
+      retryTimer.current = undefined
+    }
+  }, [href])
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
     // Read the field itself, never a React copy of it. The bar is uncontrolled for the same reason: a submit can arrive in the same tick as
@@ -69,12 +82,15 @@ export function BrowserPane({
   }
   const loaded = (event: SyntheticEvent<HTMLIFrameElement>): void => {
     const frame = event.currentTarget
+    const firstLoad = !loadedFrames.current.has(frame)
+    loadedFrames.current.add(frame)
     if (
       !shouldRetryBrowserLoad({
         src: frame.getAttribute('src'),
         topOrigin: window.location.origin,
         documentReadable: frame.contentDocument !== null,
         retries: retries.current,
+        firstLoad,
       })
     )
       return
@@ -92,8 +108,10 @@ export function BrowserPane({
         <button type="submit">Go</button>
       </form>
       {href.length > 0 && (
+        // One frame per address and attempt: a frame is never re-pointed, so a load from the address it showed before (a slow external page
+        // committing after the address changed) cannot be taken for this address's answer.
         <iframe
-          key={attempt}
+          key={`${String(attempt)} ${href}`}
           className="dshWorkspaceBrowserFrame"
           title="Browser tab"
           src={href}
