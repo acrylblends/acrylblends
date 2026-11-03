@@ -18,6 +18,7 @@ import type { FrameViewState } from './view-state.ts'
 import { LeftPanel, type BranchesPort, type ChatsPort, type FeedbackPort } from './LeftPanel.tsx'
 import type { BranchChatsPort } from './branch-chats.ts'
 import { savedLabel, type VersionsPort } from './versions.ts'
+import type { GitSyncPort } from './git-sync.ts'
 import { RightPanel } from './RightPanel.tsx'
 import type { FrameTabs } from './tabs.ts'
 import type { FrameTools } from './tools.ts'
@@ -30,6 +31,8 @@ export interface BlendsFrameInjected {
   readonly view: FrameViewState
   readonly chats: ChatsPort
   readonly versions: VersionsPort
+  /** The Git tab's push and pull (the Host runs git). */
+  readonly gitSync: GitSyncPort
   readonly tabs: FrameTabs
   readonly tools: FrameTools
   readonly feedback: FeedbackPort
@@ -59,7 +62,7 @@ const SelectIcon = () => (
   </svg>
 )
 
-export function BlendsFrame({ layout, canvas, selection, frameState, view, chats, versions, tabs, tools, feedback, branches, branchChats, renderSlot }: BlendsFrameProps) {
+export function BlendsFrame({ layout, canvas, selection, frameState, view, chats, versions, gitSync, tabs, tools, feedback, branches, branchChats, renderSlot }: BlendsFrameProps) {
   const state = useStore(frameState)
   const frameView = useStore(view)
   const activePanelId = useSyncExternalStore(layout.panelInfo.subscribe, () => layout.panelInfo.getSnapshot().activePanelId)
@@ -195,6 +198,7 @@ export function BlendsFrame({ layout, canvas, selection, frameState, view, chats
             tabs={tabs}
             tools={tools}
             versions={versions}
+            gitSync={gitSync}
             state={state.status === 'ready' ? state.state : undefined}
             branchChats={branchChats}
             renderConversation={(): ReactNode => renderSlot('main', {}, { entryKey: 'conversation' })}

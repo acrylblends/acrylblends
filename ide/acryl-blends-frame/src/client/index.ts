@@ -39,6 +39,7 @@ import { installFrameStyles } from './styles.ts'
 import { FILES_TAB, FrameTabs, tabOfTerminal } from './tabs.ts'
 import { createFrameTools, installXtermStyles } from './tools.ts'
 import { createSharedVersionsApi } from './versions.ts'
+import { createGitSyncApi, type GitSyncPort } from './git-sync.ts'
 import { FrameViewState, type ViewStorage } from './view-state.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -94,6 +95,24 @@ export function apply(ctx: ClientContext): void {
   const versionsApi = createVersionsApi()
   const sharedVersionsApi = createSharedVersionsApi()
   const branchesApi = createBranchesApi()
+  const gitSyncApi = createGitSyncApi()
+  // A push moves the upstream (the left panel's shared marks), a pull the head and the app's files: the frame reads its state again, and the app page reloads when a pull brought versions in.
+  const gitSync: GitSyncPort = {
+    remote: fetchFirst => gitSyncApi.remote(fetchFirst),
+    push: async () => {
+      const result = await gitSyncApi.push()
+      await frameState.refresh()
+      return result
+    },
+    pull: async () => {
+      const headOf = (): string | undefined => { const view = frameState.getSnapshot(); return view.status === 'ready' ? view.state.head : undefined }
+      const before = headOf()
+      const result = await gitSyncApi.pull()
+      await frameState.refresh()
+      if (headOf() !== before) canvas.reload()
+      return result
+    },
+  }
   const branchChats = new BranchChatsStore(createBranchChatsApi())
   const tabs = new FrameTabs(pageStorage())
   const tools = createFrameTools()
@@ -349,6 +368,7 @@ export function apply(ctx: ClientContext): void {
         save: (path: string, message: string) => versionsApi.save(path, message),
         shared: (hashes: readonly string[]) => sharedVersionsApi.shared(hashes),
       },
+      gitSync,
       tabs,
       tools,
       feedback,

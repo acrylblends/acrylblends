@@ -10,6 +10,77 @@ export const FRAME_BRANCHES_SWITCH_PATH = `${FRAME_API_PREFIX}/branches/switch`
 export const FRAME_BRANCH_CHATS_PATH = `${FRAME_API_PREFIX}/branches/chats`
 /** POST `{ hashes }`: which of these versions are also on another branch or the remote. */
 export const FRAME_VERSIONS_SHARED_PATH = `${FRAME_API_PREFIX}/versions/shared`
+/** GET (`?fetch=1` asks the remote first): the checked-out branch against its remote, a {@link GitRemoteState}. */
+export const FRAME_GIT_REMOTE_PATH = `${FRAME_API_PREFIX}/git/remote`
+/** POST: send the checked-out branch to its upstream, setting the upstream on the first push. Never forced. Answers a {@link GitSyncResult}. */
+export const FRAME_GIT_PUSH_PATH = `${FRAME_API_PREFIX}/git/push`
+/** POST: bring the upstream's new versions in, by fast-forward only; a branch that has moved on both sides is left as it is. Answers a {@link GitSyncResult}. */
+export const FRAME_GIT_PULL_PATH = `${FRAME_API_PREFIX}/git/pull`
+
+/**
+ * The checked-out branch against its remote:
+ * - `detached`: the folder is on no branch, so there is nothing to push or pull;
+ * - `no-remote`: the repository has no remote;
+ * - `unpublished`: the branch is not on the remote yet (its first push sets the upstream); `remote` is absent when there are several remotes and
+ *   none is `origin`, so which one to use is not plain;
+ * - `tracking`: the branch has an upstream; `ahead` versions are here and not there, `behind` there and not here. `fetchError` is git's line when
+ *   asking the remote failed, and the counts are then as of the last time it answered.
+ */
+export type GitRemoteState =
+  | { readonly kind: 'detached' }
+  | { readonly kind: 'no-remote' }
+  | { readonly kind: 'unpublished'; readonly branch: string; readonly remote?: string }
+  | {
+    readonly kind: 'tracking'
+    readonly branch: string
+    readonly upstream: string
+    readonly ahead: number
+    readonly behind: number
+    readonly fetchError?: string
+  }
+
+/** What a push or pull did, in one line, and the remote state after it. */
+export interface GitSyncResult {
+  readonly message: string
+  readonly remote: GitRemoteState
+}
+
+const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0
+const isName = (value: unknown): value is string => typeof value === 'string' && value !== ''
+
+/** @throws when the answer is not a remote state. */
+export function parseGitRemoteState(value: unknown): GitRemoteState {
+  if (!isRecord(value)) throw new Error('git remote: not an object')
+  switch (value.kind) {
+    case 'detached':
+    case 'no-remote':
+      return { kind: value.kind }
+    case 'unpublished':
+      if (!isName(value.branch)) throw new Error('git remote: branch')
+      if (value.remote !== undefined && !isName(value.remote)) throw new Error('git remote: remote')
+      return { kind: 'unpublished', branch: value.branch, ...(value.remote === undefined ? {} : { remote: value.remote }) }
+    case 'tracking':
+      if (!isName(value.branch) || !isName(value.upstream)) throw new Error('git remote: branch')
+      if (!isCount(value.ahead) || !isCount(value.behind)) throw new Error('git remote: counts')
+      if (value.fetchError !== undefined && typeof value.fetchError !== 'string') throw new Error('git remote: fetchError')
+      return {
+        kind: 'tracking',
+        branch: value.branch,
+        upstream: value.upstream,
+        ahead: value.ahead,
+        behind: value.behind,
+        ...(value.fetchError === undefined ? {} : { fetchError: value.fetchError }),
+      }
+    default:
+      throw new Error('git remote: kind')
+  }
+}
+
+/** @throws when the answer is not a push or pull result. */
+export function parseGitSyncResult(value: unknown): GitSyncResult {
+  if (!isRecord(value) || typeof value.message !== 'string') throw new Error('git sync: message')
+  return { message: value.message, remote: parseGitRemoteState(value.remote) }
+}
 
 /** @throws when the answer is not a list of version hashes. */
 export function parseSharedVersions(value: unknown): string[] {
@@ -63,6 +134,8 @@ export interface FrameState {
   readonly head?: string
   /** Files changed since the last version; absent outside a repository. */
   readonly unsaved?: number
+  /** The commit the checked-out branch's upstream points at, as last fetched or pushed; absent without one. A change means the shared marks changed. */
+  readonly upstreamHead?: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,13 +145,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** @throws an Error naming the field when the answer is not a frame state. */
 export function parseFrameState(value: unknown): FrameState {
   if (!isRecord(value)) throw new Error('frame state: not an object')
-  const { appName, appRoot, appPage, branches, head, unsaved } = value
+  const { appName, appRoot, appPage, branches, head, unsaved, upstreamHead } = value
   if (typeof appName !== 'string' || appName === '') throw new Error('frame state: appName')
   if (typeof appRoot !== 'string' || appRoot === '') throw new Error('frame state: appRoot')
   if (appPage !== undefined && (typeof appPage !== 'string' || !appPage.startsWith('/'))) throw new Error('frame state: appPage')
   if (!Array.isArray(branches)) throw new Error('frame state: branches')
   if (head !== undefined && (typeof head !== 'string' || head === '')) throw new Error('frame state: head')
   if (unsaved !== undefined && (typeof unsaved !== 'number' || !Number.isInteger(unsaved) || unsaved < 0)) throw new Error('frame state: unsaved')
+  if (upstreamHead !== undefined && (typeof upstreamHead !== 'string' || upstreamHead === '')) throw new Error('frame state: upstreamHead')
   const parsed = branches.map((branch: unknown) => {
     if (!isRecord(branch) || typeof branch.name !== 'string' || typeof branch.current !== 'boolean') throw new Error('frame state: branch')
     return { name: branch.name, current: branch.current }
@@ -90,6 +164,7 @@ export function parseFrameState(value: unknown): FrameState {
     branches: parsed,
     ...(head === undefined ? {} : { head }),
     ...(unsaved === undefined ? {} : { unsaved }),
+    ...(upstreamHead === undefined ? {} : { upstreamHead }),
   }
 }
 

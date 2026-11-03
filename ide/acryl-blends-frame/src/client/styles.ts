@@ -150,6 +150,10 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsGm { color: var(--bf-warn); font: 11px ui-monospace, Menlo, monospace; flex: none; }
 .acrylBlendsGitLabel { padding: 4px 2px 8px; }
 .acrylBlendsGitLabel[data-second] { padding-top: 14px; }
+.acrylBlendsGitRemote { display: flex; align-items: center; gap: 6px; padding: 2px 8px 4px; font-size: 13px; color: #d4d4da; }
+.acrylBlendsGitRemoteState { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acrylBlendsGitRemote .acrylBlendsSmallButton { flex: none; }
+.acrylBlendsSmallButton:disabled { opacity: .45; cursor: default; }
 
 .acrylBlendsFile pre { margin: 0; font: 12px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: #d6d6dc; white-space: pre; }
 .acrylBlendsLine { min-height: 1.6em; }
