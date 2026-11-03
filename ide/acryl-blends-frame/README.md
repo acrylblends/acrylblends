@@ -16,10 +16,10 @@ The canvas page reads the frame's view (`src/client/frame-view.ts`): Build keeps
 agent-panel's button and the feedback button), and Preview shows what production shows without a reload. The page's plugins read the handle
 through `window.parent`; a page opened directly is unchanged.
 
-Settings > Plugins shares a local plugin: the frame packages it (the builder's package shape, plus the Loader patch the plugin-hub needs),
+A feedback note shows its screenshot as a thumbnail, and handing it to the chat puts the page and selector text in the composer with the picture as a real attachment. Settings > Plugins shares a local plugin: the frame packages it (the builder's package shape, plus the Loader patch the plugin-hub needs),
 publishes it with `@webboxes/plugin-hub` through the user's own `gh` and `git` to its own GitHub repository and release, and the row then shows
 the repository and version. A second app installs it with `acrylblends add <the package folder>`; the plugin-hub refuses a package with secrets
-before anything is sent. `shareOwner` in the frame row's config names the GitHub account or organization (the signed-in account when absent).
+before anything is sent. `shareOwner` in the frame row's config names the GitHub account or organization (the signed-in account when absent). Sharing a version that is already released asks first and then releases the next patch.
 
 It owns the page's `root` slot, so it is mounted instead of the IDE's workbench (`acryl-workspace`), never beside it. The Host half serves one
 private route, `GET /api/acryl-blends-frame/state` (the app's name, folder, page and branches); `appPage` in the row's config says where the

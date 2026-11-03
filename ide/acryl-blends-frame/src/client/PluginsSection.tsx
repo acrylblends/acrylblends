@@ -26,6 +26,8 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
   const [group, setGroup] = useState<PluginGroup | 'all'>('all')
   const [busy, setBusy] = useState<string | undefined>(undefined)
   const [failure, setFailure] = useState<string | undefined>(undefined)
+  // A share the hub refused because its version is released: the person is asked before the frame shares the next patch.
+  const [bump, setBump] = useState<{ readonly key: string; readonly version: string; readonly nextVersion: string } | undefined>(undefined)
 
   const [reads, setReads] = useState(0)
   useEffect(() => {
@@ -63,15 +65,22 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
     }
   }
 
-  const share = async (plugin: NavigatorPlugin) => {
+  const share = async (plugin: NavigatorPlugin, bumpVersion = false) => {
     if (plugin.share === undefined || busy !== undefined) return
     setBusy(plugin.key)
     setFailure(undefined)
+    setBump(undefined)
     try {
-      const shared = await plugin.share()
+      const outcome = await plugin.share(bumpVersion ? { bump: true } : undefined)
+      if (outcome.status === 'released') {
+        // Ask first: the version is released once, so the next share is the next patch.
+        setBump({ key: plugin.key, version: outcome.version, nextVersion: outcome.nextVersion })
+        setBusy(undefined)
+        return
+      }
       // The row shows where it went without waiting for the Host to read the whole list again.
       setLoad(current => current.status === 'ready'
-        ? { status: 'ready', plugins: current.plugins.map(row => row.key === plugin.key ? { ...row, shared } : row) }
+        ? { status: 'ready', plugins: current.plugins.map(row => row.key === plugin.key ? { ...row, shared: { url: outcome.url, version: outcome.version } } : row) }
         : current)
       setBusy(undefined)
     } catch (cause) {
@@ -126,7 +135,7 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
                   </a>
                 </>
               )}
-              {plugin.share !== undefined && plugin.shared === undefined && (
+              {plugin.share !== undefined && (
                 <>
                   {' · '}
                   <button
@@ -135,8 +144,18 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
                     disabled={busy !== undefined}
                     onClick={() => { void share(plugin) }}
                   >
-                    {busy === plugin.key ? 'Sharing…' : 'Share'}
+                    {busy === plugin.key ? 'Sharing…' : plugin.shared === undefined ? 'Share' : 'Share again'}
                   </button>
+                </>
+              )}
+              {bump?.key === plugin.key && (
+                <>
+                  {' · '}
+                  <span className="acrylBlendsBumpAsk">
+                    v{bump.version} is released. Share v{bump.nextVersion}?
+                    <button type="button" className="acrylBlendsBumpShare" disabled={busy !== undefined} onClick={() => { void share(plugin, true) }}>Share v{bump.nextVersion}</button>
+                    <button type="button" className="acrylBlendsBumpCancel" onClick={() => { setBump(undefined) }}>Cancel</button>
+                  </span>
                 </>
               )}
             </small>

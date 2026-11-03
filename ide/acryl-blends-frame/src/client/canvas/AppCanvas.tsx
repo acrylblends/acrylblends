@@ -49,6 +49,8 @@ export function AppCanvas({ canvas, picking = false, onPick, onCancel }: AppCanv
       ref={frame}
       className="acrylAppCanvasFrame"
       title="App"
+      // The feedback screenshot in Preview asks the browser for the tab; the embedded app page may do so.
+      allow="display-capture"
       src={snapshot.address}
       onLoad={(event) => {
         const address = snapshot.address

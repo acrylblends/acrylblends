@@ -194,7 +194,9 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsPlugins { color: var(--bf-text, #e8e8ea); font-size: 13px; }
 .acrylBlendsFeedbackNew { margin-left: auto; color: var(--bf-warn); font-size: 11px; }
 .acrylBlendsFeedback { display: grid; gap: 2px; width: calc(100% - 12px); margin: 0 6px 4px; padding: 7px 9px; border: 0; border-radius: 6px; background: rgba(224,164,58,.14); color: #ecdcbc; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.acrylBlendsFeedback { position: relative; padding-right: 56px; }
 .acrylBlendsFeedback:hover { background: rgba(224,164,58,.22); }
+.acrylBlendsFeedbackThumb { position: absolute; right: 7px; top: 7px; width: 42px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid #34343a; background: #0b0b0d; }
 .acrylBlendsFeedback[data-seen] { background: rgba(224,164,58,.07); color: #b9ad97; }
 .acrylBlendsFeedback b { color: #fff; font-weight: 600; }
 .acrylBlendsFeedback small { opacity: .75; font-size: 11px; }
@@ -221,6 +223,9 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsShareButton:disabled { color: #66666e; cursor: default; }
 .acrylBlendsShared { color: #8fb0ff; text-decoration: none; }
 .acrylBlendsShared:hover { text-decoration: underline; }
+.acrylBlendsBumpAsk { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #e0a43a; }
+.acrylBlendsBumpShare, .acrylBlendsBumpCancel { padding: 1px 7px; border: 1px solid #34343a; border-radius: 5px; background: var(--bf-surface-2); color: #cfcfd6; font: inherit; font-size: 11px; cursor: pointer; }
+.acrylBlendsBumpShare { border-color: var(--bf-accent); color: #fff; background: var(--bf-accent-dim); }
 .acrylBlendsTog { grid-row: 1 / span 2; grid-column: 3; width: 30px; height: 17px; border: 0; padding: 0; border-radius: 99px; background: #3a3a40; position: relative; cursor: pointer; }
 .acrylBlendsTog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: left .12s ease; }
 .acrylBlendsTog[aria-checked="true"] { background: #5468ff; }

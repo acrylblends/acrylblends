@@ -3,13 +3,15 @@
  * plugin), read from the frame's Host, and the task a note becomes when the builder hands it to an agent.
  */
 
-import { FRAME_FEEDBACK_PATH, FRAME_FEEDBACK_SEEN_PATH, parseFeedbackView, type FeedbackNoteView, type FeedbackView } from '../contract.ts'
+import { FRAME_FEEDBACK_PATH, FRAME_FEEDBACK_SEEN_PATH, FRAME_FEEDBACK_SHOT_PATH, parseFeedbackView, type FeedbackNoteView, type FeedbackView } from '../contract.ts'
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 export interface FeedbackApi {
   read(): Promise<FeedbackView>
   markSeen(ids: readonly string[]): Promise<void>
+  /** The frame-served screenshot of one note (same origin, so the panel and the hand-off can read it). */
+  shotUrl(id: string): string
 }
 
 export function createFeedbackApi(fetcher: FetchLike = (input, init) => fetch(input, init)): FeedbackApi {
@@ -27,6 +29,9 @@ export function createFeedbackApi(fetcher: FetchLike = (input, init) => fetch(in
         body: JSON.stringify({ ids }),
       })
       if (!response.ok) throw new Error(`the feedback could not be marked seen (HTTP ${String(response.status)})`)
+    },
+    shotUrl(id) {
+      return `${FRAME_FEEDBACK_SHOT_PATH}?id=${encodeURIComponent(id)}`
     },
   }
 }

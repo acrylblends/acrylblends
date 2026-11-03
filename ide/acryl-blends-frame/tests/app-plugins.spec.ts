@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, packageAppPlugin, parseBlendRows, pluginPackageManifest,
+  bumpPackageVersion, commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, packageAppPlugin, parseBlendRows, pluginPackageManifest,
   readSharedRecords, recordShare, setMadeOn, setRowOn,
 } from '../src/app-plugins.ts'
 import { appPluginRow, createAppPluginsApi, filterPlugins, framePluginRow, madeWhen } from '../src/client/plugins-navigator.ts'
@@ -97,7 +97,7 @@ describe('sharing a local plugin', () => {
   const where = { url: 'https://github.com/inboxxobni/hello-share', version: '0.1.0' }
 
   it('offers Share on a local row, and a shared row shows where it went', () => {
-    const share = () => Promise.resolve(where)
+    const share = () => Promise.resolve({ status: 'shared' as const, ...where })
     expect(appPluginRow(plugin, () => Promise.resolve(), share).share).toBe(share)
     expect(appPluginRow({ ...plugin, shared: where }, () => Promise.resolve()).shared).toEqual(where)
     // A library row is already published by its library; it is not shared from the app.
@@ -136,11 +136,37 @@ describe('sharing a local plugin', () => {
       calls.push({ url, body: String(init?.body) })
       return new Response(JSON.stringify({ url: where.url, version: where.version, owner: 'inboxxobni', repo: 'hello-share', tag: 'v0.1.0' }), { status: 200 })
     })
-    expect(await api.share('hello-share')).toEqual(where)
+    expect(await api.share('hello-share')).toEqual({ status: 'shared', ...where })
     expect(calls[0]?.url).toBe('/api/acryl-blends-frame/plugins/share')
     expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ name: 'hello-share' })
-    const failed = createAppPluginsApi(async () => new Response(JSON.stringify({ error: 'already has release v0.1.0' }), { status: 409 }))
-    await expect(failed.share('hello-share')).rejects.toThrow('already has release')
+    const failed = createAppPluginsApi(async () => new Response(JSON.stringify({ error: 'it could not be shared' }), { status: 409 }))
+    await expect(failed.share('hello-share')).rejects.toThrow('it could not be shared')
+  })
+
+  it('asks before bumping a released version, and sends the bump on the second call', async () => {
+    const bodies: string[] = []
+    const api = createAppPluginsApi(async (_url, init) => {
+      bodies.push(String(init?.body))
+      const bump = JSON.parse(String(init?.body)) as { bump?: boolean }
+      return new Response(JSON.stringify(bump.bump === true
+        ? { status: 'shared', url: where.url, version: '0.1.3' }
+        : { status: 'released', version: '0.1.2', nextVersion: '0.1.3' }), { status: 200 })
+    })
+    expect(await api.share('hello-share')).toEqual({ status: 'released', version: '0.1.2', nextVersion: '0.1.3' })
+    expect(await api.share('hello-share', { bump: true })).toEqual({ status: 'shared', url: where.url, version: '0.1.3' })
+    expect(JSON.parse(bodies[0] ?? '{}')).toEqual({ name: 'hello-share' })
+    expect(JSON.parse(bodies[1] ?? '{}')).toEqual({ name: 'hello-share', bump: true })
+  })
+
+  it('bumps a package folder one patch and writes it back', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'frame-bump-'))
+    try {
+      writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'hello-share', version: '1.2.3' }))
+      expect(await bumpPackageVersion(root)).toBe('1.2.4')
+      expect(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version).toBe('1.2.4')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('keeps the share record in the plugin list the page reads', () => {
@@ -149,6 +175,24 @@ describe('sharing a local plugin', () => {
       frame: [],
     })
     expect(view.plugins[0]?.shared).toEqual(where)
+  })
+})
+
+describe('feedback screenshots', () => {
+  it('keeps a note screenshot in the view, and drops a malformed one', () => {
+    const view = parseFeedbackView({
+      available: true,
+      notes: [{
+        id: 'n1', at: '2026-11-03T10:00:00Z', text: 'cut off', page: '/app/', seen: false,
+        screenshot: { mediaType: 'image/webp', width: 800, height: 600 },
+      }],
+    })
+    expect(view.notes[0]?.screenshot).toEqual({ mediaType: 'image/webp', width: 800, height: 600 })
+    const broken = parseFeedbackView({
+      available: true,
+      notes: [{ id: 'n2', at: '2026-11-03T10:00:00Z', text: 'x', page: '/', seen: false, screenshot: { mediaType: 'image/gif', width: 1, height: 1 } }],
+    })
+    expect(broken.notes[0]?.screenshot).toBeUndefined()
   })
 })
 

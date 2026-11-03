@@ -4,3 +4,9 @@
 export function frameViewOf(win: {
   readonly parent: unknown
 }): { readonly mode: 'build' | 'preview' } | undefined
+
+/** The stored size of a screenshot: the whole view, downscaled to `maxSide`. */
+export function shotSize(width: number, height: number, maxSide?: number): { width: number; height: number }
+
+/** The largest screenshot the page sends (decoded bytes); the Host refuses more than 512 KB. */
+export const SHOT_MAX_BYTES: number

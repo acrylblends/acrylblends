@@ -86,6 +86,15 @@ export function frameViewOf(win) {
   }
 }
 
+/** The size a screenshot is stored at: the whole view, downscaled to `maxSide`. */
+export function shotSize(width, height, maxSide = 1280) {
+  const scale = Math.min(1, maxSide / Math.max(width, height))
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) }
+}
+
+/** A screenshot is re-encoded below this size; the Host refuses more than 512 KB decoded. */
+export const SHOT_MAX_BYTES = 400 * 1024
+
 // biome-ignore lint/correctness/noUnusedVariables: ./index.ts serves this file with a call to start appended
 function start(prefix) {
   if (document.querySelector('acryl-feedback')) return
@@ -186,6 +195,86 @@ function start(prefix) {
     render()
   }
 
+  /**
+   * The tab as the person sees it, with the picker's outline on the page, as a WebP (PNG where WebP is unavailable). The Feedback button and the
+   * note form are hidden for the picture, so it shows the app and the outline, not the form. A refused picker or a browser without screen capture
+   * sends the note without an image.
+   */
+  const takeShot = async () => {
+    if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') return undefined
+    let stream
+    try {
+      // Called from the Send click itself: the browser opens its picker only inside a gesture.
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: { max: 1920 }, height: { max: 1080 } },
+        preferCurrentTab: true,
+        audio: false,
+      })
+    } catch {
+      return undefined
+    }
+    const popHidden = pop.hidden
+    const buttonDisplay = button.style.display
+    try {
+      const video = document.createElement('video')
+      video.srcObject = stream
+      video.muted = true
+      await video.play()
+      if (video.readyState < 2) await new Promise((resolve) => video.addEventListener('loadeddata', resolve, { once: true }))
+      // Hide the form after the picker closed; the outline the picker drew stays on the page and in the picture.
+      pop.hidden = true
+      button.style.display = 'none'
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      // A tab capture delivers frames a little late: wait for frames made after the hide, so the picture shows the app, not the form.
+      await new Promise((resolve) => {
+        const done = () => resolve()
+        const timer = setTimeout(done, 600)
+        if (typeof video.requestVideoFrameCallback !== 'function') return
+        let frames = 0
+        const step = () => {
+          frames += 1
+          if (frames >= 3) {
+            clearTimeout(timer)
+            done()
+            return
+          }
+          video.requestVideoFrameCallback(step)
+        }
+        video.requestVideoFrameCallback(step)
+      })
+      let maxSide = 1280
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const size = shotSize(video.videoWidth || 1, video.videoHeight || 1, maxSide)
+        const canvas = document.createElement('canvas')
+        canvas.width = size.width
+        canvas.height = size.height
+        const context = canvas.getContext('2d')
+        if (context === null) return undefined
+        context.drawImage(video, 0, 0, size.width, size.height)
+        let blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', attempt === 0 ? 0.82 : 0.7))
+        if (blob === null) blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+        if (blob === null) return undefined
+        if (blob.size <= SHOT_MAX_BYTES) {
+          const data = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result)
+            reader.onerror = () => reject(reader.error)
+            reader.readAsDataURL(blob)
+          })
+          return { data, width: size.width, height: size.height }
+        }
+        maxSide = Math.max(640, Math.round(maxSide * 0.72))
+      }
+      return undefined
+    } catch {
+      return undefined
+    } finally {
+      pop.hidden = popHidden
+      button.style.display = buttonDisplay
+      for (const track of stream.getTracks()) track.stop()
+    }
+  }
+
   button.addEventListener('click', () => {
     if (state.open) close()
     else open()
@@ -210,6 +299,8 @@ function start(prefix) {
       state.choice === 'element' && state.picked
         ? { selector: elementSelector(state.picked), label: elementLabel(state.picked) }
         : undefined
+    // The screenshot is taken here, inside the click; a refused capture still sends the note.
+    const screenshot = await takeShot()
     try {
       const response = await fetch(`${prefix}/notes`, {
         method: 'POST',
@@ -218,6 +309,7 @@ function start(prefix) {
           text: text.value,
           page: location.pathname + location.search,
           ...(element ? { element } : {}),
+          ...(screenshot ? { screenshot } : {}),
         }),
       })
       if (!response.ok)

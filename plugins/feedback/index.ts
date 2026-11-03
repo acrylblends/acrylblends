@@ -7,7 +7,9 @@
  * - A middleware appends one script tag (`<mount>/api/feedback/feedback.js`) to every HTML response, so no page is edited (agent-panel's way).
  * - In the ACRYL frame's canvas the button follows the frame's view: Build hides it (the builder has its own left panel for notes), and Preview shows it as
  *   production does. A page opened directly keeps it on every page.
- * - `POST <mount>/api/feedback/notes` takes one note from the app's own page (same origin), at most 30 a minute across the app.
+ * - `POST <mount>/api/feedback/notes` takes one note from the app's own page (same origin), at most 30 a minute across the app. The page adds a
+ *   screenshot of what the person saw (the browser's tab capture, with the picker's outline on the page), downscaled and capped; a refused capture
+ *   still sends the note.
  * - Nobody reads the notes over HTTP here: the builder reads them through the service. Opt-in: `acrylblends add feedback`.
  */
 import { readFileSync } from 'node:fs'
@@ -15,7 +17,7 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { Acryl } from '../acryl-router/src/index.ts'
 import type {} from '../instance/index.ts'
-import { type FeedbackNote, FeedbackStore, parseNewNote } from './store.ts'
+import { type FeedbackNote, FeedbackStore, parseNewNote, type StoredScreenshot } from './store.ts'
 
 export type { FeedbackNote, PinnedElement } from './store.ts'
 
@@ -26,6 +28,8 @@ export const inject = ['router', 'appInstance']
 export interface Feedback {
   list(): Promise<FeedbackNote[]>
   markSeen(ids: readonly string[]): Promise<void>
+  /** A note's screenshot, when it has one and the file is still there. */
+  screenshot(id: string): Promise<StoredScreenshot | undefined>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -68,6 +72,7 @@ export function apply(ctx: Context, config: FeedbackConfig = {}): void {
       ctx.reflect.provide('feedback', {
         list: () => store.list(),
         markSeen: (ids) => store.markSeen(ids),
+        screenshot: (id) => store.screenshot(id),
       } satisfies Feedback),
     'feedback: service',
   )

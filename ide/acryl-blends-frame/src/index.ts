@@ -19,7 +19,7 @@ import { GitRunner, Versions } from 'acryl-versions'
 import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
-import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow } from './app-plugins.ts'
+import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
 import { blankChatsFile, createBlankChatsStore } from './blank-chats.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
@@ -35,6 +35,7 @@ import {
   FRAME_BRANCHES_SWITCH_PATH,
   FRAME_FEEDBACK_PATH,
   FRAME_FEEDBACK_SEEN_PATH,
+  FRAME_FEEDBACK_SHOT_PATH,
   FRAME_GIT_PULL_PATH,
   FRAME_GIT_PUSH_PATH,
   FRAME_GIT_REMOTE_PATH,
@@ -45,7 +46,6 @@ import {
   FRAME_VERSIONS_SHARED_PATH,
   type AppPluginKind,
   type AppPluginsView,
-  type SharedPluginView,
   type ChatSavesView,
   type FeedbackView,
   parseFeedbackNotes,
@@ -183,8 +183,8 @@ async function readAppName(root: string): Promise<string> {
 export interface PluginsPort {
   read(): Promise<AppPluginsView>
   switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
-  /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path. */
-  share(name: string): Promise<SharedPluginView & { readonly owner: string; readonly repo: string; readonly tag: string }>
+  /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path; `bump` releases the next patch. */
+  share(name: string, bump?: boolean): Promise<ShareAppPluginResult>
 }
 
 function parseSwitch(body: unknown): { kind: AppPluginKind; name: string; on: boolean } | undefined {
@@ -194,16 +194,24 @@ function parseSwitch(body: unknown): { kind: AppPluginKind; name: string; on: bo
   return { kind, name, on }
 }
 
-/** The builder's side of the app's feedback: the notes people sent, and marking them seen. */
+/** A note's screenshot as the frame serves it: the bytes and their image type. */
+export interface FeedbackShot {
+  readonly bytes: Uint8Array
+  readonly mediaType: 'image/webp' | 'image/png'
+}
+
+/** The builder's side of the app's feedback: the notes people sent, marking them seen, and one note's screenshot. */
 export interface FeedbackPort {
   read(): Promise<FeedbackView>
   markSeen(ids: readonly string[]): Promise<void>
+  screenshot(id: string): Promise<FeedbackShot | undefined>
 }
 
 /** The app's `feedback` service as the frame uses it, checked at each call: the plugin may be off, or come and go with a switch. */
 interface FeedbackSource {
   list(): Promise<unknown>
   markSeen(ids: readonly string[]): Promise<void>
+  screenshot?(id: string): Promise<unknown>
 }
 
 function isFeedbackSource(value: unknown): value is FeedbackSource {
@@ -222,6 +230,15 @@ export function feedbackPort(source: () => unknown): FeedbackPort {
     async markSeen(ids) {
       const service = source()
       if (isFeedbackSource(service)) await service.markSeen(ids)
+    },
+    async screenshot(id) {
+      const service = source()
+      if (!isFeedbackSource(service) || typeof service.screenshot !== 'function') return undefined
+      const shot = await service.screenshot(id)
+      if (shot === null || typeof shot !== 'object') return undefined
+      const { bytes, mediaType } = shot as { bytes?: unknown; mediaType?: unknown }
+      if (!(bytes instanceof Uint8Array) || (mediaType !== 'image/webp' && mediaType !== 'image/png')) return undefined
+      return { bytes, mediaType }
     },
   }
 }
@@ -430,6 +447,22 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
       await feedback.markSeen(ids)
       return c.json({ ok: true })
     })
+    app.get(FRAME_FEEDBACK_SHOT_PATH, ownPage, async (c) => {
+      const id = c.req.query('id') ?? ''
+      if (!/^[0-9a-f-]{36}$/u.test(id)) return c.json(error('name one note'), 400)
+      try {
+        const shot = await feedback.screenshot(id)
+        if (shot === undefined) return c.json(error('that note has no screenshot'), 404)
+        return c.body(new Uint8Array(shot.bytes), 200, {
+          'content-type': shot.mediaType,
+          'content-length': String(shot.bytes.length),
+          'cache-control': 'private, max-age=3600',
+        })
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the screenshot could not be read'), 500)
+      }
+    })
   }
   if (plugins !== undefined) {
     app.get(FRAME_PLUGINS_PATH, ownPage, async (c) => {
@@ -453,10 +486,12 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
     })
     app.post(FRAME_PLUGINS_SHARE_PATH, ownPage, jsonBody(), async (c) => {
       const body = await readJson(c)
-      const name = body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : (body as { name?: unknown }).name
-      if (typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/u.test(name)) return c.json(error('name one local plugin'), 400)
+      const fields = body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : body as { name?: unknown; bump?: unknown }
+      const name = fields?.name
+      if (typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/u.test(name) || (fields?.bump !== undefined && typeof fields.bump !== 'boolean'))
+        return c.json(error('name one local plugin'), 400)
       try {
-        return c.json(await plugins.share(name))
+        return c.json(await plugins.share(name, fields?.bump === true))
       } catch (cause) {
         report(cause)
         return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be shared'), 409)
@@ -578,7 +613,10 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       },
       // A local plugin goes to GitHub through the plugin-hub path: the same pack, secret check, repository, release and local store an
       // ACRYL plugin share uses, with the user's own gh and git doing the publishing.
-      share: async (name) => shareAppPlugin(root, ctx.appInstance.home, name, shareOwner === undefined ? {} : { owner: shareOwner }),
+      share: async (name, bump) => shareAppPlugin(root, ctx.appInstance.home, name, {
+        ...(shareOwner === undefined ? {} : { owner: shareOwner }),
+        ...(bump === true ? { bump: true } : {}),
+      }),
     }
     // The chat's agent finished a turn that changed files: save a version by itself (./auto-save.ts), and remember which turn it was.
     const store = new SaveStore(join(ctx.appInstance.dshHome, 'chat-saves.json'), report)

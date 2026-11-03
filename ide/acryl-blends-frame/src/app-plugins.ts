@@ -10,7 +10,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
-import { gitCli, githubCli, PluginStore, sharePlugin, storeRootOf } from '@webboxes/plugin-hub'
+import { bumpVersion, gitCli, githubCli, parseVersion, PluginStore, sharePlugin, storeRootOf } from '@webboxes/plugin-hub'
 import type { AppPluginView, FramePluginState, FramePluginView, SharedPluginView } from './contract.ts'
 
 /** One row of `blend.yaml`'s `spec.rows`: where its block starts and ends (line indexes, end exclusive). */
@@ -385,21 +385,50 @@ export async function packageAppPlugin(root: string, name: string): Promise<stri
   return target
 }
 
+/** The version a package folder names, or undefined when it has none yet. */
+export async function packageVersion(dir: string): Promise<string | undefined> {
+  try {
+    const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Bump one package folder's patch version (what the hub asks for after a release), and answer the new version. */
+export async function bumpPackageVersion(dir: string): Promise<string> {
+  const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as Record<string, unknown>
+  const current = typeof manifest['version'] === 'string' ? manifest['version'] : undefined
+  if (current === undefined || parseVersion(current) === undefined) throw new Error('the package has no semantic version to bump')
+  const next = bumpVersion(current, 'patch')
+  manifest['version'] = next
+  await writeFile(join(dir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  return next
+}
+
+/** A share's answer: where it went, or the version that is already released and the patch that would follow. */
+export type ShareAppPluginResult =
+  | ({ readonly status: 'shared' } & SharedPluginView & { readonly owner: string; readonly repo: string; readonly tag: string })
+  | { readonly status: 'released'; readonly version: string; readonly nextVersion: string }
+
 /**
  * Share one local plugin through the plugin-hub path: package it, then publish the package to its own GitHub repository with a release. The user's
  * own `gh` and `git` do the publishing (the hub reads no token), and the local store keeps the tarball as it does for every share.
  * @param root - the app folder.
  * @param home - the app's home (the hub's store lives under it).
  * @param name - the local plugin's folder name.
- * @param options - the repository owner (the signed-in account when absent) and the visibility (the plugin's own when absent).
+ * @param options - the repository owner (the signed-in account when absent), the visibility (the plugin's own when absent), and whether to bump
+ * the patch version before sharing (the answer after a version was already released).
  */
 export async function shareAppPlugin(
   root: string,
   home: string,
   name: string,
-  options: { readonly owner?: string; readonly visibility?: 'private' | 'public' } = {},
-): Promise<SharedPluginView & { readonly owner: string; readonly repo: string; readonly tag: string }> {
+  options: { readonly owner?: string; readonly visibility?: 'private' | 'public'; readonly bump?: boolean } = {},
+): Promise<ShareAppPluginResult> {
   const dir = await packageAppPlugin(root, name)
+  if (options.bump === true) await bumpPackageVersion(dir)
+  const current = await packageVersion(dir)
   const result = await sharePlugin(
     dir,
     {
@@ -408,8 +437,14 @@ export async function shareAppPlugin(
     },
     { host: githubCli(), git: gitCli(), store: new PluginStore(storeRootOf(home)) },
   )
-  if (result.status === 'refused') throw new Error(result.reason)
+  if (result.status === 'refused') {
+    // A version is released once: the person is asked first, then the frame shares the next patch.
+    const released = /already has release v([^\s;]+)/u.exec(result.reason)
+    if (released !== null && current !== undefined && parseVersion(current) !== undefined)
+      return { status: 'released', version: released[1] ?? current, nextVersion: bumpVersion(current, 'patch') }
+    throw new Error(result.reason)
+  }
   // Only a completed share is remembered: the hub prepares the package.json repository before its guards, so that field alone does not prove a release.
   await recordShare(join(home, 'shared-plugins.json'), name, { url: result.url, version: result.version })
-  return { url: result.url, version: result.version, owner: result.owner, repo: result.repo, tag: result.tag }
+  return { status: 'shared', url: result.url, version: result.version, owner: result.owner, repo: result.repo, tag: result.tag }
 }
