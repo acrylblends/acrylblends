@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { countChanges, parseBranches, parseBranchName, parseFrameState, sharedVersions } from '../src/index.ts'
 import { FRAME_BRANCHES_NEW_PATH, FRAME_BRANCHES_SWITCH_PATH, branchNameProblem, parseBranchChats, parseSharedVersions } from '../src/contract.ts'
 import { branchClick, createBranchesApi, saveBeforeSwitchMessage } from '../src/client/branches.ts'
-import { BranchChatsStore } from '../src/client/branch-chats.ts'
+import { BranchChatsStore, historyGroups } from '../src/client/branch-chats.ts'
 import { createBranchChatsStore } from '../src/branch-chats.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
 import { backText, backToMessage, chatTime, saveBeforeBackMessage, savedLabel, shortTime, versionNumber } from '../src/client/versions.ts'
@@ -444,5 +444,18 @@ describe('shared versions', () => {
     expect(parseSharedVersions({ shared: ['aaa'] })).toEqual(['aaa'])
     expect(() => parseSharedVersions({ shared: [7] })).toThrow('entry')
     expect(() => parseSharedVersions({})).toThrow('not a list')
+  })
+})
+
+describe('chat history grouped by branch', () => {
+  it('puts the checked-out branch first, the others by name, and a chat with no branch yet last', () => {
+    const rows = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' }]
+    const groups = historyGroups(rows, { a: 'main', b: 'feature-due-dates', c: 'main', d: 'alpha' }, 'feature-due-dates')
+    expect(groups.map(group => [group.branch, group.rows.map(row => row.id)])).toEqual([
+      ['feature-due-dates', ['b']],
+      ['alpha', ['d']],
+      ['main', ['a', 'c']],
+      [undefined, ['e']],
+    ])
   })
 })

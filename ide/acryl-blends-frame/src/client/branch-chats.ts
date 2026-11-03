@@ -95,3 +95,25 @@ export class BranchChatsStore implements BranchChatsPort {
     for (const listener of [...this.listeners]) listener()
   }
 }
+
+/**
+ * Chat history as the History list shows it (mockup scenario 5): one group per branch, the checked-out branch first and the others by name,
+ * each keeping the rows' own order; a chat no branch was recorded for yet comes last, under no name.
+ */
+export function historyGroups<Row extends { readonly id: string }>(
+  rows: readonly Row[],
+  assignments: Readonly<Record<string, string>>,
+  checkedOut: string | undefined,
+): { readonly branch: string | undefined; readonly rows: readonly Row[] }[] {
+  const groups = new Map<string | undefined, Row[]>()
+  for (const row of rows) {
+    const branch = assignments[row.id]
+    const group = groups.get(branch)
+    if (group === undefined) groups.set(branch, [row])
+    else group.push(row)
+  }
+  const rank = (branch: string | undefined): number => (branch === checkedOut ? 0 : branch === undefined ? 2 : 1)
+  return [...groups.entries()]
+    .sort(([a], [b]) => rank(a) - rank(b) || (a ?? '').localeCompare(b ?? ''))
+    .map(([branch, grouped]) => ({ branch, rows: grouped }))
+}
