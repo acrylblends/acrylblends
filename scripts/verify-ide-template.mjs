@@ -762,6 +762,33 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         deviceScaleFactor: 1,
         mobile: false,
       })
+      // Every time a browser tile's iframe is pointed at another address in place, and every tile frame made for an outside site, in every document
+      // of the frame's page (installed before the page's own scripts, so a reload of the frame keeps it). A tile frame is made for one address:
+      // re-pointing one let a new tab's outside default page commit late and pass for the app page's error page, and the tile "retried" by
+      // replacing the live app page under a run (run 41559207908). Nothing in the gate asks for an outside site, so none may be loaded.
+      await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+        source: `if (window.top === window) {
+          window.__acrylTileRepointed = []
+          window.__acrylTileOutside = []
+          const outside = (frame) => {
+            const src = frame.getAttribute('src')
+            try { if (src !== null && new URL(src, location.href).origin !== location.origin) window.__acrylTileOutside.push({ at: Date.now(), src }) } catch {}
+          }
+          const isTile = (node) => node instanceof HTMLIFrameElement && node.classList.contains('dshWorkspaceBrowserFrame')
+          new MutationObserver((records) => {
+            for (const record of records) {
+              if (record.type === 'attributes' && isTile(record.target)) {
+                window.__acrylTileRepointed.push({ at: Date.now(), from: record.oldValue, to: record.target.getAttribute('src') })
+                outside(record.target)
+              }
+              for (const node of record.addedNodes) {
+                if (isTile(node)) outside(node)
+                else if (node.querySelectorAll !== undefined) for (const frame of node.querySelectorAll('iframe.dshWorkspaceBrowserFrame')) outside(frame)
+              }
+            }
+          }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'], attributeOldValue: true })
+        }`,
+      })
       await cdp.send('Page.navigate', { url })
       const evaluate = async (expression) =>
         (
@@ -1220,6 +1247,27 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         )
       }
       log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
+      // The new tab opened at its default address and Go sent it to the app: that must be a new frame for the app's address, not the old frame
+      // re-pointed. Checked again after the panel's run, which is when a late load from the old address used to replace the page.
+      const repointed = async (when) => {
+        const record = await evaluate(
+          '({ changes: window.__acrylTileRepointed ?? null, outside: window.__acrylTileOutside ?? null })',
+        )
+        if (!Array.isArray(record?.changes) || !Array.isArray(record?.outside))
+          fail(`the tile frame recorder is missing ${when}`)
+        if (record.changes.length > 0)
+          fail(
+            `a browser tile's frame was pointed at another address in place ${when}: ${JSON.stringify(record.changes)}`,
+          )
+        if (record.outside.length > 0)
+          fail(
+            `a browser tile loaded an outside site nobody asked for ${when}: ${JSON.stringify(record.outside)}`,
+          )
+      }
+      await repointed('when the app page was shown')
+      log(
+        'each browser tile address loads in a frame of its own (no frame is re-pointed), and a new tab never opens an outside site',
+      )
 
       // The agent template's own plugins run beside the host (the composition check above proves every row active), and the panel's routes belong under
       // the app's mount: /app/api/agent-panel, where the app is served, not the host's own /api. Open the panel in the iframe, let its session load, and
@@ -1314,6 +1362,8 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
               originAt: iframe?.contentWindow?.performance?.timeOrigin ?? null,
               href: iframe?.contentWindow?.location?.href ?? null,
               loads: window.__acrylTileLoads?.slice(-10) ?? null,
+              repointed: window.__acrylTileRepointed ?? null,
+              outside: window.__acrylTileOutside ?? null,
               // A panel-initiated page reload (a run that changed a plugin) is recorded before it happens; a failure dump says whether one was involved.
               reload: iframe?.contentWindow?.sessionStorage?.getItem('agent-panel-reload') ?? null,
             }
@@ -1335,6 +1385,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         log(
           "the panel opens in the app, asks the app's own agent, and shows the answer (run started and stopped)",
         )
+        await repointed('during the panel run')
         // The same admission as the app's own server, never a looser one: the mounted path refuses a cross-site request, and an ask without the token.
         const refused = (target, extra) =>
           spawnSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', ...extra, target], {
