@@ -1211,31 +1211,35 @@ persistence `v2` with the migration. The gate should check the
 canvas iframe as the app's page (it still opens a Browser tab to prove the app page, which passes but no longer describes the product).
 ## 33. Slice 2 state on branch 125-slice2 (2026-11-03)
 
-Working state for the handoff, not a decision record. Branch `125-slice2` started from main `81bb14dc`; it is unpushed and
-will be rebased onto `origin/125-slice1` (`077b4b6a` and its later commits) before gating.
+Working state for the handoff, not a decision record. Branch `125-slice2` is rebased onto `origin/125-slice1`
+`077b4b6a` and is unpushed; slice 1 has since moved to `85bf3c12` (which includes main `a7befe61`), and slice 2 must be
+rebased onto it before gating.
 
-Landed on the branch:
+Landed on the branch (rebased shas):
 
-- `4319aad5`: the left panel lists only open items per branch (chats, driver agent tabs and PTYs; closed chats belong to
-  the chat History); the Versions plugin gets a live port under the selected branch (`client/projects/versions-port.ts`,
-  read from `acrylVersions`); the frame has a persisted Build/Preview mode (`mode` in `DesktopLayoutState`,
-  `view-persistence.ts`, the control and preview pill in `AdvancedFrame`; preview keeps both panel subtrees mounted and
-  gives the app the whole grid).
-- `120763fe`: the new `ide/acryl-versions` package: Host log/save/restore/share routes under `/api/acryl-versions`
-  behind the loopback admission, a confined git runner, a client section under the selected branch, 27 tests on real
-  repositories, route admission and jsdom; mounted by default in `packages/cli/src/ide-profile.ts`.
-- Full check green on the pre-rebase branch.
+- `381cefef`: the left panel lists only open items per branch (chats, driver agent tabs and PTYs; closed chats belong
+  to the chat History); a live Versions port under the selected branch (`client/projects/versions-port.ts`, read from
+  `acrylVersions`); the persisted Build/Preview mode (`mode` in `DesktopLayoutState`, `view-persistence.ts`, the control
+  and preview pill in `AdvancedFrame`; preview keeps both panel subtrees mounted and gives the app the whole grid).
+- `b5654d41`: the `ide/acryl-versions` package (Host log/save/restore/share behind the loopback admission, a confined
+  git runner, a client section, 27 tests on real repositories, route admission and jsdom), mounted in `ide-profile.ts`.
+- `9e8f80ec`: the IDE Settings sections leave the frame (Tabs, Command palette, the separate Shortcuts section); both
+  panels open on first run and their open state is remembered with the mode and widths.
+- `7f1ba503` the test cast; `1a7f86cd` this note; `c592cc6b` the Preview Notice wait raised to two minutes;
+  `3b5bf2a1` the node-server port-scan test's headroom fix.
+
+Blocked on the gate: the blank frame gate's Preview Notice step fails inside `pnpm run check` but passes when the gate
+runs alone on the same tree, with or without a sibling gate. A reproduction with page diagnostics after `verify:ide-host`
+is in flight. Do not call it a slice 2 regression until that dump is read; it fails before any slice 2 area.
 
 Still to do:
 
-- Rebase onto `origin/125-slice1`; reapply the Versions port and Build/Preview to its right-panel/AdvancedFrame
-  structure; verify click-to-open from the tree reaches the right panel and that both panels open on first run (slice 1
-  owns the frame-owned right panel).
-- Remove the IDE Settings sections from the frame: the Tabs and Command palette registrations and the separate
-  Shortcuts section. The short ACRYL shortcut list in General and the plugin navigator replacing "Built-in plugins"
-  stay with the design (Q9; the navigator is slice 3).
-- Tab persistence v2 and the removals of Review, Checks, Comments and the dock are slice 1's (Fork3); do not redo them.
-- Full check, push `125-slice2`, all CI green, then report the sha.
+- Rebase onto slice 1's final head; re-verify click-to-open from the tree into the right panel.
+- The short ACRYL shortcut list in General and the plugin navigator replacing "Built-in plugins" stay with the design
+  (Q9; the navigator is slice 3).
+- Tab persistence v2 and the Review/Checks/Comments/dock removals are slice 1's (Fork3); do not redo them.
+- Full check, push `125-slice2`, all CI green, then report the sha, then slice 4.
 
-126 state: the session-navigation fix is `22513473`, merged with main `a7befe61` in `638dd437`; its full check is the
-remaining gate, then push and three greens.
+126 state: the session-navigation fix is `22513473`, merged with main `a7befe61` in `638dd437`. Green 1 is CI run
+`41586004208`; attempts 2 failed only on macOS flakes (the agent frame panel and the git-service disposal test) and
+attempt 3 is running. `125-port-inventory` now merges main `a7befe61` at `4439c62b`; its full check is pending.
