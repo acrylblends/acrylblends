@@ -22,6 +22,9 @@ textarea:focus { outline: none; border-color: #c2410c; }
 .outline { position: fixed; z-index: 2147483645; pointer-events: none; border: 2px dashed #e0a43a; border-radius: 6px; display: none; }
 .outline[data-picked] { display: block; }
 .outline span { position: absolute; right: 6px; top: -11px; background: #e0a43a; color: #1d1c1a; font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
+.pins { position: fixed; inset: 0; pointer-events: none; z-index: 2147483644; }
+.pin { position: absolute; width: 22px; height: 22px; border-radius: 50% 50% 50% 0; background: #e0a43a; color: #1d1c1a; font-size: 11px; font-weight: 700; display: grid; place-items: center; transform: rotate(-45deg); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.pin span { transform: rotate(45deg); }
 .shotRow[hidden] { display: none; }
 .shot { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; color: #4b4b52; font-size: 12px; cursor: pointer; }
 .shot input { width: auto; margin: 0; accent-color: #c2410c; }
@@ -131,6 +134,7 @@ function start(prefix) {
   const root = host.attachShadow({ mode: 'open' })
   root.innerHTML = `<style>${STYLE}</style>
 <div class="outline"><span></span></div>
+<div class="pins"></div>
 <div class="pop" role="dialog" aria-label="Your feedback" hidden>
   <b>Your feedback</b>
   <div class="options">
@@ -151,6 +155,40 @@ function start(prefix) {
   const pop = root.querySelector('.pop')
   const outline = root.querySelector('.outline')
   const outlineLabel = outline.querySelector('span')
+  const pinsLayer = root.querySelector('.pins')
+  /** The numbered pins for this page: a note already on an element shows a badge there, as the mockup's production does. */
+  let pins = []
+  const placePins = () => {
+    pinsLayer.replaceChildren()
+    for (const pin of pins) {
+      const target = document.querySelector(pin.selector)
+      if (target === null || target.getClientRects().length === 0) continue
+      const box = target.getBoundingClientRect()
+      const badge = document.createElement('span')
+      badge.className = 'pin'
+      badge.style.left = `${box.right - 11}px`
+      badge.style.top = `${box.top - 9}px`
+      const number = document.createElement('span')
+      number.textContent = String(pin.number)
+      badge.append(number)
+      pinsLayer.append(badge)
+    }
+  }
+  const readPins = async () => {
+    try {
+      const response = await fetch(`${prefix}/pins?page=${encodeURIComponent(location.pathname + location.search)}`, {
+        headers: { Accept: 'application/json' },
+      })
+      if (!response.ok) return
+      const body = await response.json()
+      pins = Array.isArray(body?.pins)
+        ? body.pins.filter((pin) => pin !== null && typeof pin === 'object' && typeof pin.selector === 'string' && Number.isInteger(pin.number))
+        : []
+      placePins()
+    } catch {
+      // No pins this time; the next read tries again.
+    }
+  }
   const onElement = root.querySelector('[data-choice="element"]')
   const nothing = root.querySelector('[data-choice="page"]')
   const text = root.querySelector('textarea')
@@ -376,6 +414,7 @@ function start(prefix) {
     const visible = frame === undefined || frame.mode !== 'build'
     host.style.display = visible ? '' : 'none'
     if (!visible && state.open) close()
+    if (visible) void readPins()
   }
   window.addEventListener(FRAME_MODE_EVENT, applyFrame)
   applyFrame()
@@ -400,4 +439,8 @@ function start(prefix) {
   document.addEventListener('keydown', onKey, true)
   window.addEventListener('scroll', reposition, true)
   window.addEventListener('resize', reposition)
+  // The builder's Build screen has no user feedback in it, so the pins are read again when the frame's view comes back.
+  window.setInterval(() => { if (host.style.display !== 'none') void readPins() }, 15_000)
+  window.addEventListener('scroll', placePins, true)
+  window.addEventListener('resize', placePins)
 }

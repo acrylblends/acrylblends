@@ -26,6 +26,15 @@ export interface FeedbackScreenshot {
   readonly bytes: number
 }
 
+/**
+ * A note already pinned on an element of a page, as that page's own script sees it: where to find the element again and the number its badge
+ * shows. It carries no note text, because anyone who opens the page can read this.
+ */
+export interface FeedbackPin {
+  readonly selector: string
+  readonly number: number
+}
+
 export interface FeedbackNote {
   readonly id: string
   /** ISO time it was sent. */
@@ -191,6 +200,22 @@ export class FeedbackStore {
       }
     }
     return undefined
+  }
+
+  /**
+   * The pins of one page, for the badges its visitors see: the elements a note was pinned on, numbered in the order their first note came,
+   * oldest first. One pin per element, so two notes on the same element share its badge, and the number of a pin never moves once it is given.
+   */
+  async pins(page: string): Promise<FeedbackPin[]> {
+    const pins: FeedbackPin[] = []
+    const taken = new Set<string>()
+    for (const note of (await this.list()).reverse()) {
+      const element = note.element
+      if (note.page !== page || element === undefined || taken.has(element.selector)) continue
+      taken.add(element.selector)
+      pins.push({ selector: element.selector, number: pins.length + 1 })
+    }
+    return pins
   }
 
   /** Every note, newest first. A line that is not a note is skipped. */

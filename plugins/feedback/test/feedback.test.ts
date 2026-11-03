@@ -86,6 +86,34 @@ describe('the notes', () => {
   })
 })
 
+describe('the pins a page shows', () => {
+  test('numbers the elements of that page in the order their first note came, and carries no note text', async () => {
+    const store = new FeedbackStore(directory())
+    await store.add({ text: 'first', page: '/', element: { selector: 'main > li:nth-of-type(1)', label: 'task' } })
+    await store.add({ text: 'elsewhere', page: '/about', element: { selector: 'h1', label: 'heading' } })
+    await store.add({ text: 'general', page: '/' })
+    await store.add({ text: 'second', page: '/', element: { selector: 'main > li:nth-of-type(2)', label: 'task' } })
+    assert.deepEqual(await store.pins('/'), [
+      { selector: 'main > li:nth-of-type(1)', number: 1 },
+      { selector: 'main > li:nth-of-type(2)', number: 2 },
+    ])
+    assert.deepEqual(await store.pins('/about'), [{ selector: 'h1', number: 1 }])
+    assert.deepEqual(await store.pins('/nowhere'), [])
+    assert.deepEqual(Object.keys((await store.pins('/'))[0] ?? {}).sort(), ['number', 'selector'])
+  })
+
+  test('gives two notes on one element one pin, and the next element the next number', async () => {
+    const store = new FeedbackStore(directory())
+    await store.add({ text: 'one', page: '/', element: { selector: '.card', label: 'card' } })
+    await store.add({ text: 'two', page: '/', element: { selector: '.card', label: 'card' } })
+    await store.add({ text: 'three', page: '/', element: { selector: '.filter', label: 'filter' } })
+    assert.deepEqual(await store.pins('/'), [
+      { selector: '.card', number: 1 },
+      { selector: '.filter', number: 2 },
+    ])
+  })
+})
+
 describe('the frame view', () => {
   test('is the handle a same-origin parent publishes, and nothing when the page is opened directly', () => {
     const handle = { mode: 'build' }

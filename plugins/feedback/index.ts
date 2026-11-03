@@ -11,6 +11,8 @@
  *   "Attach a screenshot of this page" (checked) and says the browser will ask to share the tab; the page adds the tab capture with the picker's
  *   outline, downscaled and capped. Only Chromium is offered the option (Firefox and Safari ignore preferCurrentTab and would share the whole
  *   screen); unchecking it or a refused capture still sends the note.
+ * - `GET <mount>/api/feedback/pins?page=...` answers the numbered badges a page draws on the elements people commented on (the mockup's
+ *   production feedback): each selector with its number, and no note text, since anyone who opens the page can read this route.
  * - Nobody reads the notes over HTTP here: the builder reads them through the service. Opt-in: `acrylblends add feedback`.
  */
 import { readFileSync } from 'node:fs'
@@ -18,9 +20,9 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { Acryl } from '../acryl-router/src/index.ts'
 import type {} from '../instance/index.ts'
-import { type FeedbackNote, FeedbackStore, parseNewNote, type StoredScreenshot } from './store.ts'
+import { type FeedbackNote, FeedbackStore, LIMITS, parseNewNote, type StoredScreenshot } from './store.ts'
 
-export type { FeedbackNote, PinnedElement } from './store.ts'
+export type { FeedbackNote, FeedbackPin, PinnedElement } from './store.ts'
 
 export const name = 'feedback'
 export const inject = ['router', 'appInstance']
@@ -108,6 +110,13 @@ export function apply(ctx: Context, config: FeedbackConfig = {}): void {
         'cache-control': 'no-cache',
       }),
     )
+    .get(`${PREFIX}/pins`, async (c) => {
+      const page = c.req.query('page')
+      if (typeof page !== 'string' || !page.startsWith('/') || page.length > LIMITS.page)
+        return c.json({ error: 'the page must be a path' }, 400)
+      // The page's visitors can read this route: it says where the commented elements are and nothing the notes say.
+      return c.json({ pins: await store.pins(page) }, 200, { 'cache-control': 'no-store' })
+    })
     .post(`${PREFIX}/notes`, async (c) => {
       if (!fromOwnPage(c.req.raw.headers))
         return c.json({ error: "only the app's own page may send feedback" }, 403)

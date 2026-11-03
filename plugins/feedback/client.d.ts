@@ -5,6 +5,9 @@ export function frameViewOf(win: {
   readonly parent: unknown
 }): { readonly mode: 'build' | 'preview' } | undefined
 
+/** A short name for a picked element: what it says it is, else its heading, else the first words it shows, else its tag. */
+export function elementLabel(element: Element): string
+
 /** The stored size of a screenshot: the whole view, downscaled to `maxSide`. */
 export function shotSize(width: number, height: number, maxSide?: number): { width: number; height: number }
 
