@@ -149,7 +149,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
   }, [versions, state.appRoot])
 
   // A new head is a new version, whoever made it (a save here, an agent's commit, a restore): read the list again.
-  useEffect(() => { void refresh() }, [refresh, state.head])
+  useEffect(() => { void refresh() }, [refresh, state.head, state.upstreamHead])
   useEffect(() => {
     onVersionLabel(load.status === 'ready' && load.log.entries.length > 0 ? `v${String(load.log.entries.length)}` : undefined)
   }, [load, onVersionLabel])

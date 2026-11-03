@@ -35,6 +35,9 @@ import {
   FRAME_BRANCHES_SWITCH_PATH,
   FRAME_FEEDBACK_PATH,
   FRAME_FEEDBACK_SEEN_PATH,
+  FRAME_GIT_PULL_PATH,
+  FRAME_GIT_PUSH_PATH,
+  FRAME_GIT_REMOTE_PATH,
   FRAME_PLUGINS_PATH,
   FRAME_PLUGINS_SHARE_PATH,
   FRAME_PLUGINS_SWITCH_PATH,
@@ -48,7 +51,10 @@ import {
   parseFeedbackNotes,
   type FrameBranch,
   type FrameState,
+  type GitRemoteState,
+  type GitSyncResult,
 } from './contract.ts'
+import { GitSync, upstreamHead } from './git-sync.ts'
 
 /**
  * The part of the runtime's `appInstance` service ACRYL plugins read (a separated interface: plugins do not import the runtime). Every plugin
@@ -235,6 +241,13 @@ export interface BranchesPort {
   switchTo(name: string): Promise<void>
 }
 
+/** The Git tab's push and pull for the checked-out branch (./git-sync.ts). Each rejects with the one line to show. */
+export interface GitSyncPort {
+  state(options: { readonly fetch?: boolean }): Promise<GitRemoteState>
+  push(): Promise<GitSyncResult>
+  pull(): Promise<GitSyncResult>
+}
+
 /** What each turn of a chat saved (the auto-save), for the line under the answer. */
 export interface ChatSavesPort {
   read(session: string): Promise<ChatSavesView>
@@ -283,10 +296,35 @@ export interface FrameRoutesDeps {
   readonly shared?: (hashes: readonly string[]) => Promise<string[]>
   readonly realChats?: RealChatsPort
   readonly blankChat?: BlankChatPort
+  readonly gitSync?: GitSyncPort
 }
 
-export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, blankChat }: FrameRoutesDeps): Acryl {
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, blankChat, gitSync }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
+  if (gitSync !== undefined) {
+    const failed = (cause: unknown, fallback: string): string => cause instanceof Error && cause.message !== '' ? cause.message : fallback
+    app.get(FRAME_GIT_REMOTE_PATH, ownPage, async (c) => {
+      try {
+        return c.json(await gitSync.state({ fetch: c.req.query('fetch') === '1' }))
+      } catch (cause) {
+        return c.json(error(failed(cause, 'the remote state could not be read')), 409)
+      }
+    })
+    app.post(FRAME_GIT_PUSH_PATH, ownPage, jsonBody(), async (c) => {
+      try {
+        return c.json(await gitSync.push())
+      } catch (cause) {
+        return c.json(error(failed(cause, 'the branch could not be pushed')), 409)
+      }
+    })
+    app.post(FRAME_GIT_PULL_PATH, ownPage, jsonBody(), async (c) => {
+      try {
+        return c.json(await gitSync.pull())
+      } catch (cause) {
+        return c.json(error(failed(cause, 'the branch could not be pulled')), 409)
+      }
+    })
+  }
   if (blankChat !== undefined) {
     app.get(FRAME_BLANK_CHAT_PATH, ownPage, async (c) => {
       try {
@@ -517,8 +555,8 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     const git = new GitRunner()
     const chatsFile = createBranchChatsStore(branchChatsFile(ctx.appInstance.home))
     const state = async (): Promise<FrameState> => {
-      const [appName, branches, worktree] = await Promise.all([readAppName(root), readBranches(git, root), readWorktree(git, root)])
-      return { appName, appRoot: root, ...(appPage === undefined ? {} : { appPage }), branches, ...worktree }
+      const [appName, branches, worktree, upstream] = await Promise.all([readAppName(root), readBranches(git, root), readWorktree(git, root), upstreamHead(git, root)])
+      return { appName, appRoot: root, ...(appPage === undefined ? {} : { appPage }), branches, ...worktree, ...(upstream === undefined ? {} : { upstreamHead: upstream }) }
     }
     const frameRows = (): FrameRow[] => {
       const loader = ctx.get('loader')
@@ -615,6 +653,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       shared: (hashes) => sharedVersions(git, root, hashes),
       realChats: { read: () => realChatList.read() },
       blankChat,
+      gitSync: new GitSync(git, root),
     }))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
     return () => {

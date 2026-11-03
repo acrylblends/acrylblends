@@ -1,0 +1,84 @@
+/**
+ * The Git tab's push and pull: the calls to the frame's Host (which runs git), and how the branch's remote state reads in one line.
+ */
+
+import {
+  FRAME_GIT_PULL_PATH,
+  FRAME_GIT_PUSH_PATH,
+  FRAME_GIT_REMOTE_PATH,
+  parseGitRemoteState,
+  parseGitSyncResult,
+  type GitRemoteState,
+  type GitSyncResult,
+} from '../contract.ts'
+
+export interface GitSyncPort {
+  /** The checked-out branch against its remote; `fetch` asks the remote first. @throws the Host's one line. */
+  remote(fetch: boolean): Promise<GitRemoteState>
+  /** @throws git's one line (no remote, a refused login, the network) or the reason nothing was sent. */
+  push(): Promise<GitSyncResult>
+  /** Fast-forward only. @throws git's one line, or the sentence saying the branch moved on both sides and nothing changed. */
+  pull(): Promise<GitSyncResult>
+}
+
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
+
+async function failure(response: Response, fallback: string): Promise<Error> {
+  const body = (await response.json().catch(() => ({}))) as { error?: unknown }
+  return new Error(typeof body.error === 'string' && body.error !== '' ? body.error : `${fallback} (HTTP ${String(response.status)})`)
+}
+
+export function createGitSyncApi(fetcher: FetchLike = (input, init) => fetch(input, init)): GitSyncPort {
+  const post = async (path: string, fallback: string): Promise<GitSyncResult> => {
+    const response = await fetcher(path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: '{}',
+    })
+    if (!response.ok) throw await failure(response, fallback)
+    return parseGitSyncResult(await response.json())
+  }
+  return {
+    async remote(fetchFirst) {
+      const response = await fetcher(`${FRAME_GIT_REMOTE_PATH}${fetchFirst ? '?fetch=1' : ''}`, {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+      if (!response.ok) throw await failure(response, 'The remote state could not be read')
+      return parseGitRemoteState(await response.json())
+    },
+    push: () => post(FRAME_GIT_PUSH_PATH, 'The branch could not be pushed'),
+    pull: () => post(FRAME_GIT_PULL_PATH, 'The branch could not be pulled'),
+  }
+}
+
+/** The remote state as the Git tab writes it: "origin/main · ahead 2 · behind 1", "up to date with origin/main", "no remote", ... */
+export function remoteLabel(state: GitRemoteState): string {
+  switch (state.kind) {
+    case 'detached':
+      return 'not on a branch'
+    case 'no-remote':
+      return 'no remote'
+    case 'unpublished':
+      return state.remote === undefined ? `${state.branch} is not on a remote yet` : `${state.branch} is not on ${state.remote} yet`
+    case 'tracking': {
+      const counts = [
+        ...(state.ahead > 0 ? [`ahead ${String(state.ahead)}`] : []),
+        ...(state.behind > 0 ? [`behind ${String(state.behind)}`] : []),
+      ]
+      return counts.length === 0 ? `up to date with ${state.upstream}` : `${state.upstream} · ${counts.join(' · ')}`
+    }
+  }
+}
+
+/**
+ * Which buttons do something: Push when there is something to send (or the branch is not on the remote yet), Pull when the remote is ahead.
+ * When the remote could not be asked the counts may be old, so both stay on and a click says what git says.
+ */
+export function syncActions(state: GitRemoteState): { readonly push: boolean; readonly pull: boolean } {
+  if (state.kind === 'unpublished') return { push: state.remote !== undefined, pull: false }
+  if (state.kind !== 'tracking') return { push: false, pull: false }
+  if (state.fetchError !== undefined) return { push: true, pull: true }
+  return { push: state.ahead > 0, pull: state.behind > 0 }
+}

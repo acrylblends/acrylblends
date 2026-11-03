@@ -15,6 +15,7 @@ import { FILES_TAB, GIT_TAB, PTY_AGENTS, fileTab, ptyTab, tabsForBranch, termina
 import { TerminalView } from './TerminalView.tsx'
 import type { FrameTools } from './tools.ts'
 import { chatTime, type VersionsPort } from './versions.ts'
+import type { GitSyncPort } from './git-sync.ts'
 
 const HistoryIcon = () => (
   <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -33,6 +34,7 @@ export interface RightPanelProps {
   readonly tabs: FrameTabs
   readonly tools: FrameTools
   readonly versions: VersionsPort
+  readonly gitSync: GitSyncPort
   readonly state: FrameState | undefined
   /** Which branch each chat was opened on, for the history's rows. */
   readonly branchChats: BranchChatsPort
@@ -52,7 +54,7 @@ function TabLabel({ tab }: { readonly tab: FrameTab }) {
   }
 }
 
-export function RightPanel({ chats, tabs, tools, versions, state, branchChats, renderConversation }: RightPanelProps) {
+export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branchChats, renderConversation }: RightPanelProps) {
   const subscribeChats = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const rows = useSyncExternalStore(subscribeChats, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
@@ -167,7 +169,7 @@ export function RightPanel({ chats, tabs, tools, versions, state, branchChats, r
               Files <small>tree; a file opens as a tab</small>
             </button>
             <button type="button" role="menuitem" className="acrylBlendsMenuItem" onClick={() => { openTool(GIT_TAB) }}>
-              Git <small>changes, history</small>
+              Git <small>changes, history, push and pull</small>
             </button>
             <div className="acrylBlendsMenuItem" data-gone aria-disabled="true">Browser <small>the canvas is it</small></div>
           </div>
@@ -242,7 +244,7 @@ export function RightPanel({ chats, tabs, tools, versions, state, branchChats, r
       )}
       {active?.kind === 'file' && root !== undefined && <FileView key={active.path} files={tools.files} root={root} path={active.path} />}
       {active?.kind === 'git' && root !== undefined && (
-        <GitView git={tools.git} versions={versions} root={root} revision={`${state?.head ?? ''}:${String(state?.unsaved ?? '')}`} />
+        <GitView git={tools.git} versions={versions} sync={gitSync} root={root} revision={`${state?.head ?? ''}:${String(state?.unsaved ?? '')}`} />
       )}
     </>
   )
