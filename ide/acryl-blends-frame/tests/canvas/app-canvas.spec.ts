@@ -68,4 +68,12 @@ describe('AppCanvasState', () => {
     canvas.attach(null)
     expect(canvas.pageWindow()).toBeUndefined()
   })
+
+  it('hands the live app page window to the frame view, and nothing without a page', () => {
+    const view = {} as Window
+    canvas.attach({ contentWindow: view } as HTMLIFrameElement)
+    expect(canvas.contentWindow()).toBe(view)
+    canvas.attach({ contentWindow: null } as unknown as HTMLIFrameElement)
+    expect(canvas.contentWindow()).toBeUndefined()
+  })
 })

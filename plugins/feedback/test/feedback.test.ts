@@ -3,6 +3,7 @@ import { appendFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, test } from 'node:test'
+import { frameViewOf } from '../client.js'
 import { FeedbackStore, parseNewNote } from '../store.ts'
 
 const dirs: string[] = []
@@ -51,5 +52,17 @@ describe('the notes', () => {
     await store.add({ text: 'kept', page: '/' })
     appendFileSync(join(dir, 'notes.jsonl'), '{"id":"x","te')
     assert.deepEqual((await store.list()).map(note => note.text), ['kept'])
+  })
+})
+
+describe('the frame view', () => {
+  test('is the handle a same-origin parent publishes, and nothing when the page is opened directly', () => {
+    const handle = { mode: 'build' }
+    assert.equal(frameViewOf({ parent: { [Symbol.for('acryl.frame.view')]: handle } }), handle)
+    const top: { parent: unknown } = { parent: undefined }
+    top.parent = top
+    assert.equal(frameViewOf(top), undefined)
+    const crossOrigin = { get parent(): unknown { throw new Error('cross-origin') } }
+    assert.equal(frameViewOf(crossOrigin), undefined)
   })
 })

@@ -12,6 +12,10 @@ The workbench around an app made with ACRYL Blends, as the owner's mockup draws 
 On a new app the frame is the first screen: both panels open, a blank chat with its composer at the bottom, and the model connected in
 Settings > Models. DSH's preview notice and credential prompt stay out of the frame instead of covering the app.
 
+The canvas page reads the frame's view (`src/client/frame-view.ts`): Build keeps the app's own build-time controls out of the canvas (the
+agent-panel's button and the feedback button), and Preview shows what production shows without a reload. The page's plugins read the handle
+through `window.parent`; a page opened directly is unchanged.
+
 It owns the page's `root` slot, so it is mounted instead of the IDE's workbench (`acryl-workspace`), never beside it. The Host half serves one
 private route, `GET /api/acryl-blends-frame/state` (the app's name, folder, page and branches); `appPage` in the row's config says where the
 app's page is served.

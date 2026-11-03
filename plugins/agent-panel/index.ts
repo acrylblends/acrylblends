@@ -11,7 +11,8 @@
  *   `/api` routes would otherwise answer first. The row's `mount` config names it.
  * - Development only: the plugin does nothing with `NODE_ENV=production` or `ACRYL_DOOR=off`, except as the Assistant (`assistant: true`): then it runs in production too,
  *   docked open on the right, with the app's own agent only. The app gives that agent the page tools alone and a page-only door, so it uses the app for a visitor and
- *   cannot change it (src/app.ts, `ACRYL_ASSISTANT=on`).
+ *   cannot change it (src/app.ts, `ACRYL_ASSISTANT=on`). In the ACRYL frame's canvas the panel follows the frame's view: Build hides it, and Preview shows it only as
+ *   the Assistant and only when the app's production environment names one (`assistantInProduction` in the session).
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { appendFileSync, mkdirSync } from 'node:fs'
@@ -147,6 +148,9 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
       return c.json({
         token,
         ...(assistant ? { assistant: true } : {}),
+        // The frame's Preview shows the app as production would. This is the fact that lets its page show the Assistant when the app's production
+        // environment names it (ACRYL_ASSISTANT=on), even though the frame host itself runs in development and never mounts the Assistant row.
+        ...(process.env.ACRYL_ASSISTANT === 'on' ? { assistantInProduction: true } : {}),
         // A terminal driver names the browser module that draws its view and the prefix its endpoints live under: the plugin that owns the view
         // also knows where the app is mounted, so the panel never guesses either.
         drivers: registry.list().map((driver) => ({

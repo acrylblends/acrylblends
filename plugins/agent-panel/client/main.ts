@@ -3,6 +3,7 @@
 // `start` with the prefix the app is served under (the root of its own server, or `/app` when the ACRYL frame hosts it).
 import { describePageStep, describeTool } from './describe.ts'
 import { createPickGeneration } from './driver-pick.ts'
+import { FRAME_MODE_EVENT, frameViewOf, panelVariant, panelVisible } from './frame.ts'
 import { renderMarkdown } from './markdown.ts'
 
 let PREFIX = '/api/agent-panel'
@@ -54,6 +55,8 @@ interface Session {
   token: string
   /** The production Assistant: the app's own agent drives the page for a visitor. */
   assistant?: boolean
+  /** The app's production environment names the Assistant (ACRYL_ASSISTANT=on); the frame's Preview shows it even though the frame host runs in development. */
+  assistantInProduction?: boolean
   drivers: Array<{
     name: string
     kind: 'chat' | 'terminal'
@@ -252,7 +255,10 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   if (!reply.ok) return
   let session = (await reply.json()) as Session
 
-  const assistant = session.assistant === true
+  // The frame's Build is the builder's screen, and its Preview shows the app as production would: the panel takes the Assistant's variant only where
+  // production has it, and it is hidden everywhere the canvas should be the app alone. A direct page (no frame) is unchanged.
+  const frame = frameViewOf()
+  const assistant = panelVariant(session, frame)
   const host = document.createElement('div')
   host.id = 'agent-panel'
   if (assistant) host.dataset.assistant = ''
@@ -297,6 +303,11 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   termStop.addEventListener('click', () => void terminal?.stop())
   const form = $<HTMLFormElement>('form')
   document.body.append(host)
+  const applyFrame = (): void => {
+    host.style.display = panelVisible(frame, assistant) ? '' : 'none'
+  }
+  window.addEventListener(FRAME_MODE_EVENT, applyFrame)
+  applyFrame()
   const kindOf = (name: string): 'chat' | 'terminal' =>
     session.drivers.find((d) => d.name === name)?.kind ?? 'chat'
   let terminal: { detach(): void; stop(): Promise<void> } | undefined

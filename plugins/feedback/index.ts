@@ -5,6 +5,8 @@
  * shows in the builder's left panel ("Feedback from users"), where one click hands a note to an agent.
  *
  * - A middleware appends one script tag (`<mount>/api/feedback/feedback.js`) to every HTML response, so no page is edited (agent-panel's way).
+ * - In the ACRYL frame's canvas the button follows the frame's view: Build hides it (the builder has its own left panel for notes), and Preview shows it as
+ *   production does. A page opened directly keeps it on every page.
  * - `POST <mount>/api/feedback/notes` takes one note from the app's own page (same origin), at most 30 a minute across the app.
  * - Nobody reads the notes over HTTP here: the builder reads them through the service. Opt-in: `acrylblends add feedback`.
  */
