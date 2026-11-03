@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { Door, type ExtensionsPort } from '../../src/host/door.ts'
 import { UiChannel, type PageStream } from '../../src/host/channel.ts'
 import type { AuditLog } from '../../src/host/audit.ts'
-import type { ChannelToPage } from '../../src/page/protocol.ts'
+import type { ChannelToPage, UiResult } from '../../src/page/protocol.ts'
 
 const audit = { record: () => undefined } as unknown as AuditLog
 const never = new AbortController().signal
@@ -66,7 +66,7 @@ describe('an act that takes the page away', () => {
           const frame = JSON.parse(data) as ChannelToPage
           calls.push(`${windowId} ${frame.request.op}`)
           const leaving = frame.request.op === 'click' && frame.request.ref === '1.1'
-          const value = frame.request.op === 'snapshot' ? { generation: 1, title: windowId, nodes: [], total: 0 }
+          const value: UiResult = frame.request.op === 'snapshot' ? { generation: 1, title: windowId, nodes: [], total: 0 }
             : leaving ? { ok: true, leaving: true, detail: 'the page is going to another address' } : { ok: true }
           channel.receive(windowId, { t: 'result', id: frame.id, value })
           if (leaving) setTimeout(() => { end(); open() }, 20)

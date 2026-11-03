@@ -11,7 +11,11 @@ describe('the frame view a page reads', () => {
     const top: { parent: unknown } = { parent: undefined }
     top.parent = top
     assert.equal(frameViewOf(top as unknown as Window), undefined)
-    const crossOrigin = { get parent(): unknown { throw new Error('cross-origin') } }
+    const crossOrigin = {
+      get parent(): unknown {
+        throw new Error('cross-origin')
+      },
+    }
     assert.equal(frameViewOf(crossOrigin as unknown as Window), undefined)
   })
 

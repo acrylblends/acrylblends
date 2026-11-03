@@ -56,7 +56,11 @@ const builtIn: Rule[] = [
     if (step === 0) return undefined
     // A failed call comes back as `{ error }`: say what failed, not "[object Object]".
     const failed = typeof toolResult === 'object' && toolResult !== null && 'error' in toolResult
-    return { text: failed ? `That did not work: ${String(toolResult.error)}.` : `The answer is ${String(toolResult)}.` }
+    return {
+      text: failed
+        ? `That did not work: ${String(toolResult.error)}.`
+        : `The answer is ${String(toolResult)}.`,
+    }
   },
   ({ question }) => {
     const sum = /^add\s+(-?\d+)\s+(-?\d+)$/.exec(question.trim())

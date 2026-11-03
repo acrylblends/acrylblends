@@ -13,6 +13,7 @@
       "!.specify",
       "!.claude",
       "!**/*.md",
+      "!docs/design",
       "!plugins/acryl-*",
       "!ide/*",
       "!spikes/ide-slice0/dsh-client-ui-brand-acryl",

@@ -26,7 +26,10 @@ textarea:focus { outline: none; border-color: #c2410c; }
 
 /** A short name for an element: what it says it is, else the words it shows, else its tag. */
 export function elementLabel(element) {
-  const named = element.getAttribute('aria-label') || element.getAttribute('title') || element.getAttribute('alt')
+  const named =
+    element.getAttribute('aria-label') ||
+    element.getAttribute('title') ||
+    element.getAttribute('alt')
   if (named) return clip(named)
   const heading = element.querySelector('h1, h2, h3, h4, b, strong')
   const text = (heading?.textContent || element.textContent || '').replace(/\s+/g, ' ').trim()
@@ -40,18 +43,32 @@ function clip(text) {
 /** A CSS selector that finds the element again: up from it to the nearest id, each step its tag and place among its siblings. */
 export function elementSelector(element) {
   const parts = []
-  for (let node = element; node && node.nodeType === 1 && parts.length < 8; node = node.parentElement) {
-    if (node.id) { parts.unshift(`#${cssEscape(node.id)}`); break }
+  for (
+    let node = element;
+    node && node.nodeType === 1 && parts.length < 8;
+    node = node.parentElement
+  ) {
+    if (node.id) {
+      parts.unshift(`#${cssEscape(node.id)}`)
+      break
+    }
     const tag = node.tagName.toLowerCase()
-    if (tag === 'body' || tag === 'html') { parts.unshift(tag); break }
-    const same = node.parentElement ? [...node.parentElement.children].filter((child) => child.tagName === node.tagName) : []
+    if (tag === 'body' || tag === 'html') {
+      parts.unshift(tag)
+      break
+    }
+    const same = node.parentElement
+      ? [...node.parentElement.children].filter((child) => child.tagName === node.tagName)
+      : []
     parts.unshift(same.length > 1 ? `${tag}:nth-of-type(${same.indexOf(node) + 1})` : tag)
   }
   return parts.join(' > ')
 }
 
 function cssEscape(value) {
-  return typeof globalThis.CSS?.escape === 'function' ? globalThis.CSS.escape(value) : value.replace(/[^A-Za-z0-9_-]/g, '\\$&')
+  return typeof globalThis.CSS?.escape === 'function'
+    ? globalThis.CSS.escape(value)
+    : value.replace(/[^A-Za-z0-9_-]/g, '\\$&')
 }
 
 // The ACRYL frame's view (ide/acryl-blends-frame/src/client/frame-view.ts): the frame's canvas hides the app's own build-time controls in Build and
@@ -69,6 +86,7 @@ export function frameViewOf(win) {
   }
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: ./index.ts serves this file with a call to start appended
 function start(prefix) {
   if (document.querySelector('acryl-feedback')) return
   const host = document.createElement('acryl-feedback')
@@ -102,9 +120,17 @@ function start(prefix) {
   const state = { open: false, picking: false, picked: null, choice: 'element' }
 
   const place = (element, label) => {
-    if (!element) { outline.removeAttribute('data-picked'); return }
+    if (!element) {
+      outline.removeAttribute('data-picked')
+      return
+    }
     const box = element.getBoundingClientRect()
-    Object.assign(outline.style, { left: `${box.left - 3}px`, top: `${box.top - 3}px`, width: `${box.width + 6}px`, height: `${box.height + 6}px` })
+    Object.assign(outline.style, {
+      left: `${box.left - 3}px`,
+      top: `${box.top - 3}px`,
+      width: `${box.width + 6}px`,
+      height: `${box.height + 6}px`,
+    })
     outlineLabel.textContent = label
     outline.setAttribute('data-picked', '')
   }
@@ -113,9 +139,12 @@ function start(prefix) {
     pop.hidden = !state.open
     onElement.setAttribute('aria-pressed', String(state.choice === 'element'))
     nothing.setAttribute('aria-pressed', String(state.choice === 'page'))
-    onElement.textContent = state.picked ? `⌖ On this element: ${elementLabel(state.picked)}` : '⌖ Click the element you mean'
+    onElement.textContent = state.picked
+      ? `⌖ On this element: ${elementLabel(state.picked)}`
+      : '⌖ Click the element you mean'
     send.disabled = text.value.trim() === '' || (state.choice === 'element' && !state.picked)
-    if (state.open && state.choice === 'element' && state.picked) place(state.picked, `Picked: ${elementLabel(state.picked)}`)
+    if (state.open && state.choice === 'element' && state.picked)
+      place(state.picked, `Picked: ${elementLabel(state.picked)}`)
     else if (!state.picking) place(null)
   }
   const ours = (event) => event.composedPath().includes(host)
@@ -135,8 +164,12 @@ function start(prefix) {
     render()
     text.focus()
   }
-  const onKey = (event) => { if (event.key === 'Escape' && state.open) close() }
-  const reposition = () => { if (state.open) render() }
+  const onKey = (event) => {
+    if (event.key === 'Escape' && state.open) close()
+  }
+  const reposition = () => {
+    if (state.open) render()
+  }
   const open = () => {
     state.open = true
     state.picking = true
@@ -153,24 +186,50 @@ function start(prefix) {
     render()
   }
 
-  button.addEventListener('click', () => { if (state.open) close(); else open() })
-  onElement.addEventListener('click', () => { state.choice = 'element'; state.picking = true; state.picked = null; render() })
-  nothing.addEventListener('click', () => { state.choice = 'page'; state.picking = false; state.picked = null; render(); text.focus() })
+  button.addEventListener('click', () => {
+    if (state.open) close()
+    else open()
+  })
+  onElement.addEventListener('click', () => {
+    state.choice = 'element'
+    state.picking = true
+    state.picked = null
+    render()
+  })
+  nothing.addEventListener('click', () => {
+    state.choice = 'page'
+    state.picking = false
+    state.picked = null
+    render()
+    text.focus()
+  })
   text.addEventListener('input', render)
   send.addEventListener('click', async () => {
     send.disabled = true
-    const element = state.choice === 'element' && state.picked ? { selector: elementSelector(state.picked), label: elementLabel(state.picked) } : undefined
+    const element =
+      state.choice === 'element' && state.picked
+        ? { selector: elementSelector(state.picked), label: elementLabel(state.picked) }
+        : undefined
     try {
       const response = await fetch(`${prefix}/notes`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: text.value, page: location.pathname + location.search, ...(element ? { element } : {}) }),
+        body: JSON.stringify({
+          text: text.value,
+          page: location.pathname + location.search,
+          ...(element ? { element } : {}),
+        }),
       })
-      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `sending failed (${response.status})`)
+      if (!response.ok)
+        throw new Error(
+          (await response.json().catch(() => ({}))).error || `sending failed (${response.status})`,
+        )
       text.value = ''
       close()
       button.textContent = 'Thanks, sent'
-      setTimeout(() => { button.textContent = 'Feedback' }, 2500)
+      setTimeout(() => {
+        button.textContent = 'Feedback'
+      }, 2500)
     } catch (error) {
       note.textContent = error instanceof Error ? error.message : 'sending failed'
       note.setAttribute('data-error', '')
@@ -190,8 +249,12 @@ function start(prefix) {
   // agent-panel sits in the same corner: its button in development, the Assistant docked on the right in production. Stand to the left of whichever shows.
   const besideOthers = () => {
     const shadow = document.getElementById('agent-panel')?.shadowRoot
-    const shown = (element) => element && getComputedStyle(element).display !== 'none' ? element.getBoundingClientRect() : null
-    const box = shown(shadow?.querySelector('section.shown')) ?? shown(shadow?.querySelector('button.open'))
+    const shown = (element) =>
+      element && getComputedStyle(element).display !== 'none'
+        ? element.getBoundingClientRect()
+        : null
+    const box =
+      shown(shadow?.querySelector('section.shown')) ?? shown(shadow?.querySelector('button.open'))
     const right = box && box.width > 0 ? `${Math.round(window.innerWidth - box.left + 8)}px` : ''
     button.style.right = right
     pop.style.right = right
