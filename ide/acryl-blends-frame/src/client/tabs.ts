@@ -28,7 +28,10 @@ export type FrameTab =
 export interface FrameTabsSnapshot {
   readonly tabs: readonly FrameTab[]
   readonly active: string
-  /** What each terminal says it runs (its title, as a shell sets it: `npm test`), by terminal id; not remembered. */
+  /**
+   * What each terminal says it runs (its title, as a shell sets it: `npm test`), by terminal id. Remembered, so a terminal row still says what ran in it
+   * after the page reloads or the Host restarts and the shell that set the title is gone.
+   */
   readonly titles?: Readonly<Record<string, string>>
 }
 
@@ -46,6 +49,25 @@ export const terminalTab = (terminalId: string): FrameTab => ({ kind: 'terminal'
 export const fileTab = (path: string): FrameTab => ({ kind: 'file', id: `file:${path}`, path })
 export const FILES_TAB: FrameTab = { kind: 'files', id: 'files' }
 export const GIT_TAB: FrameTab = { kind: 'git', id: 'git' }
+
+/** The last `count` segments of a path. */
+const suffix = (parts: readonly string[], count: number): string => parts.slice(Math.max(0, parts.length - count)).join('/')
+
+/**
+ * What each file tab calls itself: the file's name, or as much of its folder as it takes to tell it from the other file tabs open beside it. Two
+ * `index.ts` in different folders read `team-board/index.ts` and `src/index.ts`; a name no other tab shares keeps its file name alone.
+ */
+export function fileTabLabels(paths: readonly string[]): ReadonlyMap<string, string> {
+  const split = new Map(paths.map(path => [path, path.split('/')]))
+  const labels = new Map<string, string>()
+  for (const path of paths) {
+    const parts = split.get(path) as string[]
+    let count = 1
+    while (count < parts.length && paths.some(other => other !== path && suffix(split.get(other) as string[], count) === suffix(parts, count))) count += 1
+    labels.set(path, suffix(parts, count))
+  }
+  return labels
+}
 
 /** The tabs the strip shows on a branch: the base chat always, and what was opened on that branch. No branch (outside a repository): every tab. */
 export function tabsForBranch(snapshot: FrameTabsSnapshot, branch: string | undefined): readonly FrameTab[] {
@@ -75,6 +97,37 @@ function parseTab(value: unknown): FrameTab | undefined {
   }
 }
 
+/** The terminal ids with a tab in `tabs`. */
+function openTerminals(tabs: readonly FrameTab[]): ReadonlySet<string> {
+  return new Set(tabs.flatMap(tab => (tab.kind === 'pty' || tab.kind === 'terminal' ? [tab.terminalId] : [])))
+}
+
+/**
+ * The titles worth remembering for `tabs`: one per open terminal, and the very same map when nothing was dropped, so a caller can compare by reference.
+ * A closed terminal's title goes with its tab.
+ */
+function keptTitles(
+  titles: Readonly<Record<string, string>> | undefined,
+  tabs: readonly FrameTab[],
+): Readonly<Record<string, string>> | undefined {
+  if (titles === undefined) return undefined
+  const open = openTerminals(tabs)
+  const kept: Record<string, string> = {}
+  for (const [terminalId, title] of Object.entries(titles)) if (open.has(terminalId) && title !== '') kept[terminalId] = title
+  const ids = Object.keys(kept)
+  if (ids.length === 0) return undefined
+  const before = Object.keys(titles)
+  return ids.length === before.length && ids.every(id => titles[id] === kept[id]) ? titles : kept
+}
+
+/** What a remembered strip said about terminal titles; entries that are not text are dropped. */
+function parseTitles(raw: unknown): Readonly<Record<string, string>> | undefined {
+  if (raw === null || typeof raw !== 'object') return undefined
+  const titles: Record<string, string> = {}
+  for (const [terminalId, title] of Object.entries(raw as Record<string, unknown>)) if (typeof title === 'string' && title !== '') titles[terminalId] = title
+  return Object.keys(titles).length === 0 ? undefined : titles
+}
+
 /** A remembered strip, or the first run's when it is missing or malformed. The chat is always there, first. */
 export function parseStoredTabs(raw: string | null): FrameTabsSnapshot {
   if (raw === null) return FIRST_RUN_TABS
@@ -91,7 +144,12 @@ export function parseStoredTabs(raw: string | null): FrameTabsSnapshot {
     if (tab !== undefined && !tabs.some(existing => existing.id === tab.id)) tabs.push(tab)
   }
   const active = (value as { active?: unknown }).active
-  return { tabs, active: typeof active === 'string' && tabs.some(tab => tab.id === active) ? active : 'chat' }
+  const titles = keptTitles(parseTitles((value as { titles?: unknown }).titles), tabs)
+  return {
+    tabs,
+    active: typeof active === 'string' && tabs.some(tab => tab.id === active) ? active : 'chat',
+    ...(titles === undefined ? {} : { titles }),
+  }
 }
 
 /** Whether the remembered strip already went through the branch migration (`setBranch`). */
@@ -176,18 +234,20 @@ export class FrameTabs {
     return tab
   }
 
-  /** A terminal's program set its title. */
+  /** A terminal's program set its title; remembered with the strip, so the row still says what ran there after a reload or a Host restart. */
   setTitle(terminalId: string, title: string): void {
     if (this.snapshot.titles?.[terminalId] === title) return
-    this.snapshot = { ...this.snapshot, titles: { ...this.snapshot.titles, [terminalId]: title } }
-    for (const listener of [...this.listeners]) listener()
+    this.set({ ...this.snapshot, titles: { ...this.snapshot.titles, [terminalId]: title } })
   }
 
   private set(next: FrameTabsSnapshot): void {
-    if (next.active === this.snapshot.active && next.tabs === this.snapshot.tabs) return
-    this.snapshot = { ...next, ...(this.snapshot.titles === undefined ? {} : { titles: this.snapshot.titles }) }
+    // A call that says nothing about titles keeps the ones already there; a closed terminal's title goes with its tab, and the same map comes back
+    // when nothing changed, so an unchanged strip stays quiet.
+    const titles = keptTitles(next.titles ?? this.snapshot.titles, next.tabs)
+    if (next.active === this.snapshot.active && next.tabs === this.snapshot.tabs && titles === this.snapshot.titles) return
+    this.snapshot = { tabs: next.tabs, active: next.active, ...(titles === undefined ? {} : { titles }) }
     try {
-      this.storage?.setItem(STORAGE_KEY, JSON.stringify({ tabs: next.tabs, active: next.active, branched: this.branched }))
+      this.storage?.setItem(STORAGE_KEY, JSON.stringify({ tabs: next.tabs, active: next.active, branched: this.branched, ...(titles === undefined ? {} : { titles }) }))
     } catch {
       // A blocked storage only forgets the strip for the next page.
     }
