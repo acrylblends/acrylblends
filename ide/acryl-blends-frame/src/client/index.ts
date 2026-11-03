@@ -14,8 +14,11 @@ import { BlendsFrame } from './BlendsFrame.tsx'
 import { AppCanvasState } from './canvas/app-canvas.ts'
 import { ChatsStore, type MainViewNavigation } from './chats.ts'
 import { FrameStateStore } from './frame-state.ts'
+import { FILES_SEARCH_EVENT } from './FilesView.tsx'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
+import { FILES_TAB, FrameTabs, tabOfTerminal } from './tabs.ts'
+import { createFrameTools, installXtermStyles } from './tools.ts'
 import { FrameViewState, type ViewStorage } from './view-state.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -47,6 +50,8 @@ export function apply(ctx: ClientContext): void {
   const view = new FrameViewState(pageStorage())
   const chats = new ChatsStore(() => (ctx.get as (name: string) => MainViewNavigation | undefined)('uiWorkspace'))
   const versionsApi = createVersionsApi()
+  const tabs = new FrameTabs(pageStorage())
+  const tools = createFrameTools()
 
   ctx.effect(() => provideDesktopLayout(ctx, layout), 'acryl-blends-frame: layout service')
   // DSH's views read the open keyed panel through the standard `usePanelInfo` hook, which the root supplies.
@@ -64,6 +69,36 @@ export function apply(ctx: ClientContext): void {
   }, 'acryl-blends-frame: strip the launch token')
 
   ctx.effect(() => installFrameStyles(), 'acryl-blends-frame: styles')
+  ctx.effect(() => installXtermStyles(), 'acryl-blends-frame: terminal styles')
+  // A terminal whose process ended, or that the Host no longer knows (it restarted), leaves the strip; its title names what it runs.
+  ctx.effect(() => {
+    const closeTabOf = (terminalId: string) => {
+      const tab = tabOfTerminal(tabs.getSnapshot(), terminalId)
+      if (tab !== undefined) tabs.close(tab.id)
+      tools.terminals.release(terminalId)
+    }
+    const offLost = tools.terminals.onLost(closeTabOf)
+    const offExit = tools.terminals.onExit(closeTabOf)
+    const offTitle = tools.terminals.onTitle((terminalId, title) => { tabs.setTitle(terminalId, title) })
+    return () => {
+      offLost()
+      offExit()
+      offTitle()
+      tools.terminals.disposeAll()
+    }
+  }, 'acryl-blends-frame: terminal sessions')
+  // ⌘P (Ctrl P) anywhere in the frame: Files, with its search taking the keys.
+  ctx.effect(() => {
+    const quickOpen = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'p' || !(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return
+      event.preventDefault()
+      tabs.open(FILES_TAB)
+      view.showRight()
+      window.setTimeout(() => { window.dispatchEvent(new Event(FILES_SEARCH_EVENT)) }, 0)
+    }
+    window.addEventListener('keydown', quickOpen, true)
+    return () => { window.removeEventListener('keydown', quickOpen, true) }
+  }, 'acryl-blends-frame: quick open')
   ctx.slots.inject('settings.launcher', () => ctx.slots.register({ name: 'settings.launcher' }, SettingsLauncher))
   ctx.effect(() => {
     const presenter = new DesktopThemePresenter()
@@ -108,6 +143,8 @@ export function apply(ctx: ClientContext): void {
       view,
       chats,
       versions: { log: (path: string) => versionsApi.log(path), save: (path: string, message: string) => versionsApi.save(path, message) },
+      tabs,
+      tools,
     }),
   }, BlendsFrame), 'acryl-blends-frame: root slot')
 }

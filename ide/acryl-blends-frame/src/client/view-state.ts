@@ -65,6 +65,11 @@ export class FrameViewState {
     this.publish({ ...this.view, right: !this.view.right })
   }
 
+  /** Show the right panel (something was opened in it); Preview is left for Build, where the panel is. */
+  showRight(): void {
+    if (!this.view.right || this.view.mode !== 'build') this.publish({ ...this.view, right: true, mode: 'build' })
+  }
+
   setMode(mode: FrameMode): void {
     if (this.view.mode !== mode) this.publish({ ...this.view, mode })
   }

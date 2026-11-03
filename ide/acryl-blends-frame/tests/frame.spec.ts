@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { countChanges, parseBranches, parseFrameState } from '../src/index.ts'
 import { chatRows, chatTitle } from '../src/client/chats.ts'
 import { savedLabel, versionNumber } from '../src/client/versions.ts'
+import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
+import { highlightLine, languageOf } from '../src/client/highlight.ts'
+import { FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, parseStoredTabs, ptyTab, terminalMeta } from '../src/client/tabs.ts'
 import { FIRST_RUN_VIEW, FrameViewState, parseStoredView, type ViewStorage } from '../src/client/view-state.ts'
 
 describe('parseBranches', () => {
@@ -117,5 +120,60 @@ describe('versionNumber', () => {
     const entries = [{}, {}, {}] as never[]
     expect(versionNumber(entries, 0)).toBe(3)
     expect(versionNumber(entries, 2)).toBe(1)
+  })
+})
+
+describe('fuzzy file search', () => {
+  it('matches the letters in order, the file name first, and splits the top folder off for display', () => {
+    const [best] = fuzzySearch('brd', ['test/board.test.ts', 'src/board.ts', 'README.md', 'plugins/board-mobile/index.ts'])
+    expect(best?.path).toBe('src/board.ts')
+    expect(displayMatch(best!)).toEqual({ folder: 'src', parts: [{ text: 'b', hit: true }, { text: 'oa', hit: false }, { text: 'rd', hit: true }, { text: '.ts', hit: false }] })
+    expect(fuzzySearch('zzz', ['src/board.ts'])).toEqual([])
+  })
+})
+
+describe('syntax colours', () => {
+  it('colours keywords, calls, strings, types and comments, and leaves a property plain', () => {
+    const kinds = highlightLine("export function dueBadge(task: Task) { return task.due ?? 'x' } // note", 'code')
+      .filter(token => token.kind !== 'plain').map(token => `${token.kind}:${token.text}`)
+    expect(kinds).toEqual(['kw:export', 'kw:function', 'fn:dueBadge', 'pu:(', 'va:task', 'pu::', 'ty:Task', 'pu:)', 'pu:{', 'kw:return', 'va:task', 'pu:.', 'pu:??', "st:'x'", 'pu:}', 'cm:// note'])
+    expect(languageOf('blend.yaml')).toBe('hash')
+  })
+})
+
+describe('the right panel tabs', () => {
+  it('keeps the chat first, opens a tab once, and shows the one before a closed tab', () => {
+    const storage = new MemoryStorage()
+    const tabs = new FrameTabs(storage)
+    tabs.open(ptyTab('claude', 't1'))
+    tabs.open(FILES_TAB)
+    tabs.open(ptyTab('claude', 't1'))
+    expect(tabs.getSnapshot().tabs.map(tab => tab.id)).toEqual(['chat', 'pty:t1', 'files'])
+    expect(tabs.getSnapshot().active).toBe('pty:t1')
+    tabs.close('pty:t1')
+    expect(tabs.getSnapshot().active).toBe('chat')
+    expect(tabs.close('chat')).toBeUndefined()
+    expect(new FrameTabs(storage).getSnapshot()).toEqual({ tabs: [{ kind: 'chat', id: 'chat' }, FILES_TAB], active: 'chat' })
+  })
+
+  it('drops what it cannot read back', () => {
+    expect(parseStoredTabs('{"tabs":[{"kind":"pty","agent":"nope","terminalId":"x"},{"kind":"file","path":"src/a.ts"}],"active":"gone"}'))
+      .toEqual({ tabs: [{ kind: 'chat', id: 'chat' }, fileTab('src/a.ts')], active: 'chat' })
+    expect(parseStoredTabs('nonsense')).toBe(FIRST_RUN_TABS)
+  })
+})
+
+describe('a terminal row', () => {
+  it('names the command a shell runs, or the folder of an idle prompt', () => {
+    expect(terminalMeta('npm test')).toBe('npm test')
+    expect(terminalMeta('ana@laptop:/Users/ana/apps/team-board')).toBe('team-board')
+    expect(terminalMeta(undefined)).toBe('')
+  })
+})
+
+describe('fuzzy ranking', () => {
+  it('puts letters close together above letters scattered over a long path', () => {
+    const paths = ['docs/framework/cordis/migration-from-0-4.md', 'docs/framework/cordis/acryl-in-a-cordis-app.md', 'src/main.ts', 'plugins/agent-panel/client/main.ts']
+    expect(fuzzySearch('mai', paths).map(match => match.path).slice(0, 2)).toEqual(['src/main.ts', 'plugins/agent-panel/client/main.ts'])
   })
 })

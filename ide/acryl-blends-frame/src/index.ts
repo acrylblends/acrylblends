@@ -2,7 +2,9 @@
  * Cordis Host plugin: the Blends frame's one route, `GET /api/acryl-blends-frame/state` - the app's name and folder, where its page is served,
  * and its local branches. The frame itself is the client half (`./client`).
  *
- * One effect owns the confined git runner and both registrations; disposal unmounts the route and reaps any git call still running.
+ * One effect owns the confined git runner and both registrations; disposal unmounts the route and reaps any git call still running. The right
+ * panel's terminals, PTY agents, files and git are the workspace's own Host services (`acryl-workspace`), run here as a child plugin: only its
+ * Host half, since the frame, not the workbench, owns the page.
  */
 
 import { readFile } from 'node:fs/promises'
@@ -14,13 +16,16 @@ import { Acryl } from 'acrylblends'
 import { error } from 'acryl-loopback-http'
 import { ownPage, privateApi } from 'acryl-loopback-http/router'
 import { GitRunner } from 'acryl-versions'
+import * as workspaceHost from 'acryl-workspace'
 import { FRAME_API_PREFIX, FRAME_STATE_PATH, type FrameBranch, type FrameState } from './contract.ts'
 
 /**
- * The part of the runtime's `appInstance` service this plugin reads (a separated interface: plugins do not import the runtime).
+ * The part of the runtime's `appInstance` service ACRYL plugins read (a separated interface: plugins do not import the runtime). Every plugin
+ * declares exactly this shape, so the Context augmentations agree in a program that loads several; the app's folder (`root`) is read apart.
  */
-export interface AppInstanceService {
-  readonly root: string
+interface AppInstanceService {
+  readonly home: string
+  readonly dshHome: string
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -111,7 +116,9 @@ export function frameRoutes(state: () => Promise<FrameState>, report: (cause: un
 
 export function apply(ctx: Context, config: FrameConfig = {}): void {
   const appPage = typeof config.appPage === 'string' && config.appPage.startsWith('/') ? config.appPage : undefined
-  const root = ctx.appInstance.root
+  const root = (ctx.appInstance as { readonly root?: unknown }).root
+  if (typeof root !== 'string') throw new Error('acryl-blends-frame: the app instance has no app folder (root)')
+  ctx.plugin(workspaceHost, appPage === undefined ? {} : { appPage })
   ctx.effect(() => {
     const git = new GitRunner()
     const state = async (): Promise<FrameState> => {

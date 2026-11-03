@@ -287,6 +287,9 @@ importers:
       acryl-versions:
         specifier: workspace:*
         version: link:../acryl-versions
+      acryl-workspace:
+        specifier: workspace:*
+        version: link:../acryl-workspace
     devDependencies:
       '@acryl/ui':
         specifier: workspace:*

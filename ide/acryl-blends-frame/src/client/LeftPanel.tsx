@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { formatRelativeTime } from 'acryl-versions/client'
 import type { FrameState } from '../contract.ts'
 import type { VersionsLogView } from 'acryl-versions'
+import { PTY_AGENTS, terminalMeta, type FrameTabs } from './tabs.ts'
 import { versionNumber, type VersionsPort } from './versions.ts'
 
 /** A chat on the branch, as the left panel lists it. */
@@ -38,13 +39,20 @@ export interface LeftPanelProps {
   readonly state: FrameState
   readonly chats: ChatsPort
   readonly versions: VersionsPort
+  /** The right panel's tabs: the branch lists its open agents and terminals, and a click shows one. */
+  readonly tabs: FrameTabs
+  /** Show a right panel tab (opening the panel when it is closed). */
+  readonly showTab: (id: string) => void
   /** Told the newest version's label ("v7"), for the top bar. */
   readonly onVersionLabel: (label: string | undefined) => void
 }
 
-export function LeftPanel({ state, chats, versions, onVersionLabel }: LeftPanelProps) {
+export function LeftPanel({ state, chats, versions, tabs, showTab, onVersionLabel }: LeftPanelProps) {
   const subscribe = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const chatRows = useSyncExternalStore(subscribe, () => chats.getSnapshot())
+  const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
+  const strip = useSyncExternalStore(subscribeTabs, () => tabs.getSnapshot())
+  const terminals = strip.tabs.flatMap(tab => (tab.kind === 'pty' || tab.kind === 'terminal' ? [tab] : []))
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(state.branches.filter(b => b.current).map(b => b.name)))
   const [load, setLoad] = useState<VersionsLoad>({ status: 'loading' })
   const [saving, setSaving] = useState<string | undefined>(undefined)
@@ -91,8 +99,8 @@ export function LeftPanel({ state, chats, versions, onVersionLabel }: LeftPanelP
         {state.branches.length === 0 && <p className="acrylBlendsNote">This app's folder is not a git repository.</p>}
         {state.branches.map(branch => {
           const open = expanded.has(branch.name)
-          // Chats are not tied to a branch yet: they are the checked-out branch's, since that is the folder the agent works in.
-          const items = branch.current ? chatRows : []
+          // Chats and terminals are not tied to a branch yet: they are the checked-out branch's, since that is the folder they work in.
+          const count = branch.current ? chatRows.length + terminals.length : 0
           return (
             <div key={branch.name} className="acrylBlendsBranchGroup">
               <button type="button" className="acrylBlendsBranch" aria-expanded={open} onClick={() => { toggle(branch.name) }}>
@@ -100,19 +108,35 @@ export function LeftPanel({ state, chats, versions, onVersionLabel }: LeftPanelP
                 <BranchIcon />
                 <span className="acrylBlendsBranchName">{branch.name}</span>
                 <span className="acrylBlendsMeta">
-                  {branch.current ? <span className="acrylBlendsDot" data-live /> : items.length > 0 ? `${String(items.length)} open` : ''}
+                  {branch.current ? <span className="acrylBlendsDot" data-live /> : count > 0 ? `${String(count)} open` : ''}
                 </span>
               </button>
-              {open && items.map(item => (
+              {open && branch.current && chatRows.map(item => (
                 <button
                   key={item.id}
                   type="button"
                   className="acrylBlendsItem"
-                  aria-current={item.current || undefined}
-                  onClick={() => { chats.open(item.id) }}
+                  aria-current={(item.current && strip.active === 'chat') || undefined}
+                  onClick={() => {
+                    chats.open(item.id)
+                    showTab('chat')
+                  }}
                 >
                   <span className="acrylBlendsItemIcon">◆</span>
                   <span className="acrylBlendsItemTitle">Chat · {item.title}</span>
+                </button>
+              ))}
+              {open && branch.current && terminals.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className="acrylBlendsItem"
+                  aria-current={strip.active === tab.id || undefined}
+                  onClick={() => { showTab(tab.id) }}
+                >
+                  <span className="acrylBlendsItemIcon">{tab.kind === 'pty' ? '>_' : '$'}</span>
+                  <span className="acrylBlendsItemTitle">{tab.kind === 'pty' ? PTY_AGENTS.find(entry => entry.agent === tab.agent)?.label : 'Terminal'}</span>
+                  <span className="acrylBlendsMeta acrylBlendsItemMeta">{tab.kind === 'pty' ? 'PTY' : terminalMeta(strip.titles?.[tab.terminalId])}</span>
                 </button>
               ))}
             </div>

@@ -17,6 +17,8 @@ import type { FrameViewState } from './view-state.ts'
 import { LeftPanel, type ChatsPort } from './LeftPanel.tsx'
 import { savedLabel, type VersionsPort } from './versions.ts'
 import { RightPanel } from './RightPanel.tsx'
+import type { FrameTabs } from './tabs.ts'
+import type { FrameTools } from './tools.ts'
 
 export interface BlendsFrameInjected {
   readonly layout: DesktopLayoutState
@@ -25,6 +27,8 @@ export interface BlendsFrameInjected {
   readonly view: FrameViewState
   readonly chats: ChatsPort
   readonly versions: VersionsPort
+  readonly tabs: FrameTabs
+  readonly tools: FrameTools
 }
 
 export type BlendsFrameProps = PropsRuntime<'root'> & PropsRenderSlots<'main' | 'shell.overlay' | 'sidebar.settings'> & BlendsFrameInjected
@@ -41,7 +45,7 @@ const PanelIcon = ({ side }: { side: 'left' | 'right' }) => (
   </svg>
 )
 
-export function BlendsFrame({ layout, canvas, frameState, view, chats, versions, renderSlot }: BlendsFrameProps) {
+export function BlendsFrame({ layout, canvas, frameState, view, chats, versions, tabs, tools, renderSlot }: BlendsFrameProps) {
   const state = useStore(frameState)
   const frameView = useStore(view)
   const activePanelId = useSyncExternalStore(layout.panelInfo.subscribe, () => layout.panelInfo.getSnapshot().activePanelId)
@@ -107,7 +111,17 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
       <div className="acrylBlendsBody">
         <aside className="acrylBlendsLeft" aria-label="Branches and versions" hidden={!leftOpen}>
           {state.status === 'ready' && (
-            <LeftPanel state={state.state} chats={chats} versions={versions} onVersionLabel={setVersionLabel} />
+            <LeftPanel
+              state={state.state}
+              chats={chats}
+              versions={versions}
+              tabs={tabs}
+              showTab={(id) => {
+                tabs.activate(id)
+                view.showRight()
+              }}
+              onVersionLabel={setVersionLabel}
+            />
           )}
           {state.status === 'error' && <p className="acrylBlendsNote" data-error>{state.message}</p>}
         </aside>
@@ -123,7 +137,14 @@ export function BlendsFrame({ layout, canvas, frameState, view, chats, versions,
           </div>
         </main>
         <aside className="acrylBlendsRight" aria-label="Agents" hidden={!rightOpen}>
-          <RightPanel chats={chats} renderConversation={(): ReactNode => renderSlot('main', {}, { entryKey: 'conversation' })} />
+          <RightPanel
+            chats={chats}
+            tabs={tabs}
+            tools={tools}
+            versions={versions}
+            state={state.status === 'ready' ? state.state : undefined}
+            renderConversation={(): ReactNode => renderSlot('main', {}, { entryKey: 'conversation' })}
+          />
         </aside>
       </div>
       {dialogPanel !== null && (

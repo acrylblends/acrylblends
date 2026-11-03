@@ -57,7 +57,8 @@
   "dependencies": {
     "acryl-loopback-http": "workspace:*",
     "acryl-app-shell": "workspace:*",
-    "acryl-versions": "workspace:*"
+    "acryl-versions": "workspace:*",
+    "acryl-workspace": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2",

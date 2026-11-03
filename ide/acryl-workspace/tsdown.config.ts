@@ -17,6 +17,22 @@ export default defineConfig([
     sourcemap: true,
   },
   {
+    // The reusable client layers (`src/client/ui.ts`) as a plain browser module, bundled into another root owner's client.
+    name: `${PACKAGE_NAME}/ui`,
+    entry: { ui: 'src/client/ui.ts' },
+    tsconfig: 'tsconfig.client.json',
+    outDir: 'lib',
+    format: 'esm',
+    platform: 'browser',
+    target: 'es2022',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+    sourcemap: true,
+    plugins: [xtermCssPlugin()],
+    noExternal: () => true,
+  },
+  {
     name: `${PACKAGE_NAME}/client`,
     entry: { client: 'src/client/index.ts' },
     tsconfig: 'tsconfig.client.json',
