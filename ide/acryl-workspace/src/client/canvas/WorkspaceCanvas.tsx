@@ -34,9 +34,7 @@ import type { ModelConnectControl } from '../models/model-connect.ts'
 import { describeFinish, type ToastState, type ToastTarget } from '../notifications/toast-state.ts'
 import type { AgentsState } from '../agents/agents-state.ts'
 import { TabStrip } from '../tabs/TabStrip.tsx'
-import { SplitDivider } from './SplitDivider.tsx'
 import { routeShellRequests } from './shell-requests.ts'
-import { clampSplit, readSplitRatio, writeSplitRatio } from './split-ratio.ts'
 import { GLOBAL_GROUP, groupLocation, type WorkspaceGroups } from './groups.ts'
 import type { WorkspaceShellState } from '../worktrees/shell-state.ts'
 import { DocFilePane } from '../docs/DocFilePane.tsx'
@@ -132,16 +130,9 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
   const sessionState = useSyncExternalStore(subscribeSession, () => frameSession.getSnapshot())
   const sessions = useSessions(state => state)
   const stageRef = useRef<HTMLDivElement>(null)
-  const [splitRatio, setSplitRatio] = useState(() => readSplitRatio(safeStorage()))
   /** Set only when starting a new AcrylDSH Chat from the "+" menu fails (no tab exists yet to attach it to). */
   const [chatNotice, setChatNotice] = useState<string | null>(null)
-  const changeSplitRatio = useCallback((ratio: number): void => {
-    const next = clampSplit(ratio)
-    setSplitRatio(next)
-    writeSplitRatio(safeStorage(), next)
-  }, [])
   const active = snapshot.tiles.find(tile => tile.id === snapshot.activeId)
-  const splitTile = snapshot.tiles.find(tile => tile.id === snapshot.splitId)
 
   const renameChat = useCallback((sessionId: string, title: string) => {
     void projects.renameChat(sessionId, title).then((result) => { if (!result.ok) setChatNotice(result.reason) })
@@ -374,8 +365,8 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
       {chatNotice !== null && (
         <p className="dshWorkspaceSideNotice" role="alert">{chatNotice}</p>
       )}
-      <div ref={stageRef} className="dshWorkspaceStage" role="tabpanel" data-split={splitTile !== undefined || undefined}>
-        <div className="dshWorkspacePane" data-pane="primary" style={splitTile === undefined ? undefined : { flexBasis: `${splitRatio * 100}%`, flexGrow: 0 }}>
+      <div ref={stageRef} className="dshWorkspaceStage" role="tabpanel">
+        <div className="dshWorkspacePane" data-pane="primary">
           {active === undefined
             ? (
                 <div className="dshWorkspaceEmpty">
@@ -384,26 +375,6 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
               )
             : renderTile(active)}
         </div>
-        {splitTile !== undefined && <SplitDivider stage={stageRef} ratio={splitRatio} onRatio={changeSplitRatio} />}
-        {splitTile !== undefined && (
-          <div className="dshWorkspacePane" data-pane="split">
-            <div className="dshWorkspaceSplitHead">
-              <span className="dshWorkspaceSplitTitle">
-                <span aria-hidden="true">{glyph(splitTile.kind)}</span> {splitTile.title}
-              </span>
-              <button
-                type="button"
-                className="dshWorkspaceSplitClose"
-                aria-label="Close split"
-                title="Close the split (the tab stays open)"
-                onClick={() => { workspace.closeSplit() }}
-              >
-                ×
-              </button>
-            </div>
-            {renderTile(splitTile)}
-          </div>
-        )}
       </div>
       <CommandPalette palette={palette} />
       <Toasts
@@ -414,17 +385,6 @@ export function WorkspaceCanvas({ renderConversation: conversationProp, ptyApi, 
   )
 }
 
-function glyph(kind: WorkspaceTile['kind']): string {
-  if (kind === 'chat') return '◎'
-  if (kind === 'pty') return '❯'
-  if (kind === 'file') return '▤'
-  if (kind === 'files') return '▥'
-  if (kind === 'git') return '⑂'
-  if (kind === 'diff') return '±'
-  if (kind === 'kanban') return '▦'
-  if (kind === 'doc') return '▧'
-  return '◉'
-}
 
 function safeStorage(): Storage | undefined {
   try {

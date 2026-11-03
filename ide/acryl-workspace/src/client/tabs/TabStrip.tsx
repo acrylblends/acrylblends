@@ -65,15 +65,12 @@ interface TabContextMenuProps {
   readonly y: number
   readonly tiles: readonly WorkspaceTile[]
   readonly anchorId: string
-  readonly splitId: string | undefined
   onClose(): void
   onRename(id: string): void
   onCloseTab(tile: WorkspaceTile): void
-  onOpenBeside(id: string): void
-  onCloseSplit(): void
 }
 
-function TabContextMenu({ x, y, tiles, anchorId, splitId, onClose, onRename, onCloseTab, onOpenBeside, onCloseSplit }: TabContextMenuProps) {
+function TabContextMenu({ x, y, tiles, anchorId, onClose, onRename, onCloseTab }: TabContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const away = (event: PointerEvent): void => { if (ref.current?.contains(event.target as Node) !== true) onClose() }
@@ -96,9 +93,6 @@ function TabContextMenu({ x, y, tiles, anchorId, splitId, onClose, onRename, onC
   return (
     <div ref={ref} className="dshWorkspaceMenu dshWorkspaceTabMenu" role="menu" aria-label="Tab actions" style={{ position: 'fixed', top: y, left: x, right: 'auto' }}>
       {item('Rename', () => { onRename(anchorId) })}
-      {tiles.length > 1 && (anchorId === splitId
-        ? item('Close split', onCloseSplit)
-        : item('Open beside the current tab', () => { onOpenBeside(anchorId) }))}
       <div className="dshWorkspaceMenuRule" />
       {anchor !== undefined && item('Close', () => { onCloseTab(anchor) })}
       {item('Close others', () => { closing('others') }, tiles.length < 2)}
@@ -231,17 +225,6 @@ export function TabStrip({ snapshot, workspace, branchLabel, branchTitle, runnin
                   <span className="dshWorkspaceTabLabel">{tile.title}{tile.fileRel !== undefined && tile.content !== undefined ? ' ●' : ''}</span>
                 </button>
               )}
-              {snapshot.tiles.length > 1 && !selected && (
-                <button
-                  type="button"
-                  className="dshWorkspaceTabSplit"
-                  aria-label={tile.id === snapshot.splitId ? 'Close split' : `Open ${tile.title} beside the current tab`}
-                  title={tile.id === snapshot.splitId ? 'Close the split' : 'Open beside the current tab'}
-                  onClick={() => { if (tile.id === snapshot.splitId) workspace.closeSplit(); else workspace.openInSplit(tile.id) }}
-                >
-                  ◫
-                </button>
-              )}
               <button type="button" className="dshWorkspaceTabClose" aria-label={`Close ${tile.title}`} onClick={() => { onClose(tile) }}>×</button>
             </div>
           )
@@ -288,12 +271,9 @@ export function TabStrip({ snapshot, workspace, branchLabel, branchTitle, runnin
           y={tabMenu.y}
           tiles={snapshot.tiles}
           anchorId={tabMenu.id}
-          splitId={snapshot.splitId}
           onClose={() => { setTabMenu(null) }}
           onRename={(id) => { const tile = snapshot.tiles.find(candidate => candidate.id === id); if (tile !== undefined) setEditing({ id, value: tile.title }) }}
           onCloseTab={onClose}
-          onOpenBeside={(id) => { workspace.openInSplit(id) }}
-          onCloseSplit={() => { workspace.closeSplit() }}
         />
       )}
     </div>

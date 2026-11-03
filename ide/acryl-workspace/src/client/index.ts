@@ -20,13 +20,8 @@ import { openSettingsSection, setSettingsPanelOpener } from './settings/open-set
 import { createWorkspaceFilesApi } from './files/files-api.ts'
 import { filesTabPlugin } from './files/files-tab.ts'
 import { changesTabPlugin } from './changes/changes-tab.ts'
-import { checksTabPlugin } from './checks/checks-tab.ts'
 import { parseSavedThreads, REVIEW_STORAGE_KEY, ReviewStore, startReviewPersistence } from './review/review-store.ts'
-import { reviewTabPlugin } from './review/review-tab.ts'
 import { COMMENTS_STORAGE_KEY, CommentStore, parseSavedComments, startCommentPersistence } from './comments/comment-store.ts'
-import { commentsTabPlugin } from './comments/comments-tab.ts'
-import { listTerminalTargets } from './comments/terminal-targets.ts'
-import { browserClipboard } from './comments/use-comments.ts'
 import { WorkspaceState } from './canvas/state.ts'
 import { WorkspaceGroups } from './canvas/groups.ts'
 import { frameSessionBannerFrom, probeAdmittedSession } from './connection/session-banner.ts'
@@ -218,24 +213,12 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => startShellPolling(shell), 'acryl-workspace: git state polling')
   ctx.effect(() => installWorkspaceStyles(), 'acryl-workspace: styles')
   ctx.plugin(changesTabPlugin(shell, gitApi))
-  ctx.plugin(reviewTabPlugin(shell, review))
-  ctx.plugin(checksTabPlugin(shell, gitApi))
+  // 125: Review, Checks and Comments leave the frame; their views lived only in DSH's right column, and their stores stay for the diff pane's
+  // one send-to-agent path (question 13) until the editor's comment gutter goes with them.
   ctx.plugin(filesTabPlugin(shell, filesApi, gitApi, advanced))
 
   if (advanced && terminalStack !== undefined) {
     const { ptyClient, terminals, dock } = terminalStack
-    // Line comments are kept until the user copies them or sends them into one of these terminals.
-    ctx.plugin(commentsTabPlugin(shell, comments, {
-      list: worktree => listTerminalTargets({ groups, dock, terminals, shell }, worktree),
-      pasteTarget: terminalId => terminals.get(terminalId),
-      reveal: (target) => {
-        if (target.place === 'tab' && target.tabId !== undefined) {
-          shell.select(target.worktree)
-          chats.selectTab(target.worktree, target.tabId)
-        }
-        requestAnimationFrame(() => { terminals.get(target.terminalId)?.focus() })
-      },
-    }, browserClipboard()))
     // What terminal agents report through their hooks: the attention queue reads it.
     const agentStatus = new AgentStatusState(createAgentStatusApi())
     ctx.effect(() => agentStatus.start(), 'acryl-workspace: agent status polling')

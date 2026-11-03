@@ -262,15 +262,10 @@ describe('WorkspaceState split pane', () => {
     expect(w.getSnapshot().tiles.filter(t => t.kind === 'diff')).toHaveLength(1)
   })
 
-  it('restores a saved split', () => {
-    const w = make()
+  it('drops a saved split: the right panel has no split pane (125)', () => {
+    const w = new WorkspaceState({ createId: counter() })
     w.restore([{ kind: 'doc', title: 'Doc' }, { kind: 'kanban', title: 'Board' }], 0, 1)
-    const s = w.getSnapshot()
-    expect(s.tiles.find(t => t.id === s.activeId)?.kind).toBe('doc')
-    expect(s.tiles.find(t => t.id === s.splitId)?.kind).toBe('kanban')
-    const same = make()
-    same.restore([{ kind: 'doc', title: 'Doc' }], 0, 0)
-    expect(same.getSnapshot().splitId).toBeUndefined()
+    expect(w.getSnapshot().splitId).toBeUndefined()
   })
 
   describe('with the DSH chat off', () => {

@@ -234,21 +234,19 @@ export class WorkspaceState {
    * @param saved - tiles without ids (terminals are never saved).
    * @param active - index into `saved` of the tab to focus, or -1 to keep the chat focused.
    */
-  restore(saved: readonly Omit<WorkspaceTile, 'id'>[], active: number, split = -1): void {
+  restore(saved: readonly Omit<WorkspaceTile, 'id'>[], active: number, _split = -1): void {
     const kept = this.chat ? saved : saved.filter(tile => tile.kind !== 'chat')
     if (kept.length === 0) return
-    // `active` and `split` index the saved list; map them onto what was kept.
+    // `active` indexes the saved list; map it onto what was kept. A saved split is dropped: 125's right panel has no split pane.
     const keptActive = this.chat ? active : kept.indexOf(saved[active] as never)
-    const keptSplit = this.chat ? split : kept.indexOf(saved[split] as never)
     const restored = kept.map(tile => Object.freeze({ ...tile, id: this.createId() }) as WorkspaceTile)
     const tiles = [...this.snapshot.tiles, ...restored]
     const activeId = restored[keptActive]?.id ?? this.snapshot.activeId
-    const splitId = restored[keptSplit]?.id
     this.replace({
       ...this.snapshot,
       tiles: Object.freeze(tiles),
       activeId,
-      splitId: splitId === activeId ? undefined : splitId,
+      splitId: undefined,
       menuOpen: false,
     })
   }
