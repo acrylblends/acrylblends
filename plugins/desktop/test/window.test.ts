@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CASCADE_STEP, cascade, windowOptions } from '../window.ts'
+import { CASCADE_STEP, cascade, WINDOW_SIZE, windowOptions, windowSize } from '../window.ts'
 
 const work = { x: 0, y: 25, width: 1920, height: 1055 }
 const size = { width: 1100, height: 760 }
@@ -77,4 +77,20 @@ test('a row of windows on a big screen starts again at the corner, but never on 
     taken.push(place)
     from = { ...place, width: 1100, height: 760 }
   }
+})
+
+test('a new window keeps its usual size on a big screen and is made to fit, with room to cascade, on a small one', () => {
+  assert.deepEqual(windowSize({ x: 0, y: 25, width: 1920, height: 1055 }), WINDOW_SIZE)
+  // CI's macOS screen: macOS moves a window that runs past the edge back onto the screen, so a second window of the usual size would land on the first.
+  const small = { x: 0, y: 25, width: 1024, height: 743 }
+  const size = windowSize(small)
+  assert.equal(size.width <= small.width - CASCADE_STEP * 3, true)
+  assert.equal(size.height <= small.height - CASCADE_STEP * 3, true)
+  const first = { x: small.x, y: small.y, ...size }
+  const second = cascade(first, small, size, [first])
+  assert.deepEqual(second, { x: small.x + CASCADE_STEP, y: small.y + CASCADE_STEP })
+  assert.equal(second.x + size.width <= small.x + small.width, true)
+  assert.equal(second.y + size.height <= small.y + small.height, true)
+  // Never below the smallest size, however small the screen.
+  assert.deepEqual(windowSize({ x: 0, y: 0, width: 400, height: 300 }), { width: 480, height: 360 })
 })
