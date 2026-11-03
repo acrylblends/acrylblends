@@ -116,6 +116,30 @@ export function apply(ctx: ClientContext): void {
       }
     }, 'acryl-workspace: the app folder on first run')
   }
+  // 125: a workspace saved before the redesign can hold the app's own page as a browser tab. The canvas shows the app now, so that tab is dropped
+  // (every other tab stays where it was, and they are the right panel's now). A new save records the tab set without it.
+  if (advanced && saved !== undefined) {
+    ctx.effect(() => {
+      let cancelled = false
+      void capabilitiesLoaded.then((loaded) => {
+        if (cancelled || loaded.appPage === undefined) return
+        let url: string
+        try {
+          url = new URL(loaded.appPage, window.location.origin).href
+        } catch {
+          return
+        }
+        for (const key of groups.keys()) {
+          const state = groups.stateFor(key)
+          for (const tile of state.getSnapshot().tiles)
+            if (tile.kind === 'browser' && tile.url === url) state.closeTile(tile.id)
+        }
+      })
+      return () => {
+        cancelled = true
+      }
+    }, 'acryl-workspace: the app page leaves the tab strip (125)')
+  }
   const review = new ReviewStore(parseSavedThreads(storage?.getItem(REVIEW_STORAGE_KEY) ?? null))
   ctx.effect(() => startReviewPersistence(review, storage), 'acryl-workspace: save review comments')
   const comments = new CommentStore(parseSavedComments(storage?.getItem(COMMENTS_STORAGE_KEY) ?? null))
