@@ -293,6 +293,11 @@ describe('fuzzy ranking', () => {
     const paths = ['docs/framework/cordis/migration-from-0-4.md', 'docs/framework/cordis/acryl-in-a-cordis-app.md', 'src/main.ts', 'plugins/agent-panel/client/main.ts']
     expect(fuzzySearch('mai', paths).map(match => match.path).slice(0, 2)).toEqual(['src/main.ts', 'plugins/agent-panel/client/main.ts'])
   })
+
+  it('puts a word that holds the letters above a file name that scatters them', () => {
+    const paths = ['docs/framework/guides/bring-your-own-tool.md', 'plugins/acryl-router/src/browser/jsx-dom.ts', 'docs/framework/concepts/web-standard.md', 'plugins/team-board/index.ts', 'test/team-board.test.ts']
+    expect(fuzzySearch('brd', paths).map(match => match.path).slice(0, 2)).toEqual(['test/team-board.test.ts', 'plugins/team-board/index.ts'])
+  })
 })
 
 describe('the open file in the tree', () => {
