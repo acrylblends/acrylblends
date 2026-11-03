@@ -1070,6 +1070,44 @@ script has no watcher, so the frame's app server does not restart under a run; t
 during the change window leaves the page and text alone; an idle empty composer records the marker before reloading). Also `e1f6617a`: a sent message blurs the composer, so a plugin-install run still reloads the page (verify:panel passes again).
 State at this edit: main `81bb14dc` (119 landed) merged into the branch as `7e2d208b` with no conflicts; the full check on the merged head (`5c3afee3`)
 found the restricted port above, fixed in `96afd061`; the full check is green on the head that carries this note; the first count on `91fe629a` was
-stopped by attempt 2's two flakes, both addressed above, and the count restarted on the head that carries the gate's load recorder (`dc829324`). The
-gate's panel step (on this branch) records the typed nodes' liveness, the reload marker and every iframe load under the submit, so a recurrence names a
-replaced page, a frame-initiated load or an unwired form.
+stopped by attempt 2's two flakes, both addressed above, and the macOS one's cause and fix are section 30 (merged from `124-rootcause`: `dabceeb5`,
+`9fbbf209`); the count runs on the head that carries them. The gate's panel step records the typed nodes' liveness, the reload marker, every iframe
+load under the submit and every tile frame re-pointed in place or made for an outside site, so a recurrence names a replaced page, a frame-initiated
+load, a re-pointed tile or an unwired form.
+
+## 30. The tile that replaced the app page: the agent-panel failure's cause (branch 124, 2026-11-03)
+
+Section 29's macOS agent-job failure (run 41559207908: the panel took the submit, wrote "add 2 3", cleared the composer, and a moment later a fresh panel
+stood in a fresh document with the ask lost) had one actor: the frame's browser tile. Neither the panel, the door, the router nor Chrome reloaded the page.
+
+**What happened.** The canvas shows only the active tab, and `renderTile` returned an unkeyed `<BrowserPane>`, so React kept one pane - one iframe, one
+attempt counter, one retry timer - for whichever browser tab was in front. The gate's path is the workshop's: the app's own tab ("agent-app", `/app`)
+is in front, then "New Browser Tab", then the app's address and Go. A local probe (a MutationObserver installed on every new document) recorded the
+same iframe element being pointed in place from `/app` to the new tab's default `https://example.com`, then about 100 ms later to `/app/settings`, on
+every run. When the outside page commits before Go replaces it (a runner with a fast network: a CDN answers in tens of milliseconds), its load event
+fires while the element's `src` already reads `/app/settings`. `shouldRetryBrowserLoad` read `src` from the element, saw an unreadable document (a
+cross-origin page hides it, like Chrome's error page does) for one of the frame's own addresses, and scheduled a "retry": 250 ms later it remounted the
+iframe, replacing the app page the gate had just typed into. Whether the remount landed before or after the submit decided green or red.
+
+**The rule it broke**, and the fix at the source (`ide/acryl-workspace`): the frame never reloads the app page on its own.
+- Every canvas pane is keyed by its tab (`WorkspaceCanvas.renderTile`): a pane's own state belongs to its tab, and selecting another tab of the same
+  kind mounts that tab's pane.
+- A browser tab's frame is made for one address and one attempt (`key` is both): a frame is never re-pointed, so a late load from an earlier address
+  cannot land on the current one.
+- The retry answers only for a frame's first load (`shouldRetryBrowserLoad({ firstLoad })`). A later load is the page's own move (a link it followed,
+  its own reload, a door navigation) and is never undone, unreadable or not. A pending retry is cancelled when the address changes.
+- A new browser tab opens at the app's own page when the Host serves one, else empty with the address bar waiting (`WorkspaceStateOptions.browserHome`);
+  it never loads an outside site nobody asked for.
+
+**Tests.** `tests/browser/browser-pane.spec.tsx` (jsdom): a late load from the address the frame showed before does not replace the page it shows now
+(the CI failure, deterministic with fake timers); a page that navigates itself somewhere unreadable is left there; the first load's error page is still
+loaded again; a reload pending for one address never lands on the next. Four of them fail on the old pane. `tests/canvas/state.spec.ts`: a new browser
+tab opens at the app page or empty. The frame gate records every tile frame re-pointed in place and every tile frame made for an outside site, and fails
+on either when the app page is shown and again after the panel's run; the old code re-pointed on every run, so the gate fails it every time, not one
+run in N.
+
+**A second way the app page is taken away, not fixed here (a scope question for 125).** The same probe showed the app's tab losing the front to the
+chat tab with no click: `synchronizeWorkspaceWithSessionNavigation` treats every session-list update while the shown chat is blank as "New Session"
+and selects the chat tab, and a fresh app's chat is always blank. The canvas unmounts the tab that leaves the front, so the app page (and any panel
+run in it) is gone; coming back loads it again. The 125 redesign moves the agent out of the app's iframe, which removes the run loss; whether the
+canvas should also keep browser tabs mounted, and the New Session signal become an event instead of list state, is recorded for 125.
