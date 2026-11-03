@@ -10,6 +10,8 @@ import type {} from '@acryl/ui/frame'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { DesktopLayoutState, DesktopThemePresenter, provideDesktopLayout, stripLaunchToken } from 'acryl-app-shell/client'
 import { createVersionsApi } from 'acryl-versions/client'
+import { ChatSavesStore, createChatSavesApi } from './chat-saves.ts'
+import { TurnSaveFooter } from './TurnSaveFooter.tsx'
 import { BlendsFrame } from './BlendsFrame.tsx'
 import { AppCanvasState } from './canvas/app-canvas.ts'
 import { ChatsStore, type MainViewNavigation } from './chats.ts'
@@ -17,6 +19,7 @@ import { FrameStateStore } from './frame-state.ts'
 import { FILES_SEARCH_EVENT } from './FilesView.tsx'
 import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSharedPlugin } from 'acryl-workspace/ui'
 import { ShortcutsRow } from './ShortcutsRow.tsx'
+import { createSidebarRightStandIn } from './sidebar-right-stand-in.ts'
 import { createBranchesApi } from './branches.ts'
 import { createFeedbackApi, feedbackTask } from './feedback.ts'
 import { draftInChat } from './chat-draft.ts'
@@ -69,6 +72,8 @@ export function apply(ctx: ClientContext): void {
   const versionsApi = createVersionsApi()
   const tabs = new FrameTabs(pageStorage())
   const tools = createFrameTools()
+  // The line under an answer that changed the app: what the Host's auto-save made of the turn. A new save changes the versions and the unsaved count, so the frame reads its state again.
+  const chatSaves = new ChatSavesStore(createChatSavesApi(), () => { void frameState.refresh() })
   // Feedback from users: the notes, and handing one to the chat as a task the builder reads and sends.
   const feedback: FeedbackPort = {
     api: createFeedbackApi(),
@@ -87,6 +92,11 @@ export function apply(ctx: ClientContext): void {
     const dispose = ctx.reflect.provide('appCanvas', canvas)
     return () => { void dispose() }
   }, 'acryl-blends-frame: the canvas service')
+  // DSH's chat view opens the links of an answer through `sidebarRight`; the frame has no DSH right sidebar, so it answers for it (a web link opens in a new tab).
+  ctx.effect(() => {
+    const dispose = ctx.reflect.provide('sidebarRight', createSidebarRightStandIn(url => { window.open(url, '_blank', 'noopener,noreferrer') }))
+    return () => { void dispose() }
+  }, 'acryl-blends-frame: the right sidebar stand-in')
 
   // The launch token was exchanged for the cookie before this client ran; left in the address bar a reconnect could spend it again.
   ctx.effect(() => {
@@ -198,6 +208,18 @@ export function apply(ctx: ClientContext): void {
       }, ShortcutsRow))
     },
   })
+
+  // DSH's chat draws a slot before each completed turn's action row (`conversation.chat.turnTail`, declared by `@deepseek-ai/dsh-client-ui-chat`): the frame
+  // puts its line there. It names the slot without that package's types, which the frame does not depend on.
+  const turnTail = ctx.slots as unknown as {
+    inject(name: string, register: () => unknown): void
+    register(entry: object, component: unknown): unknown
+  }
+  turnTail.inject('conversation.chat.turnTail', () => turnTail.register({
+    name: 'conversation.chat.turnTail',
+    id: 'acryl-blends-saves',
+    inject: (sessionId: string) => ({ sessionId, chatSaves }),
+  }, TurnSaveFooter))
 
   ctx.inject(['sessions'], (child) => {
     child.effect(() => chats.watch(child.sessions), 'acryl-blends-frame: chats follow the sessions')

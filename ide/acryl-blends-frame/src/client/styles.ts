@@ -51,6 +51,8 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsSmallButton { font-size: 11px; color: #c8c8d0; background: var(--bf-surface-2); border: 1px solid #2f2f35; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
 .acrylBlendsSep { height: 1px; background: var(--bf-border); margin: 10px 12px; flex: none; }
 .acrylBlendsNote { margin: 4px 8px; color: var(--bf-dim); font-size: 12px; }
+/* Under a chat answer that changed the app (the mockup's .tool line): what it edited and the version it was saved as. */
+.acrylBlendsTurnSave { margin: 6px 0 2px; color: var(--bf-dim); font: 11px/1.4 ui-monospace, "SF Mono", Menlo, monospace; overflow-wrap: anywhere; }
 .acrylBlendsNote[data-error] { color: #f87171; }
 .acrylBlendsMeta { margin-left: auto; color: var(--bf-dim); font-size: 11px; font-weight: 400; white-space: nowrap; }
 .acrylBlendsDot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #55555c; flex: none; }

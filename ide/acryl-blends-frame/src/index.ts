@@ -15,15 +15,17 @@ import type {} from 'acrylblends/cordis/router-http'
 import { Acryl } from 'acrylblends'
 import { error } from 'acryl-loopback-http'
 import { INVALID_JSON, jsonBody, ownPage, privateApi, readJson } from 'acryl-loopback-http/router'
-import { GitRunner } from 'acryl-versions'
+import { GitRunner, Versions } from 'acryl-versions'
 import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, switchAppPlugin, type FrameRow } from './app-plugins.ts'
+import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
 import {
   FRAME_API_PREFIX,
   branchNameProblem,
   FRAME_BRANCHES_NEW_PATH,
+  FRAME_CHAT_SAVES_PATH,
   FRAME_FEEDBACK_PATH,
   FRAME_FEEDBACK_SEEN_PATH,
   FRAME_PLUGINS_PATH,
@@ -31,6 +33,7 @@ import {
   FRAME_STATE_PATH,
   type AppPluginKind,
   type AppPluginsView,
+  type ChatSavesView,
   type FeedbackView,
   parseFeedbackNotes,
   type FrameBranch,
@@ -177,8 +180,28 @@ export interface BranchesPort {
   create(name: string): Promise<void>
 }
 
-export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort, feedback?: FeedbackPort, branches?: BranchesPort): Acryl {
+/** What each turn of a chat saved (the auto-save), for the line under the answer. */
+export interface ChatSavesPort {
+  read(session: string): Promise<ChatSavesView>
+}
+
+/** A session id as DSH mints them: letters, digits and dashes, never a path. */
+const SESSION_ID = /^[A-Za-z0-9_-]{1,100}$/u
+
+export function frameRoutes(state: () => Promise<FrameState>, report: (cause: unknown) => void = () => {}, plugins?: PluginsPort, feedback?: FeedbackPort, branches?: BranchesPort, chatSaves?: ChatSavesPort): Acryl {
   const app = new Acryl()
+  if (chatSaves !== undefined) {
+    app.get(FRAME_CHAT_SAVES_PATH, ownPage, async (c) => {
+      const session = c.req.query('session') ?? ''
+      if (!SESSION_ID.test(session)) return c.json(error('name the chat'), 400)
+      try {
+        return c.json(await chatSaves.read(session))
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the saves could not be read'), 500)
+      }
+    })
+  }
   if (branches !== undefined) {
     app.post(FRAME_BRANCHES_NEW_PATH, ownPage, jsonBody(), async (c) => {
       const body = await readJson(c)
@@ -245,12 +268,53 @@ export function frameRoutes(state: () => Promise<FrameState>, report: (cause: un
 /** The Loader row that runs the app's own plugins (the app's `cordis.patch.yml`). */
 const APP_PLUGINS_ROW = 'app-plugins'
 
+/**
+ * Save the app's folder as a version called `message`, and say which one it is (`v7`: how many versions the branch has then). Only a turn DSH says changed
+ * files comes here, but the commit takes the whole folder as a save point does: a file the person changed by hand since the last version goes into it. A folder
+ * with nothing to commit (the agent committed itself, or the files are ignored) makes no version.
+ */
+export async function saveVersion(git: GitRunner, versions: Versions, root: string, message: string): Promise<{ hash: string; version: number; subject: string } | undefined> {
+  const { unsaved } = await readWorktree(git, root)
+  if (unsaved === undefined || unsaved === 0) return undefined
+  const { entry } = await versions.save(root, message)
+  const count = Number((await git.run(['rev-list', '--count', entry.hash], root)).stdout.trim())
+  return { hash: entry.hash, version: Number.isInteger(count) && count > 0 ? count : 1, subject: entry.subject }
+}
+
+/** DSH's `workspaceChanges` service as the frame uses it (the host row `workspace-changes`); undefined when the app composes without it. */
+interface WorkspaceChangesService {
+  summary(session: string, seq: number): { readonly files: readonly { readonly display: string }[] } | undefined
+}
+
+function workspaceChangesOf(value: unknown): WorkspaceChangesService | undefined {
+  return value !== null && typeof value === 'object' && typeof (value as { summary?: unknown }).summary === 'function' ? value as WorkspaceChangesService : undefined
+}
+
+/** `ctx.on('session/event', ...)`: DSH's host emits it with the session object and the event; the frame needs only the id and the event. */
+interface SessionEvents {
+  on(name: 'session/event', listener: (session: { readonly id: string }, event: SessionEventLike) => void): () => void
+}
+
 export function apply(ctx: Context, config: FrameConfig = {}): void {
   const appPage = typeof config.appPage === 'string' && config.appPage.startsWith('/') ? config.appPage : undefined
   const root = (ctx.appInstance as { readonly root?: unknown }).root
   if (typeof root !== 'string') throw new Error('acryl-blends-frame: the app instance has no app folder (root)')
   ctx.plugin(workspaceHost, appPage === undefined ? {} : { appPage })
+  // The chat works in the app's own folder. DSH's first-run workspace is a folder under Documents; with the app's folder registered first, the page's first chat
+  // opens in it (DSH makes its default workspace only when it has none), so what the agent writes is the app, and the auto-save can save it.
+  ctx.inject(['workspaceController'], (child) => {
+    const workspaces = (child as unknown as { workspaceController: { create(request: { readonly path: string }): Promise<unknown> } }).workspaceController
+    child.effect(() => {
+      workspaces.create({ path: root }).catch((cause: unknown) => {
+        child.logger.error(`acryl-blends-frame: the app folder could not be made a workspace: ${cause instanceof Error ? cause.message : String(cause)}`)
+      })
+      return () => {}
+    }, 'acryl-blends-frame: the chat works in the app folder')
+  })
   ctx.effect(() => {
+    const report = (cause: unknown): void => {
+      ctx.logger.error(`acryl-blends-frame: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
     const git = new GitRunner()
     const state = async (): Promise<FrameState> => {
       const [appName, branches, worktree] = await Promise.all([readAppName(root), readBranches(git, root), readWorktree(git, root)])
@@ -275,6 +339,18 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
         if (entry?.fiber !== undefined) await entry.fiber.restart()
       },
     }
+    // The chat's agent finished a turn that changed files: save a version by itself (./auto-save.ts), and remember which turn it was.
+    const store = new SaveStore(join(ctx.appInstance.dshHome, 'chat-saves.json'), report)
+    const versions = new Versions(git)
+    const autoSave = new AutoSave({
+      summary: (session, seq) => workspaceChangesOf(ctx.get('workspaceChanges'))?.summary(session, seq),
+      save: message => saveVersion(git, versions, root, message),
+      store,
+      report,
+    })
+    // DSH announces every event of every chat session here; `workspace/changes` is the one that says a turn changed files.
+    const stopListening = (ctx as unknown as SessionEvents).on('session/event', (session, event) => { autoSave.observe(session.id, event) })
+    const chatSaves: ChatSavesPort = { read: async session => ({ saves: await store.forSession(session) }) }
     ctx.router.route('/', frameRoutes(state, (cause) => {
       ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
     }, plugins, feedbackPort(() => ctx.get('feedback')), {
@@ -289,10 +365,14 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
           throw new Error(typeof detail === 'string' && detail !== '' ? detail : 'git could not make the branch')
         }
       },
-    }))
+    }, chatSaves))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
-    return () => { void git.dispose() }
+    return () => {
+      stopListening()
+      void autoSave.settled().then(() => git.dispose())
+    }
   }, 'acryl-blends-frame: git runner and state route')
 }
 
+export { AutoSave, messageText, requestSubject, SaveStore } from './auto-save.ts'
 export { FRAME_API_PREFIX, FRAME_STATE_PATH, parseFrameState, type FrameBranch, type FrameState } from './contract.ts'

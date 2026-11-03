@@ -184,3 +184,37 @@ export function parseFeedbackView(value: unknown): FeedbackView {
   if (!isRecord(value) || typeof value.available !== 'boolean') throw new Error('feedback: not a view')
   return { available: value.available, notes: parseFeedbackNotes(value.notes) }
 }
+
+/** GET `?session=<id>`: what each of that chat's turns saved (`ChatSavesView`). */
+export const FRAME_CHAT_SAVES_PATH = `${FRAME_API_PREFIX}/chat-saves`
+
+/** The save point the frame made by itself when a chat turn changed the app's files. */
+export interface TurnSaveView {
+  /** The chat turn (DSH's turn number) that changed the files. */
+  readonly turn: number
+  /** The files the turn changed, relative to the app's folder. */
+  readonly files: readonly string[]
+  /** The version the turn was saved as: its commit, how many versions the branch had then (`v7`), and what it was called. */
+  readonly hash: string
+  readonly version: number
+  readonly subject: string
+}
+
+export interface ChatSavesView {
+  readonly saves: readonly TurnSaveView[]
+}
+
+/** @throws when the value is not a list of turn saves. */
+export function parseChatSaves(value: unknown): ChatSavesView {
+  if (!isRecord(value) || !Array.isArray(value.saves)) throw new Error('chat saves: not a list')
+  return {
+    saves: value.saves.map((entry: unknown) => {
+      if (!isRecord(entry) || typeof entry.turn !== 'number' || !Number.isInteger(entry.turn) || !Array.isArray(entry.files)
+        || !entry.files.every((file: unknown) => typeof file === 'string') || typeof entry.hash !== 'string' || entry.hash === ''
+        || typeof entry.version !== 'number' || !Number.isInteger(entry.version) || entry.version < 1 || typeof entry.subject !== 'string') {
+        throw new Error('chat saves: entry')
+      }
+      return { turn: entry.turn, files: entry.files as string[], hash: entry.hash, version: entry.version, subject: entry.subject }
+    }),
+  }
+}

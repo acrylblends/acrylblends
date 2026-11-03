@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'vitest'
 import {
+  AGENT_PRESET_ID,
+  AGENT_PRESET_ROWS,
   applyIdeProfile,
   CLIENT_ROWS,
   DRIVER_ROWS,
@@ -48,7 +50,10 @@ test('one profile per app, named from the app and safe for a DSH profile', () =>
 
 test("the frame's row is told the app's page, and the IDE's workbench is not mounted", () => {
   const overlay = ideProfilePlan(input).overlay
-  assert.match(overlay, /- id: acryl-blends-frame\n {6}name: acryl-blends-frame\n {6}config:\n {8}appPage: \/app/u)
+  assert.match(
+    overlay,
+    /- id: acryl-blends-frame\n {6}name: acryl-blends-frame\n {6}config:\n {8}appPage: \/app/u,
+  )
   assert.doesNotMatch(overlay, /acryl-workspace/u)
 })
 
@@ -84,6 +89,32 @@ test("the frame draws both side panels, so DSH's sidebars are not mounted, and t
   const ids = CLIENT_ROWS.map((row) => row.id)
   assert.ok(!ids.includes('ui-sidebar') && !ids.includes('ui-sidebar-right'))
   assert.deepEqual(CLIENT_ROWS.find((row) => row.id === 'ui-theme')?.config, { preference: 'dark' })
+})
+
+test("the chat view's rows are mounted, so an answer and its tool calls are drawn, and the frame's own agent preset is the default", () => {
+  const ids = CLIENT_ROWS.map((row) => row.id)
+  for (const id of ['ui-chat', 'ui-tool', 'ui-approval', 'ui-attachment'])
+    assert.ok(ids.includes(id), `${id} is a client row`)
+  const [registry, preset] = AGENT_PRESET_ROWS
+  assert.deepEqual(registry?.config, { default: AGENT_PRESET_ID })
+  assert.equal(preset?.id, `preset-${AGENT_PRESET_ID}`)
+  const tools = ((preset?.config.plugins ?? []) as { id: string }[]).map((plugin) => plugin.id)
+  for (const id of ['tool-bash', 'tool-fs', 'tool-fs-search', 'tool-jobs'])
+    assert.ok(tools.includes(id), `${id} is in the preset`)
+  // The tools are the preset's own; the host rows they stand on are driver rows, and DSH's `standard` preset (and its host rows) is not mounted.
+  for (const id of [
+    'fs-observation-policy',
+    'shell-env',
+    'jobs',
+    'workspace-changes',
+    'subprocess',
+  ])
+    assert.ok(DRIVER_ROWS.includes(id), `${id} is a driver row`)
+  for (const id of ['preset-standard', 'tool-fs', 'tool-bash', 'agent-preset-registry'])
+    assert.ok(!DRIVER_ROWS.includes(id), `${id} must not be a driver row`)
+  const script = ideProfilePlan(input).hostScript
+  assert.match(script, /const agentRows = \[/u)
+  assert.match(script, /\.\.\.agentRows,/u)
 })
 
 test("the overlay keeps the first chat's workspace in the app's own data home", () => {

@@ -155,6 +155,82 @@ export const DRIVER_ROWS: readonly string[] = [
   'fs-sandbox',
   'sandbox-policy',
   'commands',
+  // What the agent's tools stand on: the file observation rule, the sandbox and approval policy, the shell and its environment, and background jobs. The
+  // tools themselves are the frame's own agent preset below, not host rows.
+  'fs-observation-policy',
+  'sandbox',
+  'bash-sandbox',
+  'pwsh-sandbox',
+  'approval',
+  'permission',
+  'shell-env',
+  'jobs',
+  // The chat's auto-save: `workspace-changes` diffs the working tree around every turn and says which files the agent changed (and announces a turn that
+  // changed none by saying nothing); it runs git through `subprocess`. The frame's Host saves a version from that, and DSH's own changed-files card
+  // (`ui-deliverables`) is not mounted: the frame says it in one line under the answer.
+  'subprocess',
+  'workspace-changes',
+]
+
+/**
+ * The chat's agent preset. DSH's web bundle gives every session a preset (`standard`: every tool DSH has, subagents, workflows, skills and plan mode, each
+ * needing host rows of its own), and a session without a loadable preset cannot start. The frame offers the agent what builds an app, and nothing more:
+ * the shell, the file tools (read, write, edit, search) and background jobs, with the persona and the app folder's instructions. It is the registry's
+ * default, so every chat in the frame uses it. A tool added here needs the host rows it stands on in `DRIVER_ROWS`.
+ */
+export const AGENT_PRESET_ID = 'acryl-blends'
+
+export const AGENT_PRESET_ROWS: readonly {
+  readonly id: string
+  readonly name: string
+  readonly config: Readonly<Record<string, unknown>>
+}[] = [
+  {
+    id: 'agent-preset-registry',
+    name: '@deepseek-ai/dsh-agent-preset-registry',
+    config: { default: AGENT_PRESET_ID },
+  },
+  {
+    id: `preset-${AGENT_PRESET_ID}`,
+    name: '@deepseek-ai/dsh-agent-preset',
+    config: {
+      id: AGENT_PRESET_ID,
+      order: 1,
+      plugins: [
+        {
+          id: 'persona',
+          name: '@deepseek-ai/dsh-persona',
+          config: {
+            prefix: 'You are a coding agent powered by the {{model}} model.',
+            suffix: 'Your working directory is {{cwd}}.',
+          },
+        },
+        {
+          id: 'agent-instructions',
+          name: '@deepseek-ai/dsh-agent-instructions',
+          config: { maxBytes: 65536 },
+        },
+        // The loader evaluates `__jsExpr` (the `!!js` tag) when it composes the row.
+        {
+          id: 'tool-bash',
+          name: '@deepseek-ai/dsh-tool-bash',
+          disabled: { __jsExpr: "process.platform === 'win32'" },
+        },
+        {
+          id: 'tool-pwsh',
+          name: '@deepseek-ai/dsh-tool-pwsh',
+          disabled: { __jsExpr: "process.platform !== 'win32'" },
+        },
+        { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
+        {
+          id: 'tool-fs-search',
+          name: '@deepseek-ai/dsh-tool-fs-search',
+          config: { sampleOverCapGlobResults: false },
+        },
+        { id: 'tool-jobs', name: '@deepseek-ai/dsh-tool-jobs' },
+      ],
+    },
+  },
 ]
 
 /**
@@ -164,7 +240,11 @@ export const DRIVER_ROWS: readonly string[] = [
  * the failure the old overlay avoided by disabling the row); the only layout client row mounted is `acryl-app-shell`, so the document renders
  * the ACRYL frame.
  */
-export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string; readonly config?: Readonly<Record<string, unknown>> }[] = [
+export const CLIENT_ROWS: readonly {
+  readonly id: string
+  readonly name: string
+  readonly config?: Readonly<Record<string, unknown>>
+}[] = [
   { id: 'client-modules', name: '@deepseek-ai/dsh-client-modules' },
   { id: 'client-locale', name: '@deepseek-ai/dsh-client-locale' },
   { id: 'client-shortcuts', name: '@deepseek-ai/dsh-client-shortcuts' },
@@ -184,6 +264,12 @@ export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string;
   { id: 'ui-commands', name: '@deepseek-ai/dsh-client-ui-commands' },
   { id: 'ui-workspace', name: '@deepseek-ai/dsh-client-ui-workspace' },
   { id: 'ui-conversation', name: '@deepseek-ai/dsh-client-ui-conversation' },
+  // What the chat view draws: the transcript (`ui-chat`, which opens an answer's links through the `sidebarRight` the frame stands in for), the tool calls
+  // inside it, the approval card of a tool that asks, and the files attached to a message. Without them a conversation shows the person's message and no answer.
+  { id: 'ui-chat', name: '@deepseek-ai/dsh-client-ui-chat' },
+  { id: 'ui-tool', name: '@deepseek-ai/dsh-client-ui-tool' },
+  { id: 'ui-approval', name: '@deepseek-ai/dsh-client-ui-approval' },
+  { id: 'ui-attachment', name: '@deepseek-ai/dsh-client-ui-attachment' },
   { id: 'client-resources', name: '@deepseek-ai/dsh-client-resources' },
   { id: 'ui-input-trigger', name: '@deepseek-ai/dsh-client-ui-input-trigger' },
 ]
@@ -254,12 +340,14 @@ function hostScriptOf(profile: string): string {
     "const frameLayer = load(readFileSync(join(appRoot, 'cordis.patch.yml'), 'utf8')) ?? []",
     "/** Our host rows first: the framework's node server, then the webServer port the driver rows register on (they are the app's, not DSH's). */",
     'const clientRows = ' + JSON.stringify(CLIENT_ROWS, null, 2).replaceAll('\\n', '\\n'),
+    'const agentRows = ' + JSON.stringify(AGENT_PRESET_ROWS, null, 2),
     'const hostLayer = [{',
     '  insert: [',
     "    { id: 'node-server', name: './plugins/acryl-node-server/src/index.ts', config: { hostname: '127.0.0.1', port: Number(port), scan: Number(port) === 0 ? 0 : 20 } },",
     "    { id: 'web-server', name: './plugins/acryl-web-server/src/index.ts' },",
     "    { id: 'page', name: './plugins/acryl-page/src/index.ts' },",
     '    ...clientRows,',
+    '    ...agentRows,',
     '  ],',
     '}]',
     "// The composition: the driver rows selected from the bundles, the host rows and the app's frame layer, in the order they mount.",
