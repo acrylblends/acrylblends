@@ -1778,7 +1778,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       if (skipSettings) log('Settings skipped (GATE_SKIP_SETTINGS=1)')
       else {
         // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
-        // (c) Settings: General, Models, Plugins, Support, Shortcuts.
+        // (c) Settings: General, Models, Plugins, Agents, Support.
         // A person presses Settings once and waits for it; only a visible dialog whose nav carries a real section counts, so a stale or hidden dialog
         // cannot be mistaken for Settings. Pressing again before the dialog has rendered toggles the open panel closed again, which is how a slow runner
         // livelocked this step on 2026-11-02 (both triggers present, no dialog, no exception, forty presses in twenty seconds): each press here is
@@ -1865,7 +1865,9 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         // The dialog is up; its sections register asynchronously, and on a slow runner a layout settle can close it again right after it opens (the blank
         // gate's Node 22 check, run 41491427783, found the dialog and then lost it during this wait). Keep reading the dialog itself; if it vanishes,
         // press Settings once more - a person does the same - and never press while it is up, so a late render cannot be toggled shut.
-        const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
+        // 125 slice 2: the separate Shortcuts section left the frame (its commands stay rebindable in DSH's own
+        // dialog); the frame's Settings are General, Models, Plugins, Agents and Support.
+        const sections = ['General', 'Models', 'Plugins', 'Agents', 'Support']
         let settings
         let sectionPresses = 0
         const sectionDeadline = Date.now() + 20_000
@@ -1881,7 +1883,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           })()`)
           if (snapshot?.open === true) {
             const text = `${snapshot.text}\n${snapshot.labels.join('\n')}`
-            if (/Shortcuts/iu.test(text)) settings = { text, labels: snapshot.labels }
+            if (/Agents/iu.test(text)) settings = { text, labels: snapshot.labels }
             else await sleep(300)
             continue
           }
