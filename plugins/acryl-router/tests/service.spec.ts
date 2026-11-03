@@ -4,10 +4,19 @@
  * repeated mount and reload, in-flight abort, and streams that end with the router or with the plugin that serves them. Routing itself is covered by the core's own suite.
  */
 
+import { appendFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { Context, type FiberState } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import { streamSSE } from '../src/helpers/index.ts'
 import { apply, Acryl, Config, connectionOf, HTTPException, name, type Router } from '../src/index.ts'
+
+/** ACRYL_ROUTER_TRACE=1: the handler-side half of the request-signal diagnostics (the service writes the flight-side half to the same file). */
+const tlog = (line: string): void => {
+  if (process.env.ACRYL_ROUTER_TRACE !== '1') return
+  try { appendFileSync(process.env.ACRYL_ROUTER_TRACE_FILE ?? `${tmpdir()}/acryl-router-trace.log`, `${String(Date.now())} TEST ${line}\n`) } catch { /* tracing never affects a test */ }
+}
+const tagOf = (signal: AbortSignal): string => String((signal as unknown as Record<symbol, unknown>)[Symbol.for('acryl.router.signalTag')] ?? 'untagged')
 
 const PENDING = 0 as FiberState.PENDING
 const ACTIVE = 2 as FiberState.ACTIVE
@@ -255,25 +264,67 @@ describe('acryl-router lifecycle through Cordis', () => {
     expect((await get(router, '/cycle/0')).status).toBe(404)
   })
 
-  it('aborts an in-flight request and waits for it when the router is disposed, then answers 503', async () => {
+  it('lets a request in flight finish inside the grace, untouched by disposal', async () => {
     const ctx = root()
     const fiber = ctx.plugin(provider, config)
     await settle()
     const router = ctx.router
     let aborted = false
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => { release = resolve })
+    router.route('/', new Acryl().get('/save', async c => {
+      c.req.raw.signal.addEventListener('abort', () => { aborted = true }, { once: true })
+      await gate
+      return c.text('saved')
+    }))
+    const pending = get(router, '/save')
+    await settle()
+    const startedAt = Date.now()
+    const disposal = fiber.dispose()
+    await new Promise(resolve => setTimeout(resolve, 50))
+    release()
+    const answered = await pending
+    expect(answered.status).toBe(200)
+    expect(await answered.text()).toBe('saved')
+    await disposal
+    expect(aborted).toBe(false)
+    // Disposal waited for the request, not for the grace: well inside the grace plus the short abort settle.
+    expect(Date.now() - startedAt).toBeLessThan(config.disposeGraceMs + 300)
+  })
+
+  it('aborts what is still in flight after the grace, answers 503 with Connection: close, and never lets a new request in', async () => {
+    const ctx = root()
+    const fiber = ctx.plugin(provider, { ...config, disposeGraceMs: 100 })
+    await settle()
+    const router = ctx.router
+    let aborted = false
+    let listening!: () => void
+    const listenerAttached = new Promise<void>(resolve => { listening = resolve })
+    let abortSeen!: () => void
+    const abortedEvent = new Promise<void>(resolve => { abortSeen = resolve })
     router.route('/', new Acryl().get('/slow', async c => {
-      await new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { aborted = true; reject(new Error('aborted')) }, { once: true }) })
+      c.req.raw.signal.addEventListener('abort', () => { aborted = true; abortSeen() }, { once: true })
+      listening()
+      await new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { reject(new Error('aborted')) }, { once: true }) })
       return c.text('late')
     }))
     const pending = get(router, '/slow')
-    await settle()
+    // The handler is running and listening before the stop begins: otherwise the grace can abort a signal whose listener is attached later, which the
+    // signal never replays, and the test would be observing a race it never meant to test (seen on the CI check under load).
+    await listenerAttached
 
+    const startedAt = Date.now()
     await fiber.dispose()
-    await settle()
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(100)
+    // Await the abort itself, not a timer: the event is the observable fact this test is about.
+    await Promise.race([abortedEvent, new Promise<void>(resolve => { setTimeout(resolve, 1_000) })])
+    tlog(`dispose done aborted=${String(aborted)}`)
     expect(aborted).toBe(true)
     expect((await pending).status).toBe(499)
-    expect((await get(router, '/slow')).status).toBe(503)
-  })
+    const refused = await get(router, '/slow')
+    expect(refused.status).toBe(503)
+    expect(refused.headers.get('connection')).toBe('close')
+  }, 15_000)
 
   it('forwards the caller\'s own abort to the handler signal', async () => {
     const { router } = await mountRouter()
@@ -357,14 +408,21 @@ describe('acryl-router lifecycle through Cordis', () => {
     let guardAborted = false
     let handlerAborted = false
     let release!: () => void
+    // The held request is inside the guard's middleware before the guard unloads: without this the removal can run first under load, when the
+    // request has not reached the middleware yet, and the test then checks an abort that was never owed.
+    let heldStarted!: () => void
+    const heldInGuard = new Promise<void>(resolve => { heldStarted = resolve })
     const guard = ctx.plugin({
       name: 'guard',
       inject: ['router'],
       apply(inner: Context): void {
         inner.router.route('/', new Acryl()
           .use('/held/*', async (c, next) => {
-            c.req.raw.signal.addEventListener('abort', () => { guardAborted = true }, { once: true })
-            await new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { reject(new Error('aborted')) }, { once: true }) })
+            tlog(`guard listener attach tag=${tagOf(c.req.raw.signal)}`)
+            c.req.raw.signal.addEventListener('abort', () => { guardAborted = true; tlog(`guard listener fired tag=${tagOf(c.req.raw.signal)}`) }, { once: true })
+            const held = new Promise<void>((_resolve, reject) => { c.req.raw.signal.addEventListener('abort', () => { tlog('handler listener fired'); reject(new Error('aborted')) }, { once: true }) })
+            heldStarted()
+            await held
             await next()
           })
           .use('/passed/*', async (_c, next) => { await next() }))
@@ -385,17 +443,21 @@ describe('acryl-router lifecycle through Cordis', () => {
     })
     await settle()
     const held = get(router, '/held/x')
+    await heldInGuard
+
     const passed = await get(router, '/passed/x')
     const reader = passed.body!.getReader()
     await reader.read()
 
+    const disposeStarted = Date.now()
     await guard.dispose()
+    expect(Date.now() - disposeStarted).toBeGreaterThanOrEqual(2000)
     expect(guardAborted).toBe(true)
     expect((await held).status).toBe(499)
     expect(handlerAborted).toBe(false)
     release()
     await expect(reader.read()).resolves.toMatchObject({ done: true })
-  })
+  }, 15_000)
 
   it('keeps a request in flight through waitUntil until its task settles', async () => {
     const ctx = root()

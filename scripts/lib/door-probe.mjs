@@ -2,7 +2,7 @@
 // folder's own command, `.acryl/bin/acryl look`, the way an agent checks its work. The door never types a password, so the probe signs a user up over HTTP and gives the
 // browser that session's cookie over the DevTools protocol. Returns { ok, steps } and never throws.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromeCandidates } from './platform.mjs'
@@ -39,6 +39,12 @@ export async function devtools(port, tab) {
     ws.addEventListener('error', () => reject(new Error('the DevTools connection failed')))
   })
   let id = 0
+  // Events (messages without an id) are kept for diagnostics: a failure can print what the page itself reported (uncaught exceptions, console errors).
+  const events = []
+  ws.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data)
+    if (message.id === undefined) events.push(message)
+  })
   // A call that never gets its answer (the browser died, the connection closed) rejects instead of leaving the script waiting with nothing pending.
   const send = (method, params = {}, ms = 30_000) =>
     new Promise((resolve, reject) => {
@@ -63,7 +69,108 @@ export async function devtools(port, tab) {
       ws.addEventListener('close', onClose)
       ws.send(JSON.stringify({ id: mine, method, params }))
     })
-  return { send, close: () => ws.close() }
+  return { send, close: () => ws.close(), events: () => events.slice() }
+}
+
+/**
+ * The port Chrome chose, read from the `DevToolsActivePort` file it writes into its own profile when started with `--remote-debugging-port=0` (the file's
+ * first line is the port). Undefined while the file is absent or is not a port yet. Reading this instead of guessing a port is what keeps a gate from
+ * spinning on a port another process happens to hold.
+ */
+export function devToolsActivePort(profile) {
+  try {
+    const [first] = readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')
+    const port = Number.parseInt(first ?? '', 10)
+    return Number.isInteger(port) && port > 0 ? port : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Kill a launched Chrome and everything it started. On Windows a killed browser can leave renderer and crashpad processes behind that hold the profile
+ * and its port, so the whole tree goes with `taskkill /T /F`; elsewhere the process group (the child is spawned detached) gets SIGKILL. Waits for the
+ * leader to exit, bounded.
+ */
+export async function stopChrome(child) {
+  if (child === undefined) return
+  if (child.exitCode === null && child.signalCode === null) {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
+    } else {
+      try {
+        process.kill(-child.pid, 'SIGKILL')
+      } catch {
+        try {
+          child.kill('SIGKILL')
+        } catch {}
+      }
+    }
+  }
+  if (child.exitCode !== null || child.signalCode !== null) return
+  await Promise.race([new Promise((done) => child.once('exit', done)), sleep(5_000)])
+}
+
+/**
+ * Start a headless Chrome on `profile` and wait, bounded, for its own DevTools endpoint.
+ *
+ * The port is Chrome's (`--remote-debugging-port=0`, read from the profile's DevToolsActivePort file), never a guess, so a port another process holds can
+ * never stall the gate. Chrome's stderr and its `--enable-logging=stderr` output are kept and returned in the error, so a browser that will not start says
+ * why (Defender, a first-run dialog, a profile lock) instead of only that it did not. On failure the whole tree is killed, the profile state is named
+ * (exit code, DevToolsActivePort present or missing and its content), and the error carries the browser's last output.
+ */
+export async function startChrome(profile, { args = [], timeoutMs = 60_000 } = {}) {
+  const chrome = findChrome()
+  if (chrome === undefined)
+    throw new Error('no Chrome or Chromium on this machine (set CHROME_BIN)')
+  const child = spawn(
+    chrome,
+    [...chromeFlags(profile, 0), '--hide-scrollbars', '--enable-logging=stderr', ...args],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
+    },
+  )
+  let output = ''
+  const collect = (chunk) => {
+    output = (output + chunk.toString()).slice(-8000)
+  }
+  child.stdout?.on('data', collect)
+  child.stderr?.on('data', collect)
+  const deadline = Date.now() + timeoutMs
+  let port
+  while (port === undefined && Date.now() < deadline && child.exitCode === null) {
+    port = devToolsActivePort(profile)
+    if (port === undefined) await sleep(100)
+  }
+  let ready = false
+  while (port !== undefined && !ready && Date.now() < deadline) {
+    ready = await fetch(`http://127.0.0.1:${String(port)}/json/version`).then(
+      (reply) => reply.ok,
+      () => false,
+    )
+    if (!ready && child.exitCode !== null) break
+    if (!ready) await sleep(100)
+  }
+  if (!ready) {
+    const portFile = join(profile, 'DevToolsActivePort')
+    const state = existsSync(portFile)
+      ? `present ${JSON.stringify(readFileSync(portFile, 'utf8').slice(0, 120))}`
+      : 'missing'
+    await stopChrome(child)
+    // The CI frame job uploads this file on failure, so a browser that will not start keeps its evidence even when the step's console is trimmed.
+    const log = join(tmpdir(), 'acryl-chrome-launch.log')
+    const detail = `${new Date().toISOString()} chrome=${chrome} profile=${profile} exit=${String(child.exitCode)} DevToolsActivePort=${state} port=${String(port ?? 'none')}\n${output}\n`
+    try {
+      appendFileSync(log, detail)
+    } catch {
+      // A read-only temp folder only costs the artifact; the message below still carries the output.
+    }
+    throw new Error(
+      `headless Chrome did not open its DevTools endpoint within ${String(timeoutMs)} ms (exit ${String(child.exitCode)}; DevToolsActivePort ${state}; ${port === undefined ? 'no port' : `port ${String(port)} did not answer /json/version`}; log ${log}):\n${output}`,
+    )
+  }
+  return { child, port, output: () => output, stop: () => stopChrome(child) }
 }
 
 /** The flags a headless Chrome needs; on a CI runner (a container, a sandboxed user namespace) its own sandbox cannot start. */

@@ -83,12 +83,24 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/**
+ * Milliseconds a request already in flight, or an upgraded socket's own owner, may finish once the server stops taking new work. A save during a
+ * restart must not be cut; a stream that never ends must not hold the stop open.
+ */
+export const STOP_GRACE_MS = 2_000
+
 export class NodeServer extends Service {
   readonly hostname: string
   readonly config: Config
   private readonly server: Server
   private hub: UpgradeHub | undefined
   private bound = 0
+  /** The one stop this server runs: a second call (the disposer after an explicit stop) waits on the same promise. */
+  private stopping: Promise<void> | undefined
+  /** Requests whose response has not finished yet: the stop waits for them before their sockets are cut. */
+  private active = 0
+  /** Upgraded sockets this server handed out (WebSockets): neither close() nor closeAllConnections() reaches them, so the stop tracks them itself. */
+  private readonly upgraded = new Set<Duplex>()
   /** Raw routes registered by the host's compatibility layer (see {@link registerRaw}). */
   private readonly rawExact = new Map<string, RawRoute['handler']>()
   private readonly rawPrefix = new Map<string, RawRoute['handler']>()
@@ -107,6 +119,17 @@ export class NodeServer extends Service {
     this.server = createAdaptorServer({
       fetch: (request, bindings) => {
         const { incoming, outgoing } = bindings as { incoming: IncomingMessage; outgoing: ServerResponse }
+        // One count of a request whose response has not finished: the stop (see the disposer below) lets these finish before their sockets are cut,
+        // which is what keeps a save made while the app restarts from being lost.
+        this.active += 1
+        let finished = false
+        const settle = (): void => {
+          if (finished) return
+          finished = true
+          this.active -= 1
+        }
+        outgoing.once('finish', settle)
+        outgoing.once('close', settle)
         // A raw route owns the node response: start it and return the sentinel synchronously, so the adapter (which checks the
         // sentinel before treating the result as a promise) writes nothing. The handler's own failure becomes a 500 here.
         // An upgrade that reaches the HTTP fetch path has no WebSocket listener to claim it (a provider transition, or no hub at all): refuse it
@@ -141,6 +164,10 @@ export class NodeServer extends Service {
     // removed never adds or removes a listener; a request it dispatched once is never dispatched again (a guard beside the single ownership).
     this.server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
       if (this.rawUpgradeSeen.has(request)) return
+      // Upgraded sockets leave the HTTP connection lifecycle: close() and closeAllConnections() never reach them (measured, not assumed), so the stop
+      // tracks them and waits for their owner's close frame before cutting what is left.
+      this.upgraded.add(socket)
+      socket.once('close', () => { this.upgraded.delete(socket) })
       const websocket = request.headers.upgrade?.toLowerCase() === 'websocket'
       const handler = this.rawUpgrades.get(pathnameOf(request.url))
       // A raw claim owns its path. A WebSocket upgrade nobody claimed is left to the router's hub when one is attached; with no hub, or for a
@@ -162,11 +189,64 @@ export class NodeServer extends Service {
       ;(request as RawUpgradeRequest)[RAW_UPGRADE_HANDLED] = true
       Promise.resolve(handler(request, socket, head)).catch(() => socket.destroy())
     })
-    ctx.effect(() => async () => {
-      await this.hub?.close()
+    ctx.effect(() => () => this.stop(), 'acryl-node-server: close listener and open connections')
+  }
+
+  /**
+   * Stop serving, gracefully, and resolve once the port is free: no new connections; requests already in flight may finish (a stream that never ends is
+   * cut) within {@link STOP_GRACE_MS}; each upgraded socket's owner closes it with a close frame first, and what is left is destroyed. Idempotent - the
+   * disposer calls it.
+   *
+   * Calling this BEFORE the rest of the app is disposed is what makes the grace count: the router has its own disposal, and it aborts in-flight requests
+   * and ends their bodies by design, concurrently with every other disposer (Cordis runs them together). A launcher that disposes the context directly
+   * therefore cuts the request this drains; a launcher that stops the server first lets it answer, then disposes.
+   */
+  stop(): Promise<void> {
+    this.stopping ??= this.closeGracefully()
+    return this.stopping
+  }
+
+  private async closeGracefully(): Promise<void> {
+    // The hub's close runs beside the request grace rather than before it: the stop takes one grace, not two.
+    const upgrades = this.hub?.close()
+    if (!this.server.listening) {
+      await upgrades
+      return
+    }
+    const stopped = new Promise<void>(resolve => { this.server.close(() => { resolve() }) })
+    this.server.closeIdleConnections()
+    const settled = await this.settleStop(STOP_GRACE_MS)
+    // A response that finished exactly at the grace's end is written but not yet delivered: end its socket gracefully (a FIN behind the buffered body)
+    // instead of destroying it, which would answer the client with a reset and an empty body. A little flush window, then force what is left.
+    this.server.closeIdleConnections()
+    const drained = settled
+      ? await Promise.race([
+          stopped.then(() => true),
+          new Promise<boolean>(resolve => { setTimeout(() => { resolve(false) }, 300) }),
+        ])
+      : false
+    if (!drained) {
       this.server.closeAllConnections()
-      if (this.server.listening) await new Promise<void>(resolve => { this.server.close(() => { resolve() }) })
-    }, 'acryl-node-server: close listener and open connections')
+      // Upgraded sockets that outlived their owner's close: destroy them, or the server's own close never finishes.
+      for (const socket of this.upgraded) socket.destroy()
+      this.upgraded.clear()
+    }
+    await Promise.all([upgrades, stopped])
+  }
+
+  /**
+   * Wait, bounded, until no request is in flight and no upgraded socket is left; true when both reached zero inside the bound. Every pass sweeps idle
+   * keep-alive sockets again: the single sweep `close()` does misses one that becomes idle after its request finished, and such a socket would otherwise
+   * hold the stop to its deadline.
+   */
+  private async settleStop(ms: number): Promise<boolean> {
+    const deadline = Date.now() + ms
+    while (Date.now() < deadline) {
+      if (this.active === 0 && this.upgraded.size === 0) return true
+      this.server.closeIdleConnections()
+      await new Promise(resolve => setTimeout(resolve, 25))
+    }
+    return this.active === 0 && this.upgraded.size === 0
   }
 
   /**

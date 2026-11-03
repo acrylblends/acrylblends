@@ -26,7 +26,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { chromeFlags, devtools, findChrome } from './lib/door-probe.mjs'
+import { devtools, startChrome, stopChrome } from './lib/door-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
 import { doorSpawn, npmSpawn } from './lib/platform.mjs'
 
@@ -90,6 +90,7 @@ async function until(fn, ms, every = 300) {
  * page; its /settings page is the one that always renders. `notes` has no unauthenticated JSON route at the prefix, so its page is the proof.
  */
 const PAGES = {
+  // The blank app's root answers a page to a browser (the first tile) and JSON to an API client, like the agent template.
   blank: { path: '/app/about', text: 'About', api: { path: '/app' } },
   agent: { path: '/app/settings', text: 'Settings', panel: true, api: { path: '/app' } },
   todo: { path: '/app', text: 'Todo', api: { path: '/app/api', list: true } },
@@ -151,14 +152,21 @@ function startMockLlm() {
         index: 0,
         delta: { type: 'text_delta', text: 'pong from the mock' },
       })
-      send('content_block_stop', { type: 'content_block_stop', index: 0 })
-      send('message_delta', {
-        type: 'message_delta',
-        delta: { stop_reason: 'end_turn', stop_sequence: null },
-        usage: { output_tokens: 4 },
-      })
-      send('message_stop', { type: 'message_stop' })
-      response.end()
+      // ACRYL_GATE_STREAM_MS holds the answer open, so a run is still streaming when the next step presses something (the Settings-during-a-run
+      // reproduction). Zero by default: the gate's own runs stay as fast as before.
+      const streamDelayMs = Number(process.env.ACRYL_GATE_STREAM_MS ?? 0)
+      const finish = () => {
+        send('content_block_stop', { type: 'content_block_stop', index: 0 })
+        send('message_delta', {
+          type: 'message_delta',
+          delta: { stop_reason: 'end_turn', stop_sequence: null },
+          usage: { output_tokens: 4 },
+        })
+        send('message_stop', { type: 'message_stop' })
+        response.end()
+      }
+      if (Number.isFinite(streamDelayMs) && streamDelayMs > 0) setTimeout(finish, streamDelayMs)
+      else finish()
     })
   })
   return new Promise((done) => {
@@ -355,33 +363,17 @@ ${composition.stdout}`)
    * on the same port and refreshes the cookie jar through the new launch token.
    */
   const dismissNoticeAndRestart = async () => {
-    const chrome = findChrome()
-    if (chrome === undefined)
-      fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the notice check')
     const profile = mkdtempSync(join(tmpdir(), 'ide-template-notice-'))
-    const devPort = 9300 + Math.floor(Math.random() * 300)
-    const child = spawn(chrome, [...chromeFlags(profile, devPort), '--hide-scrollbars'], {
-      stdio: 'ignore',
-    })
-    let chromeOutput = ''
-    const collect = (chunk) => {
-      chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
-    }
-    child.stdout?.on('data', collect)
-    child.stderr?.on('data', collect)
+    // A unique profile and Chrome's own port (from DevToolsActivePort), never a guessed one; a browser that will not start says why (its stderr and
+    // --enable-logging output travel in the error), and its whole process tree is killed before this function fails.
+    const launched = await startChrome(profile).catch((error) =>
+      fail(
+        `the notice check could not start headless Chrome: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    )
     let cdp
     try {
-      let ready = false
-      for (let i = 0; i < 600 && !ready; i += 1) {
-        if (child.exitCode !== null) break
-        cdp = await devtools(devPort).catch(() => undefined)
-        if (cdp !== undefined) ready = true
-        else await sleep(100)
-      }
-      if (!ready)
-        fail(
-          `headless Chrome did not open for the notice check (exit ${String(child.exitCode)}):\n${chromeOutput}`,
-        )
+      cdp = await devtools(launched.port)
       await cdp.send('Page.enable')
       await cdp.send('Runtime.enable')
       for (const cookie of cookiesOf(jar))
@@ -443,15 +435,9 @@ ${composition.stdout}`)
       log('the Preview Notice is dismissed once and its acknowledgement saves')
     } finally {
       cdp?.close()
-      child.kill('SIGKILL')
-      // Chrome keeps writing its own profile for a moment after the kill, and removing it then is a flake with a name: ENOTEMPTY: directory not
-      // empty, rmdir '/tmp/ide-template-notice-...' (run 41352593171, check on Linux Node 22). Wait for the process to be gone first, then remove
-      // with the retries the tile block below already uses.
-      await new Promise((done) => {
-        if (child.exitCode !== null) return done()
-        child.once('exit', done)
-        setTimeout(done, 5_000)
-      })
+      // The whole tree, not only the browser process: on Windows renderers and crashpad outlive a killed browser and hold the profile. Chrome keeps
+      // writing its profile for a moment after the kill, and removing it then is ENOTEMPTY (run 41352593171), so the removal below keeps its retries.
+      await launched.stop()
       try {
         rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
       } catch {
@@ -724,52 +710,49 @@ function setInputValue(selector, value) {
  * that package registers a tab type for DSH's right sidebar, while the owner's requirement is the main surface, which is the workspace canvas.
  */
 async function checkTileInBrowser(url, origin, jar, page, output, mock, restartHost) {
-  const chrome = findChrome()
-  if (chrome === undefined)
-    fail('no Chrome or Chromium on this machine (set CHROME_BIN) for the tile check')
   const profile = mkdtempSync(join(tmpdir(), 'ide-template-tile-'))
-  const port = 9600 + Math.floor(Math.random() * 300)
-  // Chrome's own output is the only clue when it does not come up, so it is kept and printed if the endpoint never answers. The wait is 30 s: a loaded CI
-  // runner can take several seconds, and the old ten-second wait then fell through to a bare ECONNREFUSED from the DevTools call.
-  let chromeOutput = ''
   // When the tile's request dies (the iframe shows the browser's error page), its net log names why: ERR_CONNECTION_RESET, ERR_EMPTY_RESPONSE or
   // ERR_ABORTED. CI uploads the file as an artifact only when a gate fails, and the failure message carries its path.
   const netLog = join(tmpdir(), `acryl-frame-netlog-${template}.json`)
-  const child = spawn(
-    chrome,
-    [...chromeFlags(profile, port), '--hide-scrollbars', `--log-net-log=${netLog}`],
-    {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  )
-  const collect = (chunk) => {
-    chromeOutput = (chromeOutput + chunk.toString()).slice(-4000)
-  }
-  child.stdout?.on('data', collect)
-  child.stderr?.on('data', collect)
+  let launched
   try {
-    let ready = false
-    for (let i = 0; i < 600; i += 1) {
-      if (child.exitCode !== null) break
-      if (
-        await fetch(`http://127.0.0.1:${port}/json/version`).then(
-          (r) => r.ok,
-          () => false,
-        )
-      ) {
-        ready = true
-        break
-      }
-      await sleep(50)
-    }
-    if (!ready)
+    launched = await startChrome(profile, { args: [`--log-net-log=${netLog}`] }).catch((error) =>
       fail(
-        `Chrome did not open its DevTools endpoint on port ${String(port)} within 30 s (exit ${String(child.exitCode)}):\n${chromeOutput}`,
-      )
-    const cdp = await devtools(port)
+        `the tile check could not start headless Chrome: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    )
+    const cdp = await devtools(launched.port)
+    // What the page itself reported (uncaught exceptions, console errors, the tile iframe's included: it runs in the same target), printed on any
+    // failure below - a panel or a tile that fails silently must say why, not only that its expected text was missing.
+    const pageReported = () =>
+      cdp
+        .events()
+        .flatMap((message) => {
+          if (message.method === 'Runtime.exceptionThrown') {
+            const details = message.params?.exceptionDetails ?? {}
+            const text = details.exception?.description ?? details.text ?? 'exception'
+            return [
+              `exception: ${String(text).split('\n')[0]} (${String(details.url ?? '')}:${String(details.lineNumber ?? 0)})`,
+            ]
+          }
+          if (message.method === 'Runtime.consoleAPICalled' && message.params?.type === 'error')
+            return [
+              `console.error: ${(message.params.args ?? []).map((argument) => argument.value ?? argument.description ?? '').join(' ')}`,
+            ]
+          if (
+            message.method === 'Log.entryAdded' &&
+            (message.params?.entry?.level === 'error' || message.params?.entry?.level === 'warning')
+          )
+            return [
+              `${String(message.params.entry.level)}: ${String(message.params.entry.text ?? '')}`,
+            ]
+          return []
+        })
+        .slice(-12)
     try {
       await cdp.send('Page.enable')
       await cdp.send('Runtime.enable')
+      await cdp.send('Log.enable')
       await cdp.send('Network.enable')
       for (const cookie of cookiesOf(jar))
         await cdp.send('Network.setCookie', { ...cookie, url: `${origin}/` })
@@ -1229,18 +1212,31 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           async () =>
             await evaluate(`(() => {
             const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-            const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
+            const host = iframe?.contentDocument?.querySelector('#agent-panel')
+            const root = host?.shadowRoot
             const open = root?.querySelector('button.open')
             if (!open) return undefined
+            // The panel marks itself ready once its form is wired; filing a submit before that is the half-wired state the gate saw once.
+            if (host.dataset.ready !== '1') return undefined
             open.click()
             const select = root.querySelector('select')
             const drivers = [...select.options].map(option => option.value)
             if (!drivers.includes('agent')) return undefined
             select.value = 'agent'
             const textarea = root.querySelector('textarea')
-            textarea.value = 'add 2 3'
+            // Type the way a person does (the native setter plus an input event), not a bare value assignment the page's own listeners would never see.
+            const message = 'add 2 3'
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+            if (setter !== undefined) setter.call(textarea, message)
+            else textarea.value = message
+            textarea.dispatchEvent(new Event('input', { bubbles: true }))
             root.querySelector('form').requestSubmit()
-            return { drivers }
+            return {
+              drivers,
+              value: textarea.value,
+              ready: host.dataset.ready ?? null,
+              following: host.dataset.following ?? null,
+            }
           })()`),
           30_000,
         )
@@ -1268,16 +1264,20 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         if (answered === undefined || answered.send !== true || answered.stopped !== true) {
           const detail = await evaluate(`(() => {
             const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-            const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
+            const host = iframe?.contentDocument?.querySelector('#agent-panel')
+            const root = host?.shadowRoot
             return {
               log: root?.querySelector('#log')?.innerText?.slice(-600) ?? null,
               send: root === undefined || root === null ? null : root.querySelector('.send')?.disabled,
               stop: root === undefined || root === null ? null : root.querySelector('.stop')?.disabled,
               drivers: root === undefined || root === null ? null : [...(root.querySelector('select')?.options ?? [])].map(option => option.value),
+              value: root?.querySelector('textarea')?.value ?? null,
+              ready: host?.dataset.ready ?? null,
+              following: host?.dataset.following ?? null,
             }
           })()`)
           fail(
-            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}; panel: ${JSON.stringify(detail)}`,
+            `the panel's run did not start and stop in the app's page: ${JSON.stringify(answered)}; at submit: ${JSON.stringify(panel)}; panel: ${JSON.stringify(detail)}`,
           )
         }
         log(
@@ -1507,38 +1507,52 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       else {
         // Settings last: it is the one surface another worker owns (the settings registration), so every independent assertion above runs first.
         // (c) Settings: General, Models, Plugins, Support, Shortcuts.
-        // Open it the way the Models step above does, and the way a person does: look first, and press only when no Settings dialog is up. Every
-        // Settings-labelled button in the left pane is pressed (the visible foot button goes through the product's own openSettings path, and the
-        // hidden upstream shell's own trigger sits in the same pane); the plain DSH trigger is the fallback. One generic click is lost when it lands
-        // on another control with that name or on a trigger that is not wired yet, and pressing while the dialog is already up can toggle it closed.
-        // Only a visible dialog whose nav carries a real section counts, so a stale or hidden dialog cannot be mistaken for Settings.
-        const opened = await until(
-          async () =>
-            await evaluate(`(() => {
-              const sectionLabels = ['Models', '模型']
-              const isSection = (button) => {
-                const label = (button.getAttribute('aria-label') ?? '').trim()
-                const text = (button.textContent ?? '').replace(/\\s+/g, ' ').trim()
-                return sectionLabels.includes(label === '' ? text : label)
-              }
-              const open = [...document.querySelectorAll('[role=dialog]')].some((dialog) =>
-                dialog.getClientRects().length > 0 &&
-                dialog.querySelector('nav') !== null &&
-                [...dialog.querySelectorAll('nav button')].some(isSection))
-              if (open) return true
-              const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
-                (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
-              for (const button of buttons) button.click()
-              if (buttons.length === 0) {
-                const trigger = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
-                  .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))
-                trigger?.click()
-              }
-              return false
-            })()`),
-          20_000,
-          500,
-        )
+        // A person presses Settings once and waits for it; only a visible dialog whose nav carries a real section counts, so a stale or hidden dialog
+        // cannot be mistaken for Settings. Pressing again before the dialog has rendered toggles the open panel closed again, which is how a slow runner
+        // livelocked this step on 2026-11-02 (both triggers present, no dialog, no exception, forty presses in twenty seconds): each press here is
+        // followed by a bounded wait for the render, and only then is the next press allowed.
+        const settingsOpenExpression = `(() => {
+          const sectionLabels = ['Models', '模型']
+          const isSection = (button) => {
+            const label = (button.getAttribute('aria-label') ?? '').trim()
+            const text = (button.textContent ?? '').replace(/\\s+/g, ' ').trim()
+            return sectionLabels.includes(label === '' ? text : label)
+          }
+          return [...document.querySelectorAll('[role=dialog]')].some((dialog) =>
+            dialog.getClientRects().length > 0 &&
+            dialog.querySelector('nav') !== null &&
+            [...dialog.querySelectorAll('nav button')].some(isSection))
+        })()`
+        const pressSettingsExpression = `(() => {
+          // Press the product's own trigger once. The visible foot button goes through the frame's openSettings path (which activates the DSH trigger
+          // itself); pressing the hidden upstream trigger as well can toggle the just-opened dialog straight back shut, so it is only the fallback.
+          const labelOf = (element) => (element.getAttribute('aria-label') ?? element.textContent.trim())
+          const foot = [...document.querySelectorAll('.dshWorkspaceSideFoot button')].filter((candidate) => labelOf(candidate) === 'Settings')
+          const buttons = foot.length > 0 ? foot : [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) => labelOf(candidate) === 'Settings')
+          for (const button of buttons.slice(0, 1)) button.click()
+          if (buttons.length === 0) {
+            const trigger = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
+              .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))
+            trigger?.click()
+          }
+          return buttons.length
+        })()`
+        let opened = false
+        let presses = 0
+        for (let attempt = 0; attempt < 6 && !opened; attempt += 1) {
+          presses += 1
+          if ((await evaluate(settingsOpenExpression)) === true) {
+            opened = true
+            break
+          }
+          await evaluate(pressSettingsExpression)
+          opened =
+            (await until(
+              async () => ((await evaluate(settingsOpenExpression)) === true ? true : undefined),
+              3_000,
+              200,
+            )) === true
+        }
         if (opened !== true) {
           const detail = await evaluate(`(() => {
             const candidates = [...document.querySelectorAll('button,[role=button],[role=menuitem],a')]
@@ -1549,30 +1563,77 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
                 inFoot: candidate.closest('.dshWorkspaceSideFoot') !== null,
                 inUpstreamHost: candidate.closest('.dshWorkspaceUpstreamHost') !== null,
                 inDialog: candidate.closest('[role=dialog]') !== null,
+                visible: candidate.getClientRects().length > 0,
+                disabled: candidate.disabled === true,
+                ariaDisabled: candidate.getAttribute('aria-disabled'),
+                ariaExpanded: candidate.getAttribute('aria-expanded'),
+                ariaHaspopup: candidate.getAttribute('aria-haspopup'),
               }))
-            return JSON.stringify({ body: document.body.innerText.slice(-1200), candidates })
+            // The run state at the failure: a DSH chat that is still streaming shows its Stop control and no enabled Send.
+            const controls = [...document.querySelectorAll('button')]
+              .map((button) => button.getAttribute('aria-label') ?? button.textContent.trim())
+              .filter((label) => /stop|send|cancel|interrupt/iu.test(label))
+              .slice(0, 8)
+            const dialogs = [...document.querySelectorAll('[role=dialog]')].map((dialog) => ({
+              visible: dialog.getClientRects().length > 0,
+              label: dialog.getAttribute('aria-label'),
+              nav: dialog.querySelector('nav') !== null,
+            }))
+            return JSON.stringify({ presses: ${presses}, body: document.body.innerText.slice(-1200), candidates, controls, dialogs })
           })()`)
           fail(`Settings did not open: ${String(detail)}`)
         }
-        // Wait for the dialog itself: a snapshot taken immediately is always truthy, so the old wait accepted a frame whose Settings had not rendered yet.
-        const settings = await until(async () => {
+        // The record of the product answer: Settings must open while a chat run streams. The Success log says whether one was still going at the
+        // moment the dialog was found, so a regression is visible even when this step passes.
+        const runAtOpen = await evaluate(`(() => {
+          const labels = [...document.querySelectorAll('button')].map((button) => button.getAttribute('aria-label') ?? button.textContent.trim())
+          return labels.filter((label) => /stop|interrupt|cancel/iu.test(label)).slice(0, 5)
+        })()`)
+        log(`Settings opened; stop/interrupt controls at that moment: ${JSON.stringify(runAtOpen)}`)
+        // The dialog is up; its sections register asynchronously, and on a slow runner a layout settle can close it again right after it opens (the blank
+        // gate's Node 22 check, run 41491427783, found the dialog and then lost it during this wait). Keep reading the dialog itself; if it vanishes,
+        // press Settings once more - a person does the same - and never press while it is up, so a late render cannot be toggled shut.
+        const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
+        let settings
+        let sectionPresses = 0
+        const sectionDeadline = Date.now() + 20_000
+        while (Date.now() < sectionDeadline && settings === undefined) {
           const snapshot = await evaluate(`(() => {
-              const text = document.body.innerText
-              const labels = [...document.querySelectorAll('button,[role=tab],[role=menuitem],a')]
-                .map(element => element.getAttribute('aria-label') ?? element.textContent.trim())
-                .filter(Boolean)
-              return { text: text.slice(-4000), labels: labels.slice(0, 120) }
-            })()`)
-          return /Shortcuts/iu.test(`${snapshot.text}\n${snapshot.labels.join('\n')}`)
-            ? snapshot
-            : undefined
-        }, 15_000)
+            const dialog = [...document.querySelectorAll('[role=dialog]')]
+              .find((candidate) => candidate.getClientRects().length > 0 && candidate.querySelector('nav') !== null)
+            if (dialog === undefined) return { open: false }
+            const labels = [...dialog.querySelectorAll('button,[role=tab],[role=menuitem],a')]
+              .map((element) => element.getAttribute('aria-label') ?? element.textContent.trim())
+              .filter(Boolean)
+            return { open: true, text: dialog.innerText.slice(0, 4000), labels: labels.slice(0, 160) }
+          })()`)
+          if (snapshot?.open === true) {
+            const text = `${snapshot.text}\n${snapshot.labels.join('\n')}`
+            if (/Shortcuts/iu.test(text)) settings = { text, labels: snapshot.labels }
+            else await sleep(300)
+            continue
+          }
+          sectionPresses += 1
+          await evaluate(pressSettingsExpression)
+          await sleep(800)
+        }
         if (settings === undefined) {
-          const body = await evaluate(`document.body.innerText.slice(-1200)`)
-          fail(`Settings did not open: ${JSON.stringify(body)}`)
+          const detail = await evaluate(`(() => {
+            const dialogs = [...document.querySelectorAll('[role=dialog]')].map((dialog) => ({
+              visible: dialog.getClientRects().length > 0,
+              label: dialog.getAttribute('aria-label'),
+              nav: dialog.querySelector('nav') !== null,
+              text: dialog.innerText.slice(0, 300),
+            }))
+            const controls = [...document.querySelectorAll('button')]
+              .map((button) => button.getAttribute('aria-label') ?? button.textContent.trim())
+              .filter((label) => /stop|send|cancel|interrupt/iu.test(label))
+              .slice(0, 8)
+            return JSON.stringify({ presses: ${presses + sectionPresses}, dialogs, controls, body: document.body.innerText.slice(-1200) })
+          })()`)
+          fail(`Settings did not stay open with its sections: ${String(detail)}`)
         }
         const settingsText = `${settings.text}\n${settings.labels.join('\n')}`
-        const sections = ['General', 'Models', 'Plugins', 'Support', 'Shortcuts']
         // DSH 0.2 labels the plugins section "Built-in plugins"; the section names match case-insensitively.
         const missing = sections.filter((section) => !new RegExp(section, 'iu').test(settingsText))
         if (missing.length > 0)
@@ -1614,16 +1675,19 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       log(
         'the session banner names `npx acrylblends open` after the browser session ended, with the page unscrolled',
       )
+    } catch (error) {
+      const reported = pageReported()
+      if (reported.length > 0)
+        console.error(
+          `verify-ide-template(${template}): the page reported:\n${reported.join('\n')}`,
+        )
+      throw error
     } finally {
       cdp.close()
     }
   } finally {
-    child.kill('SIGKILL')
-    await new Promise((done) => {
-      if (child.exitCode !== null) return done()
-      child.once('exit', done)
-      setTimeout(done, 5_000)
-    })
+    // The whole tree, not only the browser process: on Windows renderers and crashpad outlive a killed browser and hold the profile.
+    await stopChrome(launched?.child)
     try {
       rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
     } catch {

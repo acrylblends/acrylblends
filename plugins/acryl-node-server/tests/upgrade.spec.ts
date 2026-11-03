@@ -155,7 +155,9 @@ describe('WebSocket upgrades on the standalone adapter', () => {
     expect(ctx.nodeServer.sockets).toBe(0)
   })
 
-  it('stopping the server closes every socket', async () => {
+  it('stopping the server resolves while a socket is open, and the socket gets its close frame', async () => {
+    // An upgraded socket is not an HTTP connection: closeIdleConnections and closeAllConnections never reach it, so the stop itself must see it
+    // closed, with 1001 from its owner, before the grace runs out.
     const ctx = await boot({ websocket: { grace: 500 } })
     await ctx.plugin(wsPlugin('ws-a', '/ws', fresh()))
     const ws = await open(wsUrl(ctx, '/ws'))

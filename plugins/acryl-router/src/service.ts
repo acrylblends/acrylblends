@@ -7,6 +7,8 @@
  * response body still streaming and waits for all of it to settle.
  */
 
+import { appendFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { ConnectionInfo, RouterBindings } from './connection.ts'
@@ -20,6 +22,27 @@ import { mergePath } from './core/utils/url.ts'
 import type { ErrorHandler, H, NotFoundHandler } from './core/types.ts'
 
 const DEFAULT_DISPOSE_GRACE_MS = 2000
+
+/** How long disposal waits for the flights it had to abort after the drain, before it continues without them. */
+const ABORT_SETTLE_MS = 300
+
+/** Set by ACRYL_ROUTER_TRACE=1: append request-signal lifecycle lines to ACRYL_ROUTER_TRACE_FILE (the CI artifact) - diagnostics for the abort-reaches-handler defect. */
+const traceFile = (): string => process.env.ACRYL_ROUTER_TRACE_FILE ?? `${tmpdir()}/acryl-router-trace.log`
+const trace = (line: string): void => {
+  if (process.env.ACRYL_ROUTER_TRACE !== '1') return
+  try { appendFileSync(traceFile(), `${String(Date.now())} [${String(process.pid)}] ${line}\n`) } catch { /* tracing never affects a request */ }
+}
+let flightSeq = 0
+const SIGNAL_TAG = Symbol.for('acryl.router.signalTag')
+const tagOf = (signal: AbortSignal | undefined): string => {
+  if (signal === undefined) return 'none'
+  const tag = (signal as unknown as Record<symbol, unknown>)[SIGNAL_TAG]
+  return typeof tag === 'string' ? tag : 'untagged'
+}
+const tagSignal = (signal: AbortSignal, tag: string): void => {
+  try { (signal as unknown as Record<symbol, unknown>)[SIGNAL_TAG] = tag } catch { /* a frozen signal keeps no tag */ }
+}
+
 
 /** How a trailing slash is read: `strict` keeps `/a` and `/a/` distinct, `ignore` treats them as one path. */
 export type TrailingSlash = 'strict' | 'ignore'
@@ -105,6 +128,10 @@ interface RouterState {
 
 interface Flight {
   readonly controller: AbortController
+  /** The request the handlers run on (the caller's request with the flight's signal): held strongly for the flight's lifetime, so its signal cannot be collected under a listener. */
+  readonly inner: Request
+  /** Names the flight in the ACRYL_ROUTER_TRACE diagnostics. */
+  readonly tag: string
   /** How many of each mount's handlers are running for this request right now (a middleware counts until its `next()` returns). */
   readonly running: Map<Mount, number>
   /** The mount whose handler produced the response; its body is that mount's code still running. */
@@ -150,8 +177,8 @@ export class Router extends Service {
     }
     ctx.effect(() => async () => {
       this.state.closing = true
-      await this.end([...this.flights], 'disposal')
-    }, 'acryl-router: abort and settle in-flight requests')
+      await this.drain()
+    }, 'acryl-router: drain in-flight requests, then abort what is left')
   }
 
   /** Registrations currently held (mounts, and the router-wide error and not-found handlers); a leak check for reload tests. */
@@ -168,12 +195,16 @@ export class Router extends Service {
     const mount = this.snapshot(path, app)
     this.state.mounts.add(mount)
     this.state.composed = undefined
-    // Removing a mount ends the requests its code is still serving: their signals abort, a body it produced is cancelled, and the
-    // plugin's unload waits for them (bounded by `disposeGraceMs`), so nothing a plugin started outlives it.
+    // Removing a mount ends the requests its code is still serving: they get the grace to finish first (a save being written when its plugin unloads,
+    // or when the whole app stops and every plugin unloads together, must not be cut), and only then are their signals aborted, their bodies cancelled
+    // and their settle awaited, so nothing a plugin started outlives it by more than that bounded grace.
     const remove = (): Promise<void> => {
       if (!this.state.mounts.delete(mount)) return Promise.resolve()
       this.state.composed = undefined
-      return this.end([...this.flights].filter(flight => (flight.running.get(mount) ?? 0) > 0 || flight.producer === mount), `removing ${path}`)
+      return this.drainFlights(
+        [...this.flights].filter(flight => (flight.running.get(mount) ?? 0) > 0 || flight.producer === mount),
+        `removing ${path}`,
+      )
     }
     // Each route the mount serves is a child effect of it, labeled on its own, so the inspector can report routes without asking the
     // router and no label grows with the size of the app (`ALL` is middleware or `all`). The children hold nothing: the mount does.
@@ -215,6 +246,7 @@ export class Router extends Service {
       const handler: H = async (c, next) => {
         const flight = this.flightOf.get(c.req.raw)
         if (flight === undefined) return inner(c, next)
+        trace(`handler ${flight.tag} requestTag=${tagOf(c.req.raw.signal)} innerTag=${tagOf(flight.inner.signal)} sameSignal=${String(c.req.raw.signal === flight.inner.signal)} aborted=${String(c.req.raw.signal.aborted)}`)
         let calledNext = false
         flight.running.set(mount, (flight.running.get(mount) ?? 0) + 1)
         try {
@@ -234,18 +266,46 @@ export class Router extends Service {
     return mount
   }
 
-  /** Abort `flights`, cut their bodies short and wait for them to settle, at most `disposeGraceMs`. */
-  private async end(flights: readonly Flight[], why: string): Promise<void> {
+  /**
+   * The router's own disposal: let the flights already in flight finish within `disposeGraceMs` - a save being written when the app stops must not be cut
+   * by the router beneath it - then abort what is left and settle it for a moment, so disposal does not wait a second full grace on code that ignores
+   * its abort signal.
+   */
+  private async drain(): Promise<void> {
+    await this.drainFlights([...this.flights], 'disposal')
+  }
+
+  /** The one draining rule: let `flights` finish inside the grace, then abort and settle what is left. */
+  private async drainFlights(flights: readonly Flight[], why: string): Promise<void> {
+    trace(`drain ${why} chosen=[${flights.map(flight => flight.tag).join(', ')}]`)
+    if (flights.length === 0) return
+    if (await this.settledWithin(flights, this.graceMs)) { trace(`drain ${why} settled inside the grace`); return }
+    const left = flights.filter(flight => this.flights.has(flight))
+    trace(`drain ${why} grace over left=[${left.map(flight => flight.tag).join(', ')}]`)
+    if (left.length > 0) await this.end(left, why, ABORT_SETTLE_MS)
+  }
+
+  /** Resolve true when every flight settled inside `ms`, false at the deadline. */
+  private async settledWithin(flights: readonly Flight[], ms: number): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const gaveUp = new Promise<false>(resolve => { timer = setTimeout(() => { resolve(false) }, ms) })
+    const outcome = await Promise.race([Promise.allSettled(flights.map(flight => flight.settled)).then(() => true as const), gaveUp])
+    clearTimeout(timer)
+    return outcome
+  }
+
+  /** Abort `flights`, cut their bodies short and wait for them to settle, at most `settleMs`. */
+  private async end(flights: readonly Flight[], why: string, settleMs: number = this.graceMs): Promise<void> {
     if (flights.length === 0) return
     for (const flight of flights) {
+      trace(`abort ${flight.tag} before=${String(flight.controller.signal.aborted)}`)
       flight.controller.abort()
+      trace(`abort ${flight.tag} after=${String(flight.controller.signal.aborted)} innerAborted=${String(flight.inner.signal.aborted)}`)
+      queueMicrotask(() => { trace(`post-abort ${flight.tag} innerAborted=${String(flight.inner.signal.aborted)}`) })
       flight.endBody()
     }
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const gaveUp = new Promise<'gave-up'>(resolve => { timer = setTimeout(() => { resolve('gave-up') }, this.graceMs) })
-    const outcome = await Promise.race([Promise.allSettled(flights.map(flight => flight.settled)).then(() => 'settled' as const), gaveUp])
-    clearTimeout(timer)
-    if (outcome === 'gave-up') this.ctx.logger.warn(`acryl-router: ${String(flights.length)} request(s) did not finish ${String(this.graceMs)} ms after abort (${why}); continued without them`)
+    if (await this.settledWithin(flights, settleMs)) return
+    this.ctx.logger.warn(`acryl-router: ${String(flights.length)} request(s) did not finish ${String(settleMs)} ms after abort (${why}); continued without them`)
   }
 
   /** Turn errors no mounted app handled into responses. One handler per router; the calling plugin owns it. */
@@ -292,7 +352,7 @@ export class Router extends Service {
    * `bindings` is an object an adapter hands to the handler as `c.env` (an upgrade request's socket hooks, for `upgradeWebSocket`); `connection` is added to it.
    */
   fetch(request: Request, connection: ConnectionInfo = {}, bindings?: object): Promise<Response> {
-    if (this.state.closing) return Promise.resolve(new Response('Service Unavailable', { status: 503 }))
+    if (this.state.closing) return Promise.resolve(new Response('Service Unavailable', { status: 503, headers: { connection: 'close' } }))
     const controller = new AbortController()
     const forward = (): void => controller.abort()
     if (request.signal.aborted) controller.abort()
@@ -308,8 +368,11 @@ export class Router extends Service {
     let bodyDone: Promise<void> = Promise.resolve()
     let endBody = (): void => {}
     let resolveSettled!: (value: Promise<unknown>) => void
-    const flight: Flight = { controller, running: new Map(), producer: undefined, endBody: () => { endBody() }, settled: new Promise(resolve => { resolveSettled = resolve }) }
+    const tag = `f${String(++flightSeq)}`
     const inner = new Request(request, { signal: controller.signal })
+    tagSignal(inner.signal, tag)
+    const flight: Flight = { controller, inner, tag, running: new Map(), producer: undefined, endBody: () => { endBody() }, settled: new Promise(resolve => { resolveSettled = resolve }) }
+    trace(`create ${tag} ${request.method} ${new URL(request.url).pathname}`)
     this.flightOf.set(inner, flight)
     // The caller gets the Response the moment the handler returns it; the flight lasts until its body ends and every waitUntil task settles.
     const response = this.dispatch(inner, env, executionCtx).then(raw => {

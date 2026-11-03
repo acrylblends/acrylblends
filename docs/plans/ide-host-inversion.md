@@ -864,6 +864,64 @@ when the second boot starts; the script exits explicitly after its final synchro
 Ctrl-C reaches the script child through npm, but a bare SIGTERM to npm does not. The agent gate passes end to end locally; the Ubuntu job is the
 proof, and the visual baseline is requested again from this push.
 
+The coordinator relayed the owner's scope decision (2026-11-02): the frame keeps only what every app type needs - the collapsible sessions panel,
+agents, the collapsible right panel, Settings and the app as the central canvas; the IDE-only parts (Files/Changes/Review/Checks/Comments, the
+branch/worktree tree, the git status bar and the IDE Settings sections) leave the default frame, and a redesign slice follows. The visual baseline is
+therefore held: the three PNGs were captured on ubuntu-latest (frame, settings-models, right-panel-open at 1440x900) but are not committed,
+`FRAME_VISUAL` stays off, and the masking/compare code (`scripts/frame-views-frame.json`, `frame-compare --against acryl`, the Linux capture path)
+stays for the baseline after the redesign.
+
+The blank template's first tile showed Chrome's JSON viewer: its root answered JSON to every client, which is nearly invisible in the frame's dark
+surface. Fixed in `9f04ced9`: the root negotiates like the agent template - a browser gets a minimal first page naming the app with a relative About
+link, an API client still gets the JSON hello - so the scaffolder gate's `GET /` contract does not move. The blank frame gate shows the tile with the
+page ("blank-app"), and the scaffolder gate over every template is green.
+
+## 26. A graceful node-server stop (branch 121, 2026-11-02)
+
+The disposer closed all connections immediately (`closeAllConnections()` before `close()`), so a request in flight when the app stopped was cut. Requested
+behavior: close idle connections first, let in-flight requests finish within a short bounded grace, then close all connections and close; and since an
+upgraded socket (the PTY and door WebSockets) is never an HTTP connection, track those too and let their owner close each with a proper close frame inside
+the same grace.
+
+Measured first, on Node 24 (the platform the apps require): `server.close()` does not end a keep-alive socket that becomes idle after its request finished
+(it stays until the server cuts it), and neither `close()` nor `closeAllConnections()` reaches an upgraded socket - in a probe with one open raw upgrade, the
+`close()` callback never fired, even after `closeAllConnections()`.
+
+The implementation: the adapter counts requests whose response has not finished (the response's `finish`/`close` events), the upgrade listener tracks every
+upgraded socket until it closes, and `NodeServer.stop()` - idempotent, public, and what the disposer calls - runs the hub's close beside the request grace.
+It stops new connections, sweeps idle keep-alive sockets on every pass (one that goes idle after its request finished is not caught by the single sweep
+`close()` does), waits up to `STOP_GRACE_MS` (2 s) for the active requests and the tracked sockets, then ends the finished sockets gracefully (a `FIN` behind
+the buffered body, not a destroy: destroying there answered the client with a reset and an empty body, which the first version of the test caught), gives
+them a 300 ms flush window, and forces `closeAllConnections()` plus destroys any upgraded socket still left, so the server's own `close()` can finish. A
+socket owned by another hub (the router-http adapter's) is closed by that owner's disposer, with its 1001 frame; if it is still open when the grace ends, the
+stop destroys it rather than hang. Tests: an in-flight request finishes and its answer arrives while `stop()` is under way, the port is free, and a second
+stop or the disposer is a no-op; disposal with an open event stream gets an explicit bound for the grace it now waits; and stopping with a WebSocket open
+resolves while the socket gets its 1001 close frame.
+
+**D: the router drains, and the mount removal that cut a second time.** The first whole-root dispose still answered the save with a 200 and
+`content-length: 0`: Cordis runs every disposer together, and the router's own disposal refused new requests, aborted in-flight flights and ended their
+bodies at once. The coordinator chose D - the router's disposer drains instead of aborting - and first asked whether Cordis awaits async disposers. It
+does: a probe with one 100 ms and one 500 ms disposer starts both on the same tick and resolves the root dispose at 636 ms, after the slow one. D is
+implemented: while closing, the router answers new requests 503 with `Connection: close`; disposal waits up to `disposeGraceMs` for the flights in hand,
+then aborts what is left and settles it for 300 ms. Implementing it exposed a second cut: removing a mount also aborted its flights at once, and on a whole
+root dispose every plugin unloads together, so a route-owning plugin's removal cut the save even when the router drained. Mount removal now follows the
+same rule (drain first, then abort). The launcher is unchanged: it keeps disposing the root directly, and both drains run in that window.
+
+**The gate gap that let a type error hide.** The root typecheck ran three aggregate tsconfigs, not each package's own script, so a package's own test configs
+(the router's `tsconfig.jsx-tests.json` among them) were never exercised by the gate: the compress test's `Blob` parts failed TypeScript 6 there while every
+gate stayed green. The check now also runs `pnpm -r --if-present run typecheck` - every package's own script, test configs included - right after the
+aggregate, and the whole tree passes it (27 packages). That is the same class as the earlier test-timeout gaps: the gate has to run the thing that fails.
+
+Tests on a whole-root dispose, on the frame's own composition (the router, our node server, the webServer port over it, and the router-http adapter): an
+in-flight save finishes with its full body and a mounted WebSocket gets 1001, both inside the grace plus 300 ms; the router's unit tests cover the drain,
+the 503 with `Connection: close`, and that a flight finishing inside the grace is never aborted, while the node-server tests keep the `stop()` path, the
+no-op second stop, the bounded event stream, and the 1001 close frame. The DSH web server stack is not in this test: its own disposal destroys upgraded
+sockets (the client saw 1006) and the frame does not use it.
+
+The Windows frame timings from the three green runs on `af583d6c` (measure only, for the record): blank 4m53 / 5m40 / 8m58, agent 5m12 / 6m15 / 6m51, todo
+4m44 / 5m07 / 6m49, notes 4m16 / 5m05 / 7m09, chat 4m34 / 5m33 / 7m07, nodejs 4m16 / 5m41 / 6m29. Every step grows roughly together rather than one path
+growing, which reads as runner and install/network slowness (each step scaffolds and installs from scratch), not a gate code regression; not fixed here.
+
 ## 27. The desktop window opens the frame (design, branch 122, 2026-11-02)
 
 `npm run desktop` opened only the app's page: it ran the bare `src/app.ts` `createApp`, or attached to a running dev server and loaded its root. The
@@ -903,3 +961,69 @@ build a second one: the host is the one `npm run dev` runs, and the window is on
    tile. It also checks that closing the window stops
    the host it started (the port is free), that Ctrl-C (SIGINT to `npm run desktop`'s process group) does too, and that a window attached to a running `npm run dev` leaves that host running. The desktop CI job
    runs on macOS, Windows and Linux (xvfb).
+
+## 28. The Windows notice-check Chrome launch (branch 123, 2026-11-02)
+
+Run 41440407757 on `d0e0561c` failed frame (windows-latest) at the blank gate: "headless Chrome did not open for the notice check (exit null)" after about two
+minutes, with nothing after the colon. The cause was in the gate, in two parts. The notice check spawned Chrome with `stdio: 'ignore'` and attached its output
+listeners to the resulting null streams, so the captured output was always empty - the diagnostics that claimed to show Chrome's last lines never could. And
+the launch waited on a guessed port (9300 + random(300)) with a 600-iteration loop and no named bound, so a browser that never opened DevTools on that port
+spun with a live child and no evidence.
+
+Both launches (the notice check and the tile check) now go through `scripts/lib/door-probe.mjs`'s `startChrome`: a unique profile per launch,
+`--remote-debugging-port=0` with the port read from the profile's `DevToolsActivePort` file (never a guess), `--enable-logging=stderr` with stderr captured,
+and a bounded 60 s wait whose failure names the exit code, the DevToolsActivePort state and the last 8 KB of the browser's output, appends that to
+`<tmp>/acryl-chrome-launch.log` (the frame job's failure artifact step uploads it with the net logs, only when a gate fails), and kills the whole process
+tree (`taskkill /T /F` on Windows, the process group elsewhere) before failing. A parser test covers the DevToolsActivePort read; the blank gate passes locally
+through the new launcher and the full check is exit 0.
+
+Handoff: the full check is green on branch 123; the next step is the branch CI and, on the Windows frame job, either a green run or the captured browser output
+naming whether it is Defender, a first-run dialog or a profile lock - the message and the artifact now exist for that answer. Three consecutive green CI runs
+on one sha are the bar before reporting 123 green.
+
+### The agent panel's silent Send (branch 123, same day)
+
+Run 3's macOS agent gate failed with the panel present, drivers listed, empty log, Send enabled and Stop disabled; the gate-wide page capture added earlier showed only
+warnings (a PTY WebSocket closed before it opened, and the sandbox notices), no exception - so nothing threw, and the submit handler's two silent early returns
+(nothing typed, or a run already being followed) were the fit. The panel now says why it does not send ("Type a message first." / "A run is already going; stop it
+first."), marks itself `data-ready` once its form is wired and `data-following` while a run is going, and the gate waits for the ready mark, types with the native
+setter plus an input event, and prints the textarea value, ready and following at submit time in both the failure message and its panel detail. A guard test covers
+the two refusal reasons. The capture result is part of the record: no exception was thrown, which ruled the half-wired-by-a-throw theory out before the change.
+
+### Handoff (branch 123, 2026-11-02, at d18a3b40)
+
+Where it stands: the Chrome-launch rewrite and the agent panel's guards/readiness/diagnostics are in and green locally (full check exit 0 on d18a3b40; CI run 41466529499 on
+it passed every job except the macOS agent gate). That run reached a new failure: the panel step now passes, and the gate fails at the FINAL Settings open after the chat
+step ("Settings did not open", 20 s of the look-first press loop, no page exception) - the same class as `94548f5d`'s notes red. Evidence: the page dump shows the hidden
+upstream sidebar's Settings trigger and the frame's foot Settings both present, a chat session "Hello from the gate" in the tree, and no dialog; the first Settings open
+(Models, before the chat step) passes.
+
+Open hypothesis to test next: the DSH chat run from the gate's chat step may still be streaming when the final Settings open starts (either Settings does not open while a
+run is active, or the dialog is closed by the chat surface). The product answer is fixed, not open: Settings MUST open while a run streams - a user changes models or keys
+mid-run - so the gate must not paper over it by waiting for idle. Test it deterministically on this Mac instead of waiting for CI: make the mock model stream slowly (about
+10 s), start a chat run, press the frame's Settings while it streams, and poll for dialogs plus both Settings triggers' disabled and aria-expanded state. If Settings does not
+open during a run, that is a product defect in the frame (or a DSH behaviour to report), to fix at the cause; if it does open, the cause of the gate failure is elsewhere and
+the dialog polling names it.
+
+What is in the branch: `d0e0561c` (121: node-server graceful stop, router drain, whole-root tests, every package's typecheck in the gate); `3318719a` (startChrome: own port
+from DevToolsActivePort, `--enable-logging=stderr` captured, bounded named failure, launch log artifact, whole-tree kill; parser test); `d18a3b40` (panel guards,
+data-ready/data-following, the gate's human-style typing and submit diagnostics, client-guards test). Three consecutive green CI runs on one sha remain the bar; the count
+restarts on the next push.
+
+**Settings during a streaming run, reproduced and the livelock fixed (`73d52acf`).** The product question was settled first, with the mock's new
+`ACRYL_GATE_STREAM_MS` switch holding the answer open: with a 10 s and then a 60 s stream, the final Settings open succeeded while the chat showed
+`Stop generating` at the moment the dialog was found, so Settings does open during a run and the product answer holds. The CI failure was therefore the
+gate's own open loop: it re-pressed every Settings-labelled button every 500 ms whenever no visible dialog was up, and on a slow runner a press that
+landed before the dialog rendered toggled the just-opened panel closed again - a livelock that leaves exactly the recorded state (both triggers present,
+no dialog, no exception, about forty presses in twenty seconds). The loop now presses once and waits up to 3 s for the render before another press is
+allowed (six bounded attempts, about the old 20 s budget). A failure records the press count, each trigger's visible/disabled/aria-disabled/
+aria-expanded/aria-haspopup state, the dialog list and the stop/send controls; a success logs the stop controls present when the dialog opened, so the
+"opens during a run" fact is in the record of every green run.
+
+**The blank gate's dialog that closed during its sections wait (run 41491427783 on `c85973d8`).** The Linux Node 22 check failed at the blank gate after
+the open loop found a visible Settings dialog: the old 15 s sections wait found it gone, and the dump had no dialog content. The wait was reading
+`document.body` and had no way to reopen, and the press pressed every Settings-labelled button in the left pane - the visible foot and the hidden upstream
+trigger, both moving the same panel, so a second press in the same tick can toggle the just-opened dialog straight back shut. The step now reads the
+dialog's own text, re-presses only when the dialog has vanished, and presses one trigger per attempt: the product's foot button first (its `openSettings`
+path activates the DSH trigger itself), the hidden trigger as the fallback. Blank and agent gates pass on the final code; the three-run count restarts on
+this push.
