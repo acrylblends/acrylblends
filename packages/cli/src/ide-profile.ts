@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: the launcher's source is written out as lines of text, and its template literals are meant
 /**
  * The host an app runs on inside the ACRYL frame: the app's own node server and loader composition, with DSH riding as the chat/session driver
  * (`docs/plans/ide-host-inversion.md`). The overlay (`cordis.patch.yml`) is the app's own layer: the frame's rows, the app's rows and the switches.
@@ -293,7 +294,7 @@ function hostScriptOf(profile: string): string {
     "import { Acryl } from 'acrylblends'",
     '',
     "const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..')",
-    "const profileName = '" + profile + "'",
+    `const profileName = '${profile}'`,
     "const home = process.env.ACRYLBLENDS_HOME ?? join(appRoot, '.acrylblends')",
     "// DSH's rows keep their files in this app's own home: set before any driver row is imported.",
     'process.env.DSH_HOME = home',
@@ -314,7 +315,7 @@ function hostScriptOf(profile: string): string {
     'const load = (text) => parseYaml(text, { schema: DEFAULT_SCHEMA.extend([JsExpr]) })',
     '',
     '/** The driver rows above are selected from the bundles by id; nothing else of DSH is mounted. */',
-    'const DRIVER_ROWS = ' + JSON.stringify(DRIVER_ROWS, null, 2).replaceAll('\n', '\n'),
+    `const DRIVER_ROWS = ${JSON.stringify(DRIVER_ROWS, null, 2).replaceAll('\n', '\n')}`,
     '',
     "/** A bundle's patch files, in application order, as the package declares them. */",
     'function bundlePatches(packageName) {',
@@ -339,8 +340,8 @@ function hostScriptOf(profile: string): string {
     '',
     "const frameLayer = load(readFileSync(join(appRoot, 'cordis.patch.yml'), 'utf8')) ?? []",
     "/** Our host rows first: the framework's node server, then the webServer port the driver rows register on (they are the app's, not DSH's). */",
-    'const clientRows = ' + JSON.stringify(CLIENT_ROWS, null, 2).replaceAll('\\n', '\\n'),
-    'const agentRows = ' + JSON.stringify(AGENT_PRESET_ROWS, null, 2),
+    `const clientRows = ${JSON.stringify(CLIENT_ROWS, null, 2).replaceAll('\\n', '\\n')}`,
+    `const agentRows = ${JSON.stringify(AGENT_PRESET_ROWS, null, 2)}`,
     'const hostLayer = [{',
     '  insert: [',
     "    { id: 'node-server', name: './plugins/acryl-node-server/src/index.ts', config: { hostname: '127.0.0.1', port: Number(port), scan: Number(port) === 0 ? 0 : 20 } },",
@@ -592,7 +593,7 @@ function overlayOf(
     "    documentsDirectory: !!js process.env.ACRYLBLENDS_HOME ?? process.cwd() + '/.acrylblends'",
   )
   for (const id of [...disabled].sort()) {
-    lines.push('- id: ' + id, '  disabled: true')
+    lines.push(`- id: ${id}`, '  disabled: true')
   }
   return `${lines.join('\n')}\n`
 }

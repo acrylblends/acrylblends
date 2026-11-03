@@ -11,7 +11,7 @@
  * makes it fill the viewport, so both sides of a pair have the same size.
  */
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -21,17 +21,35 @@ const WIDTH = 1440
 const HEIGHT = 900
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const MOCKUP = join(ROOT, 'docs', 'design', 'blends-frame-mockup.html')
-export const SCENARIOS = ['first', 'agent', 'claude', 'files', 'hist', 'plugins', 'preview', 'prod', 'prodfb', 'assist']
+export const SCENARIOS = [
+  'first',
+  'agent',
+  'claude',
+  'files',
+  'hist',
+  'plugins',
+  'preview',
+  'prod',
+  'prodfb',
+  'assist',
+]
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
 async function withPage(run) {
   const profile = mkdtempSync(join(tmpdir(), 'acryl-frame-capture-'))
-  const chrome = await startChrome(profile, { args: [`--window-size=${String(WIDTH)},${String(HEIGHT)}`] })
+  const chrome = await startChrome(profile, {
+    args: [`--window-size=${String(WIDTH)},${String(HEIGHT)}`],
+  })
   try {
     const page = await devtools(chrome.port)
     try {
-      await page.send('Emulation.setDeviceMetricsOverride', { width: WIDTH, height: HEIGHT, deviceScaleFactor: 1, mobile: false })
+      await page.send('Emulation.setDeviceMetricsOverride', {
+        width: WIDTH,
+        height: HEIGHT,
+        deviceScaleFactor: 1,
+        mobile: false,
+      })
       await page.send('Page.enable')
       return await run(page)
     } finally {
@@ -47,7 +65,10 @@ async function load(page, url, settleMs) {
   await page.send('Page.navigate', { url })
   const deadline = Date.now() + 30_000
   for (;;) {
-    const state = await page.send('Runtime.evaluate', { expression: 'document.readyState', returnByValue: true })
+    const state = await page.send('Runtime.evaluate', {
+      expression: 'document.readyState',
+      returnByValue: true,
+    })
     if (state.result?.result?.value === 'complete') break
     if (Date.now() > deadline) throw new Error(`${url} did not finish loading`)
     await sleep(100)
@@ -56,8 +77,15 @@ async function load(page, url, settleMs) {
 }
 
 async function evaluate(page, expression) {
-  const reply = await page.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
-  if (reply.result?.exceptionDetails !== undefined) throw new Error(`page script failed: ${JSON.stringify(reply.result.exceptionDetails).slice(0, 400)}`)
+  const reply = await page.send('Runtime.evaluate', {
+    expression,
+    returnByValue: true,
+    awaitPromise: true,
+  })
+  if (reply.result?.exceptionDetails !== undefined)
+    throw new Error(
+      `page script failed: ${JSON.stringify(reply.result.exceptionDetails).slice(0, 400)}`,
+    )
   return reply.result?.result?.value
 }
 
@@ -108,6 +136,8 @@ if (mode === 'mockup' && outDir !== undefined) {
 } else if (mode === 'frame' && outDir !== undefined && rest[0] !== undefined) {
   await captureFrame(resolve(outDir), rest[0], rest[1] ?? 'first')
 } else {
-  console.error('usage: frame-mockup-capture.mjs mockup <outDir> [scenario...] | frame <outDir> <url> [name]')
+  console.error(
+    'usage: frame-mockup-capture.mjs mockup <outDir> [scenario...] | frame <outDir> <url> [name]',
+  )
   process.exit(2)
 }

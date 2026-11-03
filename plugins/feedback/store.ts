@@ -36,12 +36,15 @@ export function parseNewNote(body: unknown): NewNote | string {
   const { text, page, element } = body as Record<string, unknown>
   if (typeof text !== 'string' || text.trim() === '') return 'write a note'
   if (text.length > LIMITS.text) return `a note has at most ${LIMITS.text} characters`
-  if (typeof page !== 'string' || !page.startsWith('/') || page.length > LIMITS.page) return 'the page must be a path'
+  if (typeof page !== 'string' || !page.startsWith('/') || page.length > LIMITS.page)
+    return 'the page must be a path'
   if (element === undefined || element === null) return { text: text.trim(), page }
   if (typeof element !== 'object') return 'the element must be an object'
   const { selector, label } = element as Record<string, unknown>
-  if (typeof selector !== 'string' || selector === '' || selector.length > LIMITS.selector) return 'the element needs a selector'
-  if (typeof label !== 'string' || label === '' || label.length > LIMITS.label) return 'the element needs a name'
+  if (typeof selector !== 'string' || selector === '' || selector.length > LIMITS.selector)
+    return 'the element needs a selector'
+  if (typeof label !== 'string' || label === '' || label.length > LIMITS.label)
+    return 'the element needs a name'
   return { text: text.trim(), page, element: { selector, label } }
 }
 
@@ -74,7 +77,12 @@ export class FeedbackStore {
       if (line.trim() === '') continue
       try {
         const raw = JSON.parse(line) as Omit<FeedbackNote, 'seen'>
-        if (typeof raw.id === 'string' && typeof raw.at === 'string' && typeof raw.text === 'string' && typeof raw.page === 'string')
+        if (
+          typeof raw.id === 'string' &&
+          typeof raw.at === 'string' &&
+          typeof raw.text === 'string' &&
+          typeof raw.page === 'string'
+        )
           notes.push({ ...raw, seen: seen.has(raw.id) })
       } catch {
         // A torn last line: skipped.
@@ -95,7 +103,9 @@ export class FeedbackStore {
   private async seen(): Promise<Set<string>> {
     try {
       const ids: unknown = JSON.parse(await readFile(this.seenFile, 'utf8'))
-      return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [])
+      return new Set(
+        Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [],
+      )
     } catch {
       return new Set()
     }

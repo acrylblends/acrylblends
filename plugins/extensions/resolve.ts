@@ -103,8 +103,16 @@ export function routerAliases(): Record<string, string> {
     aliases[`#${folder.name}`] = entry
     // Its other top-level modules by subpath, as its package exports them (`acryl-node-server/client-modules`): the door imports one before any extension is installed.
     for (const file of readdirSync(fileURLToPath(new URL(`${folder.name}/src/`, plugins)))) {
-      if (!file.endsWith('.ts') || file === 'index.ts' || file.endsWith('.test.ts') || file.endsWith('.d.ts')) continue
-      aliases[`${folder.name}/${file.slice(0, -3)}`] ??= fileURLToPath(new URL(`${folder.name}/src/${file}`, plugins))
+      if (
+        !file.endsWith('.ts') ||
+        file === 'index.ts' ||
+        file.endsWith('.test.ts') ||
+        file.endsWith('.d.ts')
+      )
+        continue
+      aliases[`${folder.name}/${file.slice(0, -3)}`] ??= fileURLToPath(
+        new URL(`${folder.name}/src/${file}`, plugins),
+      )
     }
     const suite = fileURLToPath(new URL(`${folder.name}/src/conformance.ts`, plugins))
     if (existsSync(suite)) aliases[`#${folder.name}/conformance`] = suite

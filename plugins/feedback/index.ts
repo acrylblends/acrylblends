@@ -57,10 +57,20 @@ function fromOwnPage(headers: Headers): boolean {
 
 export function apply(ctx: Context, config: FeedbackConfig = {}): void {
   const mount = config.mount ?? ''
-  if (mount !== '' && !MOUNT.test(mount)) throw new TypeError(`feedback: the app's mount "${mount}" must be empty or an absolute path such as "/app"`)
+  if (mount !== '' && !MOUNT.test(mount))
+    throw new TypeError(
+      `feedback: the app's mount "${mount}" must be empty or an absolute path such as "/app"`,
+    )
   const PREFIX = `${mount}/api/feedback`
   const store = new FeedbackStore(join(ctx.appInstance.home, 'feedback'))
-  ctx.effect(() => ctx.reflect.provide('feedback', { list: () => store.list(), markSeen: (ids) => store.markSeen(ids) } satisfies Feedback), 'feedback: service')
+  ctx.effect(
+    () =>
+      ctx.reflect.provide('feedback', {
+        list: () => store.list(),
+        markSeen: (ids) => store.markSeen(ids),
+      } satisfies Feedback),
+    'feedback: service',
+  )
 
   const tag = `<script type="module" src="${PREFIX}/feedback.js"></script>`
   const addScript = async (c: { res: Response }, next: () => Promise<void>): Promise<void> => {
@@ -69,7 +79,11 @@ export function apply(ctx: Context, config: FeedbackConfig = {}): void {
     const html = await c.res.text()
     const headers = new Headers(c.res.headers)
     headers.delete('content-length')
-    const body = html.includes(`${PREFIX}/feedback.js`) ? html : html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag
+    const body = html.includes(`${PREFIX}/feedback.js`)
+      ? html
+      : html.includes('</body>')
+        ? html.replace('</body>', `${tag}</body>`)
+        : html + tag
     c.res = new Response(body, { status: c.res.status, headers })
   }
   const router = ctx.router as unknown as { wrap?: (middleware: typeof addScript) => unknown }
@@ -83,12 +97,18 @@ export function apply(ctx: Context, config: FeedbackConfig = {}): void {
       await addScript(c, next)
     })
     .get(`${PREFIX}/feedback.js`, (c) =>
-      c.body(`${CLIENT}\nstart(${JSON.stringify(PREFIX)})\n`, 200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' }))
+      c.body(`${CLIENT}\nstart(${JSON.stringify(PREFIX)})\n`, 200, {
+        'content-type': 'text/javascript; charset=utf-8',
+        'cache-control': 'no-cache',
+      }),
+    )
     .post(`${PREFIX}/notes`, async (c) => {
-      if (!fromOwnPage(c.req.raw.headers)) return c.json({ error: "only the app's own page may send feedback" }, 403)
+      if (!fromOwnPage(c.req.raw.headers))
+        return c.json({ error: "only the app's own page may send feedback" }, 403)
       const now = Date.now()
       while (sent.length > 0 && (sent[0] as number) < now - 60_000) sent.shift()
-      if (sent.length >= NOTES_PER_MINUTE) return c.json({ error: 'too much feedback at once; try again in a minute' }, 429)
+      if (sent.length >= NOTES_PER_MINUTE)
+        return c.json({ error: 'too much feedback at once; try again in a minute' }, 429)
       const note = parseNewNote(await c.req.json().catch(() => undefined))
       if (typeof note === 'string') return c.json({ error: note }, 400)
       sent.push(now)
