@@ -26,6 +26,7 @@ import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
 import { AppReloader, watchFolder, type AppRow } from './app-reload.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
+import { guardToolCalls, type ToolCallEvents } from './tool-call-guard.ts'
 import { branchChatsFile, createBranchChatsStore } from './branch-chats.ts'
 import {
   FRAME_API_PREFIX,
@@ -683,6 +684,8 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     })
     // DSH announces every event of every chat session here; `workspace/changes` is the one that says a turn changed files.
     const stopListening = (ctx as unknown as SessionEvents).on('session/event', (session, event) => { autoSave.observe(session.id, event) })
+    // No tool call may hold a chat forever (./tool-call-guard.ts).
+    const stopGuard = guardToolCalls(ctx as unknown as ToolCallEvents, line => { ctx.logger.warn(line) })
     const realChatList = new RealChats({
       list: async () => (await sessionQueryOf(ctx.get('sessionQuery'))?.listSessions() ?? []).map(record => record.header.id),
       look: async id => lookAtLog((await sessionQueryOf(ctx.get('sessionQuery'))?.readSession(id))?.events ?? []),
@@ -764,6 +767,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     ctx.routerHttp.mount(FRAME_API_PREFIX)
     return () => {
       stopListening()
+      stopGuard()
       stopWatching()
       void autoSave.settled().then(() => git.dispose())
     }
