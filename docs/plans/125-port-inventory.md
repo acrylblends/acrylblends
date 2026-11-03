@@ -550,6 +550,12 @@ Support stay.
 | 3. Settings | 6 | The Plugins navigator, with source, state and on/off |
 | 4. Production modes | 7 | Feedback with the pinpoint picker; the assistant that drives the UI without changing the app |
 
+## Status of the three 120 items this port touches
+
+- Tile Go: fixed on main in `0a6d25c9` (one Go loads the app) and `b7c2f07b` (three bounded transport attempts), tests `ide/acryl-workspace/tests/browser/browser-pane.spec.tsx`; the Go/address-bar bug is superseded by 125, which removes the Browser tab, its field and its Go (the bounded retry remains the reference for the canvas's own app load).
+- Composer focus: fixed on main in `8731cda3`, tests `ide/acryl-workspace/tests/chat/composer-focus.spec.ts`; not superseded in substance, the composer still mounts after a reload in the right panel, so the helper and the effect that runs it move with the chat tab.
+- Windows ECONNRESET: fixed on main in `8731cda3` (a refusal settles the body it never read before answering), test `plugins/acryl-router-http/tests/refusal-body.spec.ts`; not superseded by 125, it is the framework's HTTP adapter and independent of the frame's layout.
+
 ## Questions the mini-design must settle
 
 1. **The right panel is session-scoped today; the new one is frame-scoped.** DSH's `sidebarRight` opens tabs
