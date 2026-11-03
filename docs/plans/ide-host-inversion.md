@@ -1234,22 +1234,21 @@ Landed on the branch (rebased shas):
 - `7f1ba503` the test cast; `1a7f86cd` this note; `c592cc6b` the Preview Notice wait raised to two minutes;
   `3b5bf2a1` the node-server port-scan test's headroom fix.
 
-Gate status: on the older `077b4b6a` base the blank gate's Preview Notice failed inside `pnpm run check` but passed alone;
-slice 1's `a24b6ff2` has a green full pipeline on the same machine, so the branch is now on that base and the clean full
-check is rerun when the machine is free (it was stopped so it would not run beside the backup's 124 check, per the
-no-parallel-gates rule).
+Current base and head: rebased onto slice 1's head `1b4aaaa9` (which includes main `d33fa0cd`); the full check is green
+at `c404f937` (this note is a doc commit on top). Unpushed until the 126 count frees the runners.
 
-Still to do:
+Also on the branch: the gate now expects the frame's Settings sections (General, Models, Plugins, Agents, Support) and
+waits for Agents, since the separate Shortcuts section left; a remembered closed right panel keeps a width so slice 1's
+load-time default open cannot override it; the node-server port-scan test's headroom fix; section 32 carries the
+back-port ticket that ACRYL's own web client still needs the launch-token strip.
 
-- Rebase onto slice 1's final head; re-verify click-to-open from the tree into the right panel.
-- The short ACRYL shortcut list in General and the plugin navigator replacing "Built-in plugins" stay with the design
-  (Q9; the navigator is slice 3).
-- Tab persistence v2 and the Review/Checks/Comments/dock removals are slice 1's (Fork3); do not redo them.
-- Full check, push `125-slice2`, all CI green, then report the sha, then slice 4.
+Remaining: push `125-slice2` and get its CI green; slice 4 (feedback/assistant) is not started. The left panel's
+first-run open is mine; the right panel's first-run open is slice 1's and the remembered state overrides it.
 
-126 state: the session-navigation fix is `22513473`, merged with main `a7befe61` in `638dd437`. Attempt 2 failed on two
-macOS causes, both fixed at the cause in `18df5252` (the agent gate now fires the driver select's change event, so the
-log is visible when the terminal is the default driver; the git disposal spec waits bounded for the killed process to
-leave ps). The full check on `18df5252` is green, the branch is pushed, and CI run `41598129084` is counting; 124's
-landing needs a merge into 126 and one more green if the merge touches no counted code.
-`125-port-inventory` merges main `a7befe61` at `4439c62b`; its full check is pending after the machine is free.
+126 state: head `77ccfd1e`, merging the banner-stability branch: the product launch-token strip (`stripLaunchToken` with a
+unit test, `history.replaceState` after admission) is the cause of the chat gate's session-banner flake - the frame kept
+`?token=` after exchanging it for the cookie, so a reconnect could re-admit a page whose cookie was gone. Also the
+agent-panel pick-generation guard with its unit test, the git disposal bounded wait, and a gate that picks and asserts
+instead of repairing the DOM. Full check exit 0, desktop gate green, pushed; CI run `41623498716` is counting three
+greens. `125-port-inventory` is green at `7e74f5f1` (main `d33fa0cd` merged); it lands after 126, then merges the
+post-126 main for one more green.
