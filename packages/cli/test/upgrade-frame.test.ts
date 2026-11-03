@@ -14,7 +14,12 @@ import type { Template } from '../src/templates'
 import { frameReport, planFrameStep } from '../src/upgrade'
 
 const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-upgrade-frame-'))
-afterAll(() => rmSync(scratch, { recursive: true, force: true }))
+// Removing the scaffolds this suite built is one delete of a deep tree (the CLI copies the whole plugin library into every app): it took 15,046 ms on this
+// Mac on 2026-11-03, and vitest's 10 s hook default then failed the suite after all 11 tests had passed (run of the full check that day). The bound is
+// eight times that measurement, for the slower file systems CI runs on; it bounds a delete whose cost is the suite's own size, not a wait for something
+// external.
+const CLEANUP_TIMEOUT_MS = 120_000
+afterAll(() => rmSync(scratch, { recursive: true, force: true }), CLEANUP_TIMEOUT_MS)
 afterEach(() => {
   delete process.env.ACRYLBLENDS_FRAME_PACKAGES
 })
