@@ -134,6 +134,8 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsTabWrap .acrylBlendsTabClose { position: absolute; top: 2px; right: 1px; opacity: 0; background: var(--bf-side); }
 .acrylBlendsTabWrap:hover .acrylBlendsTabClose, .acrylBlendsTabClose:focus-visible { opacity: 1; }
 .acrylBlendsTabClose:hover { background: var(--bf-surface-2); color: #fff; }
+/* A panel with its tabs closed keeps its own width and says how to open one (the mockup's panel body, the owner's 2026-11-04 review). */
+.acrylBlendsPanelEmpty { margin: 16px 14px; max-width: 300px; color: var(--bf-dim); font-size: 12px; line-height: 1.5; }
 /* Every open chat has a tab, so the strip can run past the panel: the + stays at its right edge, over a fade, and the tab shown scrolls into view. */
 .acrylBlendsPlus { margin-left: 2px; flex: none; position: sticky; right: 0; background: var(--bf-side); box-shadow: -8px 0 6px 2px var(--bf-side); }
 .acrylBlendsMenu { position: absolute; top: 34px; left: 8px; z-index: 5; width: 230px; background: var(--bf-surface); border: 1px solid #34343a; border-radius: 8px; padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }

@@ -298,6 +298,9 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
           </div>
         )}
       </div>
+      {visible.length === 0 && (
+        <p className="acrylBlendsPanelEmpty" role="status">No tab open. + to open Chat, an agent, a terminal, Files or Git</p>
+      )}
       {notice !== undefined && (
         <p className="acrylBlendsNotice" role="alert">
           {notice}
