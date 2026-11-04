@@ -47,6 +47,9 @@ export function firstRunRoot(root: string, documents: string, log: (line: string
     force: true,
     filter: (source) => !SKIPPED.has(source.slice(root.length + 1).split('/')[0] ?? ''),
   })
+  // The packager drops dot files like `.git`; the scaffold's repository travels as `template-git` and becomes the app folder's own.
+  const templateGit = join(root, 'template-git')
+  if (existsSync(templateGit)) cpSync(templateGit, join(destination, '.git'), { recursive: true, force: true })
   log(`product: ${destination} is ready`)
   return destination
 }

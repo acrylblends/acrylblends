@@ -55,22 +55,86 @@ const materialize = (path) => {
   cpSync(resolve(dirname(path), target), path, { recursive: true, dereference: true })
 }
 const modules = join(app, 'node_modules')
+const materialized = []
 for (const entry of readdirSync(modules)) {
   if (entry === '.bin') continue
   const path = join(modules, entry)
   const stat = lstatSync(path)
   if (stat.isSymbolicLink()) {
     materialize(path)
+    materialized.push(entry)
     log(`materialized ${entry}`)
   } else if (stat.isDirectory() && entry.startsWith('@')) {
     for (const scoped of readdirSync(path)) {
       const scopedPath = join(path, scoped)
       if (!lstatSync(scopedPath).isSymbolicLink()) continue
       materialize(scopedPath)
+      materialized.push(`${entry}/${scoped}`)
       log(`materialized ${entry}/${scoped}`)
     }
   }
 }
+
+// 3b. Packages installed from npm can miss dependencies the monorepo satisfied by hoisting, and a linked package's own dependencies came from the checkout;
+// a bundle carries none of that, and the packager keeps only packages the app declares: install whatever any installed package requires and the app does
+// not have, into package.json, until nothing is missing (optionals are left
+// out: they are platform builds, and npm refuses the ones for another CPU).
+const packagesIn = (dir) => {
+  const found = []
+  for (const entry of readdirSync(dir)) {
+    if (entry.startsWith('.')) continue
+    const path = join(dir, entry)
+    if (!lstatSync(path).isDirectory()) continue
+    if (entry.startsWith('@')) {
+      for (const scoped of readdirSync(path)) {
+        const scopedPath = join(path, scoped)
+        if (lstatSync(scopedPath).isDirectory()) found.push({ name: `${entry}/${scoped}`, path: scopedPath })
+      }
+    } else found.push({ name: entry, path })
+  }
+  return found
+}
+for (let round = 1; round <= 4; round += 1) {
+  const missing = new Map()
+  for (const pkg of packagesIn(modules)) {
+    const manifestPath = join(pkg.path, 'package.json')
+    if (!existsSync(manifestPath)) continue
+    const own = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    for (const [dependency, range] of Object.entries({ ...own.dependencies, ...own.peerDependencies })) {
+      const wantedRange = String(range)
+      if (wantedRange.startsWith('workspace:')) continue
+      if (missing.has(dependency)) continue
+      if (existsSync(join(modules, dependency))) continue
+      missing.set(dependency, wantedRange)
+    }
+  }
+  if (missing.size === 0) break
+  const specs = [...missing].map(([dependency, range]) => `${dependency}@${range}`)
+  log(`round ${String(round)}: installing ${String(specs.length)} dependencies the app was missing`)
+  const extra = spawnSync('npm', ['install', '--save-exact', '--no-audit', '--no-fund', '--loglevel=error', ...specs], { cwd: app, stdio: 'inherit' })
+  if (extra.status !== 0) throw new Error(`installing missing dependencies failed (${String(extra.status)})`)
+}
+
+// 3c. The packager keeps only what the app declares, and a dependency that arrived transitively (an optional one, say) is still needed at run time: every
+// installed package is declared, so the bundle carries exactly the tree that runs here.
+const declared = {}
+for (const pkg of packagesIn(modules)) {
+  const manifestPath = join(pkg.path, 'package.json')
+  if (!existsSync(manifestPath)) continue
+  const own = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  // electron is the runtime the packager brings, not a package of the app: it stays in devDependencies.
+  if (pkg.name === 'electron') continue
+  if (typeof own.version === 'string') declared[pkg.name] = own.version
+}
+const before = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
+const merged = { ...before.dependencies, ...declared }
+JSON.parse(JSON.stringify(before)) // the manifest is rewritten below with the product fields; dependencies travel with it
+writeFileSync(join(app, 'package.json'), `${JSON.stringify({ ...before, dependencies: merged }, null, 2)}\n`)
+log(`declared ${String(Object.keys(declared).length)} installed packages`)
+
+// 3d. The packager leaves dot files like `.git` out of a bundle: the scaffold's repository travels as `template-git`, and the first start renames it in the copy.
+if (existsSync(join(app, '.git'))) rmSync(join(app, 'template-git'), { recursive: true, force: true })
+if (existsSync(join(app, '.git'))) cpSync(join(app, '.git'), join(app, 'template-git'), { recursive: true })
 
 // 4. The product marker, and what Electron needs to find its main process and the packager its identity.
 const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
