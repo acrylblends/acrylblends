@@ -22,6 +22,7 @@ import * as workspaceHost from 'acryl-workspace'
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
+import { type ChatSettingsService, defaultQuietChat } from './chat-defaults.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
 import { AppReloader, watchFolder, type AppRow } from './app-reload.ts'
@@ -676,6 +677,16 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       c.res = await ctx.router.fetch(new Request(new URL(target, url.origin), init), (c.env as { connection?: CanvasConnection } | undefined)?.connection ?? {})
     }), 'acryl-blends-frame: app requests under the canvas prefix')
   }
+  // The chat starts on the mockup's quiet settings (see chat-defaults.ts): DSH's settings service owns the write, and a choice the person or the app's
+  // composition already made stays. No DSH document is edited and no message is re-rendered here.
+  ctx.inject(['settings'], (child) => {
+    const settings = child.get('settings') as unknown as ChatSettingsService | undefined
+    if (settings === undefined) return
+    child.effect(
+      () => defaultQuietChat(settings, (message) => child.logger.warn(`acryl-blends-frame: ${message}`)),
+      'acryl-blends-frame: the chat starts on the quiet work details',
+    )
+  })
   ctx.plugin(workspaceHost, appPage === undefined ? {} : { appPage })
   // The chat works in the app's own folder. DSH's first-run workspace is a folder under Documents; with the app's folder registered first, the page's first chat
   // opens in it (DSH makes its default workspace only when it has none), so what the agent writes is the app, and the auto-save can save it.
