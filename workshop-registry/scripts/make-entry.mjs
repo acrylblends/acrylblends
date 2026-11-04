@@ -2,6 +2,9 @@
 // Turn your app into an entry of this registry:   node scripts/make-entry.mjs <your app folder> <login>.<name> [--description "..."] [--license MIT]
 // Copies the app to blends/<login>.<name>/ without what an entry does not carry (node_modules, dist, data, .git, the framework docs, the agent's scratch), makes its blend.yaml public
 // and licensed under that id, and writes acryl.template.json, which marks the entry as an app for acrylblends. Then: commit, push to your fork, open a pull request.
+// An app's blend.lock.json (every version the frame saves has one) is kept true to the entry: its origin takes the new id, version and blend.yaml digest, so the
+// entry still verifies against its own lock and another app can apply it (npm run snapshot apply <entry>).
+import { createHash } from 'node:crypto'
 import {
   cpSync,
   existsSync,
@@ -56,6 +59,7 @@ cpSync(app, target, {
 if (existsSync(join(target, '.gitignore')))
   renameSync(join(target, '.gitignore'), join(target, 'gitignore'))
 const manifestFile = join(target, 'blend.yaml')
+const lockFile = join(target, 'blend.lock.json')
 const text = readFileSync(manifestFile, 'utf8')
 const meta = /^metadata:\n(?:[ \t]+.*\n|[ \t]*\n)*/mu.exec(text)
 if (!meta) {
@@ -82,6 +86,18 @@ writeFileSync(
     ].join('\n'),
   ),
 )
+if (existsSync(lockFile)) {
+  const lock = JSON.parse(readFileSync(lockFile, 'utf8'))
+  if (lock !== null && typeof lock === 'object' && lock.origin !== null && typeof lock.origin === 'object') {
+    lock.origin = {
+      ...lock.origin,
+      id,
+      version: '0.1.0',
+      digest: createHash('sha256').update(readFileSync(manifestFile, 'utf8')).digest('hex'),
+    }
+    writeFileSync(lockFile, `${JSON.stringify(lock, null, 2)}\n`)
+  }
+}
 writeFileSync(
   join(target, 'acryl.template.json'),
   `${JSON.stringify({ name, description, plugins: [] }, null, 2)}\n`,

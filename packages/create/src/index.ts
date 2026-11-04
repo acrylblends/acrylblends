@@ -19,6 +19,7 @@ import { findSecrets } from '@webboxes/app-persistence'
 import { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST } from './names'
 import {
   DEFAULT_REGISTRY,
+  ownLock,
   ownManifest,
   pickEntry,
   REGISTRY_ID,
@@ -365,11 +366,15 @@ async function createFromSource(
       frameworkRange(),
       name,
     )
-    if (entry !== undefined && existsSync(join(staged, 'blend.yaml')))
-      writeFileSync(
-        join(staged, 'blend.yaml'),
-        ownManifest(readFileSync(join(staged, 'blend.yaml'), 'utf8'), name),
-      )
+    if (entry !== undefined && existsSync(join(staged, 'blend.yaml'))) {
+      const manifestText = ownManifest(readFileSync(join(staged, 'blend.yaml'), 'utf8'), name)
+      writeFileSync(join(staged, 'blend.yaml'), manifestText)
+      if (existsSync(join(staged, 'blend.lock.json')))
+        writeFileSync(
+          join(staged, 'blend.lock.json'),
+          ownLock(readFileSync(join(staged, 'blend.lock.json'), 'utf8'), manifestText, name),
+        )
+    }
     if (!existsSync(join(staged, 'AGENTS.md')))
       writeFileSync(
         join(staged, 'AGENTS.md'),

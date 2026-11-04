@@ -3,6 +3,7 @@
  * starter under `blends/<id>/`. Its CI says in the index which runtime an entry is for: only `runtime: acrylblends` entries are apps this package can make (the folder is the
  * app, with an `acryl.template.json`); the others are ACRYL app starters and are refused with one line. Nothing is run: the entry is downloaded, unpacked and copied.
  */
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SourceError } from './source'
@@ -108,4 +109,25 @@ export function ownManifest(text: string, name: string): string {
   for (let at = end - 1; at > start; at -= 1)
     if (/^\s+license:/.test(lines[at] ?? '')) lines.splice(at, 1)
   return lines.join('\n')
+}
+
+/**
+ * Keep a pulled starter's `blend.lock.json` true to the app made from it: the lock's origin names the manifest it was written from (its id and the digest of its text,
+ * as blends-core's `manifestDigest`), and {@link ownManifest} has just changed both. The plugin folders are copied unchanged, so their digests stand. A lock it cannot
+ * read is left as it is (`npm run snapshot capture` writes it again).
+ */
+export function ownLock(text: string, manifestText: string, name: string): string {
+  let lock: unknown
+  try {
+    lock = JSON.parse(text)
+  } catch {
+    return text
+  }
+  const origin = (lock as { origin?: unknown } | null)?.origin
+  if (origin === null || typeof origin !== 'object') return text
+  const owned = {
+    ...(lock as object),
+    origin: { ...origin, id: `acrylblends.${name}`, digest: createHash('sha256').update(manifestText).digest('hex') },
+  }
+  return `${JSON.stringify(owned, null, 2)}\n`
 }

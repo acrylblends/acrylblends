@@ -2,6 +2,7 @@
 // blends-core: set BLENDS_CORE to its src folder, or those tests are skipped and say so).
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   cpSync,
   existsSync,
@@ -201,4 +202,34 @@ test('a whole app in the wrong folder is one line, not one per file', () => {
   assert.equal(result.status, 1)
   assert.equal(result.stdout.trim().split('\n').length, 1, result.stdout)
   assert.match(result.stdout, /blends\/bob\.hello\/: the folder belongs to "bob"/)
+})
+
+describe('make-entry', () => {
+  test('keeps the app\'s lock true to the entry: the origin takes the new id, version and blend.yaml digest', () => {
+    const registry = mkdtempSync(join(scratch, 'fork-'))
+    mkdirSync(join(registry, 'scripts'))
+    cpSync(join(repo, 'scripts', 'make-entry.mjs'), join(registry, 'scripts', 'make-entry.mjs'))
+    const app = mkdtempSync(join(scratch, 'app-'))
+    writeFileSync(join(app, 'package.json'), '{ "name": "board" }\n')
+    writeFileSync(
+      join(app, 'blend.yaml'),
+      'apiVersion: blends.acryl.dev/v1alpha1\nkind: Blueprint\nmetadata:\n  id: acrylblends.board\n  name: board\n  version: 0.3.0\nspec:\n  rows: []\n',
+    )
+    const modules = [{ name: 'notes', origin: 'local', digest: 'sha256:abc', source: 'plugins/notes' }]
+    writeFileSync(
+      join(app, 'blend.lock.json'),
+      JSON.stringify({ formatVersion: 3, origin: { id: 'acrylblends.board', kind: 'Blueprint', version: '0.3.0', digest: 'old' }, modules }),
+    )
+    const made = spawnSync(process.execPath, [join(registry, 'scripts', 'make-entry.mjs'), app, 'octo.board'], { encoding: 'utf8' })
+    assert.equal(made.status, 0, made.stderr)
+    const entry = join(registry, 'blends', 'octo.board')
+    const lock = JSON.parse(readFileSync(join(entry, 'blend.lock.json'), 'utf8'))
+    assert.deepEqual(lock.origin, {
+      id: 'octo.board',
+      kind: 'Blueprint',
+      version: '0.1.0',
+      digest: createHash('sha256').update(readFileSync(join(entry, 'blend.yaml'))).digest('hex'),
+    })
+    assert.deepEqual(lock.modules, modules)
+  })
 })
