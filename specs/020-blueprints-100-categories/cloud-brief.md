@@ -28,7 +28,7 @@ b. The registry index tool needs the Blend format library. CI takes it from a pr
      mkdir -p WORK/core/shim && cd WORK/core && npm init -y && npm install @webboxes/blends-core@0.4.0
      printf "export * from '../node_modules/@webboxes/blends-core/dist/registry.js'\n" > shim/registry.ts
      printf '{"type":"module"}\n' > shim/package.json
-   and in every shell that runs the index tool: export BLENDS_CORE=WORK/core/shim   (it runs with Node 22.18 or newer, or with bun).
+   and in every shell that runs the index tool: export BLENDS_CORE=WORK/core/shim   (it runs with Node 24 or with bun).
 
 For each of your ten tasks:
 1. Make the app with the published CLI, outside both repositories:
