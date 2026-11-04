@@ -73,12 +73,14 @@ after the call that told it has ended, asks once while that move is on its way, 
 
 The app's code runs in the dev host (`npm run dev`), and the host loads it once. So that a version the person goes back to, a file the chat wrote, a
 line typed in an editor or a `git switch` shows in the canvas without a restart (a restart would end the terminals and agents in the right panel),
-the Host loads the app's code again whenever a file under `src/` changes, whoever changed it (300 ms after the last change).
+the Host loads the app's code again whenever `blend.yaml` or a file under `src/` or `plugins/` changes, whoever changed it (300 ms after the last
+change).
 
 How it works: the launcher (`scripts/ide-host.mjs`) loads `acryl-blends-frame/app-generation` before anything of the app does. It installs a resolve
-hook that, once the Host raises the generation, gives every file of the app's `src/` (and the generated `frame/` rows) a `?gen=N` query, so a new import
-of them - and of everything they import - is a fresh copy. Nothing in `node_modules` or the framework's `plugins/` gets one, so their services stay
-single instances. The Host (`src/app-reload.ts`) then imports the app's rows (`app-plugins`, `app-routes`) under the new generation, and only if that
+hook that, once the Host raises the generation, gives every file of the app's `src/`, of its own plugins (the
+folders of `plugins/` that `plugins/library.json` does not list) and of the generated `frame/` rows a `?gen=N` query, so a new import of them - and
+of everything they import - is a fresh copy. Nothing in `node_modules` or the library copies in `plugins/` gets one, so their services stay single
+instances. The Host (`src/app-reload.ts`) then imports the app's rows (`app-plugins`, `app-routes`) under the new generation, and only if that
 succeeds stops them and starts them from the new code. The page follows a long poll on `GET /api/acryl-blends-frame/app?after=<seq>` and reloads the
 canvas when a new generation is up.
 

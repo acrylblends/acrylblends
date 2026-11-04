@@ -24,7 +24,7 @@ import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
-import { AppReloader, watchFolders, type AppRow } from './app-reload.ts'
+import { AppReloader, watchFolder, watchFolders, type AppRow } from './app-reload.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
 import { guardToolCalls, type HostIdentity, type ToolCallEvents } from './tool-call-guard.ts'
 import { installSelectionContext, parseSelectionContext, SelectionInbox, sessionOf } from './selection-context.ts'
@@ -752,8 +752,15 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     // agent in a terminal, an editor. Only where the launcher installed the generation hook (./app-generation.ts); elsewhere the app's code is as it started.
     const generation = appGeneration()
     const appReload = generation === undefined ? undefined : new AppReloader({ generation, rows: () => appRowsOf(ctx.get('loader')), appRoot: realpathSync(root), report })
-    // The app's code is its src/ and its plugins/: an agent editing a plugin sees it live like a route, with no reason to restart the host.
-    const stopWatching = appReload === undefined ? () => {} : watchFolders([join(root, 'src'), join(root, 'plugins')], () => { void appReload.reload() }, { report })
+    // The app is its blend.yaml (which plugins run, in which order, which are off), its src/ and its plugins/: an agent adding a row, editing a plugin
+    // or writing a route sees it live, with no reason to restart the host.
+    const reloadApp = (): void => { void appReload?.reload() }
+    const stopWatchingCode = appReload === undefined ? () => {} : watchFolders([join(root, 'src'), join(root, 'plugins')], reloadApp, { report })
+    const stopWatchingBlend = appReload === undefined ? () => {} : watchFolder(root, reloadApp, { report, only: ['blend.yaml'] })
+    const stopWatching = (): void => {
+      stopWatchingCode()
+      stopWatchingBlend()
+    }
     /** git's own line as the message a person reads: the runner keeps it as the failure's detail. */
     const gitReason = (cause: unknown, fallback: string): Error => {
       const detail = (cause as { detail?: unknown }).detail

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   bumpPackageVersion, commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, packageAppPlugin, parseBlendRows, pluginPackageManifest,
-  readSharedRecords, recordShare, setMadeOn, setRowOn,
+  readAppPlugins, readSharedRecords, recordShare, setMadeOn, setRowOn, switchAppPlugin,
 } from '../src/app-plugins.ts'
 import { appPluginRow, createAppPluginsApi, filterPlugins, framePluginRow, madeWhen } from '../src/client/plugins-navigator.ts'
 import { feedbackPlace, feedbackTask } from '../src/client/feedback.ts'
@@ -89,6 +89,38 @@ describe('the plugins navigator', () => {
     expect(docSummary('/**\n * The extensions service (`ctx.extensions`): install and reload plugins. More here.\n *\n * Later.\n */\nexport {}'))
       .toBe('The extensions service (ctx.extensions): install and reload plugins.')
     expect(docSummary('export const x = 1')).toBe('')
+  })
+})
+
+describe('the app\'s own plugins', () => {
+  const noGit = { run: () => Promise.reject(new Error('not a repository')) }
+
+  it('lists a plugin its blend.yaml row mounts once, as made, and switches it by that row', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'frame-own-'))
+    try {
+      for (const name of ['notes', 'loose', 'home']) {
+        mkdirSync(join(root, 'plugins', name), { recursive: true })
+        writeFileSync(join(root, 'plugins', name, 'index.ts'), `/** The ${name} plugin. */\nexport function apply() {}\n`)
+      }
+      writeFileSync(join(root, 'plugins', 'library.json'), '{"plugins":["home"]}\n')
+      writeFileSync(join(root, 'blend.yaml'), 'spec:\n  rows:\n    - id: home\n      name: home\n    - id: notes\n      name: notes\n    - id: extensions\n      name: extensions\n')
+      const listed = await readAppPlugins(root, noGit)
+      expect(listed.map(plugin => [plugin.name, plugin.kind, plugin.on])).toEqual([
+        ['loose', 'made', true],
+        ['notes', 'made', true],
+        ['home', 'row', true],
+        ['extensions', 'row', true],
+      ])
+      await switchAppPlugin(root, 'made', 'notes', false)
+      const text = readFileSync(join(root, 'blend.yaml'), 'utf8')
+      expect(parseBlendRows(text).find(row => row.id === 'notes')?.disabled).toBe(true)
+      expect(extensionsOff(text)).toEqual([])
+      expect((await readAppPlugins(root, noGit)).find(plugin => plugin.name === 'notes')?.on).toBe(false)
+      await switchAppPlugin(root, 'made', 'loose', false)
+      expect(extensionsOff(readFileSync(join(root, 'blend.yaml'), 'utf8'))).toEqual(['loose'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

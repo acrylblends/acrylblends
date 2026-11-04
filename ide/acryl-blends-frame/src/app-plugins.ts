@@ -207,42 +207,51 @@ async function libraryVersions(root: string): Promise<Map<string, string>> {
   return versions
 }
 
-/** Every plugin of the app: the `blend.yaml` rows in their order, then the plugins written into `plugins/`. */
+/**
+ * Every plugin of the app: first the app's own plugins (the folders of `plugins/` that are not library copies), each mounted by its `blend.yaml` row
+ * or, without one, started by the `extensions` row; then the library rows of `blend.yaml` in their order.
+ */
 export async function readAppPlugins(root: string, git: GitPort, sharedFile?: string): Promise<AppPluginView[]> {
   const text = await readFile(join(root, 'blend.yaml'), 'utf8')
   const off = new Set(extensionsOff(text))
   const versions = await libraryVersions(root)
   const shareRecords = await readSharedRecords(sharedFile)
-  const rows = await Promise.all(parseBlendRows(text).map(async (row): Promise<AppPluginView> => {
-    const description = row.comment !== '' ? firstSentence(row.comment) : await packageDescription(join(root, 'plugins', row.name))
-    const version = versions.get(row.name)
-    return { name: row.name, kind: 'row', ...(version === undefined ? {} : { version }), description, on: !row.disabled }
-  }))
-  const made = await Promise.all((await madePlugins(root)).map(async (name): Promise<AppPluginView> => {
+  const blendRows = parseBlendRows(text)
+  const own = await madePlugins(root)
+  const made = await Promise.all(own.map(async (name): Promise<AppPluginView> => {
     const [description, first] = await Promise.all([packageDescription(join(root, 'plugins', name)), firstCommit(git, root, `plugins/${name}`)])
     const shared = shareRecords[name]
+    const row = blendRows.find(entry => entry.name === name)
     return {
       name,
       kind: 'made',
       ...(first === undefined ? { unsaved: true } : { by: first.by, at: first.at }),
       ...(shared === undefined ? {} : { shared }),
       description,
-      on: !off.has(name),
+      on: row === undefined ? !off.has(name) : !row.disabled,
     }
+  }))
+  const rows = await Promise.all(blendRows.filter(row => !own.includes(row.name)).map(async (row): Promise<AppPluginView> => {
+    const description = row.comment !== '' ? firstSentence(row.comment) : await packageDescription(join(root, 'plugins', row.name))
+    const version = versions.get(row.name)
+    return { name: row.name, kind: 'row', ...(version === undefined ? {} : { version }), description, on: !row.disabled }
   }))
   return [...made, ...rows]
 }
 
-/** Switch one plugin in `blend.yaml`. @throws when there is no such plugin. */
+/**
+ * Switch one plugin in `blend.yaml`: a row (a library row, or one of the app's own plugins that has a row) gets or loses `disabled: true`; an own
+ * plugin without a row is put in or taken out of the `extensions` row's `off` list. @throws when there is no such plugin.
+ */
 export async function switchAppPlugin(root: string, kind: 'row' | 'made', name: string, on: boolean): Promise<void> {
   const file = join(root, 'blend.yaml')
   const text = await readFile(file, 'utf8')
+  const row = parseBlendRows(text).find(entry => entry.name === name)
   let next: string
-  if (kind === 'made') {
+  if (kind === 'made' && row === undefined) {
     if (!(await madePlugins(root)).includes(name)) throw new Error(`plugins/ has no plugin "${name}"`)
     next = setMadeOn(text, name, on)
   } else {
-    const row = parseBlendRows(text).find(entry => entry.name === name)
     if (row === undefined) throw new Error(`blend.yaml has no row "${name}"`)
     next = setRowOn(text, row.id, on)
   }
