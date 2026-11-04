@@ -16,14 +16,13 @@ Two checkouts are attached. In what follows ACR is the acrylblends/acrylblends c
 Work in a scratch folder outside both (called WORK), and run the commands from there.
 
 Read first:
-- ACR, branch 020-blueprints: specs/020-blueprints-100-categories/spec.md (what a blueprint is and when one is done) and tasks.md (your batch: the ten tasks marked [B<NN>]).
+- ACR, branch main (the latest acrylblends, the same 1.1.0 the published CLI is): specs/020-blueprints-100-categories/spec.md (what a blueprint is and when one is done) and tasks.md (your batch: the ten tasks marked [B<NN>]).
 - A finished blueprint, as the pattern to follow: `git -C SITE fetch origin blueprints/batch-01` and read registry/blends/acrylblends.system-monitor/ on that branch
   (src/monitor.ts is the plugin, src/monitor/ its domain code, test/ the tests, README.md, and AGENTS.md's last section). Do not copy its job; copy its shape.
 - In any app you make: AGENTS.md and docs/framework/README.md. The same docs are at https://acrylblends.github.io/docs.
 
 Once, before the first blueprint:
-a. Branches. In SITE: `git switch -c blueprints/batch-<NN> origin/main`. In ACR: `git switch -c blueprints/batch-<NN>-tasks origin/020-blueprints`
-   (the entry script below exists only on 020-blueprints; read it from there).
+a. Branches. In SITE: `git switch -c blueprints/batch-<NN> origin/main`. In ACR: `git switch -c blueprints/batch-<NN>-tasks origin/main`.
 b. The registry index tool needs the Blend format library. CI takes it from a private checkout; use the published package instead:
      mkdir -p WORK/core/shim && cd WORK/core && npm init -y && npm install @webboxes/blends-core@0.4.0
      printf "export * from '../node_modules/@webboxes/blends-core/dist/registry.js'\n" > shim/registry.ts
@@ -57,6 +56,9 @@ For each of your ten tasks:
    (this also runs the entry checks: no links, install scripts, keys or oversized files, an acryl.template.json, a package.json and src/). Do not edit registry/index.json by hand.
 6. Prove the entry as a person gets it: cd WORK && npm create acrylblends@latest t-<name> -- --from acrylblends.<name> --registry SITE/registry
    then, in t-<name>: npm install, npm test, and `ACRYLBLENDS_PORT=<free port> npm start` with the first page fetched. (--registry takes SITE/registry; SITE itself works too.)
+
+Do not create repositories. After review the coordinator gives every blueprint its own repository in the acrylblends organization, named
+<NN>-<category>-<name> like 01-system-system-monitor (workshop-registry/scripts/publish-repo.mjs), and the site and acryl.dev/blends list it from the registry.
 
 Commit each blueprint as its own commit in SITE (the entry folder, registry/index.json and the registry-placement.ts line), on branch blueprints/batch-<NN>, and push that
 branch. Do not open a pull request, merge, or push to main. In ACR, on blueprints/batch-<NN>-tasks, tick your tasks in tasks.md and add anything you ran into under
