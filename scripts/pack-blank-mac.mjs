@@ -9,7 +9,7 @@
  * read-only; the packaged app copies it into the person's Documents on first start (plugins/desktop/product.ts).
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -132,10 +132,6 @@ JSON.parse(JSON.stringify(before)) // the manifest is rewritten below with the p
 writeFileSync(join(app, 'package.json'), `${JSON.stringify({ ...before, dependencies: merged }, null, 2)}\n`)
 log(`declared ${String(Object.keys(declared).length)} installed packages`)
 
-// 3d. The packager leaves dot files like `.git` out of a bundle: the scaffold's repository travels as `template-git`, and the first start renames it in the copy.
-if (existsSync(join(app, '.git'))) rmSync(join(app, 'template-git'), { recursive: true, force: true })
-if (existsSync(join(app, '.git'))) cpSync(join(app, '.git'), join(app, 'template-git'), { recursive: true })
-
 // 4. The product marker, and what Electron needs to find its main process and the packager its identity.
 const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
 manifest.main = 'plugins/desktop/main.ts'
@@ -158,6 +154,31 @@ manifest.build = {
 }
 writeFileSync(join(app, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 writeFileSync(join(app, 'product.json'), `${JSON.stringify({ appFolder: 'ACRYL Blends Blank' }, null, 2)}\n`)
+
+// 4b. The packager drops or rewrites files the app owns: `.git` and `.gitignore` never enter a bundle (electron-builder excludes those names), and the
+// manifest it ships is filtered (the scripts go). Each travels under a plain carrier name and the first start writes it back as itself
+// (plugins/desktop/product.ts). The product's own build-time files stay out of the repository's status through its local exclude, never the app's tracked
+// .gitignore.
+cpSync(join(app, '.gitignore'), join(app, 'gitignore-product'))
+cpSync(join(app, 'package.json'), join(app, 'package-product.json'))
+const exclude = join(app, '.git', 'info', 'exclude')
+const excluded = existsSync(exclude) ? readFileSync(exclude, 'utf8') : ''
+const productNames = ['product.json', 'gitignore-product', 'package-product.json', 'template-git/']
+const missingNames = productNames.filter((name) => !excluded.split('\n').map((line) => line.trim()).includes(name))
+if (missingNames.length > 0) {
+  mkdirSync(join(app, '.git', 'info'), { recursive: true })
+  appendFileSync(exclude, `${excluded === '' || excluded.endsWith('\n') ? '' : '\n'}${missingNames.join('\n')}\n`)
+}
+// The manifest the packer wrote (entry point, declared dependencies, build fields) becomes the app folder's own history, so the copy starts clean instead of
+// showing the packaging as an unsaved change. The identity is the product's, not whatever the build machine configures.
+const gitIdentity = ['-c', 'user.name=ACRYL Blends', '-c', 'user.email=build@acrylblends.dev', '-c', 'commit.gpgsign=false']
+if (execFileSync('git', ['status', '--porcelain', '--', 'package.json'], { cwd: app, encoding: 'utf8' }).trim() !== '') {
+  execFileSync('git', [...gitIdentity, 'add', 'package.json'], { cwd: app, stdio: 'inherit' })
+  execFileSync('git', [...gitIdentity, 'commit', '-m', 'product: the manifest the packaged app carries'], { cwd: app, stdio: 'inherit' })
+}
+// The scaffold's repository travels as `template-git` (the packager drops `.git`), with that commit in it.
+if (existsSync(join(app, '.git'))) rmSync(join(app, 'template-git'), { recursive: true, force: true })
+if (existsSync(join(app, '.git'))) cpSync(join(app, '.git'), join(app, 'template-git'), { recursive: true })
 
 // 5. Package it. The builder is not a dependency of this repo yet; a checkout of ACRYL has one, and npx fetches one otherwise.
 const builder = process.env.ELECTRON_BUILDER
