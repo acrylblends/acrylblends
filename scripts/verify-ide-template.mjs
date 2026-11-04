@@ -330,12 +330,14 @@ try {
     if (init.status !== 0)
       fail(`init failed (exit ${String(init.status)}):\n${init.stdout}${init.stderr}`)
     const overlay = readFileSync(join(app, 'cordis.patch.yml'), 'utf8')
+    // The page's root is the Blends frame (`acryl-blends-frame`), not the IDE's workbench (`acryl-workspace`): the frame lists the branches, versions
+    // and the app; the workbench comes in as the frame's dependency, not as a row of its own.
     for (const row of [
       '- id: app-routes',
       'name: ./src/frame.ts',
       'name: ./plugins/acryl-door/src/index.ts',
       'name: acryl-app-shell',
-      'name: acryl-workspace',
+      'name: acryl-blends-frame',
     ])
       if (!overlay.includes(row)) fail(`the generated overlay is missing ${JSON.stringify(row)}`)
     const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
@@ -612,12 +614,14 @@ ${composition.stdout}`)
         `the page's script tag ${match[0]} is not closed; the tags after it would be swallowed as its text`,
       )
   }
-  if (!html.includes('acryl-workspace/client.js'))
-    fail(`the page does not load the workspace client; server said:\n${output.slice(-2500)}`)
+  if (!html.includes('acryl-blends-frame/client.js'))
+    fail(`the page does not load the frame's client; server said:\n${output.slice(-2500)}`)
+  // The door drives the app's page, never the frame around it (its row is generated with `hostIndex: false`), so the frame's own page must not carry
+  // the script; the app's page carries it once (checked below). A copy here would make an agent's navigate leave the frame.
   const tags = html.split('/api/acryl-door/page.js').length - 1
-  if (tags !== 1)
-    fail(`the frame page carries the door script ${String(tags)} times, expected once`)
-  log('the page loads the workspace client and carries the door script once')
+  if (tags !== 0)
+    fail(`the frame page carries the door script ${String(tags)} times, expected none`)
+  log("the page loads the frame's client and leaves the app's page to the door")
 
   // The app answers at its prefix: its API route when the template has one (blank's and the agent's root, todo's list, the chat's and nodejs' health
   // route). Retried, because the app's rows mount a moment after the launcher prints its URL.
@@ -670,7 +674,11 @@ ${composition.stdout}`)
     fail(
       `the app's page at ${page.path} did not show "${page.text}"; server said:\n${output.slice(-2500)}`,
     )
-  log(`the app's page answers at ${page.path}`)
+  // The page an agent drives inside the canvas carries the door's one script tag; an extra copy would drive the page twice.
+  const appTags = readFileSync(directFile, 'utf8').split('/api/acryl-door/page.js').length - 1
+  if (appTags !== 1)
+    fail(`the app's page carries the door script ${String(appTags)} times, expected once`)
+  log(`the app's page answers at ${page.path} and carries the door script once`)
 
   // The workshop's day-one path: the Preview Notice appears on a fresh profile, is dismissed once, and stays dismissed after a host restart because
   // its acknowledgement is in the settings document (the precedence fixture above also sets the key in the composition).
