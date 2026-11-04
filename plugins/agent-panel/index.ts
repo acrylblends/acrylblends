@@ -33,7 +33,7 @@ import {
   headlessDriver,
   whyNotChat,
 } from './headless.ts'
-import { mountedPrefix } from './mount.ts'
+import { mountedBase, mountedPrefix } from './mount.ts'
 import { provideDrivers } from './registry.ts'
 import { type AssistantLimits, type Visitor, Visitors } from './visitors.ts'
 
@@ -97,6 +97,9 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
   if (process.env.ACRYL_DOOR === 'off' || (process.env.NODE_ENV === 'production' && !assistant))
     return
   const PREFIX = panelPrefix(config.mount)
+  // The panel's routes mount at the app's own mount and keep the fixed path inside (`/app` + `/api/agent-panel/...`); the frame's router prefixes the
+  // mount path itself, so a prefix inside the routes too would become `/app/app/...`. PREFIX stays absolute for the page's script tag and client URLs.
+  const MOUNT = mountedBase(config.mount, 'agent-panel')
   const root = ctx.appInstance.root
   const visitors = new Visitors<Run>({
     shared: !assistant,
@@ -155,7 +158,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
       if (wrapped) return next()
       await addScript(c, next)
     })
-    .get(`${PREFIX}/panel.js`, (c) =>
+    .get(`${PANEL_PATH}/panel.js`, (c) =>
       c.body(
         `import { start } from '${PREFIX}/client/main.ts'\nstart(${JSON.stringify(PREFIX)})\n`,
         200,
@@ -165,8 +168,8 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
         },
       ),
     )
-    .route(`${PREFIX}/client`, clientModules({ root: CLIENT_DIR, mount: `${PREFIX}/client` }))
-    .get(`${PREFIX}/session`, (c) => {
+    .route(`${PANEL_PATH}/client`, clientModules({ root: CLIENT_DIR, mount: `${PREFIX}/client` }))
+    .get(`${PANEL_PATH}/session`, (c) => {
       if (!fromOwnPage(c.req.raw.headers))
         return c.json({ error: "only the app's own page may use the panel" }, 403)
       const { visitor, setCookie } = visitors.session(
@@ -189,7 +192,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
         })),
       })
     })
-    .post(`${PREFIX}/ask`, async (c) => {
+    .post(`${PANEL_PATH}/ask`, async (c) => {
       const visitor = caller(c.req.raw.headers, c.req.header('x-agent-panel-token'))
       if (visitor === undefined) return c.json({ error: "only the app's own page may ask" }, 403)
       const body = (await c.req.json().catch(() => ({}))) as {
@@ -209,7 +212,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
       return follow(c, run, false)
     })
     // Stop: the only thing that cancels a run. A page that goes away (a reload, a move to another page, a closed tab) does not: the agent goes on, and the page picks it up again.
-    .post(`${PREFIX}/stop`, (c) => {
+    .post(`${PANEL_PATH}/stop`, (c) => {
       const visitor = caller(c.req.raw.headers, c.req.header('x-agent-panel-token'))
       if (visitor === undefined)
         return c.json({ error: "only the app's own page may stop a run" }, 403)
@@ -218,7 +221,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
       return c.json({ ok: true })
     })
     // The latest run, for a page that just loaded: what was asked, then every event so far, then the rest as it happens (until the run ends).
-    .get(`${PREFIX}/run`, (c) => {
+    .get(`${PANEL_PATH}/run`, (c) => {
       const visitor = caller(c.req.raw.headers, c.req.header('x-agent-panel-token'))
       if (visitor === undefined)
         return c.json({ error: "only the app's own page may read the run" }, 403)
@@ -516,5 +519,5 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
     )
     inner.router.route('/', ws)
   })
-  ctx.router.route('/', app)
+  ctx.router.route(MOUNT === '' ? '/' : MOUNT, app)
 }

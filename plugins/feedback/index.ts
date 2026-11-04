@@ -74,7 +74,10 @@ export function apply(ctx: Context, config: FeedbackConfig = {}): void {
     throw new TypeError(
       `feedback: the app's mount "${mount}" must be empty or an absolute path such as "/app"`,
     )
-  const PREFIX = `${mount}/api/feedback`
+  const FEEDBACK_PATH = '/api/feedback'
+  const PREFIX = `${mount}${FEEDBACK_PATH}`
+  // The routes mount at the app's own mount and keep the fixed feedback path inside (the frame's router prefixes the mount, not the routes).
+  const APP_MOUNT = mount
   const store = new FeedbackStore(join(ctx.appInstance.home, 'feedback'))
   ctx.effect(
     () =>
@@ -110,20 +113,20 @@ export function apply(ctx: Context, config: FeedbackConfig = {}): void {
       if (wrapped) return next()
       await addScript(c, next)
     })
-    .get(`${PREFIX}/feedback.js`, (c) =>
+    .get(`${FEEDBACK_PATH}/feedback.js`, (c) =>
       c.body(`${CLIENT}\nstart(${JSON.stringify(PREFIX)})\n`, 200, {
         'content-type': 'text/javascript; charset=utf-8',
         'cache-control': 'no-cache',
       }),
     )
-    .get(`${PREFIX}/pins`, async (c) => {
+    .get(`${FEEDBACK_PATH}/pins`, async (c) => {
       const page = c.req.query('page')
       if (typeof page !== 'string' || !page.startsWith('/') || page.length > LIMITS.page)
         return c.json({ error: 'the page must be a path' }, 400)
       // The page's visitors can read this route: it says where the commented elements are and nothing the notes say.
       return c.json({ pins: await store.pins(page) }, 200, { 'cache-control': 'no-store' })
     })
-    .post(`${PREFIX}/notes`, async (c) => {
+    .post(`${FEEDBACK_PATH}/notes`, async (c) => {
       if (!fromOwnPage(c.req.raw.headers))
         return c.json({ error: "only the app's own page may send feedback" }, 403)
       const now = Date.now()
@@ -136,5 +139,5 @@ export function apply(ctx: Context, config: FeedbackConfig = {}): void {
       const stored = await store.add(note)
       return c.json({ id: stored.id }, 201)
     })
-  ctx.router.route('/', app)
+  ctx.router.route(APP_MOUNT === '' ? '/' : APP_MOUNT, app)
 }
