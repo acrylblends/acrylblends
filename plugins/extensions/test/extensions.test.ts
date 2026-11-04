@@ -186,6 +186,29 @@ test('a restart mounts what was installed; a trusted source installs new folders
   assert.equal(second.root.get('greeting'), 'hello')
 })
 
+test('a restart after a refused update runs the version that worked, from its staged copy', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'extensions-test-'))
+  cleanup.unshift(() => rmSync(home, { recursive: true, force: true }))
+  const first = await boot({ home })
+  await first.root.extensions.install(writeGreeter(first.folder, 'hello'))
+  const broken = await first.root.extensions.install(
+    writeGreeter(first.folder, 'never', { throws: true }),
+  )
+  assert.equal(!broken.ok && broken.restoredPrevious, true)
+  await first.stop()
+
+  // The broken source is still on disk.
+  const second = await boot({ home })
+  const summary = await second.root.extensions.ready
+  assert.equal(second.root.get('greeting'), 'hello')
+  assert.deepEqual(summary.stale, ['greeter'])
+  assert.match(summary.failed[0]?.error ?? '', /refuses to start/)
+  assert.deepEqual(
+    second.root.extensions.list().map((entry) => [entry.name, entry.state, entry.stale]),
+    [['greeter', 'active', true]],
+  )
+})
+
 test('disposing the plugin disposes every extension it mounted', async () => {
   const { root, folder, stop } = await boot()
   await root.extensions.install(writeGreeter(folder, 'hello'))

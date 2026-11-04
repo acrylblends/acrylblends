@@ -793,11 +793,15 @@ export class Extensions extends Service {
         this.approved.set(name, record.version)
         if (existsSync(record.source)) {
           const result = await this.installNow(record.source)
-          if (result.ok) summary.installed.push(name)
-          else summary.failed.push({ name, error: result.errors.join('; ') })
-          continue
+          if (result.ok) {
+            summary.installed.push(name)
+            continue
+          }
+          summary.failed.push({ name, error: result.errors.join('; ') })
+          // A source changed into one that does not start (a refused update leaves it on disk): the version that worked runs from its staged copy.
+          if (!existsSync(record.dir)) continue
         }
-        // The source is gone: the last installed version still runs, and is reported as stale.
+        // The source is gone or broken: the last installed version still runs, and is reported as stale.
         summary.stale.push(name)
         this.stale.add(name)
         if (!existsSync(record.dir)) {
