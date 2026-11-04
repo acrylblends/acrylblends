@@ -1799,8 +1799,17 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             `Settings is missing ${missing.join(', ')}: ${JSON.stringify(settings).slice(0, 3000)}`,
           )
         log(`Settings has ${sections.join(', ')}`)
-        // Mockup scenario 6 (Settings: plugins): the navigator of everything the app is made of, with its search and its rows.
+        // Mockup scenario 6 (Settings: plugins): the navigator of everything the app is made of, with its search and its rows. A slow runner can
+        // lose the dialog between reading its sections and this step (the same settle that closed it under the sections wait), so the gear is pressed
+        // again whenever no visible dialog is up; a press while it is open would toggle it shut, which is why it is only the closed case.
         const plugins = await until(async () => {
+          const open = await evaluate(
+            `[...document.querySelectorAll('[role=dialog]')].some((candidate) => candidate.getClientRects().length > 0 && candidate.querySelector('nav') !== null)`,
+          )
+          if (open !== true) {
+            await evaluate(pressSettingsExpression)
+            return undefined
+          }
           const clicked = await evaluate(`(() => {
             const item = [...document.querySelectorAll('[role=dialog] nav button')]
               .find((button) => /Plugins|插件/u.test((button.getAttribute('aria-label') ?? '') + ' ' + button.textContent))
