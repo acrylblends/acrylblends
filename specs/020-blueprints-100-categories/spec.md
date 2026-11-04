@@ -25,14 +25,14 @@ The app opens in the ACRYL frame and already does the category's job. From there
   service, no API key, no paid service and no network call it cannot do without. Whatever needs a key reads it from settings and says so on the page.
 - Its own tests (`npm test`) cover the domain logic and every route.
 - A `README.md`: what it is, who it is for, what to ask the chat next (three example prompts), and a screenshot.
-- Published as `registry/blends/acrylblends.<name>/` in the site repository with the registry's own entry script (`make-entry.mjs`, see
-  `workshop-registry/README.md` in this repository), with `category` set to the category's slug and `subcategory` to one of its subs.
+- Published as `registry/blends/acrylblends.<name>/` in the site repository with the registry's own entry script (`make-entry.mjs --out <site>/registry --category <slug>`, see
+  `cloud-brief.md`), with `category` in its `blend.yaml` set to the category's slug. The subcategory is not a field of `blend.yaml`: it is the entry's line in `src/lib/registry-placement.ts` of the site repository, which is also what makes the site list the entry.
 
 ## Done for one blueprint
 
 1. `npm create acrylblends@latest t -- --from acrylblends.<name> --registry <path to the site repository>` makes the app.
 2. Then `npm install`, `npm test` and `npm run build` (when the app has one) pass.
-3. `npm run dev` serves the app inside the frame, and `npm start` serves it alone, each with its first page showing the seed data.
+3. `npm start` serves the app, with its first page showing the seed data. (`npm run dev` serves it inside the ACRYL frame; the coordinator checks that, a cloud agent cannot.)
 4. The entry passes the registry's checks (no links, install scripts, keys or oversized files), and `registry/index.json` is regenerated.
 
 ## Done for the milestone

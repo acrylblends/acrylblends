@@ -8,14 +8,14 @@ Format: `T<nnn> [B<batch>] <category> (subcategories) - acrylblends.<name>: <the
 
 ## Setup (done by the coordinator before batch 1)
 
-- [ ] T000 The registry path works end to end with one real blueprint: `acrylblends.system-monitor` made, published to
+- [x] T000 The registry path works end to end with one real blueprint: `acrylblends.system-monitor` made, published to
   `registry/blends/` in acrylblends.github.io with `make-entry.mjs`, `index.json` regenerated, and started again with
-  `npm create acrylblends@latest t -- --from acrylblends.system-monitor --registry <checkout>`. The steps that worked go into cloud-brief.md.
+  `npm create acrylblends@latest t -- --from acrylblends.system-monitor --registry <checkout>`. The steps that worked go into cloud-brief.md. (Done 2026-11-04: site branch `blueprints/batch-01`; the brief is the steps as run.)
 
 
 ## Batch 1 (categories 1-10)
 
-- [ ] T001 [B01] System (`system`: Operating systems, Kernels, Device drivers, Firmware, Boot software, System utilities) - `acrylblends.system-monitor`: System Monitor: this machine's processes, memory and disk, refreshed live, with a kill-list of the heaviest
+- [x] T001 [B01] System (`system`: Operating systems, Kernels, Device drivers, Firmware, Boot software, System utilities) - `acrylblends.system-monitor`: System Monitor: this machine's processes, memory and disk, refreshed live, with a kill-list of the heaviest
 - [ ] T002 [B01] Application (`application`: Productivity, Personal information management, Communication, Collaboration) - `acrylblends.productivity-hub`: Productivity Hub: notes, tasks and a week calendar on one page
 - [ ] T003 [B01] Business (`business`: ERP, CRM, Finance, Payments, HR, Project management, Procurement, Operations) - `acrylblends.small-crm`: Small CRM: contacts, companies and a drag-and-drop deals pipeline
 - [ ] T004 [B01] Developer (`developer`: Code editors, IDEs, Version control, Build tools, Language tooling, Dependency management, Testing, API development, Developer collaboration) - `acrylblends.snippets`: Snippet Manager: code snippets with tags, syntax highlighting and search
@@ -146,4 +146,10 @@ Format: `T<nnn> [B<batch>] <category> (subcategories) - acrylblends.<name>: <the
 ## Found
 
 Things a builder ran into that the CLI, the framework or the registry should fix (one line each, with the task that found it).
-
+- T001: `make-entry.mjs` wrote into `workshop-registry/blends/` of this repository and always set `category: workshop`; it now takes `--out <registry folder>` and `--category <slug>` (tested in workshop-registry/test/rules.test.mjs).
+- T001: `blend.yaml`'s `metadata` has no field for a subcategory (the format refuses unknown keys), so the spec's "subcategory set in the entry" cannot be done there. The site's taxonomy placement is a hand-written line in `src/lib/registry-placement.ts` (site repository), by display names; an entry without one is not shown on the site.
+- T001: `scripts/registry-index.ts` in the site repository imports `registry.ts` from a checkout of the private ACRYL repo (CI pins a commit). The published `@webboxes/blends-core@0.4.0` has the same code as `dist/registry.js` and no `src/`; a two-line shim (cloud-brief.md, "Once") makes the script run on it, with Node 22.18+ or bun, and it reproduces the existing `index.json` byte for byte. A cloud agent has no other way to run it.
+- T001: every batch branch appends a line to `registryPlacement` and an entry to `registry/index.json`, so merging the ten branches conflicts there; after merging, regenerate the index (`node scripts/registry-index.ts registry`) instead of resolving it by hand, and keep every placement line.
+- T001: `npm run dev` in a blank-template app is `node --watch` (the app alone). "Serves the app inside the frame" in spec.md's "Done for one blueprint" (3) is therefore not something a cloud agent can check; the brief leaves the frame to the coordinator. The system-monitor was not opened in the frame in T000.
+- T001: the made app starts with `package-lock.json` after `npm install`; `make-entry.mjs` carries it into the entry (kept: it makes the entry's install repeatable).
+- T001: `npm create acrylblends@latest` printed "Next: see the template's README" for an app made from a registry entry; harmless, not changed.

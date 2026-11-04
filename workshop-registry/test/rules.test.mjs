@@ -202,3 +202,44 @@ test('a whole app in the wrong folder is one line, not one per file', () => {
   assert.equal(result.stdout.trim().split('\n').length, 1, result.stdout)
   assert.match(result.stdout, /blends\/bob\.hello\/: the folder belongs to "bob"/)
 })
+
+describe('make-entry', () => {
+  /** A whole app in a folder of its own, as `npm create acrylblends` leaves it. */
+  function appFolder() {
+    const app = mkdtempSync(join(scratch, 'app-'))
+    const { dir } = entryTree('alice.hello')
+    cpSync(dir, app, { recursive: true })
+    rmSync(join(app, 'acryl.template.json'))
+    writeFileSync(
+      join(app, 'blend.yaml'),
+      'apiVersion: blends.acryl.dev/v1alpha1\nkind: Blueprint\nmetadata:\n  id: acrylblends.hello\n  name: Hello App\n  version: 0.1.0\n  visibility: private\nspec:\n  runtime: cordis\n  rows:\n    - id: router\n      name: acryl-router\n',
+    )
+    mkdirSync(join(app, 'node_modules', 'x'), { recursive: true })
+    return app
+  }
+  const make = (args) =>
+    spawnSync(process.execPath, [join(repo, 'scripts', 'make-entry.mjs'), ...args], { encoding: 'utf8' })
+
+  test('--out puts the entry in that registry, --category names it, and nothing lands in this one', () => {
+    const out = mkdtempSync(join(scratch, 'out-'))
+    const result = make([appFolder(), 'acrylblends.hello', '--description', 'Says hello.', '--category', 'system', '--out', out])
+    assert.equal(result.status, 0, result.stderr)
+    const entry = join(out, 'blends', 'acrylblends.hello')
+    const manifest = readFileSync(join(entry, 'blend.yaml'), 'utf8')
+    assert.match(manifest, /id: acrylblends\.hello/)
+    assert.match(manifest, /name: "Hello App"/)
+    assert.match(manifest, /category: system/)
+    assert.match(manifest, /visibility: public/)
+    assert.deepEqual(JSON.parse(readFileSync(join(entry, 'acryl.template.json'), 'utf8')), { name: 'Hello App', description: 'Says hello.', plugins: [] })
+    assert.equal(existsSync(join(entry, 'node_modules')), false)
+    assert.equal(existsSync(join(repo, 'blends', 'acrylblends.hello')), false)
+  })
+
+  test('refuses an entry that exists, and a bad id', () => {
+    const out = mkdtempSync(join(scratch, 'out-'))
+    const app = appFolder()
+    assert.equal(make([app, 'acrylblends.hello', '--out', out]).status, 0)
+    assert.equal(make([app, 'acrylblends.hello', '--out', out]).status, 1)
+    assert.equal(make([app, 'Not An Id', '--out', out]).status, 2)
+  })
+})

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// Turn your app into an entry of this registry:   node scripts/make-entry.mjs <your app folder> <login>.<name> [--description "..."] [--license MIT]
+// Turn your app into an entry of this registry:   node scripts/make-entry.mjs <your app folder> <login>.<name> [--description "..."] [--license MIT] [--category <slug>] [--out <registry folder>]
+// `--category` is the `category` written to blend.yaml (default `workshop`). `--out` is the folder whose `blends/` receives the entry (default: this registry); point it at `registry/` of the
+// acrylblends.github.io checkout to publish there. The taxonomy placement (category and subcategory shown on the site) is not in blend.yaml: it is src/lib/registry-placement.ts in that checkout.
 // Copies the app to blends/<login>.<name>/ without what an entry does not carry (node_modules, dist, data, .git, the framework docs, the agent's scratch), makes its blend.yaml public
 // and licensed under that id, and writes acryl.template.json, which marks the entry as an app for acrylblends. Then: commit, push to your fork, open a pull request.
 import {
@@ -18,13 +20,13 @@ import { parseArgs } from 'node:util'
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { description: { type: 'string' }, license: { type: 'string' } },
+  options: { description: { type: 'string' }, license: { type: 'string' }, category: { type: 'string' }, out: { type: 'string' } },
 })
 const [source, id] = positionals
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const root = values.out === undefined ? resolve(dirname(fileURLToPath(import.meta.url)), '..') : resolve(values.out)
 if (!source || !id || !/^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/u.test(id)) {
   console.error(
-    'usage: node scripts/make-entry.mjs <your app folder> <login>.<name>   (lower case; <login> is your GitHub login)',
+    'usage: node scripts/make-entry.mjs <your app folder> <login>.<name> [--description "..."] [--license MIT] [--category <slug>] [--out <registry folder>]   (lower case; <login> is your GitHub login)',
   )
   process.exit(2)
 }
@@ -74,7 +76,7 @@ writeFileSync(
       `  id: ${id}`,
       `  name: ${JSON.stringify(name)}`,
       '  version: 0.1.0',
-      '  category: workshop',
+      `  category: ${values.category ?? 'workshop'}`,
       `  description: ${JSON.stringify(description)}`,
       `  license: ${values.license ?? 'MIT'}`,
       '  visibility: public',
@@ -87,5 +89,7 @@ writeFileSync(
   `${JSON.stringify({ name, description, plugins: [] }, null, 2)}\n`,
 )
 console.log(
-  `made blends/${id}/. Next:  git add blends/${id} && git commit -m "add ${id}" && git push, then open a pull request.`,
+  values.out === undefined
+    ? `made blends/${id}/. Next:  git add blends/${id} && git commit -m "add ${id}" && git push, then open a pull request.`
+    : `made ${target}`,
 )
