@@ -501,7 +501,7 @@ async function createFromSource(
       `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}${
         options.desktop
           ? `  ${pm} run dev        in the ACRYL frame, in the browser\n  ${pm} run desktop    in the ACRYL frame, in its own window\n  ${pm} start          the app on its own\n`
-          : `  see the template's README or package.json scripts\n`
+          : `  ${existsSync(join(target, 'README.md')) ? 'see README.md or the package.json scripts' : 'see the package.json scripts'}\n`
       }`,
     )
     return 0

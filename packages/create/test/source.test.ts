@@ -320,6 +320,9 @@ describe('starters from a registry', () => {
       ),
     ).toBe(0)
     expect(bare.runs).toHaveLength(0)
+    // The starter has no README, so the Next block does not send the reader to one.
+    expect(bare.out()).toContain('see the package.json scripts')
+    expect(bare.out()).not.toContain('README')
   })
 
   it('gives an app made from another app its own name and its own repository with one first commit', async () => {
