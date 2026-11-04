@@ -13,7 +13,7 @@ import { NEW_CHAT } from './chats.ts'
 import type { ChatsPort } from './LeftPanel.tsx'
 import { historyGroups, type BranchChatsPort } from './branch-chats.ts'
 import type { SwitchRequests } from './switch-request.ts'
-import { FILES_TAB, GIT_TAB, PTY_AGENTS, chatTab, fileTab, fileTabLabels, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
+import { DETAILS_TAB, FILES_TAB, GIT_TAB, PTY_AGENTS, chatTab, fileTab, fileTabLabels, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
 import { tabSizing } from './tab-sizing.ts'
 import { TerminalView } from './TerminalView.tsx'
 import type { FrameTools } from './tools.ts'
@@ -44,6 +44,21 @@ export interface RightPanelProps {
   /** Where a chat of another branch is asked for: the left panel offers the switch first. */
   readonly switchRequests: SwitchRequests
   readonly renderConversation: () => ReactNode
+  /** DSH's right sidebar (the `rightbar` slot) at the given width. Always mounted, so DSH's panel is there to open; shown only on its tab. */
+  readonly renderDetails: (width: number) => ReactNode
+  /** Whether DSH's right sidebar is open, as it reports through the layout; it opens and closes its tab here. */
+  readonly details: { subscribe(listener: () => void): () => void; getSnapshot(): boolean }
+  readonly sidebar: SidebarPort
+}
+
+/** DSH's right sidebar as the Panel tab drives it. */
+export interface SidebarPort {
+  /** Collapse it (DSH's own collapse), when the person closes its tab. */
+  close(): void
+  /** Expand it (DSH's own expand), when the person picks its tab. */
+  expand(): void
+  /** Hear each page opened in it. @returns the disposer. */
+  onOpened(listener: () => void): () => void
 }
 
 const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
@@ -84,10 +99,11 @@ function TabLabel({ tab, chatTitle, fileLabel, showKind }: { readonly tab: Frame
       return <span className="acrylBlendsTabLabel">{folder === '' ? label : <><span className="acrylBlendsTabPath">{folder}</span>{label.slice(folder.length)}</>}</span>
     }
     case 'git': return <span className="acrylBlendsTabLabel">Git</span>
+    case 'details': return <span className="acrylBlendsTabLabel">Panel</span>
   }
 }
 
-export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branchChats, switchRequests, renderConversation }: RightPanelProps) {
+export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branchChats, switchRequests, renderConversation, renderDetails, details, sidebar }: RightPanelProps) {
   const subscribeChats = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const rows = useSyncExternalStore(subscribeChats, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
@@ -118,6 +134,21 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
 
   // Each tab's share of the strip; the labels ellipsize to it and the kind drops out when it is narrow (see tab-sizing.ts).
   const stripWidth = useStripWidth(stripRef)
+  // DSH's right sidebar opens itself (a Plan card's button, a changed file, a file an answer names): its tab opens with it, and leaves when it closes.
+  const subscribeDetails = useCallback((listener: () => void) => details.subscribe(listener), [details])
+  const detailsOpen = useSyncExternalStore(subscribeDetails, () => details.getSnapshot())
+  // The tab is remembered with the strip, so a page load that finds DSH's sidebar open (DSH remembers it too) leaves the strip on the tab the person was on.
+  // DSH's own collapse closes the tab; DSH's own expand opens it when it is not in the strip.
+  const detailsWere = useRef(false)
+  useEffect(() => {
+    const was = detailsWere.current
+    detailsWere.current = detailsOpen
+    const inStrip = tabs.getSnapshot().tabs.some(tab => tab.id === DETAILS_TAB.id)
+    if (detailsOpen && !was && !inStrip) tabs.open(DETAILS_TAB)
+    else if (!detailsOpen && was && inStrip) tabs.close(DETAILS_TAB.id)
+  }, [detailsOpen, tabs])
+  // A page opened while the sidebar is already shown changes nothing above, and still has to be seen.
+  useEffect(() => sidebar.onOpened(() => { tabs.open(DETAILS_TAB) }), [sidebar, tabs])
   const sizing = tabSizing(stripWidth > 0 ? stripWidth : 396, visible.length)
   // The tab shown stays in view when the strip has to scroll; when the tabs share the width they all stay in view, so the strip starts at the first tab.
   useEffect(() => {
@@ -156,6 +187,7 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
 
   const close = (id: string) => {
     const closed = tabs.close(id)
+    if (closed?.kind === 'details' && detailsOpen) sidebar.close()
     if (closed?.kind === 'pty' || closed?.kind === 'terminal') {
       tools.terminals.release(closed.terminalId)
       void tools.pty.close(closed.terminalId).catch(() => {})
@@ -177,6 +209,8 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
 
   const showTab = (tab: FrameTab) => {
     tabs.activate(tab.id)
+    // The tab of a sidebar DSH has collapsed (a page loaded that way) shows it again.
+    if (tab.kind === 'details' && !detailsOpen) sidebar.expand()
     // A chat tab shows its own chat; the base tab shows the branch's chat that no other tab has.
     if (tab.kind === 'chat') {
       if (tab.session === undefined) chats.openPrimary(chatSessions())
@@ -324,6 +358,11 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
         <div className="acrylBlendsConversation" hidden={history}>
           {renderConversation()}
         </div>
+      </div>
+      {/* DSH's right sidebar stays mounted under the other tabs, as DSH keeps it: its tabs, panes and scroll survive a switch. It is sized by the strip,
+          which is always on screen: hidden, it would measure nothing and DSH would fold it as too narrow. */}
+      <div className="acrylBlendsDetails" hidden={active?.kind !== 'details'}>
+        {renderDetails(stripWidth)}
       </div>
       {(active?.kind === 'pty' || active?.kind === 'terminal') && (
         <>

@@ -167,8 +167,8 @@ export const DRIVER_ROWS: readonly string[] = [
   'shell-env',
   'jobs',
   // The chat's auto-save: `workspace-changes` diffs the working tree around every turn and says which files the agent changed (and announces a turn that
-  // changed none by saying nothing); it runs git through `subprocess`. The frame's Host saves a version from that, and DSH's own changed-files card
-  // (`ui-deliverables`) is not mounted: the frame says it in one line under the answer.
+  // changed none by saying nothing); it runs git through `subprocess`. The frame's Host saves a version from that, and DSH's changed-files card
+  // (`ui-deliverables`) shows the same event under the answer.
   'subprocess',
   'workspace-changes',
   // What ACRYL IDE's chat stands on beyond the conversation itself, from DSH's own web composition (the desktop app composes the same): the turn and
@@ -183,6 +183,10 @@ export const DRIVER_ROWS: readonly string[] = [
   'open-in-app',
   'session-log-download',
   'session-reference',
+  // The footer's tokens, cache hit and context % (`ui-chat`'s stats read the `tokenUsage` projection this meter keeps, on the host plane as DSH's web
+  // bundle keeps it), and the questions a plan or a tool asks the person (`tool-ask-user` and `ui-user-questions` both stand on this service).
+  'token-meter',
+  'user-questions',
 ]
 
 /**
@@ -192,6 +196,14 @@ export const DRIVER_ROWS: readonly string[] = [
  * default, so every chat in the frame uses it. A tool added here needs the host rows it stands on in `DRIVER_ROWS`.
  */
 export const AGENT_PRESET_ID = 'acryl-blends'
+
+/**
+ * The plugins the frame's preset takes from DSH's own `standard` preset, as DSH declares them (config and prompt included), so they follow every DSH
+ * bump instead of being restated here: plan mode and its `/plan` (`planning`, which ui-plan's plan card and Plan tab show), the To-dos list the
+ * composer's dock shows (`tool-todo`), the questions the agent can ask (`tool-ask-user`), and context compaction (`compaction`), whose meter is the
+ * footer's context %.
+ */
+export const DSH_STANDARD_PLUGINS: readonly string[] = ['planning', 'compaction', 'tool-ask-user', 'tool-todo']
 
 export const AGENT_PRESET_ROWS: readonly {
   readonly id: string
@@ -241,6 +253,7 @@ export const AGENT_PRESET_ROWS: readonly {
           config: { sampleOverCapGlobResults: false },
         },
         { id: 'tool-jobs', name: '@deepseek-ai/dsh-tool-jobs' },
+        // DSH_STANDARD_PLUGINS are appended here at boot, read from DSH's own `standard` preset (see the host script).
       ],
     },
   },
@@ -274,9 +287,12 @@ export const CLIENT_ROWS: readonly ClientRow[] = [
   // No `ui-settings-plugins` (DSH's "Built-in plugins"): the frame's Settings > Plugins lists everything the app is made of.
   { id: 'ui-settings-models', name: '@deepseek-ai/dsh-client-ui-settings-models' },
   { id: 'ui-session', name: '@deepseek-ai/dsh-client-ui-session' },
-  // No `ui-sidebar` or `ui-sidebar-right`: the Blends frame draws both side panels itself (branches and versions on the left, the agents as tabs on
-  // the right). DSH's sidebars would be second, unreachable panels, and its left one also claims the `sidebar.settings` seat the frame's top bar
-  // renders DSH's Settings in.
+  // No `ui-sidebar`: the Blends frame draws the left panel itself (branches and versions), and DSH's left sidebar also claims the
+  // `sidebar.settings` seat the frame's top bar renders DSH's Settings in. DSH's right sidebar is mounted as it is (`ui-sidebar-right`, the docking
+  // surface the Plan, the changed-files review and a file an answer links to open in); the frame shows it as one of its right panel's tabs.
+  { id: 'ui-sidebar-right', name: '@deepseek-ai/dsh-client-ui-sidebar-right' },
+  // The right sidebar's document tab: a file an answer names opens in it (Markdown, code, HTML, PDF, plain text).
+  { id: 'ui-sidebar-documentpreview', name: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview' },
   { id: 'ui-commands', name: '@deepseek-ai/dsh-client-ui-commands' },
   { id: 'ui-workspace', name: '@deepseek-ai/dsh-client-ui-workspace' },
   { id: 'ui-conversation', name: '@deepseek-ai/dsh-client-ui-conversation' },
@@ -289,7 +305,7 @@ export const CLIENT_ROWS: readonly ClientRow[] = [
   // The rest of ACRYL IDE's chat, the same DSH packages in the order DSH's web composition mounts them: the shortcuts surface, workflow runs, `/` skills,
   // subagents, `@` references, the jobs roster, the goal bar, Like and Dislike, the model and effort selector, the permission picker (Read Only, Workspace
   // Write, Full access), the agent-preset setting, the session log setting, user questions, the Trajectory tab, and the session header's "Open in".
-  // Not yet: `ui-plan` and `ui-deliverables` open in DSH's right sidebar (`sidebarRightTabs`), which the frame's right panel does not provide yet.
+  // The changed-files card under an answer and its review tab (`ui-deliverables`), and plan mode's composer control, plan card and Plan tab (`ui-plan`).
   { id: 'ui-shortcuts', name: '@deepseek-ai/dsh-client-ui-shortcuts' },
   { id: 'ui-workflow-run', name: '@deepseek-ai/dsh-client-ui-workflow-run' },
   { id: 'ui-skill', name: '@deepseek-ai/dsh-client-ui-skill' },
@@ -304,6 +320,8 @@ export const CLIENT_ROWS: readonly ClientRow[] = [
   { id: 'ui-settings-session-log', name: '@deepseek-ai/dsh-client-ui-settings-session-log' },
   { id: 'ui-user-questions', name: '@deepseek-ai/dsh-client-ui-user-questions' },
   { id: 'ui-trajectory', name: '@deepseek-ai/dsh-client-ui-trajectory' },
+  { id: 'ui-deliverables', name: '@deepseek-ai/dsh-client-ui-deliverables' },
+  { id: 'ui-plan', name: '@deepseek-ai/dsh-client-ui-plan' },
   { id: 'ui-open-in-app', name: '@deepseek-ai/dsh-client-ui-open-in-app' },
   { id: 'client-resources', name: '@deepseek-ai/dsh-client-resources' },
   { id: 'ui-input-trigger', name: '@deepseek-ai/dsh-client-ui-input-trigger' },
@@ -448,6 +466,18 @@ function hostScriptOf(profile: string): string {
     "/** Our host rows first: the framework's node server, then the webServer port the driver rows register on (they are the app's, not DSH's). */",
     `const clientRows = ${JSON.stringify(CLIENT_ROWS, null, 2).replaceAll('\\n', '\\n')}`,
     `const agentRows = ${JSON.stringify(AGENT_PRESET_ROWS, null, 2)}`,
+    `const DSH_STANDARD_PLUGINS = ${JSON.stringify(DSH_STANDARD_PLUGINS)}`,
+    "/** One plugin row of DSH's `standard` preset, exactly as DSH's web bundle declares it; a missing one fails the boot loudly. */",
+    'function dshStandardPlugin(id) {',
+    "  for (const patch of bundlePatches('@deepseek-ai/dsh-web-app'))",
+    '    for (const entry of patch.insert ?? [])',
+    "      if (entry.config?.id === 'standard') {",
+    '        const found = entry.config.plugins?.find((plugin) => plugin.id === id)',
+    '        if (found !== undefined) return found',
+    '      }',
+    "  throw new Error(`DSH's standard preset has no ${id} row`)",
+    '}',
+    `agentRows.find((row) => row.id === 'preset-${AGENT_PRESET_ID}').config.plugins.push(...DSH_STANDARD_PLUGINS.map(dshStandardPlugin))`,
     'const hostLayer = anchorRows([{',
     '  insert: [',
     "    { id: 'node-server', name: './plugins/acryl-node-server/src/index.ts', config: { hostname: '127.0.0.1', port: Number(port), scan: Number(port) === 0 ? 0 : 20 } },",

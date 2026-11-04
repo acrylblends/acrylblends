@@ -24,6 +24,11 @@ export type FrameTab =
   | { readonly kind: 'files'; readonly id: 'files'; readonly branch?: string }
   | { readonly kind: 'file'; readonly id: string; readonly path: string; readonly branch?: string }
   | { readonly kind: 'git'; readonly id: 'git'; readonly branch?: string }
+  /**
+   * DSH's right sidebar (`ui-sidebar-right`): the Plan, the changed-files review and the files an answer links to, as DSH draws them. It shows the chat on
+   * screen, whatever the branch, so it is on every branch like the base chat tab.
+   */
+  | { readonly kind: 'details'; readonly id: 'details'; readonly branch?: string }
 
 export interface FrameTabsSnapshot {
   readonly tabs: readonly FrameTab[]
@@ -39,6 +44,8 @@ const STORAGE_KEY = 'acryl-blends-frame.tabs.v1'
 const CHAT: FrameTab = { kind: 'chat', id: 'chat' }
 /** The base chat tab: always first, never closed, on every branch. */
 const isBase = (tab: FrameTab): boolean => tab.kind === 'chat' && tab.id === 'chat'
+/** The tabs no branch owns: the base chat tab and DSH's sidebar. */
+const onEveryBranch = (tab: FrameTab): boolean => isBase(tab) || tab.kind === 'details'
 
 /** The first run: the chat alone. */
 export const FIRST_RUN_TABS: FrameTabsSnapshot = { tabs: [CHAT], active: 'chat' }
@@ -49,6 +56,7 @@ export const terminalTab = (terminalId: string): FrameTab => ({ kind: 'terminal'
 export const fileTab = (path: string): FrameTab => ({ kind: 'file', id: `file:${path}`, path })
 export const FILES_TAB: FrameTab = { kind: 'files', id: 'files' }
 export const GIT_TAB: FrameTab = { kind: 'git', id: 'git' }
+export const DETAILS_TAB: FrameTab = { kind: 'details', id: 'details' }
 
 /** The last `count` segments of a path. */
 const suffix = (parts: readonly string[], count: number): string => parts.slice(Math.max(0, parts.length - count)).join('/')
@@ -72,7 +80,7 @@ export function fileTabLabels(paths: readonly string[]): ReadonlyMap<string, str
 /** The tabs the strip shows on a branch: the base chat always, and what was opened on that branch. No branch (outside a repository): every tab. */
 export function tabsForBranch(snapshot: FrameTabsSnapshot, branch: string | undefined): readonly FrameTab[] {
   if (branch === undefined) return snapshot.tabs
-  return snapshot.tabs.filter(tab => isBase(tab) || tab.branch === branch)
+  return snapshot.tabs.filter(tab => onEveryBranch(tab) || tab.branch === branch)
 }
 
 const stamped = (tab: FrameTab, branch: string | undefined): FrameTab => (branch === undefined ? tab : { ...tab, branch })
@@ -86,6 +94,7 @@ function parseTab(value: unknown): FrameTab | undefined {
     case 'chat': { const session = text('session'); return session === undefined ? CHAT : stamped(chatTab(session), branch) }
     case 'files': return stamped(FILES_TAB, branch)
     case 'git': return stamped(GIT_TAB, branch)
+    case 'details': return DETAILS_TAB
     case 'file': { const path = text('path'); return path === undefined ? undefined : stamped(fileTab(path), branch) }
     case 'terminal': { const id = text('terminalId'); return id === undefined ? undefined : stamped(terminalTab(id), branch) }
     case 'pty': {
@@ -204,12 +213,12 @@ export class FrameTabs {
     this.branch = branch
     if (this.branched || branch === undefined) return
     this.branched = true
-    this.set({ tabs: this.snapshot.tabs.map(tab => (isBase(tab) || tab.branch !== undefined ? tab : { ...tab, branch })), active: this.snapshot.active })
+    this.set({ tabs: this.snapshot.tabs.map(tab => (onEveryBranch(tab) || tab.branch !== undefined ? tab : { ...tab, branch })), active: this.snapshot.active })
   }
 
   /** Show a tab, adding it at the end of the strip when it is not open yet; a tab opened now belongs to the checked-out branch. */
   open(tab: FrameTab): void {
-    const next = !isBase(tab) && tab.branch === undefined && this.branch !== undefined ? { ...tab, branch: this.branch } : tab
+    const next = !onEveryBranch(tab) && tab.branch === undefined && this.branch !== undefined ? { ...tab, branch: this.branch } : tab
     const open = this.snapshot.tabs.some(existing => existing.id === next.id)
     this.set({ tabs: open ? this.snapshot.tabs : [...this.snapshot.tabs, next], active: next.id })
   }
@@ -218,7 +227,7 @@ export class FrameTabs {
   add(...added: readonly FrameTab[]): void {
     const fresh = added
       .filter(tab => !this.snapshot.tabs.some(existing => existing.id === tab.id))
-      .map(tab => (!isBase(tab) && tab.branch === undefined && this.branch !== undefined ? { ...tab, branch: this.branch } : tab))
+      .map(tab => (!onEveryBranch(tab) && tab.branch === undefined && this.branch !== undefined ? { ...tab, branch: this.branch } : tab))
     if (fresh.length > 0) this.set({ tabs: [...this.snapshot.tabs, ...fresh], active: this.snapshot.active })
   }
 
