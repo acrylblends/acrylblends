@@ -38,7 +38,9 @@ made earlier and has not saved are not credited to the agent (they are still in 
 which version in `chat-saves.json` in the app's data home (`GET /api/acryl-blends-frame/chat-saves?session=`), so the line is still there after a restart.
 
 The chat the frame mounts needs more of DSH than the frame draws: the agent preset `acryl-blends` (shell, file tools and jobs; the registry's default),
-the host rows it stands on, and the chat view's client rows, with a `sidebarRight` stand-in for the chat's links. They are in `packages/cli/src/ide-profile.ts`.
+the host rows it stands on, and the chat view's client rows. They are in `packages/cli/src/ide-profile.ts`. DSH's right sidebar (`ui-sidebar-right`) is
+drawn inside the right panel as its Panel tab: when DSH opens a page there (a plan, the review of a turn's changed files) the tab opens, and closing the
+tab collapses the sidebar.
 
 ## Chats belong to a branch
 

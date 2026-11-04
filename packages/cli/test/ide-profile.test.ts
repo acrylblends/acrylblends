@@ -85,9 +85,11 @@ test('the driver rows carry no DSH web surface: our node server and page serve t
   assert.doesNotMatch(ideProfilePlan(input).overlay, /- id: webserver/u)
 })
 
-test("the frame draws both side panels, so DSH's sidebars are not mounted, and the chat starts dark like the frame", () => {
+test("the frame draws the left panel, so DSH's left sidebar is not mounted, its right sidebar is, and the chat starts dark like the frame", () => {
   const ids = CLIENT_ROWS.map((row) => row.id)
-  assert.ok(!ids.includes('ui-sidebar') && !ids.includes('ui-sidebar-right'))
+  assert.ok(!ids.includes('ui-sidebar'))
+  for (const id of ['ui-sidebar-right', 'ui-plan', 'ui-deliverables'])
+    assert.ok(ids.indexOf(id) > -1 && (id === 'ui-sidebar-right' || ids.indexOf(id) > ids.indexOf('ui-sidebar-right')), `${id} is mounted after the right sidebar`)
   assert.deepEqual(CLIENT_ROWS.find((row) => row.id === 'ui-theme')?.config, { preference: 'dark' })
 })
 

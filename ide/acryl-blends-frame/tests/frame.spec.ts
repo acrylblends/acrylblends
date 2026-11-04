@@ -12,7 +12,7 @@ import { backText, backToMessage, chatTime, saveBeforeBackMessage, savedLabel, s
 import { displayMatch, fuzzySearch } from '../src/client/fuzzy.ts'
 import { foldersAbove } from '../src/client/FilesView.tsx'
 import { highlightLine, languageOf } from '../src/client/highlight.ts'
-import { FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, fileTabLabels, parseStoredTabs, ptyTab, tabsForBranch, terminalMeta, terminalTab } from '../src/client/tabs.ts'
+import { DETAILS_TAB, FILES_TAB, FIRST_RUN_TABS, FrameTabs, fileTab, fileTabLabels, parseStoredTabs, ptyTab, tabsForBranch, terminalMeta, terminalTab } from '../src/client/tabs.ts'
 import { FIRST_RUN_VIEW, FrameViewState, parseStoredView, type ViewStorage } from '../src/client/view-state.ts'
 
 describe('parseBranches', () => {
@@ -173,6 +173,23 @@ describe('the right panel tabs', () => {
   it('keeps the branch a remembered tab was opened on', () => {
     const stored = JSON.stringify({ tabs: [{ kind: 'terminal', terminalId: 't1', branch: 'main' }], active: 'terminal:t1', branched: true })
     expect(parseStoredTabs(stored).tabs[1]).toEqual({ kind: 'terminal', id: 'terminal:t1', terminalId: 't1', branch: 'main' })
+  })
+})
+
+describe('the Panel tab of DSH\'s right sidebar', () => {
+  it('is on every branch and is remembered with the strip', () => {
+    const storage = new MemoryStorage()
+    const tabs = new FrameTabs(storage)
+    tabs.setBranch('main')
+    tabs.open(FILES_TAB)
+    tabs.open(DETAILS_TAB)
+    expect(tabs.getSnapshot().active).toBe('details')
+    expect(tabs.getSnapshot().tabs.find(tab => tab.id === 'details')?.branch).toBeUndefined()
+    tabs.setBranch('feature')
+    expect(tabsForBranch(tabs.getSnapshot(), 'feature').map(tab => tab.id)).toEqual(['chat', 'details'])
+    expect(new FrameTabs(storage).getSnapshot()).toMatchObject({ active: 'details' })
+    expect(tabsForBranch(new FrameTabs(storage).getSnapshot(), 'main').map(tab => tab.id)).toEqual(['chat', 'files', 'details'])
+    expect(tabs.close('details')?.kind).toBe('details')
   })
 })
 

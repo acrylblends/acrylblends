@@ -23,7 +23,6 @@ import { FrameStateStore } from './frame-state.ts'
 import { FILES_SEARCH_EVENT } from './FilesView.tsx'
 import { AgentsState, agentsSettingsPlugin, createWorkspaceAgentsApi, settingsSharedPlugin } from 'acryl-workspace/ui'
 import { ShortcutsRow } from './ShortcutsRow.tsx'
-import { createSidebarRightStandIn } from './sidebar-right-stand-in.ts'
 import { createBranchesApi } from './branches.ts'
 import { BranchChatsStore, createBranchChatsApi } from './branch-chats.ts'
 import { createFeedbackApi, feedbackTask } from './feedback.ts'
@@ -42,6 +41,11 @@ import { createFrameTools, installXtermStyles } from './tools.ts'
 import { createSharedVersionsApi } from './versions.ts'
 import { createGitSyncApi, type GitSyncPort } from './git-sync.ts'
 import { FrameViewState, type ViewStorage } from './view-state.ts'
+
+// `sidebarRight` on the context: DSH's right sidebar controller, drawn in the right panel's Panel tab.
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import { watchSidebarOpens } from './sidebar-opens.ts'
+import type { SidebarPort } from './RightPanel.tsx'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -171,11 +175,28 @@ export function apply(ctx: ClientContext): void {
   // The app's own client plugins read the frame's mode from the canvas page: Build keeps their build-time controls out of the canvas, Preview shows
   // what production shows, and a mode change reaches them without a reload.
   ctx.effect(() => installFrameView(canvas, view), 'acryl-blends-frame: the app page view')
-  // DSH's chat view opens the links of an answer through `sidebarRight`; the frame has no DSH right sidebar, so it answers for it (a web link opens in a new tab).
-  ctx.effect(() => {
-    const dispose = ctx.reflect.provide('sidebarRight', createSidebarRightStandIn(url => { window.open(url, '_blank', 'noopener,noreferrer') }))
-    return () => { void dispose() }
-  }, 'acryl-blends-frame: the right sidebar stand-in')
+  // DSH's right sidebar (`dsh-client-ui-sidebar-right`) is drawn inside the right panel's Panel tab: each page opened in it brings the tab forward, and
+  // closing the tab collapses the sidebar, which DSH's controller owns. Until the sidebar is mounted there is nothing to collapse.
+  let sidebarRight: Pick<ClientContext['sidebarRight'], 'isExpanded' | 'toggleExpanded'> | undefined
+  const sidebarOpens = new Set<() => void>()
+  ctx.inject(['sidebarRight'], (child) => {
+    child.effect(() => {
+      sidebarRight = child.sidebarRight
+      const stop = watchSidebarOpens(child.sidebarRight, () => { for (const listener of sidebarOpens) listener() })
+      return () => {
+        stop()
+        sidebarRight = undefined
+      }
+    }, 'acryl-blends-frame: the right sidebar')
+  })
+  const sidebar: SidebarPort = {
+    close: () => { if (sidebarRight?.isExpanded() === true) sidebarRight.toggleExpanded() },
+    expand: () => { if (sidebarRight?.isExpanded() === false) sidebarRight.toggleExpanded() },
+    onOpened: (listener) => {
+      sidebarOpens.add(listener)
+      return () => { sidebarOpens.delete(listener) }
+    },
+  }
 
   // The launch token was exchanged for the cookie before this client ran; left in the address bar a reconnect could spend it again.
   ctx.effect(() => {
@@ -410,6 +431,7 @@ export function apply(ctx: ClientContext): void {
     },
     inject: () => ({
       layout,
+      sidebar,
       canvas,
       selection,
       frameState,

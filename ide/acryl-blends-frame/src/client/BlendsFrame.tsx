@@ -5,7 +5,7 @@
  * covers the frame as a dialog.
  */
 
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime } from '@acryl/ui/frame'
 // The `sidebar.settings` seat's type: DSH's Settings shell occupies it, the frame renders it.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -20,13 +20,15 @@ import { LeftPanel, type BranchesPort, type ChatsPort, type FeedbackPort } from 
 import type { BranchChatsPort } from './branch-chats.ts'
 import { savedLabel, type VersionsPort } from './versions.ts'
 import type { GitSyncPort } from './git-sync.ts'
-import { RightPanel } from './RightPanel.tsx'
+import { RightPanel, type SidebarPort } from './RightPanel.tsx'
 import type { FrameTabs } from './tabs.ts'
 import type { SwitchRequests } from './switch-request.ts'
 import type { FrameTools } from './tools.ts'
 
 export interface BlendsFrameInjected {
   readonly layout: DesktopLayoutState
+  /** DSH's right sidebar, drawn in the right panel's Panel tab. */
+  readonly sidebar: SidebarPort
   readonly canvas: AppCanvasState
   readonly selection: SelectionStore
   readonly frameState: FrameStateStore
@@ -47,7 +49,7 @@ export interface BlendsFrameInjected {
   readonly switchRequests: SwitchRequests
 }
 
-export type BlendsFrameProps = PropsRuntime<'root'> & PropsRenderSlots<'main' | 'shell.overlay' | 'sidebar.settings'> & BlendsFrameInjected
+export type BlendsFrameProps = PropsRuntime<'root'> & PropsRenderSlots<'main' | 'rightbar' | 'shell.overlay' | 'sidebar.settings'> & BlendsFrameInjected
 
 function useStore<T>(store: { getSnapshot(): T; subscribe(listener: () => void): () => void }): T {
   const subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store])
@@ -68,11 +70,16 @@ const SelectIcon = () => (
   </svg>
 )
 
-export function BlendsFrame({ layout, canvas, selection, frameState, appReload, view, chats, versions, gitSync, tabs, tools, feedback, branches, branchChats, switchRequests, renderSlot }: BlendsFrameProps) {
+export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, appReload, view, chats, versions, gitSync, tabs, tools, feedback, branches, branchChats, switchRequests, renderSlot }: BlendsFrameProps) {
   const state = useStore(frameState)
   const appError = useStore(appReload).error
   const frameView = useStore(view)
   const activePanelId = useSyncExternalStore(layout.panelInfo.subscribe, () => layout.panelInfo.getSnapshot().activePanelId)
+  // DSH's right sidebar asks the layout to show it (a plan, a changes review); the right panel answers with its Panel tab.
+  const details = useMemo(() => ({
+    subscribe: (listener: () => void) => layout.subscribe(listener),
+    getSnapshot: () => layout.getSnapshot().detailsShown,
+  }), [layout])
   const [versionLabel, setVersionLabel] = useState<string | undefined>(undefined)
   // The select control belongs to the canvas, not to the app: it turns clicks into picks until a click, Escape, or Preview ends it.
   const [picking, setPicking] = useState(false)
@@ -226,6 +233,10 @@ export function BlendsFrame({ layout, canvas, selection, frameState, appReload, 
             branchChats={branchChats}
             switchRequests={switchRequests}
             renderConversation={(): ReactNode => renderSlot('main', {}, { entryKey: 'conversation' })}
+            // The panel is the right sidebar's whole room: its width, a viewport that is not a phone's, and room to show (DSH's own rule needs 300px).
+            renderDetails={(width: number): ReactNode => renderSlot('rightbar', { width, viewportWidth: Math.max(window.innerWidth, 768), canShow: width >= 300 })}
+            details={details}
+            sidebar={sidebar}
           />
         </aside>
       </div>
