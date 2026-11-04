@@ -6,8 +6,8 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { pinnedInstance, withPort } from '../plugins/instance/index.ts'
-import { type App, createApp } from '../src/app.ts'
-import { APP_NAME } from '../src/routes.ts'
+import { type App, type AppOptions, createApp } from '../src/app.ts'
+import { APP_NAME, FRAME_MOUNT_PREFIX } from '../src/routes.ts'
 
 /** Throwaway homes live inside the project (`.acrylblends/` is ignored by git): a sandboxed agent may not write to the system temp folder. */
 const scratch = join(fileURLToPath(new URL('..', import.meta.url)), '.acrylblends', 'test')
@@ -16,9 +16,10 @@ mkdirSync(scratch, { recursive: true })
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 /** Boot the app in a throwaway home on any free port, run the test, always stop it and remove the home. */
-async function withApp(run: (app: App) => Promise<void>) {
+async function withApp(run: (app: App) => Promise<void>, options: AppOptions = {}) {
   const home = await mkdtemp(join(scratch, 'app-test-'))
   const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0), {
+    ...options,
     listen: false,
   })
   try {
@@ -68,27 +69,57 @@ test('answers health checks and 404 for unknown paths', () =>
     await missing.body?.cancel()
   }))
 
-test('the frame row mounts the same routes under /app; the app on its own server keeps its old URLs', () =>
-  withApp(async (app) => {
-    // Standalone (production, `npm start`): the public URLs do not move.
+test('the frame mounts the same app under /app; the app on its own server keeps its old URLs', async () => {
+  // Standalone (production, `npm start`): the public URLs do not move.
+  await withApp(async (app) => {
     for (const path of ['/', '/about', '/health']) {
       const response = await app.root.router.request(path)
       assert.equal(response.status, 200, path)
       await response.body?.cancel()
     }
-    // The frame row requires the frame's router and web adapter; the app's routes mount at the one prefix the app names.
-    const frame = await import('../src/frame.ts')
-    assert.deepEqual([...frame.inject].sort(), ['router', 'routerHttp'])
-    const { FRAME_MOUNT_PREFIX, routes } = await import('../src/routes.ts')
-    routes.apply(app.root, { prefix: FRAME_MOUNT_PREFIX })
-    for (const path of ['', '/about', '/health']) {
-      const response = await app.root.router.request(`${FRAME_MOUNT_PREFIX}${path}`)
-      assert.equal(response.status, 200, path)
-      await response.body?.cancel()
-    }
-    const missing = await app.root.router.request(`${FRAME_MOUNT_PREFIX}/nope`)
-    assert.equal(missing.status, 404)
-    await missing.body?.cancel()
+  })
+  // The frame composes the same blend.yaml rows at the one prefix the app names; src/frame.ts only claims that prefix on the frame's web server.
+  const frame = await import('../src/frame.ts')
+  assert.deepEqual([...frame.inject], ['routerHttp'])
+  await withApp(
+    async (app) => {
+      for (const path of ['', '/about', '/health']) {
+        const response = await app.root.router.request(`${FRAME_MOUNT_PREFIX}${path}`)
+        assert.equal(response.status, 200, path)
+        await response.body?.cancel()
+      }
+      const missing = await app.root.router.request(`${FRAME_MOUNT_PREFIX}/nope`)
+      assert.equal(missing.status, 404)
+      await missing.body?.cancel()
+    },
+    { prefix: FRAME_MOUNT_PREFIX },
+  )
+})
+
+test('a plugin puts its widget on the first screen, and the widget leaves with the plugin', () =>
+  withApp(async (app) => {
+    const page = async () =>
+      (await app.root.router.request('/', { headers: { accept: 'text/html' } })).text()
+    const feature = app.root.plugin({
+      name: 'hello-widget',
+      inject: ['home'],
+      apply(ctx: typeof app.root) {
+        ctx.effect(() =>
+          ctx.home.widget({
+            id: 'hello-widget',
+            title: 'Hello',
+            render: () => '<p id="hello">hi</p>',
+          }),
+        )
+      },
+    })
+    await feature.await()
+    assert.match(
+      await page(),
+      /<section class="widget" data-widget="hello-widget">[\s\S]*<p id="hello">hi<\/p>/,
+    )
+    await feature.dispose()
+    assert.doesNotMatch(await page(), /data-widget="hello-widget"/)
   }))
 
 /** A sandbox may forbid listening on a port (Codex's workspace-write does); the one test that starts the real server is skipped there, and says so. */
@@ -130,7 +161,7 @@ test('the manifest decides what is mounted: a parameter changes the server, an u
   const manifest = readManifest()
   assert.deepEqual(
     manifest.plugins.map((row) => row.id),
-    ['router', 'routes', 'server'],
+    ['router', 'home', 'routes', 'extensions', 'server', 'acryl-door'],
   )
   assert.throws(() => readManifest({ nothing: 1 }), /parameter-override-unknown/)
 })

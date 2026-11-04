@@ -7,8 +7,10 @@ import * as router from '../plugins/acryl-router/src/index.ts'
 import * as state from '../plugins/acryl-state/src/index.ts'
 import { type AppInstance, instance } from '../plugins/instance/index.ts'
 import {
+  appPluginNames,
   blueprintsIn,
   compose,
+  loadAppPlugins,
   loadManifest,
   type ParameterValue,
 } from '../plugins/manifest/index.ts'
@@ -16,7 +18,7 @@ import { doorEnabled } from './door.ts'
 import * as todo from './todo.ts'
 import { FRAME_MOUNT_PREFIX } from './todo.ts'
 
-/** The plugins this app's code provides. `blend.yaml` chooses, orders and configures them. */
+/** The plugins this app's code provides. `blend.yaml` chooses, orders and configures them, and adds the app's own plugins from `plugins/` by name. */
 export const registry = {
   'acryl-router': router,
   'acryl-state': state,
@@ -29,6 +31,8 @@ export const APP_NAME = '__APP_NAME__'
 
 /** The manifest next to this app's source. */
 export const MANIFEST = join(fileURLToPath(new URL('..', import.meta.url)), 'blend.yaml')
+/** The app's plugins: the library copies `registry` imports, and the app's own plugins (a feature each), which `blend.yaml` mounts by their folder name. */
+const PLUGINS_DIR = join(fileURLToPath(new URL('..', import.meta.url)), 'plugins')
 
 /**
  * The app's manifest, resolved. A Blend finds its Blueprint in `blueprints/<id>.yaml`; an app that is itself a Blueprint never looks.
@@ -36,7 +40,7 @@ export const MANIFEST = join(fileURLToPath(new URL('..', import.meta.url)), 'ble
  */
 export function readManifest(values?: Readonly<Record<string, ParameterValue>>) {
   return loadManifest(MANIFEST, {
-    known: Object.keys(registry),
+    known: [...Object.keys(registry), ...appPluginNames(PLUGINS_DIR)],
     getBlueprint: blueprintsIn(join(fileURLToPath(new URL('..', import.meta.url)), 'blueprints')),
     ...(values ? { values } : {}),
   })
@@ -101,15 +105,28 @@ export async function composeInto(
   if (!own) leaveOut.add('acryl-node-server').add('acryl-door')
   if (!doorEnabled()) leaveOut.add('acryl-door')
   const manifest = without(read, ...leaveOut)
-  return compose(ctx, manifest, registry, {
-    // Runtime values the manifest cannot hold: where the list is kept (in the app's home) and, in the frame, the prefix the app answers at.
-    todo: {
-      file: join(chosen.home, 'todo.json'),
-      ...(prefix === undefined ? {} : { prefix }),
+  // The rows that name one of the app's own plugin folders (a feature: plugins/<name>/ and its row) rather than a registry import; each one that runs is imported here.
+  const ownRows = [
+    ...new Set(read.plugins.map((row) => row.use).filter((use) => !Object.hasOwn(registry, use))),
+  ]
+  const ownPlugins = await loadAppPlugins(
+    PLUGINS_DIR,
+    ownRows.filter((use) => manifest.plugins.some((row) => row.use === use && !row.disabled)),
+  )
+  return compose(
+    ctx,
+    manifest,
+    { ...registry, ...ownPlugins },
+    {
+      // Runtime values the manifest cannot hold: where the list is kept (in the app's home) and, in the frame, the prefix the app answers at.
+      todo: {
+        file: join(chosen.home, 'todo.json'),
+        ...(prefix === undefined ? {} : { prefix }),
+      },
+      // Only the app's own server listens; the frame host owns the server and its port.
+      ...(own ? { server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 } } : {}),
     },
-    // Only the app's own server listens; the frame host owns the server and its port.
-    ...(own ? { server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 } } : {}),
-  })
+  )
 }
 
 /** The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. */
