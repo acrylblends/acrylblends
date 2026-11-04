@@ -300,7 +300,7 @@ export class Door {
 
   private async plugin(run: (extensions: ExtensionsPort) => unknown, mutates = true): Promise<VerbAnswer> {
     const extensions = this.deps.extensions()
-    if (extensions === undefined) throw new DoorError('unavailable', 'this app has no extensions plugin, so plugins cannot be installed while it runs')
+    if (extensions === undefined) throw new DoorError('unavailable', 'this door has no extensions plugin to drive. In ACRYL\'s frame none is needed: a saved change in src/ or plugins/ reloads the app by itself, so do not restart it. Elsewhere, the app has no way to install plugins while it runs')
     const value = await run(extensions)
     // The app changed under the open pages: reload them (not when the plugin was already as it should be), and answer once they are back.
     const unchanged = typeof value === 'object' && value !== null && (value as { action?: unknown }).action === 'unchanged'

@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   COMMAND_GRACE_MS,
   FINISH_LIMIT_MS,
+  HOST_REFUSAL,
   PREPARE_LIMIT_MS,
   STOP_WAIT_MS,
   TOOL_CALL_STALLED,
   commandLimitMs,
   guardToolCalls,
+  stopsHost,
   type GuardedExecution,
   type StalledResult,
   type ToolCallEvents,
@@ -38,6 +40,37 @@ const exec = (args: unknown = { command: 'npm test', timeoutMs: 240_000 }, name 
 }
 const never = <T>(): Promise<T> => new Promise<T>(() => {})
 const textOf = (result: unknown): string => (result as StalledResult).content[0].text
+
+describe('an agent stopping the Host', () => {
+  const host = { hostPid: 96684, hostPort: 3730 }
+  const bash = (command: string) => ({ name: 'bash', arguments: { command } })
+
+  it('sees a kill of its id, its port or its script', () => {
+    expect(stopsHost(bash('kill 96684; sleep 1; lsof -nP -iTCP:3730'), host)).toBe(true)
+    expect(stopsHost(bash('lsof -ti :3730 | xargs kill -9'), host)).toBe(true)
+    expect(stopsHost(bash('pkill -f ide-host'), host)).toBe(true)
+    expect(stopsHost({ name: 'bash', arguments: '{"command":"kill -9 96684"}' }, host)).toBe(true)
+  })
+
+  it('leaves other commands alone, a kill of something else among them', () => {
+    expect(stopsHost(bash('lsof -nP -iTCP:3730 -sTCP:LISTEN'), host)).toBe(false)
+    expect(stopsHost(bash('kill 1234'), host)).toBe(false)
+    expect(stopsHost(bash('kill 966840'), host)).toBe(false)
+    expect(stopsHost({ name: 'read', arguments: { command: 'kill 96684' } }, host)).toBe(false)
+  })
+
+  it('refuses it without asking the gates', async () => {
+    const listeners = new Map<string, Listener>()
+    const events = { on(name: string, listener: Listener) { listeners.set(name, listener); return () => {} } } as unknown as ToolCallEvents
+    const lines: string[] = []
+    guardToolCalls(events, line => { lines.push(line) }, host)
+    let asked = false
+    const decision = await (listeners.get('tools/pre-execute') as unknown as (e: unknown, n: () => Promise<unknown>) => Promise<unknown>)(exec({ command: 'kill 96684' }), async () => { asked = true; return { kind: 'allow' } })
+    expect(decision).toEqual({ kind: 'deny', reason: HOST_REFUSAL })
+    expect(asked).toBe(false)
+    expect(lines).toHaveLength(1)
+  })
+})
 
 describe('the limit on a tool call', () => {
   beforeEach(() => { vi.useFakeTimers() })

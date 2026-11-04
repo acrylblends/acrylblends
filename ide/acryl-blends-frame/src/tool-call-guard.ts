@@ -13,6 +13,9 @@
  * - After the tool ran (`tools/post-execute`, every tool): over the limit, the result is kept as it is.
  *
  * Each firing is reported with the stage and the tool, which is what the next stall needs for its root cause.
+ *
+ * One more thing can end a chat for good: an agent stopping the app's Host, which is the process running it and the frame. A shell command that kills
+ * that process (by its id, its port or its script) is refused with what to do instead. It is a seat belt for an honest mistake, not a sandbox.
  */
 
 export const PREPARE_LIMIT_MS = 120_000
@@ -83,13 +86,31 @@ export function stalledResult(toolName: string, why: 'stuck' | 'stopped', limitM
   }
 }
 
+/** The Host this guard runs in, as a shell command would name it. */
+export interface HostIdentity {
+  readonly hostPid: number
+  readonly hostPort?: number
+}
+
+/** Whether a shell call would stop the Host. A kill alone is fine: agents stop their own test servers. */
+export function stopsHost(exec: Pick<GuardedExecution, 'name' | 'arguments'>, host: HostIdentity): boolean {
+  if (!SHELL_TOOLS.has(exec.name)) return false
+  const { command } = parsed(exec.arguments)
+  if (typeof command !== 'string' || !/\b(?:kill|pkill|killall|Stop-Process|taskkill)\b/u.test(command)) return false
+  const named = host.hostPort === undefined ? String(host.hostPid) : `${String(host.hostPid)}|${String(host.hostPort)}`
+  return new RegExp(`\\b(?:${named})\\b|ide-host`, 'u').test(command)
+}
+
+export const HOST_REFUSAL = 'that command would stop the app\'s Host, the process running this chat and the page beside it, and end them both. It was not run. A saved change in src/ or plugins/ reloads the app by itself; if a change does not show, the reload failed, so read the error and fix it.'
+
 /**
  * Put the guard on the tool calls of every chat.
  * @param events - the plugin's context, as the events it listens on.
  * @param report - hears each firing.
+ * @param host - the Host to protect from a shell command; left out, nothing is refused.
  * @returns the disposer: the listeners and every running limit stop.
  */
-export function guardToolCalls(events: ToolCallEvents, report: (line: string) => void): () => void {
+export function guardToolCalls(events: ToolCallEvents, report: (line: string) => void, host?: HostIdentity): () => void {
   const timers = new Set<ReturnType<typeof setTimeout>>()
   const after = (ms: number, then: () => void): (() => void) => {
     const timer = setTimeout(() => {
@@ -106,6 +127,10 @@ export function guardToolCalls(events: ToolCallEvents, report: (line: string) =>
   const openApprovals = new Map<string, Set<unknown>>()
 
   const stopPre = events.on('tools/pre-execute', async (exec, next) => {
+    if (host !== undefined && stopsHost(exec, host)) {
+      report(`refused a shell command that would stop the Host: ${exec.name}`)
+      return { kind: 'deny', reason: HOST_REFUSAL }
+    }
     const ended = Promise.withResolvers<Decision>()
     const cancel = after(PREPARE_LIMIT_MS, () => {
       report(`tool call stalled before running: ${exec.name}, ${seconds(PREPARE_LIMIT_MS)}`)
