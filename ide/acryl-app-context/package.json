@@ -20,7 +20,11 @@
       "types": "./lib/types/router.d.ts",
       "default": "./lib/router.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./lookup": {
+      "types": "./lib/types/lookup.d.ts",
+      "default": "./lib/lookup.js"
+    }
   },
   "dsh": {
     "bundle": {
@@ -47,10 +51,12 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "acrylblends": "^1.0.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@types/node": "^24.0.0",
     "acryl-router": "workspace:*",
     "acrylblends": "workspace:*",

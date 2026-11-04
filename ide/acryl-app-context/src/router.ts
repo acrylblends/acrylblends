@@ -1,3 +1,5 @@
+import { LOOKUP_TOOL_NAME } from './lookup.ts'
+
 /** The router must stay small: it is in every prompt (ACRYL spec 037 NFR-002). */
 export const ROUTER_TOKEN_BUDGET = 650
 export const ROUTER_SECTION_NAME = 'acryl:plugin-router'
@@ -27,7 +29,7 @@ export function buildRouterText(root: string, manifest: PackManifest): string {
   const topics = manifest.routes.map(route => `${route.when} (${route.docs.map(id => pathOf.get(id)).filter(path => path !== undefined).join(', ')})`)
   return [
     `<${ROUTER_TAG}>`,
-    `This app's builder docs: ${root}. Read them before you build, change, fix or remove anything in the app (a feature, page, widget, route, data, plugin).`,
+    `This app's builder docs: ${root}. Read them before you build, change, fix or remove anything in the app (a feature, page, widget, route, data, plugin); or call ${LOOKUP_TOOL_NAME}(topic).`,
     '- Paths below are under docs/; indexes: docs/README.md, example-plugins/README.md (verified plugins); start with start-here/this-app.md',
     `- When asked about: ${topics.join('; ')}`,
     "- Read .md files completely and the nearest example, follow links before implementing; never guess a plugin's shape or an import path from memory",

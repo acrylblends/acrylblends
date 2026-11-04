@@ -3,7 +3,8 @@
  * to this package's docs and verified examples, the way pi.dev's system prompt routes its agent to its own docs: one prompt section that names the
  * docs index, the topics and the rule, never the docs themselves.
  *
- * Provides: `appContext` ({ root, manifest(), resolveDoc(id) }) and the prompt section `acryl:plugin-router`. Requires: `systemPrompt`.
+ * Provides: `appContext` ({ root, manifest(), resolveDoc(id) }), the prompt section `acryl:plugin-router`, and the `acryl_plugin_lookup` tool while
+ * the `tools` registry is up (the topic's docs and examples, ranked; ACRYL's lookup). Requires: `systemPrompt`.
  * `appInstance` is read when present: the paths the agent reads are given relative to the app folder when the pack is installed in it.
  * `ACRYL_PLUGIN_DOCS=off` leaves the section out (an evaluation switch, as in ACRYL: the same task with and without the docs).
  */
@@ -11,6 +12,8 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
+import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
+import { LOOKUP_TOOL_NAME, type LookupManifest, lookupAppDocs } from './lookup.ts'
 import { buildRouterText, type PackManifest, ROUTER_SECTION_NAME, ROUTER_SECTION_ORDER } from './router.ts'
 
 export const name = 'acryl-app-context'
@@ -50,13 +53,33 @@ interface SystemPrompt {
 
 export function apply(ctx: Context): void {
   const root = packRoot()
-  const manifest = JSON.parse(readFileSync(join(root, 'docs', 'docs.json'), 'utf8')) as PackManifest
+  const manifest = JSON.parse(readFileSync(join(root, 'docs', 'docs.json'), 'utf8')) as PackManifest & LookupManifest
   const appRoot = (ctx.get('appInstance') as { readonly root?: string } | undefined)?.root
   const systemPrompt = (ctx as unknown as { systemPrompt: SystemPrompt }).systemPrompt
   // Static for the process lifetime: part of the cacheable prompt prefix.
-  const text = buildRouterText(readablePackRoot(root, appRoot), manifest)
+  const readable = readablePackRoot(root, appRoot)
+  const text = buildRouterText(readable, manifest)
   if (process.env.ACRYL_PLUGIN_DOCS !== 'off')
     ctx.effect(() => systemPrompt.section({ name: ROUTER_SECTION_NAME, order: ROUTER_SECTION_ORDER, text }), 'app-context: prompt router')
+  // The lookup answers in the paths the agent reads (the pack inside the app when it is installed there), like the prompt section.
+  ctx.inject(['tools'], scoped => {
+    ;(scoped as unknown as { tools: { register(tool: ToolDefinition): unknown } }).tools.register(
+      defineTool({
+        name: LOOKUP_TOOL_NAME,
+        description:
+          "Find this app's builder docs and verified example plugins for a topic (for example \"widget on the first screen\", \"keep data after a restart\", \"a page of its own\"). Returns the paths to read; it only routes, the docs are the authority.",
+        parameters: {
+          topic: { type: 'string', required: true, description: 'What you want to build or change, in a few words.' },
+        },
+        output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+        async execute(args) {
+          const result = lookupAppDocs(String(args.topic ?? ''), manifest, readable)
+          if (!result.ok) throw new Error(result.error)
+          return JSON.stringify(result)
+        },
+      }),
+    )
+  })
   ctx.provide('appContext', {
     root,
     manifest: () => manifest,
