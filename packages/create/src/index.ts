@@ -420,7 +420,7 @@ async function createFromSource(
       )
     }
     io.stdout.write(
-      `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}  see the template's README or package.json scripts\n`,
+      `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}  ${existsSync(join(target, 'README.md')) ? 'see README.md or the package.json scripts' : 'see the package.json scripts'}\n`,
     )
     return 0
   } catch (error) {
