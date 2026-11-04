@@ -184,3 +184,9 @@ export function watchFolder(dir: string, onChange: () => void, options: { readon
     watcher.close()
   }
 }
+
+/** {@link watchFolder} over several folders, one debounce per folder: a burst across two folders reloads once, as a reload already running takes the next one in. */
+export function watchFolders(dirs: readonly string[], onChange: () => void, options: { readonly debounceMs?: number; readonly report?: (cause: unknown) => void } = {}): () => void {
+  const stops = dirs.map(dir => watchFolder(dir, onChange, options))
+  return () => { for (const stop of stops) stop() }
+}
