@@ -18,7 +18,7 @@ import { streamSSE } from '../acryl-router/src/helpers/index.ts'
 import { Acryl } from '../acryl-router/src/index.ts'
 import type { TerminalDriver, TerminalSession } from '../agent-panel/drivers.ts'
 import { onPath } from '../agent-panel/headless.ts'
-import { mountedPrefix } from '../agent-panel/mount.ts'
+import { mountedBase, mountedPrefix } from '../agent-panel/mount.ts'
 import type {} from '../agent-panel/registry.ts'
 import { loadNodePty, type PtySpawn, resolveProgram } from './spawn.ts'
 import { terminalDriver } from './terminal.ts'
@@ -70,6 +70,8 @@ interface Live {
 export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise<void> {
   if (process.env.NODE_ENV === 'production' || process.env.ACRYL_DOOR === 'off') return
   const PREFIX = mountedPrefix(config.mount, DRIVER_PATH, 'driver-pty')
+  // The routes mount at the app's own mount and keep the fixed driver path inside (the frame's router prefixes the mount, not the routes).
+  const MOUNT = mountedBase(config.mount, 'driver-pty')
   const root = ctx.appInstance.root
   let spawn = config.spawn
   if (!spawn) {
@@ -179,8 +181,8 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
   ctx.effect(() => off)
 
   const app = new Acryl()
-    .route(`${PREFIX}/client`, clientModules({ root: CLIENT_DIR, mount: `${PREFIX}/client` }))
-    .post(`${PREFIX}/sessions`, async (c) => {
+    .route(`${DRIVER_PATH}/client`, clientModules({ root: CLIENT_DIR, mount: `${PREFIX}/client` }))
+    .post(`${DRIVER_PATH}/sessions`, async (c) => {
       if (!ctx.drivers.authorized(c.req.raw.headers)) return refuse(c)
       const body = (await c.req.json().catch(() => ({}))) as {
         driver?: unknown
@@ -205,7 +207,7 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
       live = session
       return c.json({ id: live.id })
     })
-    .get(`${PREFIX}/:id/output`, (c) => {
+    .get(`${DRIVER_PATH}/:id/output`, (c) => {
       if (!ctx.drivers.authorized(c.req.raw.headers)) return refuse(c)
       const current = find(c.req.param('id'))
       if (!current) return c.json({ error: 'no such terminal' }, 404)
@@ -241,7 +243,7 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
         })
       })
     })
-    .post(`${PREFIX}/:id/input`, async (c) => {
+    .post(`${DRIVER_PATH}/:id/input`, async (c) => {
       if (!ctx.drivers.authorized(c.req.raw.headers)) return refuse(c)
       const current = find(c.req.param('id'))
       if (!current || current.exit) return c.json({ error: 'no such terminal' }, 404)
@@ -251,7 +253,7 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
       current.session.write(data)
       return c.json({ ok: true })
     })
-    .post(`${PREFIX}/:id/resize`, async (c) => {
+    .post(`${DRIVER_PATH}/:id/resize`, async (c) => {
       if (!ctx.drivers.authorized(c.req.raw.headers)) return refuse(c)
       const current = find(c.req.param('id'))
       if (!current || current.exit) return c.json({ error: 'no such terminal' }, 404)
@@ -264,12 +266,12 @@ export async function apply(ctx: Context, config: DriverPtyConfig = {}): Promise
       current.session.resize(cols, rows)
       return c.json({ ok: true })
     })
-    .post(`${PREFIX}/:id/stop`, async (c) => {
+    .post(`${DRIVER_PATH}/:id/stop`, async (c) => {
       if (!ctx.drivers.authorized(c.req.raw.headers)) return refuse(c)
       const current = find(c.req.param('id'))
       if (!current) return c.json({ error: 'no such terminal' }, 404)
       await current.dispose()
       return c.json({ ok: true })
     })
-  ctx.router.route('/', app)
+  ctx.router.route(MOUNT === '' ? '/' : MOUNT, app)
 }
