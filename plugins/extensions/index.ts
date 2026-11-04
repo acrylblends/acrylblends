@@ -88,6 +88,11 @@ export interface ExtensionsConfig {
    * production, until taken off the list. Their folders stay as they are.
    */
   off?: readonly string[]
+  /**
+   * Plugins of the sources that `blend.yaml` mounts as rows of their own (the app composes them in its row order, with their row's config): they
+   * are not extensions, so they are neither found nor started here, and installing one is refused with that reason.
+   */
+  rows?: readonly string[]
 }
 
 const READ_ONLY =
@@ -233,6 +238,7 @@ export class Extensions extends Service {
   private disposed = false
   private readonly readOnly: boolean
   private readonly off: ReadonlySet<string>
+  private readonly rows: ReadonlySet<string>
   private readonly say: (line: string) => void
   /**
    * The context the service was constructed with. Inside a service method `this.ctx` is Cordis's shadow context, which resolves services as the
@@ -245,6 +251,7 @@ export class Extensions extends Service {
     this.owner = ctx
     this.readOnly = config.readOnly === true
     this.off = new Set(config.off ?? [])
+    this.rows = new Set(config.rows ?? [])
     this.say = config.log ?? ((line) => console.log(line))
     const { home, root } = ctx.appInstance
     this.sources = (config.sources ?? [{ dir: join(home, 'extensions'), trust: 'install' }]).map(
@@ -426,6 +433,7 @@ export class Extensions extends Service {
           NAME.test(entry.name) &&
           !library.has(entry.name) &&
           !this.off.has(entry.name) &&
+          !this.rows.has(entry.name) &&
           ENTRIES.some((file) => existsSync(join(dir, file)))
         ) {
           if (!found.some((other) => other.name === entry.name))
@@ -450,6 +458,10 @@ export class Extensions extends Service {
     if (!NAME.test(name))
       errors.push(
         `the folder name "${name}" must be lowercase letters, digits and dashes; it is the extension's name`,
+      )
+    if (this.rows.has(name))
+      errors.push(
+        `"${name}" is a row of blend.yaml, so the app starts it, in its row order and with its row's config; it is not installed here. Change its folder and the running app loads it again (npm run dev); npm test checks it`,
       )
     if (!existsSync(dir) || !statSync(dir).isDirectory()) errors.push(`"${dir}" is not a folder`)
     else if (!ENTRIES.some((file) => existsSync(join(dir, file))))
@@ -799,6 +811,8 @@ export class Extensions extends Service {
     for (const [name, record] of Object.entries(records)) {
       // Switched off: not started, and dropped from the record; switched on again, its folder is found and installed as new.
       if (this.off.has(name)) continue
+      // Now a row of blend.yaml: the app starts it, and the record of its install is dropped.
+      if (this.rows.has(name)) continue
       try {
         // What was installed before was approved then: an unchanged source starts again without asking.
         this.approved.set(name, record.version)
