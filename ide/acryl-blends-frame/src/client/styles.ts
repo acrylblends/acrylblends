@@ -37,7 +37,14 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsModes button { font-size: 12px; padding: 3px 10px; border: 0; background: transparent; color: var(--bf-dim); cursor: pointer; }
 .acrylBlendsModes button[aria-pressed="true"] { background: var(--bf-accent-dim); color: #fff; }
 
-.acrylBlendsBody { display: grid; grid-template-columns: var(--bf-lw) minmax(0, 1fr) var(--bf-rw); min-height: 0; }
+.acrylBlendsBody { display: grid; grid-template-columns: var(--bf-lw) minmax(0, 1fr) var(--bf-rw); min-height: 0; position: relative; }
+/* The panels' inner border is the resize area (owner, T009): nothing is drawn and there is no tooltip; a resize cursor on a few px over the border is
+   the whole affordance, so grabbing it needs no aim at a line. */
+.acrylBlendsGrip { position: absolute; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 4; }
+.acrylBlendsGripLeft { left: calc(var(--bf-lw) - 3px); }
+.acrylBlendsGripRight { left: calc(100% - var(--bf-rw) - 3px); }
+.acrylBlendsGrip[hidden] { display: none; }
+.acrylBlendsFrame[data-resizing] { cursor: col-resize; user-select: none; }
 .acrylBlendsLeft, .acrylBlendsRight { background: var(--bf-side); min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .acrylBlendsLeft[hidden], .acrylBlendsRight[hidden] { display: none; }
 /* Placed by column, so a hidden panel leaves its (zero-width) track empty instead of letting the app move into it. */

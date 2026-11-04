@@ -5,7 +5,7 @@
  * covers the frame as a dialog.
  */
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime } from '@acryl/ui/frame'
 // The `sidebar.settings` seat's type: DSH's Settings shell occupies it, the frame renders it.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -24,6 +24,7 @@ import { RightPanel, type SidebarPort } from './RightPanel.tsx'
 import type { FrameTabs } from './tabs.ts'
 import type { SwitchRequests } from './switch-request.ts'
 import type { FrameTools } from './tools.ts'
+import { clampPanelWidth, resolvePanelWidths, type PanelSide } from './panel-resize.ts'
 
 export interface BlendsFrameInjected {
   readonly layout: DesktopLayoutState
@@ -56,6 +57,17 @@ function useStore<T>(store: { getSnapshot(): T; subscribe(listener: () => void):
   return useSyncExternalStore(subscribe, () => store.getSnapshot())
 }
 
+/** The frame fills the window; a window resize re-clamps the panels, so a shrunken window still leaves the app its 360px. */
+function useWindowWidth(): number {
+  return useSyncExternalStore(
+    (listener) => {
+      window.addEventListener('resize', listener)
+      return () => { window.removeEventListener('resize', listener) }
+    },
+    () => window.innerWidth,
+  )
+}
+
 const PanelIcon = ({ side }: { side: 'left' | 'right' }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
     <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
@@ -83,6 +95,9 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
   const [versionLabel, setVersionLabel] = useState<string | undefined>(undefined)
   // The select control belongs to the canvas, not to the app: it turns clicks into picks until a click, Escape, or Preview ends it.
   const [picking, setPicking] = useState(false)
+  const windowWidth = useWindowWidth()
+  const frameElement = useRef<HTMLDivElement | null>(null)
+  const bodyElement = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (state.status === 'ready' && state.state.appPage !== undefined && canvas.address() === undefined) {
@@ -118,10 +133,48 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
   const rightOpen = frameView.right && !preview
   // A keyed panel other than the conversation (one DSH or a plugin opens) is a page of its own: it covers the frame until closed.
   const dialogPanel = activePanelId !== null && activePanelId !== 'conversation' ? activePanelId : null
+  // The widths the person gave the panels, clamped to the window as it is now; a closed panel shows 0 and keeps its own width for the reopen.
+  const panelWidths = resolvePanelWidths(
+    { left: frameView.leftWidth, right: frameView.rightWidth },
+    { left: leftOpen, right: rightOpen },
+    windowWidth,
+  )
+  // The inner border is the whole handle (owner, T009): nothing is drawn, no tooltip; the cursor says it. Dragging settles a width, a double-click
+  // puts the default back. The width is written straight to the column while the pointer moves, so the drag follows without a render per event.
+  const startResize = (side: PanelSide) => (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return
+    const body = bodyElement.current
+    const frameNow = frameElement.current
+    if (body === null || frameNow === null) return
+    const grip = event.currentTarget
+    event.preventDefault()
+    grip.setPointerCapture(event.pointerId)
+    const box = body.getBoundingClientRect()
+    const other = side === 'left' ? panelWidths.right : panelWidths.left
+    let width = side === 'left' ? panelWidths.left : panelWidths.right
+    frameNow.dataset.resizing = side
+    const move = (moveEvent: PointerEvent): void => {
+      const want = side === 'left' ? moveEvent.clientX - box.left : box.right - moveEvent.clientX
+      width = clampPanelWidth(want, box.width, other)
+      frameNow.style.setProperty(side === 'left' ? '--bf-lw' : '--bf-rw', `${String(width)}px`)
+    }
+    const end = (): void => {
+      grip.removeEventListener('pointermove', move)
+      grip.removeEventListener('pointerup', end)
+      grip.removeEventListener('pointercancel', end)
+      delete frameNow.dataset.resizing
+      view.setWidth(side, width)
+    }
+    grip.addEventListener('pointermove', move)
+    grip.addEventListener('pointerup', end)
+    grip.addEventListener('pointercancel', end)
+  }
 
   return (
     <div
+      ref={frameElement}
       className="acrylBlendsFrame"
+      style={{ '--bf-lw': `${String(panelWidths.left)}px`, '--bf-rw': `${String(panelWidths.right)}px` } as CSSProperties}
       data-mode={frameView.mode}
       data-left={leftOpen ? 'open' : 'closed'}
       data-right={rightOpen ? 'open' : 'closed'}
@@ -179,7 +232,7 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
           <PanelIcon side="right" />
         </button>
       </header>
-      <div className="acrylBlendsBody">
+      <div className="acrylBlendsBody" ref={bodyElement}>
         <aside className="acrylBlendsLeft" aria-label="Branches and versions" hidden={!leftOpen}>
           {state.status === 'ready' && (
             <LeftPanel
@@ -239,6 +292,25 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
             sidebar={sidebar}
           />
         </aside>
+        {/* The inner borders, as grab areas: invisible, a few px over the border, the resize cursor on hover; double-click restores the default. */}
+        <div
+          className="acrylBlendsGrip acrylBlendsGripLeft"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the left panel"
+          hidden={!leftOpen}
+          onPointerDown={startResize('left')}
+          onDoubleClick={() => { view.resetWidth('left') }}
+        />
+        <div
+          className="acrylBlendsGrip acrylBlendsGripRight"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the right panel"
+          hidden={!rightOpen}
+          onPointerDown={startResize('right')}
+          onDoubleClick={() => { view.resetWidth('right') }}
+        />
       </div>
       {dialogPanel !== null && (
         <div className="acrylBlendsDialogBackdrop" onClick={(event) => { if (event.target === event.currentTarget) layout.selectPanel(null) }}>

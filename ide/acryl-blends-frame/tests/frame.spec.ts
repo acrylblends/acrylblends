@@ -72,20 +72,48 @@ class MemoryStorage implements ViewStorage {
 }
 
 describe('the frame view', () => {
-  it('opens both panels in Build on the first run', () => {
-    expect(new FrameViewState(new MemoryStorage()).getSnapshot()).toEqual({ left: true, right: true, mode: 'build' })
+  it('opens both panels in Build on the first run, at the mockup widths', () => {
+    expect(new FrameViewState(new MemoryStorage()).getSnapshot()).toEqual({ left: true, right: true, mode: 'build', leftWidth: 248, rightWidth: 412 })
   })
 
-  it('remembers the person\'s choice for the next page', () => {
+  it('remembers the person\'s choice and the panel widths for the next page', () => {
     const storage = new MemoryStorage()
     const first = new FrameViewState(storage)
     first.toggleLeft()
     first.setMode('preview')
-    expect(new FrameViewState(storage).getSnapshot()).toEqual({ left: false, right: true, mode: 'preview' })
+    first.setWidth('right', 500)
+    expect(new FrameViewState(storage).getSnapshot()).toEqual({ left: false, right: true, mode: 'preview', leftWidth: 248, rightWidth: 500 })
+  })
+
+  it('keeps a collapsed panel\'s width, so reopening returns it at its own width', () => {
+    const view = new FrameViewState(new MemoryStorage())
+    view.setWidth('left', 320)
+    view.setWidth('right', 460)
+    view.toggleLeft()
+    view.toggleRight()
+    // The widths are the panel's own, not the open state's: closing changes neither, and the next open shows them again.
+    expect(view.getSnapshot()).toMatchObject({ left: false, right: false, leftWidth: 320, rightWidth: 460 })
+    view.toggleLeft()
+    view.toggleRight()
+    expect(view.getSnapshot()).toMatchObject({ left: true, right: true, leftWidth: 320, rightWidth: 460 })
+  })
+
+  it('puts the default width back on a double-click', () => {
+    const view = new FrameViewState(new MemoryStorage())
+    view.setWidth('left', 400)
+    view.setWidth('right', 200)
+    view.resetWidth('left')
+    view.resetWidth('right')
+    expect(view.getSnapshot()).toMatchObject({ leftWidth: 248, rightWidth: 412 })
+  })
+
+  it('a view stored before the panels resized keeps its panels and gets the default widths', () => {
+    expect(parseStoredView('{"left":false,"right":true,"mode":"preview"}')).toEqual({ left: false, right: true, mode: 'preview', leftWidth: 248, rightWidth: 412 })
   })
 
   it('falls back to the first run for a malformed or missing memory', () => {
     expect(parseStoredView('{"left":1}')).toBe(FIRST_RUN_VIEW)
+    expect(parseStoredView('{"left":true,"right":true,"mode":"build","leftWidth":"wide"}')).toEqual({ left: true, right: true, mode: 'build', leftWidth: 248, rightWidth: 412 })
     expect(parseStoredView('not json')).toBe(FIRST_RUN_VIEW)
     expect(parseStoredView(null)).toBe(FIRST_RUN_VIEW)
   })
