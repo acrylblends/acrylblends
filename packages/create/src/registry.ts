@@ -29,17 +29,18 @@ export interface RegistryEntry {
 }
 
 /** The folder of an unpacked registry that holds `index.json`: the root, or its `registry/` folder (the public registry lives in its site's repository). */
-export function registryRoot(unpacked: string): string {
+/** @param label - the registry as the person named it (a folder's path, `github:owner/repo`), for the one line when it has no index. */
+export function registryRoot(unpacked: string, label = 'this registry'): string {
   for (const candidate of [unpacked, join(unpacked, 'registry')])
     if (existsSync(join(candidate, 'index.json'))) return candidate
   throw new SourceError(
-    'this registry has no index.json (it is a folder with index.json and blends/<id>/)',
+    `${label} has no index.json (a registry is a folder with index.json and blends/<id>/, or index.json in its registry/ folder)`,
   )
 }
 
 /** Read the index of an unpacked registry. */
-export function readRegistry(unpacked: string): { root: string; entries: RegistryEntry[] } {
-  const root = registryRoot(unpacked)
+export function readRegistry(unpacked: string, label?: string): { root: string; entries: RegistryEntry[] } {
+  const root = registryRoot(unpacked, label)
   let data: unknown
   try {
     data = JSON.parse(readFileSync(join(root, 'index.json'), 'utf8'))

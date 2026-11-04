@@ -30,6 +30,7 @@ import {
   type Fetchers,
   fetchSource,
   LIFECYCLE,
+  parseRegistrySource,
   parseSource,
   readManifest,
   realFetchers,
@@ -334,7 +335,7 @@ async function createFromSource(
     let entry: RegistryEntry | undefined
     if (REGISTRY_ID.test(options.source!)) {
       // A registry id: read the registry's index, pick the entry (only an app for this runtime), and take its folder as the template.
-      const registrySource = parseSource(options.registry ?? DEFAULT_REGISTRY, io.cwd)
+      const registrySource = parseRegistrySource(options.registry ?? DEFAULT_REGISTRY, io.cwd)
       if (!registrySource)
         throw new UsageError(`unknown registry "${options.registry}" (${SOURCE_FORMS})`)
       await fetchSource(
@@ -343,7 +344,10 @@ async function createFromSource(
         join(scratch, 'download'),
         fetchers,
       )
-      const registry = readRegistry(join(scratch, 'registry'))
+      const registry = readRegistry(
+        join(scratch, 'registry'),
+        registrySource.kind === 'folder' ? registrySource.path : (options.registry ?? DEFAULT_REGISTRY),
+      )
       entry = pickEntry(registry.entries, options.source!)
       await fetchSource(
         { kind: 'folder', path: join(registry.root, entry.path) },

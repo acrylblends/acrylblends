@@ -22,7 +22,7 @@ npm run dev
 
 You need a GitHub account (and `gh auth login` makes the steps below shorter; the website works too). Your app is an `acrylblends` app you made with `npm create acrylblends@latest`.
 
-Every version the frame saves is already a captured snapshot. If you changed the app outside the frame since its last version, run `npm run snapshot capture` in it first, so the entry's `blend.lock.json` matches what you publish.
+Every version the frame saves is a captured snapshot. `make-entry.mjs` checks the app against its `blend.lock.json` and refuses one changed since the last capture, naming what changed: run `npm run snapshot capture` in the app (or Save point in the frame) and try again.
 
 ```sh
 gh repo fork acryldev/workshop-2026-11-20 --clone && cd workshop-2026-11-20

@@ -205,31 +205,63 @@ test('a whole app in the wrong folder is one line, not one per file', () => {
 })
 
 describe('make-entry', () => {
-  test('keeps the app\'s lock true to the entry: the origin takes the new id, version and blend.yaml digest', () => {
+  // The lock is written by the template's own capture (plugins/manifest/snapshot.ts), so these tests also hold make-entry's digests to blends-core's.
+  const fork = () => {
     const registry = mkdtempSync(join(scratch, 'fork-'))
     mkdirSync(join(registry, 'scripts'))
     cpSync(join(repo, 'scripts', 'make-entry.mjs'), join(registry, 'scripts', 'make-entry.mjs'))
+    return registry
+  }
+  const capturedApp = async () => {
     const app = mkdtempSync(join(scratch, 'app-'))
     writeFileSync(join(app, 'package.json'), '{ "name": "board" }\n')
     writeFileSync(
       join(app, 'blend.yaml'),
-      'apiVersion: blends.acryl.dev/v1alpha1\nkind: Blueprint\nmetadata:\n  id: acrylblends.board\n  name: board\n  version: 0.3.0\nspec:\n  rows: []\n',
+      'apiVersion: blends.acryl.dev/v1alpha1\nkind: Blueprint\nmetadata:\n  id: acrylblends.board\n  name: board\n  version: 0.3.0\nspec:\n  runtime: cordis\n  rows:\n    - id: extensions\n      name: extensions\n',
     )
-    const modules = [{ name: 'notes', origin: 'local', digest: 'sha256:abc', source: 'plugins/notes' }]
-    writeFileSync(
-      join(app, 'blend.lock.json'),
-      JSON.stringify({ formatVersion: 3, origin: { id: 'acrylblends.board', kind: 'Blueprint', version: '0.3.0', digest: 'old' }, modules }),
-    )
-    const made = spawnSync(process.execPath, [join(registry, 'scripts', 'make-entry.mjs'), app, 'octo.board'], { encoding: 'utf8' })
+    mkdirSync(join(app, 'plugins', 'notes2', 'lib'), { recursive: true })
+    writeFileSync(join(app, 'plugins', 'notes2', 'index.ts'), "export const name = 'notes2'\nexport function apply() {}\n")
+    writeFileSync(join(app, 'plugins', 'notes2', 'lib', 'store.ts'), 'export const notes = []\n')
+    const { captureApp } = await import(join(repo, '..', 'plugins', 'manifest', 'snapshot.ts'))
+    captureApp(app)
+    return app
+  }
+  const make = (registry, app, id) =>
+    spawnSync(process.execPath, [join(registry, 'scripts', 'make-entry.mjs'), app, id], { encoding: 'utf8' })
+
+  test('keeps the app\'s lock true to the entry: the origin takes the new id, version and blend.yaml digest', async () => {
+    const registry = fork()
+    const app = await capturedApp()
+    const before = JSON.parse(readFileSync(join(app, 'blend.lock.json'), 'utf8'))
+    const made = make(registry, app, 'octo.board')
     assert.equal(made.status, 0, made.stderr)
     const entry = join(registry, 'blends', 'octo.board')
     const lock = JSON.parse(readFileSync(join(entry, 'blend.lock.json'), 'utf8'))
     assert.deepEqual(lock.origin, {
+      ...before.origin,
       id: 'octo.board',
-      kind: 'Blueprint',
       version: '0.1.0',
       digest: createHash('sha256').update(readFileSync(join(entry, 'blend.yaml'))).digest('hex'),
     })
-    assert.deepEqual(lock.modules, modules)
+    assert.deepEqual(lock.modules, before.modules)
+  })
+
+  test('refuses a snapshot changed since the last capture, in one line, and copies nothing', async () => {
+    const registry = fork()
+    const app = await capturedApp()
+    writeFileSync(join(app, 'plugins', 'notes2', 'lib', 'store.ts'), 'export const notes = ["edited"]\n')
+    const plugin = make(registry, app, 'octo.board')
+    assert.equal(plugin.status, 1)
+    assert.equal(
+      plugin.stderr.trim(),
+      'plugins/notes2 changed since the last capture; run npm run snapshot capture (or Save point in the frame) and try again',
+    )
+    assert.equal(existsSync(join(registry, 'blends')), false)
+    const { captureApp } = await import(join(repo, '..', 'plugins', 'manifest', 'snapshot.ts'))
+    captureApp(app)
+    writeFileSync(join(app, 'blend.yaml'), `${readFileSync(join(app, 'blend.yaml'), 'utf8')}# edited\n`)
+    assert.match(make(registry, app, 'octo.board').stderr, /^blend\.yaml changed since the last capture/)
+    captureApp(app)
+    assert.equal(make(registry, app, 'octo.board').status, 0)
   })
 })
