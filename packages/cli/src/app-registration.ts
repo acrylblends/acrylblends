@@ -33,13 +33,17 @@ function registrations(text: string, mounted: readonly Mounted[]): AppRegistrati
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw
     const importMatch = /^import \* as (\w+) from '\.\.\/plugins\/([^/]+)\/([^']+)'$/u.exec(line)
     if (importMatch !== null) {
-      const plugin = mounted.find((candidate) => candidate.name === importMatch[2] && candidate.local === importMatch[1])
+      const plugin = mounted.find(
+        (candidate) => candidate.name === importMatch[2] && candidate.local === importMatch[1],
+      )
       if (plugin !== undefined) found.push({ plugin, kind: 'import', line })
       continue
     }
     const entryMatch = /^ {2}'([^']+)': (\w+),$/u.exec(line)
     if (entryMatch !== null) {
-      const plugin = mounted.find((candidate) => candidate.name === entryMatch[1] && candidate.local === entryMatch[2])
+      const plugin = mounted.find(
+        (candidate) => candidate.name === entryMatch[1] && candidate.local === entryMatch[2],
+      )
       if (plugin !== undefined) found.push({ plugin, kind: 'registry', line })
     }
   }
@@ -53,10 +57,12 @@ export function stripRegistrations(
   mounted: readonly Mounted[] = MOUNTED,
   template?: string,
 ): { readonly text: string; readonly edits: readonly AppRegistration[] } {
-  const inTemplate = new Set((template ?? '').split('\n').map(raw => raw.endsWith('\r') ? raw.slice(0, -1) : raw))
-  const edits = registrations(text, mounted).filter(edit => !inTemplate.has(edit.line))
+  const inTemplate = new Set(
+    (template ?? '').split('\n').map((raw) => (raw.endsWith('\r') ? raw.slice(0, -1) : raw)),
+  )
+  const edits = registrations(text, mounted).filter((edit) => !inTemplate.has(edit.line))
   if (edits.length === 0) return { text, edits }
-  const wanted = new Set(edits.map(edit => edit.line))
+  const wanted = new Set(edits.map((edit) => edit.line))
   const kept = text.split('\n').filter((raw) => {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw
     return !wanted.has(line)
@@ -71,20 +77,30 @@ export function stripRegistrations(
 export function withRegistrations(text: string, edits: readonly AppRegistration[]): string {
   const eol = eolOf(text)
   let next = text
-  const imports = edits.filter(edit => edit.kind === 'import' && !next.split('\n').some(raw => (raw.endsWith('\r') ? raw.slice(0, -1) : raw) === edit.line))
+  const imports = edits.filter(
+    (edit) =>
+      edit.kind === 'import' &&
+      !next.split('\n').some((raw) => (raw.endsWith('\r') ? raw.slice(0, -1) : raw) === edit.line),
+  )
   if (imports.length > 0) {
     const last = [...next.matchAll(/^import .* from '\.\.\/plugins\/[^']+'\r?\n/gmu)].at(-1)
     if (last !== undefined) {
       const at = last.index + last[0].length
-      next = next.slice(0, at) + imports.map(edit => `${edit.line}${eol}`).join('') + next.slice(at)
+      next =
+        next.slice(0, at) + imports.map((edit) => `${edit.line}${eol}`).join('') + next.slice(at)
     }
   }
-  const entries = edits.filter(edit => edit.kind === 'registry' && !next.split('\n').some(raw => (raw.endsWith('\r') ? raw.slice(0, -1) : raw) === edit.line))
+  const entries = edits.filter(
+    (edit) =>
+      edit.kind === 'registry' &&
+      !next.split('\n').some((raw) => (raw.endsWith('\r') ? raw.slice(0, -1) : raw) === edit.line),
+  )
   if (entries.length > 0) {
     const table = /^export const registry = \{(\r?\n)/mu.exec(next)
     if (table !== null) {
       const at = table.index + table[0].length
-      next = next.slice(0, at) + entries.map(edit => `${edit.line}${eol}`).join('') + next.slice(at)
+      next =
+        next.slice(0, at) + entries.map((edit) => `${edit.line}${eol}`).join('') + next.slice(at)
     }
   }
   return next
@@ -109,16 +125,20 @@ export interface ChangedLine {
  * `limit` lines, so a change reads as the lines it is, not as a whole file.
  */
 export function ownerChangeLines(actual: string, expected: string, limit = 5): ChangedLine[] {
-  const lineOf = (raw: string | undefined): string => raw === undefined ? '' : raw.endsWith('\r') ? raw.slice(0, -1) : raw
+  const lineOf = (raw: string | undefined): string =>
+    raw === undefined ? '' : raw.endsWith('\r') ? raw.slice(0, -1) : raw
   const left = actual.split('\n')
   const right = expected.split('\n')
   // One table of the longest common subsequence lengths, then the walk reports the app's lines it cannot match.
-  const lengths: number[][] = Array.from({ length: left.length + 1 }, () => new Array<number>(right.length + 1).fill(0))
+  const lengths: number[][] = Array.from({ length: left.length + 1 }, () =>
+    new Array<number>(right.length + 1).fill(0),
+  )
   for (let i = left.length - 1; i >= 0; i -= 1) {
     for (let j = right.length - 1; j >= 0; j -= 1) {
-      lengths[i]![j] = lineOf(left[i]) === lineOf(right[j])
-        ? (lengths[i + 1]![j + 1] ?? 0) + 1
-        : Math.max(lengths[i + 1]![j] ?? 0, lengths[i]![j + 1] ?? 0)
+      lengths[i]![j] =
+        lineOf(left[i]) === lineOf(right[j])
+          ? (lengths[i + 1]![j + 1] ?? 0) + 1
+          : Math.max(lengths[i + 1]![j] ?? 0, lengths[i]![j + 1] ?? 0)
     }
   }
   const changed: ChangedLine[] = []

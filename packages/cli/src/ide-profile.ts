@@ -288,8 +288,13 @@ export function parseHostClientRows(hostText: string): ClientRow[] | undefined {
   try {
     const parsed: unknown = JSON.parse(match[1])
     if (!Array.isArray(parsed)) return undefined
-    return parsed.filter((row): row is ClientRow => row !== null && typeof row === 'object'
-      && typeof (row as { id?: unknown }).id === 'string' && typeof (row as { name?: unknown }).name === 'string')
+    return parsed.filter(
+      (row): row is ClientRow =>
+        row !== null &&
+        typeof row === 'object' &&
+        typeof (row as { id?: unknown }).id === 'string' &&
+        typeof (row as { name?: unknown }).name === 'string',
+    )
   } catch {
     return undefined
   }
@@ -303,19 +308,22 @@ export function parseHostClientRows(hostText: string): ClientRow[] | undefined {
  * @param appHost - the app's existing host script, when it has one.
  * @returns the text to write and the row names it added.
  */
-export function mergeHostClientRows(currentHost: string, appHost: string | undefined): { readonly text: string; readonly added: readonly string[] } {
+export function mergeHostClientRows(
+  currentHost: string,
+  appHost: string | undefined,
+): { readonly text: string; readonly added: readonly string[] } {
   if (appHost === undefined) return { text: currentHost, added: [] }
   const current = parseHostClientRows(currentHost)
   const app = parseHostClientRows(appHost)
   if (current === undefined || app === undefined) return { text: currentHost, added: [] }
-  const names = new Set(app.map(row => row.name))
-  const missing = current.filter(row => !names.has(row.name))
+  const names = new Set(app.map((row) => row.name))
+  const missing = current.filter((row) => !names.has(row.name))
   const block = CLIENT_ROWS_BLOCK.exec(currentHost)
   if (block === null) return { text: currentHost, added: [] }
   const merged = [...app, ...missing]
   return {
     text: currentHost.replace(block[0], `const clientRows = ${JSON.stringify(merged, null, 2)}`),
-    added: missing.map(row => row.name),
+    added: missing.map((row) => row.name),
   }
 }
 
@@ -623,7 +631,15 @@ function overlayOf(
     '      name: ./app/runtime.mjs',
     // The frame's index is not the app: the door drives the app's page in the canvas, never the frame around it (an agent's navigate would leave the frame).
     // The canvas prefix goes with it: `act navigate --path /board` reaches the app's /board at the canvas prefix, the same path it has on its own server.
-    ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts', '      config:', '        hostIndex: false', `        appBase: ${FRAME_PAGE_PREFIX}`] : []),
+    ...(door
+      ? [
+          '    - id: acryl-door',
+          '      name: ./plugins/acryl-door/src/index.ts',
+          '      config:',
+          '        hostIndex: false',
+          `        appBase: ${FRAME_PAGE_PREFIX}`,
+        ]
+      : []),
     ...appRows.flatMap((row) => [
       `    - id: ${row.id}`,
       `      name: ${row.name}`,

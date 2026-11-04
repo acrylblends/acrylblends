@@ -20,7 +20,13 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { Acryl } from '../acryl-router/src/index.ts'
 import type {} from '../instance/index.ts'
-import { type FeedbackNote, FeedbackStore, LIMITS, parseNewNote, type StoredScreenshot } from './store.ts'
+import {
+  type FeedbackNote,
+  FeedbackStore,
+  LIMITS,
+  parseNewNote,
+  type StoredScreenshot,
+} from './store.ts'
 
 export type { FeedbackNote, FeedbackPin, PinnedElement } from './store.ts'
 

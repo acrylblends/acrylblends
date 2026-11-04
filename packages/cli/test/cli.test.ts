@@ -143,7 +143,9 @@ describe('a coding agent in a generated app', () => {
       expect(readFileSync(join(dir, '.agents/skills/acryl-app/SKILL.md'), 'utf8')).toBe(appSkill)
       expect(appSkill).toContain(`Working in app-${template}`)
       const pluginSkill = readFileSync(join(dir, '.claude/skills/cordis-plugin/SKILL.md'), 'utf8')
-      expect(readFileSync(join(dir, '.agents/skills/cordis-plugin/SKILL.md'), 'utf8')).toBe(pluginSkill)
+      expect(readFileSync(join(dir, '.agents/skills/cordis-plugin/SKILL.md'), 'utf8')).toBe(
+        pluginSkill,
+      )
       expect(pluginSkill).toContain('Adding a Cordis plugin')
       // One plugin folder: the generated text and both skills name no second one except to forbid it.
       for (const text of [agents, appSkill, pluginSkill])

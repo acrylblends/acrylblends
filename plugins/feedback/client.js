@@ -111,7 +111,10 @@ export function frameViewOf(win) {
 /** The size a screenshot is stored at: the whole view, downscaled to `maxSide`. */
 export function shotSize(width, height, maxSide = 1280) {
   const scale = Math.min(1, maxSide / Math.max(width, height))
-  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) }
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  }
 }
 
 /** A screenshot is re-encoded below this size; the Host refuses more than 512 KB decoded. */
@@ -176,13 +179,22 @@ function start(prefix) {
   }
   const readPins = async () => {
     try {
-      const response = await fetch(`${prefix}/pins?page=${encodeURIComponent(location.pathname + location.search)}`, {
-        headers: { Accept: 'application/json' },
-      })
+      const response = await fetch(
+        `${prefix}/pins?page=${encodeURIComponent(location.pathname + location.search)}`,
+        {
+          headers: { Accept: 'application/json' },
+        },
+      )
       if (!response.ok) return
       const body = await response.json()
       pins = Array.isArray(body?.pins)
-        ? body.pins.filter((pin) => pin !== null && typeof pin === 'object' && typeof pin.selector === 'string' && Number.isInteger(pin.number))
+        ? body.pins.filter(
+            (pin) =>
+              pin !== null &&
+              typeof pin === 'object' &&
+              typeof pin.selector === 'string' &&
+              Number.isInteger(pin.number),
+          )
         : []
       placePins()
     } catch {
@@ -198,14 +210,19 @@ function start(prefix) {
 
   /** @type {{ open: boolean, picking: boolean, picked: Element | null, choice: 'element' | 'page' }} */
   const state = { open: false, picking: false, picked: null, choice: 'element', attach: true }
-  const canShot = canCaptureTab(navigator.userAgent, typeof navigator.mediaDevices?.getDisplayMedia === 'function')
+  const canShot = canCaptureTab(
+    navigator.userAgent,
+    typeof navigator.mediaDevices?.getDisplayMedia === 'function',
+  )
   const shotRow = root.querySelector('.shotRow')
   const shotBox = root.querySelector('.shotBox')
   if (!canShot) {
     shotRow.hidden = true
     state.attach = false
   }
-  shotBox.addEventListener('change', () => { state.attach = shotBox.checked })
+  shotBox.addEventListener('change', () => {
+    state.attach = shotBox.checked
+  })
 
   const place = (element, label) => {
     if (!element) {
@@ -299,7 +316,10 @@ function start(prefix) {
       video.srcObject = stream
       video.muted = true
       await video.play()
-      if (video.readyState < 2) await new Promise((resolve) => video.addEventListener('loadeddata', resolve, { once: true }))
+      if (video.readyState < 2)
+        await new Promise((resolve) =>
+          video.addEventListener('loadeddata', resolve, { once: true }),
+        )
       // Hide the form after the picker closed; the outline the picker drew stays on the page and in the picture.
       pop.hidden = true
       button.style.display = 'none'
@@ -330,8 +350,11 @@ function start(prefix) {
         const context = canvas.getContext('2d')
         if (context === null) return undefined
         context.drawImage(video, 0, 0, size.width, size.height)
-        let blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', attempt === 0 ? 0.82 : 0.7))
-        if (blob === null) blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+        let blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, 'image/webp', attempt === 0 ? 0.82 : 0.7),
+        )
+        if (blob === null)
+          blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
         if (blob === null) return undefined
         if (blob.size <= SHOT_MAX_BYTES) {
           const data = await new Promise((resolve, reject) => {
@@ -440,7 +463,9 @@ function start(prefix) {
   window.addEventListener('scroll', reposition, true)
   window.addEventListener('resize', reposition)
   // The builder's Build screen has no user feedback in it, so the pins are read again when the frame's view comes back.
-  window.setInterval(() => { if (host.style.display !== 'none') void readPins() }, 15_000)
+  window.setInterval(() => {
+    if (host.style.display !== 'none') void readPins()
+  }, 15_000)
   window.addEventListener('scroll', placePins, true)
   window.addEventListener('resize', placePins)
 }
