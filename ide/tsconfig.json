@@ -66,8 +66,7 @@
     "**/node_modules/**",
     "**/lib/**",
     "**/tests/fixtures/**",
-    // Host-only, and it imports @deepseek-ai/dsh-tools, whose types bring DSH's server-side `sessions` onto Cordis's Context, which the client
-    // packages here read as the client-side one. It imports no other ide package and type-checks with its own tsconfig (pnpm typecheck:packages).
+    // Workaround, to be fixed with a types-only import path: dsh-tools' Context augmentation (server-side `sessions`) leaks into the client packages.
     "acryl-app-context/**"
   ]
 }
