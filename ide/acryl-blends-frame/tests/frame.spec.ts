@@ -188,8 +188,38 @@ describe('the right panel tabs', () => {
     expect(tabs.getSnapshot().active).toBe('pty:t1')
     tabs.close('pty:t1')
     expect(tabs.getSnapshot().active).toBe('chat')
-    expect(tabs.close('chat')).toBeUndefined()
     expect(new FrameTabs(storage).getSnapshot()).toEqual({ tabs: [{ kind: 'chat', id: 'chat' }, FILES_TAB], active: 'chat' })
+  })
+
+  it('closes the base chat tab like the others, keeps it closed across a reload, and reopens it when a chat is shown again', () => {
+    const storage = new MemoryStorage()
+    const tabs = new FrameTabs(storage)
+    tabs.setBranch('main')
+    tabs.open(FILES_TAB)
+    // The base tab's x: the tab leaves the strip and the active one is the tab it drew before.
+    expect(tabs.close('chat')?.id).toBe('chat')
+    expect(tabs.getSnapshot()).toMatchObject({ baseClosed: true, active: 'files' })
+    expect(tabsForBranch(tabs.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['files'])
+    // A page that loads the strip again keeps it closed.
+    const again = new FrameTabs(storage)
+    expect(again.getSnapshot()).toMatchObject({ baseClosed: true, active: 'files' })
+    expect(tabsForBranch(again.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['files'])
+    // Asking for a chat brings the base tab back.
+    again.activate('chat')
+    expect(again.getSnapshot().baseClosed).toBeUndefined()
+    expect(again.getSnapshot().active).toBe('chat')
+    expect(tabsForBranch(again.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['chat', 'files'])
+  })
+
+  it('leaves no tab on screen when the base chat was the last one, and activating it brings it back', () => {
+    const tabs = new FrameTabs(new MemoryStorage())
+    expect(tabs.close('chat')?.id).toBe('chat')
+    expect(tabs.getSnapshot().active).toBe('')
+    expect(tabsForBranch(tabs.getSnapshot(), undefined)).toEqual([])
+    expect(tabs.close('chat')).toBeUndefined()
+    tabs.activate('chat')
+    expect(tabs.getSnapshot()).toMatchObject({ active: 'chat' })
+    expect(tabs.getSnapshot().baseClosed).toBeUndefined()
   })
 
   it('drops what it cannot read back', () => {

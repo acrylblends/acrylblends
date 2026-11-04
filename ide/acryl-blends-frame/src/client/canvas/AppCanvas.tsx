@@ -13,19 +13,26 @@ export interface AppCanvasProps {
   readonly onPick?: (element: SelectedElement) => void
   /** Escape left the picker. */
   readonly onCancel?: () => void
+  /** The pick belongs to a page the canvas no longer shows: the frame lets the selection go with it. */
+  readonly onStaleSelection?: () => void
   /** The element the chat has selected: outlined while it is on the page shown. */
   readonly selected?: SelectedElement | undefined
 }
 
-export function AppCanvas({ canvas, picking = false, onPick, onCancel, selected }: AppCanvasProps) {
+/** The page a loaded app document shows; undefined while the frame is still the browser's initial about:blank. */
+export function appPage(doc: { readonly location: { readonly href: string; readonly pathname: string; readonly search: string } }): string | undefined {
+  return doc.location.href === 'about:blank' || doc.location.href === '' ? undefined : doc.location.pathname + doc.location.search
+}
+
+export function AppCanvas({ canvas, picking = false, onPick, onCancel, onStaleSelection, selected }: AppCanvasProps) {
   const snapshot = useSyncExternalStore(
     (listener) => canvas.subscribe(listener),
     () => canvas.getSnapshot(),
   )
   const frame = useRef<HTMLIFrameElement | null>(null)
   // The handlers are read at the event, so a new callback identity never tears the picker down and re-attaches it.
-  const handlers = useRef({ onPick, onCancel })
-  handlers.current = { onPick, onCancel }
+  const handlers = useRef({ onPick, onCancel, onStaleSelection })
+  handlers.current = { onPick, onCancel, onStaleSelection }
   // The service reads the live page through the frame the component rendered. Laid out before paint so `pageWindow` answers as soon as the
   // document it is asked about is the one on screen.
   useLayoutEffect(() => {
@@ -43,11 +50,19 @@ export function AppCanvas({ canvas, picking = false, onPick, onCancel, selected 
       onCancel: () => { handlers.current.onCancel?.() },
     })
   }, [picking, snapshot.address, snapshot.attempt, snapshot.loaded])
-  // The selection stays outlined on the page it was picked on, until it is cleared or the page changes.
+  // The selection stays outlined on the page it was picked on; a page the app navigated to takes the pick with it, chip and all.
   useEffect(() => {
-    if (picking || selected === undefined || snapshot.address === undefined) return undefined
+    if (selected === undefined || snapshot.address === undefined) return undefined
     const doc = frame.current?.contentDocument
-    if (doc === null || doc === undefined || doc.location.pathname + doc.location.search !== selected.page) return undefined
+    if (doc === null || doc === undefined) return undefined
+    const page = appPage(doc)
+    // The frame is still about:blank: the app has not loaded, so nothing is known yet about the page it will show.
+    if (page === undefined) return undefined
+    if (page !== selected.page) {
+      handlers.current.onStaleSelection?.()
+      return undefined
+    }
+    if (picking) return undefined
     return markSelected(doc, selected.selector)
   }, [picking, selected, snapshot.address, snapshot.attempt, snapshot.loaded])
   if (snapshot.address === undefined) return null

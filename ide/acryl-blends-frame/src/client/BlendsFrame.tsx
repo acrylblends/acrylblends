@@ -270,6 +270,8 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
               picking={picking && !preview}
               onPick={pick}
               onCancel={() => { setPicking(false) }}
+              // The app left the page the pick was made on: the chip and the next message's context go with the page.
+              onStaleSelection={() => { selection.clear() }}
               selected={preview ? undefined : selected}
             />
           </div>

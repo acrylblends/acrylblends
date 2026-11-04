@@ -34,6 +34,11 @@ export interface FrameTabsSnapshot {
   readonly tabs: readonly FrameTab[]
   readonly active: string
   /**
+   * The base chat tab's x was pressed: its chat was closed like any chat tab's, and the strip keeps the tab away until a chat is opened again.
+   * Absent means open, the first-run state.
+   */
+  readonly baseClosed?: boolean
+  /**
    * What each terminal says it runs (its title, as a shell sets it: `npm test`), by terminal id. Remembered, so a terminal row still says what ran in it
    * after the page reloads or the Host restarts and the shell that set the title is gone.
    */
@@ -77,10 +82,14 @@ export function fileTabLabels(paths: readonly string[]): ReadonlyMap<string, str
   return labels
 }
 
-/** The tabs the strip shows on a branch: the base chat always, and what was opened on that branch. No branch (outside a repository): every tab. */
+/**
+ * The tabs the strip shows on a branch: the base chat (unless its x closed it), and what was opened on that branch. No branch (outside a repository):
+ * every tab.
+ */
 export function tabsForBranch(snapshot: FrameTabsSnapshot, branch: string | undefined): readonly FrameTab[] {
-  if (branch === undefined) return snapshot.tabs
-  return snapshot.tabs.filter(tab => onEveryBranch(tab) || tab.branch === branch)
+  const tabs = snapshot.baseClosed === true ? snapshot.tabs.filter(tab => !isBase(tab)) : snapshot.tabs
+  if (branch === undefined) return tabs
+  return tabs.filter(tab => onEveryBranch(tab) || tab.branch === branch)
 }
 
 const stamped = (tab: FrameTab, branch: string | undefined): FrameTab => (branch === undefined ? tab : { ...tab, branch })
@@ -154,9 +163,11 @@ export function parseStoredTabs(raw: string | null): FrameTabsSnapshot {
   }
   const active = (value as { active?: unknown }).active
   const titles = keptTitles(parseTitles((value as { titles?: unknown }).titles), tabs)
+  const baseClosed = (value as { baseClosed?: unknown }).baseClosed === true
   return {
     tabs,
     active: typeof active === 'string' && tabs.some(tab => tab.id === active) ? active : 'chat',
+    ...(baseClosed ? { baseClosed: true } : {}),
     ...(titles === undefined ? {} : { titles }),
   }
 }
@@ -220,7 +231,11 @@ export class FrameTabs {
   open(tab: FrameTab): void {
     const next = !onEveryBranch(tab) && tab.branch === undefined && this.branch !== undefined ? { ...tab, branch: this.branch } : tab
     const open = this.snapshot.tabs.some(existing => existing.id === next.id)
-    this.set({ tabs: open ? this.snapshot.tabs : [...this.snapshot.tabs, next], active: next.id })
+    this.set({
+      tabs: open ? this.snapshot.tabs : [...this.snapshot.tabs, next],
+      active: next.id,
+      ...(isBase(next) ? { baseClosed: false } : {}),
+    })
   }
 
   /** Add tabs that are not in the strip yet, at the end, without showing them; a tab added now belongs to the checked-out branch. */
@@ -232,7 +247,9 @@ export class FrameTabs {
   }
 
   activate(id: string): void {
-    if (this.snapshot.tabs.some(tab => tab.id === id)) this.set({ ...this.snapshot, active: id })
+    if (!this.snapshot.tabs.some(tab => tab.id === id)) return
+    // A chat asked for from the left panel or History shows in the base tab when it has no tab of its own: its x is undone.
+    this.set({ ...this.snapshot, active: id, ...(id === CHAT.id ? { baseClosed: false } : {}) })
   }
 
   /** The id of the tab that shows a chat: its own when it has one, else the base chat tab. */
@@ -240,13 +257,28 @@ export class FrameTabs {
     return this.snapshot.tabs.find(tab => tab.kind === 'chat' && tab.session === session)?.id ?? 'chat'
   }
 
-  /** Close a tab (never the base chat); the one before it is shown when it was. @returns the closed tab. */
+  /**
+   * Close a tab; the one before it is shown when it was. The base chat tab closes like any other (its chat is closed by the panel, and the tab
+   * returns when a chat is opened again). @returns the closed tab.
+   */
   close(id: string): FrameTab | undefined {
     const index = this.snapshot.tabs.findIndex(tab => tab.id === id)
     const tab = this.snapshot.tabs[index]
-    if (tab === undefined || isBase(tab)) return undefined
+    if (tab === undefined) return undefined
+    const baseClosed = this.snapshot.baseClosed === true
+    const stays = (candidate: FrameTab | undefined): candidate is FrameTab => candidate !== undefined && !(isBase(candidate) && baseClosed)
+    if (isBase(tab)) {
+      if (baseClosed) return undefined
+      const rest = this.snapshot.tabs.filter(existing => !isBase(existing))
+      const active = this.snapshot.active === tab.id ? (rest[0]?.id ?? '') : this.snapshot.active
+      this.set({ tabs: this.snapshot.tabs, active, baseClosed: true })
+      return tab
+    }
     const tabs = this.snapshot.tabs.filter(existing => existing.id !== id)
-    const active = this.snapshot.active === id ? (tabs[index - 1] ?? tabs[0] ?? CHAT).id : this.snapshot.active
+    // The tab before the closed one, else the one after: never the base chat's hidden tab.
+    const before = this.snapshot.tabs.slice(0, index).reverse().find(stays)
+    const after = this.snapshot.tabs.slice(index + 1).find(stays)
+    const active = this.snapshot.active === id ? (before?.id ?? after?.id ?? '') : this.snapshot.active
     this.set({ tabs, active })
     return tab
   }
@@ -270,10 +302,16 @@ export class FrameTabs {
     // A call that says nothing about titles keeps the ones already there; a closed terminal's title goes with its tab, and the same map comes back
     // when nothing changed, so an unchanged strip stays quiet.
     const titles = keptTitles(next.titles ?? this.snapshot.titles, next.tabs)
-    if (next.active === this.snapshot.active && next.tabs === this.snapshot.tabs && titles === this.snapshot.titles) return
-    this.snapshot = { tabs: next.tabs, active: next.active, ...(titles === undefined ? {} : { titles }) }
+    const baseClosed = next.baseClosed ?? this.snapshot.baseClosed ?? false
+    if (next.active === this.snapshot.active && next.tabs === this.snapshot.tabs && titles === this.snapshot.titles && baseClosed === (this.snapshot.baseClosed === true)) return
+    this.snapshot = {
+      tabs: next.tabs,
+      active: next.active,
+      ...(baseClosed ? { baseClosed: true } : {}),
+      ...(titles === undefined ? {} : { titles }),
+    }
     try {
-      this.storage?.setItem(STORAGE_KEY, JSON.stringify({ tabs: next.tabs, active: next.active, branched: this.branched, ...(titles === undefined ? {} : { titles }) }))
+      this.storage?.setItem(STORAGE_KEY, JSON.stringify({ tabs: next.tabs, active: next.active, branched: this.branched, ...(baseClosed ? { baseClosed: true } : {}), ...(titles === undefined ? {} : { titles }) }))
     } catch {
       // A blocked storage only forgets the strip for the next page.
     }
