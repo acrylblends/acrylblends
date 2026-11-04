@@ -24,6 +24,11 @@ row is in all of them without any export step:
   plugin folder here differs from the snapshot's (somebody's work is never overwritten), and a plugin folder the snapshot does not have stays
   where it is, on the `extensions` row's `off` list. Ask the person before you apply.
 
+In the frame the same verbs are your tools `acryl_snapshot_capture`, `acryl_snapshot_verify` and `acryl_snapshot_apply` (the frame runs the
+app's own `plugins/manifest/snapshot.ts`), and the person has **Capture** next to **Save point** above the versions. Under the versions,
+**Push** and **Pull** send the branch's versions to its remote and bring the remote's new ones in (fast-forward only, never forced): those are
+the person's buttons, not yours.
+
 ## What you do, and what only the person does
 
 - Before anything is shared, the plugin must work: [verify before done](../start-here/verify-before-done.md). Give it a doc comment whose first

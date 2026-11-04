@@ -4,7 +4,8 @@
  * docs index, the topics and the rule, never the docs themselves.
  *
  * Provides: `appContext` ({ root, manifest(), resolveDoc(id) }), the prompt section `acryl:plugin-router`, and the `acryl_plugin_lookup` tool while
- * the `tools` registry is up (the topic's docs and examples, ranked; ACRYL's lookup). Requires: `systemPrompt`.
+ * the `tools` registry is up (the topic's docs and examples, ranked; ACRYL's lookup), and the snapshot tools (capture, verify, apply) while the
+ * frame's `appSnapshot` is up too. Requires: `systemPrompt`.
  * `appInstance` is read when present: the paths the agent reads are given relative to the app folder when the pack is installed in it.
  * `ACRYL_PLUGIN_DOCS=off` leaves the section out (an evaluation switch, as in ACRYL: the same task with and without the docs).
  */
@@ -14,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { LOOKUP_TOOL_NAME, type LookupManifest, lookupAppDocs } from './lookup.ts'
+import { type AppSnapshotTools, snapshotTools } from './snapshot-tools.ts'
 import { buildRouterText, type PackManifest, ROUTER_SECTION_NAME, ROUTER_SECTION_ORDER } from './router.ts'
 
 export const name = 'acryl-app-context'
@@ -79,6 +81,11 @@ export function apply(ctx: Context): void {
         },
       }),
     )
+  })
+  // The snapshot verbs, while the frame provides them: the same service as its left panel's Capture.
+  ctx.inject(['tools', 'appSnapshot'], scoped => {
+    const { tools, appSnapshot } = scoped as unknown as { tools: { register(tool: ToolDefinition): unknown }; appSnapshot: AppSnapshotTools }
+    for (const tool of snapshotTools(appSnapshot)) tools.register(tool)
   })
   ctx.provide('appContext', {
     root,
