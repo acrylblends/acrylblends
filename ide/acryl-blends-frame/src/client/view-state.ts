@@ -102,8 +102,10 @@ export class FrameViewState {
     if (this.view.mode !== mode) this.publish({ ...this.view, mode })
   }
 
-  /** The width a drag settled on; a collapsed panel keeps it for the next time it opens. */
+  /** The width a drag settled on; a collapsed panel keeps it for the next time it opens. A click that settled on the same width writes nothing. */
   setWidth(side: PanelSide, width: number): void {
+    const current = side === 'left' ? this.view.leftWidth : this.view.rightWidth
+    if (current === width) return
     this.publish(side === 'left' ? { ...this.view, leftWidth: width } : { ...this.view, rightWidth: width })
   }
 

@@ -58,14 +58,13 @@ function useStore<T>(store: { getSnapshot(): T; subscribe(listener: () => void):
 }
 
 /** The frame fills the window; a window resize re-clamps the panels, so a shrunken window still leaves the app its 360px. */
+const subscribeWindow = (listener: () => void): (() => void) => {
+  window.addEventListener('resize', listener)
+  return () => { window.removeEventListener('resize', listener) }
+}
+
 function useWindowWidth(): number {
-  return useSyncExternalStore(
-    (listener) => {
-      window.addEventListener('resize', listener)
-      return () => { window.removeEventListener('resize', listener) }
-    },
-    () => window.innerWidth,
-  )
+  return useSyncExternalStore(subscribeWindow, () => window.innerWidth)
 }
 
 const PanelIcon = ({ side }: { side: 'left' | 'right' }) => (
