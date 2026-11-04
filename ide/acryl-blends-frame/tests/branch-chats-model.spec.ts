@@ -478,14 +478,20 @@ describe('chat tabs', () => {
     expect(tabsForBranch(tabs.getSnapshot(), 'feature').map(tab => tab.id)).toEqual(['chat', 'chat:s2'])
   })
 
-  it('never closes the base tab, closes a chat tab, and finds the tab that shows a chat', () => {
+  it('closes the base tab too, finds the tab that shows a chat, and reopens the base when a chat is activated', () => {
     const tabs = new FrameTabs()
     tabs.setBranch('main')
     tabs.open(chatTab('s1'))
     expect(tabs.chatTabId('s1')).toBe('chat:s1')
     expect(tabs.chatTabId('other')).toBe('chat')
+    expect(tabs.close('chat')?.id).toBe('chat')
     expect(tabs.close('chat')).toBeUndefined()
+    expect(tabs.getSnapshot().baseClosed).toBe(true)
     expect(tabs.close('chat:s1')?.id).toBe('chat:s1')
+    // The strip is empty; asking for the chat again brings the base tab back.
+    expect(tabs.getSnapshot().active).toBe('')
+    tabs.activate('chat')
+    expect(tabs.getSnapshot().baseClosed).toBeUndefined()
     expect(tabs.getSnapshot().active).toBe('chat')
   })
 

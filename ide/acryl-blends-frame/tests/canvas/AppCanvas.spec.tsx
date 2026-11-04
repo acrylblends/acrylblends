@@ -7,7 +7,7 @@ import { cleanup, render } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppCanvasState } from '../../src/client/canvas/app-canvas.ts'
-import { AppCanvas } from '../../src/client/canvas/AppCanvas.tsx'
+import { AppCanvas, appPage } from '../../src/client/canvas/AppCanvas.tsx'
 
 afterEach(() => {
   cleanup()
@@ -75,6 +75,12 @@ describe('AppCanvas', () => {
       selector: 'body > div',
       page: app.location.pathname + app.location.search,
     })
+  })
+
+  it('knows the page a loaded app document shows, and nothing before it loads', () => {
+    expect(appPage({ location: { href: 'about:blank', pathname: 'blank', search: '' } })).toBeUndefined()
+    expect(appPage({ location: { href: '', pathname: '', search: '' } })).toBeUndefined()
+    expect(appPage({ location: { href: 'http://127.0.0.1:3730/app/about?tab=1', pathname: '/app/about', search: '?tab=1' } })).toBe('/app/about?tab=1')
   })
 
   it('leaves the app alone when the select control is off', () => {

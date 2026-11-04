@@ -186,21 +186,26 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
   }
 
   const close = (id: string) => {
+    // The base tab's chat is the chat on screen; its x closes it like any chat tab's, and the strip keeps the tab away until a chat opens again.
+    const wasBaseShown = id === 'chat' && tabs.getSnapshot().active === 'chat'
+    const baseChat = wasBaseShown ? rows.find(row => row.current) : undefined
     const closed = tabs.close(id)
-    if (closed?.kind === 'details' && detailsOpen) sidebar.close()
-    if (closed?.kind === 'pty' || closed?.kind === 'terminal') {
+    if (closed === undefined) return
+    if (closed.kind === 'details' && detailsOpen) sidebar.close()
+    if (closed.kind === 'pty' || closed.kind === 'terminal') {
       tools.terminals.release(closed.terminalId)
       void tools.pty.close(closed.terminalId).catch(() => {})
     }
-    // Closing the shown tab may leave the strip on one of another branch's, which it does not draw: the chat is the fallback.
+    // Closing the shown tab may leave the strip on one of another branch's, which it does not draw: the first tab it draws is shown instead.
     const after = tabs.getSnapshot()
-    if (!tabsForBranch(after, branch).some(tab => tab.id === after.active)) tabs.activate('chat')
-    // A chat tab closed closes the chat: it leaves the left panel and waits in History. When it was on screen, the view moves to the chat of the tab now
-    // shown, else to the base tab's chat (or a new one).
-    if (closed?.kind === 'chat' && closed.session !== undefined) {
-      const now = tabs.getSnapshot()
-      const shown = tabsForBranch(now, branch).find(tab => tab.id === now.active)
-      chats.closeChat(closed.session, chatSessions(), shown?.kind === 'chat' ? shown.session : undefined)
+    const visibleAfter = tabsForBranch(after, branch)
+    const afterActive = visibleAfter.find(tab => tab.id === after.active) ?? visibleAfter[0]
+    if (visibleAfter.length > 0 && afterActive !== undefined && afterActive.id !== after.active) tabs.activate(afterActive.id)
+    // A chat tab closed closes the chat: it leaves the left panel and waits in History. When it was on screen, the view moves to the chat of the tab
+    // now shown, else to the base tab's chat (or a new one).
+    if (closed.kind === 'chat') {
+      const session = closed.session ?? (wasBaseShown ? baseChat?.id : undefined)
+      if (session !== undefined) chats.closeChat(session, chatSessions(), afterActive?.kind === 'chat' ? afterActive.session : undefined)
     }
   }
 
@@ -242,7 +247,7 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
       <div className="acrylBlendsTabs" ref={menuRef}>
         <div className="acrylBlendsTabStrip" role="tablist" aria-label="Agents and tools" ref={stripRef} data-scroll={sizing.scroll || undefined}>
           {visible.map(tab => (
-            <div key={tab.id} className="acrylBlendsTabWrap" data-closable={tab.id !== 'chat' || undefined} style={{ maxWidth: `${String(sizing.width)}px` }}>
+            <div key={tab.id} className="acrylBlendsTabWrap" data-closable={true} style={{ maxWidth: `${String(sizing.width)}px` }}>
               <button
                 type="button"
                 role="tab"
@@ -254,9 +259,7 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
               >
                 <TabLabel tab={tab} chatTitle={rows.find(row => tab.kind === 'chat' && row.id === tab.session)?.title ?? NEW_CHAT} fileLabel={tab.kind === 'file' ? fileLabels.get(tab.path) : undefined} showKind={sizing.kind} />
               </button>
-              {tab.id !== 'chat' && (
-                <button type="button" className="acrylBlendsTabClose" aria-label="Close tab" onClick={() => { close(tab.id) }}>×</button>
-              )}
+              <button type="button" className="acrylBlendsTabClose" aria-label="Close tab" onClick={() => { close(tab.id) }}>×</button>
             </div>
           ))}
           <button
@@ -295,6 +298,9 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
           </div>
         )}
       </div>
+      {visible.length === 0 && (
+        <p className="acrylBlendsPanelEmpty" role="status">No tab open. + to open Chat, an agent, a terminal, Files or Git</p>
+      )}
       {notice !== undefined && (
         <p className="acrylBlendsNotice" role="alert">
           {notice}

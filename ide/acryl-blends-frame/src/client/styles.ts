@@ -37,7 +37,14 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsModes button { font-size: 12px; padding: 3px 10px; border: 0; background: transparent; color: var(--bf-dim); cursor: pointer; }
 .acrylBlendsModes button[aria-pressed="true"] { background: var(--bf-accent-dim); color: #fff; }
 
-.acrylBlendsBody { display: grid; grid-template-columns: var(--bf-lw) minmax(0, 1fr) var(--bf-rw); min-height: 0; }
+.acrylBlendsBody { display: grid; grid-template-columns: var(--bf-lw) minmax(0, 1fr) var(--bf-rw); min-height: 0; position: relative; }
+/* The panels' inner border is the resize area (owner, T009): nothing is drawn and there is no tooltip; a resize cursor on a few px over the border is
+   the whole affordance, so grabbing it needs no aim at a line. */
+.acrylBlendsGrip { position: absolute; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 4; }
+.acrylBlendsGripLeft { left: calc(var(--bf-lw) - 3px); }
+.acrylBlendsGripRight { left: calc(100% - var(--bf-rw) - 3px); }
+.acrylBlendsGrip[hidden] { display: none; }
+.acrylBlendsFrame[data-resizing] { cursor: col-resize; user-select: none; }
 .acrylBlendsLeft, .acrylBlendsRight { background: var(--bf-side); min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .acrylBlendsLeft[hidden], .acrylBlendsRight[hidden] { display: none; }
 /* Placed by column, so a hidden panel leaves its (zero-width) track empty instead of letting the app move into it. */
@@ -127,6 +134,8 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsTabWrap .acrylBlendsTabClose { position: absolute; top: 2px; right: 1px; opacity: 0; background: var(--bf-side); }
 .acrylBlendsTabWrap:hover .acrylBlendsTabClose, .acrylBlendsTabClose:focus-visible { opacity: 1; }
 .acrylBlendsTabClose:hover { background: var(--bf-surface-2); color: #fff; }
+/* A panel with its tabs closed keeps its own width and says how to open one (the mockup's panel body, the owner's 2026-11-04 review). */
+.acrylBlendsPanelEmpty { margin: 16px 14px; max-width: 300px; color: var(--bf-dim); font-size: 12px; line-height: 1.5; }
 /* Every open chat has a tab, so the strip can run past the panel: the + stays at its right edge, over a fade, and the tab shown scrolls into view. */
 .acrylBlendsPlus { margin-left: 2px; flex: none; position: sticky; right: 0; background: var(--bf-side); box-shadow: -8px 0 6px 2px var(--bf-side); }
 .acrylBlendsMenu { position: absolute; top: 34px; left: 8px; z-index: 5; width: 230px; background: var(--bf-surface); border: 1px solid #34343a; border-radius: 8px; padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }

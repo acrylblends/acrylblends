@@ -72,20 +72,48 @@ class MemoryStorage implements ViewStorage {
 }
 
 describe('the frame view', () => {
-  it('opens both panels in Build on the first run', () => {
-    expect(new FrameViewState(new MemoryStorage()).getSnapshot()).toEqual({ left: true, right: true, mode: 'build' })
+  it('opens both panels in Build on the first run, at the mockup widths', () => {
+    expect(new FrameViewState(new MemoryStorage()).getSnapshot()).toEqual({ left: true, right: true, mode: 'build', leftWidth: 248, rightWidth: 412 })
   })
 
-  it('remembers the person\'s choice for the next page', () => {
+  it('remembers the person\'s choice and the panel widths for the next page', () => {
     const storage = new MemoryStorage()
     const first = new FrameViewState(storage)
     first.toggleLeft()
     first.setMode('preview')
-    expect(new FrameViewState(storage).getSnapshot()).toEqual({ left: false, right: true, mode: 'preview' })
+    first.setWidth('right', 500)
+    expect(new FrameViewState(storage).getSnapshot()).toEqual({ left: false, right: true, mode: 'preview', leftWidth: 248, rightWidth: 500 })
+  })
+
+  it('keeps a collapsed panel\'s width, so reopening returns it at its own width', () => {
+    const view = new FrameViewState(new MemoryStorage())
+    view.setWidth('left', 320)
+    view.setWidth('right', 460)
+    view.toggleLeft()
+    view.toggleRight()
+    // The widths are the panel's own, not the open state's: closing changes neither, and the next open shows them again.
+    expect(view.getSnapshot()).toMatchObject({ left: false, right: false, leftWidth: 320, rightWidth: 460 })
+    view.toggleLeft()
+    view.toggleRight()
+    expect(view.getSnapshot()).toMatchObject({ left: true, right: true, leftWidth: 320, rightWidth: 460 })
+  })
+
+  it('puts the default width back on a double-click', () => {
+    const view = new FrameViewState(new MemoryStorage())
+    view.setWidth('left', 400)
+    view.setWidth('right', 200)
+    view.resetWidth('left')
+    view.resetWidth('right')
+    expect(view.getSnapshot()).toMatchObject({ leftWidth: 248, rightWidth: 412 })
+  })
+
+  it('a view stored before the panels resized keeps its panels and gets the default widths', () => {
+    expect(parseStoredView('{"left":false,"right":true,"mode":"preview"}')).toEqual({ left: false, right: true, mode: 'preview', leftWidth: 248, rightWidth: 412 })
   })
 
   it('falls back to the first run for a malformed or missing memory', () => {
     expect(parseStoredView('{"left":1}')).toBe(FIRST_RUN_VIEW)
+    expect(parseStoredView('{"left":true,"right":true,"mode":"build","leftWidth":"wide"}')).toEqual({ left: true, right: true, mode: 'build', leftWidth: 248, rightWidth: 412 })
     expect(parseStoredView('not json')).toBe(FIRST_RUN_VIEW)
     expect(parseStoredView(null)).toBe(FIRST_RUN_VIEW)
   })
@@ -160,8 +188,38 @@ describe('the right panel tabs', () => {
     expect(tabs.getSnapshot().active).toBe('pty:t1')
     tabs.close('pty:t1')
     expect(tabs.getSnapshot().active).toBe('chat')
-    expect(tabs.close('chat')).toBeUndefined()
     expect(new FrameTabs(storage).getSnapshot()).toEqual({ tabs: [{ kind: 'chat', id: 'chat' }, FILES_TAB], active: 'chat' })
+  })
+
+  it('closes the base chat tab like the others, keeps it closed across a reload, and reopens it when a chat is shown again', () => {
+    const storage = new MemoryStorage()
+    const tabs = new FrameTabs(storage)
+    tabs.setBranch('main')
+    tabs.open(FILES_TAB)
+    // The base tab's x: the tab leaves the strip and the active one is the tab it drew before.
+    expect(tabs.close('chat')?.id).toBe('chat')
+    expect(tabs.getSnapshot()).toMatchObject({ baseClosed: true, active: 'files' })
+    expect(tabsForBranch(tabs.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['files'])
+    // A page that loads the strip again keeps it closed.
+    const again = new FrameTabs(storage)
+    expect(again.getSnapshot()).toMatchObject({ baseClosed: true, active: 'files' })
+    expect(tabsForBranch(again.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['files'])
+    // Asking for a chat brings the base tab back.
+    again.activate('chat')
+    expect(again.getSnapshot().baseClosed).toBeUndefined()
+    expect(again.getSnapshot().active).toBe('chat')
+    expect(tabsForBranch(again.getSnapshot(), 'main').map(tab => tab.id)).toEqual(['chat', 'files'])
+  })
+
+  it('leaves no tab on screen when the base chat was the last one, and activating it brings it back', () => {
+    const tabs = new FrameTabs(new MemoryStorage())
+    expect(tabs.close('chat')?.id).toBe('chat')
+    expect(tabs.getSnapshot().active).toBe('')
+    expect(tabsForBranch(tabs.getSnapshot(), undefined)).toEqual([])
+    expect(tabs.close('chat')).toBeUndefined()
+    tabs.activate('chat')
+    expect(tabs.getSnapshot()).toMatchObject({ active: 'chat' })
+    expect(tabs.getSnapshot().baseClosed).toBeUndefined()
   })
 
   it('drops what it cannot read back', () => {
