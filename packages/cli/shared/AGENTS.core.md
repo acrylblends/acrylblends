@@ -60,6 +60,7 @@ export function apply(ctx: Context) {
 - Handlers get the request as `c.req`: `c.req.param('id')`, `c.req.query('q')`, `await c.req.json()`, `c.req.raw` for the Web `Request`.
 - A server-sent stream is `streamSSE(c, async (stream) => { await stream.writeSSE({ data: JSON.stringify(x) }) ... })`; call `stream.onAbort(cleanup)`.
 - `npm run dev` restarts the app whenever a file changes.
+- **In ACRYL's chat, the running app is the process that runs you: never stop, kill or restart it.** A saved change in `src/` or `plugins/` reloads the app by itself and the page beside you shows it, and a new folder under `plugins/` is installed by that reload. If a change does not show, the reload failed: read the error line in the frame's bar or `look` again, don't restart. `.acryl/bin/acryl plugin ...` is not available there, and is not needed.
 
 ## Before you say you are done
 

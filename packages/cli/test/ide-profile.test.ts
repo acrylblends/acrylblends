@@ -170,6 +170,33 @@ test("the launcher installs the app's generation hook before DSH or any row of t
   assert.match(hostScript, /throw error/u)
 })
 
+test("the launcher writes every layer's rows as absolute URLs, so a Settings write that re-reads the profile cannot point an app row into the bundle", () => {
+  const { hostScript } = ideProfilePlan(input)
+  // The composition is a profile bundle; DSH re-reads it through the bundle's own package and anchors a relative insert name at the bundle directory
+  // (the rule this mirrors). A relative `./src/frame.ts` then becomes `<app>/.acrylblends/node_modules/acrylblends-frame/src/frame.ts` on the first
+  // Settings write, and the frame's next reload reports "Not reloaded: Cannot find module ...". The launcher anchors each layer at the directory the
+  // layer was written for, so boot, a Settings reconcile and a reload import the same file.
+  assert.match(hostScript, /import \{ dirname, isAbsolute, join, resolve \} from 'node:path'/u)
+  assert.match(hostScript, /function anchorRows\(patches, baseDir\) \{/u)
+  assert.match(hostScript, /row\.name = pathToFileURL\(resolve\(baseDir, row\.name\)\)\.href/u)
+  // The app's overlay and the host's own rows belong to the app folder.
+  assert.match(
+    hostScript,
+    /const frameLayer = anchorRows\(load\(readFileSync\(join\(appRoot, 'cordis\.patch\.yml'\), 'utf8'\)\) \?\? \[\], appRoot\)/u,
+  )
+  assert.match(hostScript, /const hostLayer = anchorRows\(\[\{/u)
+  assert.match(hostScript, /\}\], appRoot\)/u)
+  // The settings document belongs to the app's home, and a DSH bundle's own relative rows belong to that package.
+  assert.match(
+    hostScript,
+    /const settingsLayer = anchorRows\(load\(readFileSync\(settingsPath, 'utf8'\)\) \?\? \[\], home\)/u,
+  )
+  assert.match(
+    hostScript,
+    /return anchorRows\(list\.flatMap\(\(file\) => load\(readFileSync\(join\(dir, file\), 'utf8'\)\) \?\? \[\]\), dir\)/u,
+  )
+})
+
 test('applying twice changes nothing the second time', () => {
   const root = folder()
   const first = applyIdeProfile(root, input)

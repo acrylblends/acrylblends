@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AppReloader, describeError, isNoise, watchFolder, type AppRow } from '../src/app-reload.ts'
+import { AppReloader, describeError, isNoise, watchFolder, watchFolders, type AppRow } from '../src/app-reload.ts'
 import { appRowsOf } from '../src/index.ts'
 import { parseAppReloadView } from '../src/contract.ts'
 
@@ -168,6 +168,25 @@ describe('isNoise', () => {
   it('ignores an editor\'s swap and backup files and hidden paths, and nothing of the code', () => {
     for (const name of ['routes.ts~', '.routes.ts.swp', 'x.tmp', '.git/index', 'board/.DS_Store']) expect(isNoise(name)).toBe(true)
     for (const name of ['routes.ts', 'board/card.tsx', 'page.html']) expect(isNoise(name)).toBe(false)
+  })
+})
+
+describe('watchFolders', () => {
+  it('hears each folder and stops them all', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'watch-folders-'))
+    const src = join(dir, 'src')
+    const plugins = join(dir, 'plugins')
+    mkdirSync(src)
+    mkdirSync(join(plugins, 'board'), { recursive: true })
+    let calls = 0
+    const stop = watchFolders([src, plugins, join(dir, 'missing')], () => { calls += 1 }, { debounceMs: 10 })
+    await new Promise(resolve => setTimeout(resolve, 400))
+    writeFileSync(join(plugins, 'board', 'index.ts'), 'export {}')
+    await vi.waitFor(() => { expect(calls).toBe(1) }, { timeout: 3000 })
+    writeFileSync(join(src, 'routes.ts'), 'export {}')
+    await vi.waitFor(() => { expect(calls).toBe(2) }, { timeout: 3000 })
+    stop()
+    rmSync(dir, { recursive: true, force: true })
   })
 })
 

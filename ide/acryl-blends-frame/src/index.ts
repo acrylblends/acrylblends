@@ -24,9 +24,9 @@ import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
-import { AppReloader, watchFolder, type AppRow } from './app-reload.ts'
+import { AppReloader, watchFolders, type AppRow } from './app-reload.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
-import { guardToolCalls, type ToolCallEvents } from './tool-call-guard.ts'
+import { guardToolCalls, type HostIdentity, type ToolCallEvents } from './tool-call-guard.ts'
 import { installSelectionContext, parseSelectionContext, SelectionInbox, sessionOf } from './selection-context.ts'
 import { branchChatsFile, createBranchChatsStore, type BranchChatsRecord } from './branch-chats.ts'
 import {
@@ -636,6 +636,12 @@ interface SessionEvents {
   on(name: 'session/event', listener: (session: { readonly id: string }, event: SessionEventLike) => void): () => void
 }
 
+/** This Host as a shell command would name it; the instance's port is not part of the service type the frame shares. */
+function hostIdentity(instance: unknown): HostIdentity {
+  const port = (instance as { readonly port?: { readonly start?: unknown } }).port?.start
+  return { hostPid: process.pid, ...(typeof port === 'number' ? { hostPort: port } : {}) }
+}
+
 export function apply(ctx: Context, config: FrameConfig = {}): void {
   const appPage = typeof config.appPage === 'string' && config.appPage.startsWith('/') ? config.appPage : undefined
   // The app's GitHub owner for shares; the signed-in gh account when the app names none.
@@ -735,7 +741,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     // DSH announces every event of every chat session here; `workspace/changes` is the one that says a turn changed files.
     const stopListening = (ctx as unknown as SessionEvents).on('session/event', (session, event) => { autoSave.observe(session.id, event) })
     // No tool call may hold a chat forever (./tool-call-guard.ts).
-    const stopGuard = guardToolCalls(ctx as unknown as ToolCallEvents, line => { ctx.logger.warn(line) })
+    const stopGuard = guardToolCalls(ctx as unknown as ToolCallEvents, line => { ctx.logger.warn(line) }, hostIdentity(ctx.appInstance))
     const realChatList = new RealChats({
       list: async () => (await sessionQueryOf(ctx.get('sessionQuery'))?.listSessions() ?? []).map(record => record.header.id),
       look: async id => lookAtLog((await sessionQueryOf(ctx.get('sessionQuery'))?.readSession(id))?.events ?? []),
@@ -746,7 +752,8 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     // agent in a terminal, an editor. Only where the launcher installed the generation hook (./app-generation.ts); elsewhere the app's code is as it started.
     const generation = appGeneration()
     const appReload = generation === undefined ? undefined : new AppReloader({ generation, rows: () => appRowsOf(ctx.get('loader')), appRoot: realpathSync(root), report })
-    const stopWatching = appReload === undefined ? () => {} : watchFolder(join(root, 'src'), () => { void appReload.reload() }, { report })
+    // The app's code is its src/ and its plugins/: an agent editing a plugin sees it live like a route, with no reason to restart the host.
+    const stopWatching = appReload === undefined ? () => {} : watchFolders([join(root, 'src'), join(root, 'plugins')], () => { void appReload.reload() }, { report })
     /** git's own line as the message a person reads: the runner keeps it as the failure's detail. */
     const gitReason = (cause: unknown, fallback: string): Error => {
       const detail = (cause as { detail?: unknown }).detail
