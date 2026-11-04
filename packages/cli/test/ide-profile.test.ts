@@ -89,7 +89,11 @@ test("the frame draws the left panel, so DSH's left sidebar is not mounted, its 
   const ids = CLIENT_ROWS.map((row) => row.id)
   assert.ok(!ids.includes('ui-sidebar'))
   for (const id of ['ui-sidebar-right', 'ui-plan', 'ui-deliverables'])
-    assert.ok(ids.indexOf(id) > -1 && (id === 'ui-sidebar-right' || ids.indexOf(id) > ids.indexOf('ui-sidebar-right')), `${id} is mounted after the right sidebar`)
+    assert.ok(
+      ids.indexOf(id) > -1 &&
+        (id === 'ui-sidebar-right' || ids.indexOf(id) > ids.indexOf('ui-sidebar-right')),
+      `${id} is mounted after the right sidebar`,
+    )
   assert.deepEqual(CLIENT_ROWS.find((row) => row.id === 'ui-theme')?.config, { preference: 'dark' })
 })
 
