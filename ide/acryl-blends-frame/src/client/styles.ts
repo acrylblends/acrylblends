@@ -48,6 +48,7 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 
 .acrylBlendsPaneHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 6px; }
 .acrylBlendsPaneHead .acrylBlendsSmallButton { flex: none; white-space: nowrap; }
+.acrylBlendsVersionRemote { padding: 12px 6px 2px 12px; }
 .acrylBlendsLabel { color: var(--bf-dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .acrylBlendsList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; padding: 0 6px; }
 .acrylBlendsSmallButton { font-size: 11px; color: #c8c8d0; background: var(--bf-surface-2); border: 1px solid #2f2f35; border-radius: 6px; padding: 2px 8px; cursor: pointer; }

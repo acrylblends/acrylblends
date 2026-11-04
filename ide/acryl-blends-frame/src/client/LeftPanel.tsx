@@ -9,6 +9,9 @@ import { backText, backToMessage, chatTime, saveBeforeBackMessage, shortTime, ve
 import { branchClick, saveBeforeSwitchMessage, type BranchesApi } from './branches.ts'
 import type { BranchChatsPort } from './branch-chats.ts'
 import type { SwitchRequests } from './switch-request.ts'
+import type { GitSyncPort } from './git-sync.ts'
+import { RemoteSync } from './RemoteSync.tsx'
+import { captureText, type SnapshotPort } from './snapshot.ts'
 import { feedbackPlace, type FeedbackApi } from './feedback.ts'
 
 /** A chat on the branch, as the left panel lists it. */
@@ -96,9 +99,13 @@ export interface LeftPanelProps {
   readonly showTab: (id: string) => void
   /** Told the newest version's label ("v7"), for the top bar. */
   readonly onVersionLabel: (label: string | undefined) => void
+  /** The branch's remote: the versions go there and come back (the Git tab's Push and Pull). */
+  readonly gitSync: GitSyncPort
+  /** The app's snapshot verb `capture`: every plugin folder gets its row, and the lock is written. */
+  readonly snapshot: SnapshotPort
 }
 
-export function LeftPanel({ state, chats, versions, tabs, feedback, branches, branchChats, switchRequests, showTab, onVersionLabel }: LeftPanelProps) {
+export function LeftPanel({ state, chats, versions, tabs, feedback, branches, branchChats, switchRequests, showTab, onVersionLabel, gitSync, snapshot }: LeftPanelProps) {
   const subscribe = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const chatRows = useSyncExternalStore(subscribe, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
@@ -114,6 +121,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
   /** The versions also on another branch or the remote, marked "shared". */
   const [shared, setShared] = useState<ReadonlySet<string>>(() => new Set())
   const [saving, setSaving] = useState<string | undefined>(undefined)
+  const [capture, setCapture] = useState<{ readonly busy: true } | { readonly busy: false; readonly message: string; readonly failed: boolean } | undefined>(undefined)
   // The older version a click chose to go back to (asked first), and whether that is running.
   const [askBack, setAskBack] = useState<{ readonly hash: string; readonly number: number; readonly subject: string } | undefined>(undefined)
   const [backing, setBacking] = useState<'saving' | 'going back' | undefined>(undefined)
@@ -217,6 +225,14 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
     } catch (cause) {
       setLoad({ status: 'error', message: cause instanceof Error ? cause.message : 'The save point could not be made.' })
     }
+  }
+
+  const captureApp = (): void => {
+    setCapture({ busy: true })
+    snapshot.capture().then(
+      (result) => { setCapture({ busy: false, message: captureText(result), failed: false }) },
+      (cause: unknown) => { setCapture({ busy: false, message: cause instanceof Error ? cause.message : 'The app could not be captured.', failed: true }) },
+    )
   }
 
   // Going back never loses work and never rewrites history: unsaved files get a save point first, then the Host puts the old tree back as a new version
@@ -515,6 +531,20 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
             </Fragment>
           )
         })}
+      </div>
+      <div className="acrylBlendsVersionRemote">
+        <RemoteSync sync={gitSync} root={state.appRoot} revision={`${state.head ?? ''}:${String(state.upstreamHead ?? '')}`} label="Versions on the remote" />
+        {/* The snapshot verb `capture`: what a version, a share or a blueprint passes on is the composition and its lock. */}
+        <div className="acrylBlendsLabel acrylBlendsGitLabel" data-second>Snapshot</div>
+        <div className="acrylBlendsGitRemote">
+          <span className="acrylBlendsGitRemoteState" title="Every plugin folder gets its row in blend.yaml, then blend.lock.json is written">Rows and lock</span>
+          <button type="button" className="acrylBlendsSmallButton" disabled={capture?.busy === true} onClick={captureApp}>
+            {capture?.busy === true ? 'Capturing…' : 'Capture'}
+          </button>
+        </div>
+        {capture !== undefined && !capture.busy && (
+          <p className="acrylBlendsNote" data-testid="capture-outcome" role="status" {...(capture.failed ? { 'data-error': '' } : {})}>{capture.message}</p>
+        )}
       </div>
       {notes.available && (
         <>

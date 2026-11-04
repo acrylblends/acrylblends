@@ -17,6 +17,39 @@ export const FRAME_GIT_PUSH_PATH = `${FRAME_API_PREFIX}/git/push`
 /** POST: bring the upstream's new versions in, by fast-forward only; a branch that has moved on both sides is left as it is. Answers a {@link GitSyncResult}. */
 export const FRAME_GIT_PULL_PATH = `${FRAME_API_PREFIX}/git/pull`
 
+/** POST: the app's snapshot verb `capture` (a row for every plugin folder that has none, then `blend.lock.json`). Answers a {@link SnapshotCapture}. */
+export const FRAME_SNAPSHOT_CAPTURE_PATH = `${FRAME_API_PREFIX}/snapshot/capture`
+
+/** What a capture did: the plugin folders that got a row, and how many plugins the lock now records. */
+export interface SnapshotCapture {
+  readonly addedRows: readonly string[]
+  readonly modules: number
+}
+
+/** A snapshot against its lock: `problems` names `blend.yaml` or each plugin folder that changed since the capture. */
+export interface SnapshotVerify {
+  readonly ok: boolean
+  readonly problems: readonly string[]
+  readonly checked: number
+}
+
+/** What an apply did; nothing is written when `ok` is false. `extra` are the app's folders the snapshot lacks, kept and switched off. */
+export interface SnapshotApply {
+  readonly ok: boolean
+  readonly problems: readonly string[]
+  readonly modules: ReadonlyArray<{ readonly name: string; readonly status: 'added' | 'unchanged' | 'conflict' | 'skipped'; readonly detail?: string }>
+  readonly manifestChanged: boolean
+  readonly extra: readonly string[]
+}
+
+const isWords = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === 'string')
+
+/** @throws when the answer is not a capture result. */
+export function parseSnapshotCapture(value: unknown): SnapshotCapture {
+  if (!isRecord(value) || !isWords(value.addedRows) || !isCount(value.modules)) throw new Error('snapshot capture: not a result')
+  return { addedRows: value.addedRows, modules: value.modules }
+}
+
 /**
  * The checked-out branch against its remote:
  * - `detached`: the folder is on no branch, so there is nothing to push or pull;

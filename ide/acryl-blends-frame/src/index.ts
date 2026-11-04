@@ -45,6 +45,7 @@ import {
   FRAME_GIT_PULL_PATH,
   FRAME_GIT_PUSH_PATH,
   FRAME_GIT_REMOTE_PATH,
+  FRAME_SNAPSHOT_CAPTURE_PATH,
   FRAME_PLUGINS_PATH,
   FRAME_PLUGINS_SHARE_PATH,
   FRAME_PLUGINS_SWITCH_PATH,
@@ -62,6 +63,7 @@ import {
   type GitSyncResult,
 } from './contract.ts'
 import { GitSync, upstreamHead } from './git-sync.ts'
+import { createAppSnapshot, type AppSnapshotService } from './app-snapshot.ts'
 
 /**
  * The part of the runtime's `appInstance` service ACRYL plugins read (a separated interface: plugins do not import the runtime). Every plugin
@@ -341,12 +343,14 @@ export interface FrameRoutesDeps {
   readonly shared?: (hashes: readonly string[]) => Promise<string[]>
   readonly realChats?: RealChatsPort
   readonly gitSync?: GitSyncPort
+  /** The app's snapshot verb `capture`: the left panel's Capture. */
+  readonly snapshot?: Pick<AppSnapshotService, 'capture'>
   readonly appReload?: AppReloadPort
   /** The element picks waiting for the step that reads the message they belong to (./selection-context.ts). */
   readonly selection?: SelectionInbox
 }
 
-export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, gitSync, appReload, selection }: FrameRoutesDeps): Acryl {
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, gitSync, snapshot, appReload, selection }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
   if (appReload !== undefined) {
     app.get(FRAME_APP_PATH, ownPage, async (c) => {
@@ -375,6 +379,16 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(await gitSync.pull())
       } catch (cause) {
         return c.json(error(failed(cause, 'the branch could not be pulled')), 409)
+      }
+    })
+  }
+  if (snapshot !== undefined) {
+    const failed = (cause: unknown, fallback: string): string => cause instanceof Error && cause.message !== '' ? cause.message : fallback
+    app.post(FRAME_SNAPSHOT_CAPTURE_PATH, ownPage, jsonBody(), async (c) => {
+      try {
+        return c.json(await snapshot.capture())
+      } catch (cause) {
+        return c.json(error(failed(cause, 'the app could not be captured')), 409)
       }
     })
   }
@@ -769,6 +783,8 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     // The element a chat message is about: posted by the composer at its send gesture, taken at the step that reads that message, so the
     // person's bubble keeps their words and the agent still gets the page and selector (./selection-context.ts).
     const selectionInbox = new SelectionInbox()
+    const gitSync = new GitSync(git, root)
+    const snapshot = createAppSnapshot(root, gitSync)
     ctx.effect(
       () => installSelectionContext(ctx, selectionInbox, (cause) => {
         ctx.logger.error(`acryl-blends-frame: the selected element did not reach the chat: ${cause instanceof Error ? cause.message : String(cause)}`)
@@ -823,10 +839,14 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       ...(appReload === undefined ? {} : { appReload }),
       shared: (hashes) => sharedVersions(git, root, hashes),
       realChats: { read: () => realChatList.read() },
-      gitSync: new GitSync(git, root),
+      gitSync,
+      snapshot,
     }))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
+    // The snapshot verbs for the agent's tools (acryl-app-context), on the same git runner and queue as the left panel's buttons.
+    const stopSnapshot = ctx.reflect.provide('appSnapshot', snapshot)
     return () => {
+      void stopSnapshot()
       stopListening()
       stopGuard()
       stopWatching()

@@ -40,6 +40,7 @@ import { SwitchRequests } from './switch-request.ts'
 import { createFrameTools, installXtermStyles } from './tools.ts'
 import { createSharedVersionsApi } from './versions.ts'
 import { createGitSyncApi, type GitSyncPort } from './git-sync.ts'
+import { createSnapshotApi, type SnapshotPort } from './snapshot.ts'
 import { FrameViewState, type ViewStorage } from './view-state.ts'
 
 // `sidebarRight` on the context: DSH's right sidebar controller, drawn in the right panel's Panel tab.
@@ -119,6 +120,15 @@ export function apply(ctx: ClientContext): void {
   const sharedVersionsApi = createSharedVersionsApi()
   const branchesApi = createBranchesApi()
   const gitSyncApi = createGitSyncApi()
+  const snapshotApi = createSnapshotApi()
+  // A capture writes blend.yaml and the lock: the unsaved count moves, so the frame reads its state again.
+  const snapshot: SnapshotPort = {
+    capture: async () => {
+      const result = await snapshotApi.capture()
+      await frameState.refresh()
+      return result
+    },
+  }
   // A push moves the upstream (the left panel's shared marks), a pull the head and the app's files: the frame reads its state again, and the app page reloads when a pull brought versions in.
   const gitSync: GitSyncPort = {
     remote: fetchFirst => gitSyncApi.remote(fetchFirst),
@@ -451,6 +461,7 @@ export function apply(ctx: ClientContext): void {
         shared: (hashes: readonly string[]) => sharedVersionsApi.shared(hashes),
       },
       gitSync,
+      snapshot,
       tabs,
       tools,
       feedback,
