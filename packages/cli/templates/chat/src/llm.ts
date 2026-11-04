@@ -4,13 +4,19 @@ export type Llm = (
   signal: AbortSignal,
 ) => AsyncIterable<string>
 
+/** The model has no key: the one failure whose message the page may show, since it names the fix and holds no detail from the service. */
+export class MissingKey extends Error {}
+
 /**
  * An OpenAI-compatible chat completions API with `stream: true` (DeepSeek by default). The key is read from DEEPSEEK_API_KEY at the moment of the call and
  * is never stored; DEEPSEEK_BASE_URL and DEEPSEEK_MODEL choose the service.
  */
 export const openAiCompatible: Llm = async function* (messages, signal) {
   const key = process.env.DEEPSEEK_API_KEY
-  if (!key) throw new Error('DEEPSEEK_API_KEY is not set')
+  if (!key)
+    throw new MissingKey(
+      'DEEPSEEK_API_KEY is not set: set it in the terminal that runs the app, then start the app again.',
+    )
   const base = (process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/$/, '')
   const response = await fetch(`${base}/chat/completions`, {
     method: 'POST',
