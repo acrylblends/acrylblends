@@ -103,7 +103,9 @@ export function createApp(
           await stream.writeSSE({
             event: 'error',
             data: JSON.stringify(
-              error instanceof MissingKey ? error.message : 'The model could not answer. Try again.',
+              error instanceof MissingKey
+                ? error.message
+                : 'The model could not answer. Try again.',
             ),
           })
         }
