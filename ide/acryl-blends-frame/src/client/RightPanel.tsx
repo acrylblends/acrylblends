@@ -14,6 +14,7 @@ import type { ChatsPort } from './LeftPanel.tsx'
 import { historyGroups, type BranchChatsPort } from './branch-chats.ts'
 import type { SwitchRequests } from './switch-request.ts'
 import { FILES_TAB, GIT_TAB, PTY_AGENTS, chatTab, fileTab, fileTabLabels, ptyTab, tabsForBranch, terminalTab, type FrameTab, type FrameTabs, type PtyAgent } from './tabs.ts'
+import { tabSizing } from './tab-sizing.ts'
 import { TerminalView } from './TerminalView.tsx'
 import type { FrameTools } from './tools.ts'
 import { chatTime, type VersionsPort } from './versions.ts'
@@ -47,21 +48,42 @@ export interface RightPanelProps {
 
 const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 
-function TabLabel({ tab, chatTitle, fileLabel }: { readonly tab: FrameTab; readonly chatTitle: string; readonly fileLabel?: string | undefined }) {
+/** The strip's content width, kept current as the panel opens, closes or resizes. */
+function useStripWidth(ref: { readonly current: HTMLDivElement | null }): number {
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    const element = ref.current
+    if (element === null) return undefined
+    const update = (): void => { setWidth(element.clientWidth) }
+    update()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => { observer.disconnect() }
+  }, [ref])
+  return width
+}
+
+/**
+ * A tab's label: the text ellipsizes inside the tab's share of the strip, and the kind (the chat's model, a PTY's "PTY") is left out when that share is too
+ * narrow for it. The full text stays the button's accessible name, so a shortened label never hides what the tab is.
+ */
+function TabLabel({ tab, chatTitle, fileLabel, showKind }: { readonly tab: FrameTab; readonly chatTitle: string; readonly fileLabel?: string | undefined; readonly showKind: boolean }) {
+  const kind = (text: string): ReactNode => (showKind ? <span className="acrylBlendsTabKind">{text}</span> : null)
   switch (tab.kind) {
     case 'chat': return tab.session === undefined
-      ? <>Chat <span className="acrylBlendsTabKind">DeepSeek</span></>
-      : <><span className="acrylBlendsTabTitle">{chatTitle}</span> <span className="acrylBlendsTabKind">DeepSeek</span></>
-    case 'pty': return <>{PTY_AGENTS.find(entry => entry.agent === tab.agent)?.tab} <span className="acrylBlendsTabKind">PTY</span></>
-    case 'terminal': return <>Terminal</>
-    case 'files': return <>Files</>
+      ? <><span className="acrylBlendsTabLabel">Chat</span>{kind('DeepSeek')}</>
+      : <><span className="acrylBlendsTabLabel">{chatTitle}</span>{kind('DeepSeek')}</>
+    case 'pty': return <><span className="acrylBlendsTabLabel">{PTY_AGENTS.find(entry => entry.agent === tab.agent)?.tab}</span>{kind('PTY')}</>
+    case 'terminal': return <span className="acrylBlendsTabLabel">Terminal</span>
+    case 'files': return <span className="acrylBlendsTabLabel">Files</span>
     case 'file': {
       // The folder shows only when two open files share a name, so a tab stays its file's name whenever that name is enough.
       const label = fileLabel ?? baseName(tab.path)
       const folder = label.slice(0, label.lastIndexOf('/') + 1)
-      return folder === '' ? <>{label}</> : <><span className="acrylBlendsTabPath">{folder}</span>{label.slice(folder.length)}</>
+      return <span className="acrylBlendsTabLabel">{folder === '' ? label : <><span className="acrylBlendsTabPath">{folder}</span>{label.slice(folder.length)}</>}</span>
     }
-    case 'git': return <>Git</>
+    case 'git': return <span className="acrylBlendsTabLabel">Git</span>
   }
 }
 
@@ -94,10 +116,19 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
     return needle === '' ? rows : rows.filter(row => row.title.toLowerCase().includes(needle))
   }, [rows, query])
 
-  // The tab shown stays in view when the strip is longer than the panel.
+  // Each tab's share of the strip; the labels ellipsize to it and the kind drops out when it is narrow (see tab-sizing.ts).
+  const stripWidth = useStripWidth(stripRef)
+  const sizing = tabSizing(stripWidth > 0 ? stripWidth : 396, visible.length)
+  // The tab shown stays in view when the strip has to scroll; when the tabs share the width they all stay in view, so the strip starts at the first tab.
   useEffect(() => {
-    stripRef.current?.querySelector('[role="tab"][aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [active?.id, visible.length])
+    const element = stripRef.current
+    if (element === null) return
+    if (!sizing.scroll) {
+      element.scrollLeft = 0
+      return
+    }
+    element.querySelector('[role="tab"][aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [active?.id, visible.length, sizing.scroll, sizing.width])
 
   useEffect(() => {
     if (!menu) return undefined
@@ -175,9 +206,9 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
   return (
     <>
       <div className="acrylBlendsTabs" ref={menuRef}>
-        <div className="acrylBlendsTabStrip" role="tablist" aria-label="Agents and tools" ref={stripRef}>
+        <div className="acrylBlendsTabStrip" role="tablist" aria-label="Agents and tools" ref={stripRef} data-scroll={sizing.scroll || undefined}>
           {visible.map(tab => (
-            <div key={tab.id} className="acrylBlendsTabWrap" data-closable={tab.id !== 'chat' || undefined}>
+            <div key={tab.id} className="acrylBlendsTabWrap" data-closable={tab.id !== 'chat' || undefined} style={{ maxWidth: `${String(sizing.width)}px` }}>
               <button
                 type="button"
                 role="tab"
@@ -187,7 +218,7 @@ export function RightPanel({ chats, tabs, tools, versions, gitSync, state, branc
                 onClick={() => { showTab(tab) }}
                 onAuxClick={(event) => { if (event.button === 1) close(tab.id) }}
               >
-                <TabLabel tab={tab} chatTitle={rows.find(row => tab.kind === 'chat' && row.id === tab.session)?.title ?? NEW_CHAT} fileLabel={tab.kind === 'file' ? fileLabels.get(tab.path) : undefined} />
+                <TabLabel tab={tab} chatTitle={rows.find(row => tab.kind === 'chat' && row.id === tab.session)?.title ?? NEW_CHAT} fileLabel={tab.kind === 'file' ? fileLabels.get(tab.path) : undefined} showKind={sizing.kind} />
               </button>
               {tab.id !== 'chat' && (
                 <button type="button" className="acrylBlendsTabClose" aria-label="Close tab" onClick={() => { close(tab.id) }}>×</button>

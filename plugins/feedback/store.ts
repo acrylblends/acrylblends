@@ -90,17 +90,26 @@ export function parseScreenshot(value: unknown): NewScreenshot | string {
   const { data, width, height } = value as Record<string, unknown>
   if (typeof data !== 'string') return 'the screenshot has no image'
   const match = DATA_URL.exec(data)
-  if (match === null || match[1] === undefined || match[2] === undefined) return 'the screenshot must be a WebP or PNG data URL'
+  if (match === null || match[1] === undefined || match[2] === undefined)
+    return 'the screenshot must be a WebP or PNG data URL'
   const mediaType = match[1] as ScreenshotMediaType
   const bytes = Buffer.from(match[2], 'base64')
   if (bytes.length === 0) return 'the screenshot is empty'
   if (bytes.length > LIMITS.screenshotBytes)
     return `a screenshot is at most ${String(Math.round(LIMITS.screenshotBytes / 1024))} KB`
-  const webp = bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP'
+  const webp =
+    bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP'
   const png = bytes[0] === 0x89 && bytes.subarray(1, 4).toString() === 'PNG'
-  if ((mediaType === 'image/webp' && !webp) || (mediaType === 'image/png' && !png)) return 'the screenshot is not the image its type names'
-  if (!Number.isInteger(width) || !Number.isInteger(height) || (width as number) < 1 || (height as number) < 1
-    || (width as number) > LIMITS.screenshotSide || (height as number) > LIMITS.screenshotSide)
+  if ((mediaType === 'image/webp' && !webp) || (mediaType === 'image/png' && !png))
+    return 'the screenshot is not the image its type names'
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    (width as number) < 1 ||
+    (height as number) < 1 ||
+    (width as number) > LIMITS.screenshotSide ||
+    (height as number) > LIMITS.screenshotSide
+  )
     return `the screenshot needs its size, up to ${String(LIMITS.screenshotSide)} px a side`
   return { mediaType, width: width as number, height: height as number, data: bytes }
 }
@@ -140,9 +149,21 @@ export function parseNewNote(body: unknown): NewNote | string {
 function storedScreenshot(raw: unknown): FeedbackScreenshot | undefined {
   if (raw === null || typeof raw !== 'object') return undefined
   const { file, mediaType, width, height, bytes } = raw as Record<string, unknown>
-  if (typeof file !== 'string' || (mediaType !== 'image/webp' && mediaType !== 'image/png')
-    || !Number.isInteger(width) || !Number.isInteger(height) || !Number.isInteger(bytes)) return undefined
-  return { file, mediaType, width: width as number, height: height as number, bytes: bytes as number }
+  if (
+    typeof file !== 'string' ||
+    (mediaType !== 'image/webp' && mediaType !== 'image/png') ||
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    !Number.isInteger(bytes)
+  )
+    return undefined
+  return {
+    file,
+    mediaType,
+    width: width as number,
+    height: height as number,
+    bytes: bytes as number,
+  }
 }
 
 export class FeedbackStore {
@@ -167,22 +188,27 @@ export class FeedbackStore {
       text: note.text,
       page: note.page,
       ...(note.element === undefined ? {} : { element: note.element }),
-      ...(shot === undefined ? {} : {
-        screenshot: {
-          file: `${id}.${shot.mediaType === 'image/webp' ? 'webp' : 'png'}`,
-          mediaType: shot.mediaType,
-          width: shot.width,
-          height: shot.height,
-          bytes: shot.data.length,
-        },
-      }),
+      ...(shot === undefined
+        ? {}
+        : {
+            screenshot: {
+              file: `${id}.${shot.mediaType === 'image/webp' ? 'webp' : 'png'}`,
+              mediaType: shot.mediaType,
+              width: shot.width,
+              height: shot.height,
+              bytes: shot.data.length,
+            },
+          }),
     }
     return this.serial(async () => {
       await mkdir(join(this.notesFile, '..'), { recursive: true })
       if (shot !== undefined) {
         // The image first: a note in the file always has its screenshot.
         await mkdir(this.shotsDir, { recursive: true })
-        await writeFile(join(this.shotsDir, `${id}.${shot.mediaType === 'image/webp' ? 'webp' : 'png'}`), shot.data)
+        await writeFile(
+          join(this.shotsDir, `${id}.${shot.mediaType === 'image/webp' ? 'webp' : 'png'}`),
+          shot.data,
+        )
       }
       await appendFile(this.notesFile, `${JSON.stringify(stored)}\n`)
       return { ...stored, seen: false }
@@ -192,7 +218,10 @@ export class FeedbackStore {
   /** One note's screenshot, when it has one and the file is still there. */
   async screenshot(id: string): Promise<StoredScreenshot | undefined> {
     if (!NOTE_ID.test(id)) return undefined
-    for (const [ext, mediaType] of [['webp', 'image/webp'], ['png', 'image/png']] as const) {
+    for (const [ext, mediaType] of [
+      ['webp', 'image/webp'],
+      ['png', 'image/png'],
+    ] as const) {
       try {
         return { bytes: await readFile(join(this.shotsDir, `${id}.${ext}`)), mediaType }
       } catch {
@@ -226,7 +255,9 @@ export class FeedbackStore {
     for (const line of (await readFile(this.notesFile, 'utf8')).split('\n')) {
       if (line.trim() === '') continue
       try {
-        const raw = JSON.parse(line) as Omit<FeedbackNote, 'seen'> & { readonly screenshot?: unknown }
+        const raw = JSON.parse(line) as Omit<FeedbackNote, 'seen'> & {
+          readonly screenshot?: unknown
+        }
         if (
           typeof raw.id === 'string' &&
           typeof raw.at === 'string' &&
@@ -235,7 +266,11 @@ export class FeedbackStore {
         ) {
           const { screenshot, ...rest } = raw
           const shot = storedScreenshot(screenshot)
-          notes.push({ ...rest, seen: seen.has(raw.id), ...(shot === undefined ? {} : { screenshot: shot }) })
+          notes.push({
+            ...rest,
+            seen: seen.has(raw.id),
+            ...(shot === undefined ? {} : { screenshot: shot }),
+          })
         }
       } catch {
         // A torn last line: skipped.

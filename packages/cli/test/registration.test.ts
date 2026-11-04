@@ -1,12 +1,18 @@
 /** The add-command registration lines in src/app.ts: the upgrade keeps them as the framework's, and reports only the owner's other lines. */
 import { describe, expect, it } from 'vitest'
-import { ownerChangeLines, registrationEntry, registrationImport, stripRegistrations, withRegistrations } from '../src/app-registration.ts'
+import {
+  ownerChangeLines,
+  registrationEntry,
+  registrationImport,
+  stripRegistrations,
+  withRegistrations,
+} from '../src/app-registration.ts'
 import { MOUNTED } from '../src/mount.ts'
 import { KEPT_BY_THE_APP } from '../src/upgrade.ts'
 
-const feedback = MOUNTED.find(plugin => plugin.name === 'feedback')
+const feedback = MOUNTED.find((plugin) => plugin.name === 'feedback')
 if (feedback === undefined) throw new Error('the mounted feedback plugin is gone')
-const driverPty = MOUNTED.find(plugin => plugin.name === 'driver-pty')
+const driverPty = MOUNTED.find((plugin) => plugin.name === 'driver-pty')
 if (driverPty === undefined) throw new Error('the mounted driver-pty plugin is gone')
 
 const TEMPLATE = `import * as tasks from '../plugins/tasks/index.ts'
@@ -23,15 +29,24 @@ export const registry = {
 
 const withFeedback = (text: string): string =>
   text
-    .replace("import { FRAME_MOUNT_PREFIX", `${registrationImport(feedback)}\nimport { FRAME_MOUNT_PREFIX`)
-    .replace('export const registry = {\n', `export const registry = {\n${registrationEntry(feedback)}\n`)
+    .replace(
+      'import { FRAME_MOUNT_PREFIX',
+      `${registrationImport(feedback)}\nimport { FRAME_MOUNT_PREFIX`,
+    )
+    .replace(
+      'export const registry = {\n',
+      `export const registry = {\n${registrationEntry(feedback)}\n`,
+    )
 
 describe('the framework registration lines', () => {
   it('strips to the template and re-applies to exactly the app the add command wrote', () => {
     const app = withFeedback(TEMPLATE)
     const stripped = stripRegistrations(app, undefined, TEMPLATE)
     expect(stripped.text).toBe(TEMPLATE)
-    expect(stripped.edits.map(edit => edit.line)).toEqual([registrationImport(feedback), registrationEntry(feedback)])
+    expect(stripped.edits.map((edit) => edit.line)).toEqual([
+      registrationImport(feedback),
+      registrationEntry(feedback),
+    ])
     expect(withRegistrations(TEMPLATE, stripped.edits)).toBe(app)
   })
 
@@ -54,20 +69,25 @@ describe('the framework registration lines', () => {
     expect(withRegistrations(crlf, stripped.edits)).toBe(twice)
   })
 
-  it('names the owner\'s own lines, and only those', () => {
+  it("names the owner's own lines, and only those", () => {
     const app = withFeedback(TEMPLATE)
-    const owned = app.replace('  model,\n', '  model,\n  // The owner keeps the board title short.\n')
+    const owned = app.replace(
+      '  model,\n',
+      '  model,\n  // The owner keeps the board title short.\n',
+    )
     const stripped = stripRegistrations(owned, undefined, TEMPLATE)
     expect(stripped.text).not.toBe(TEMPLATE)
     const target = withRegistrations(TEMPLATE, stripped.edits)
-    expect(ownerChangeLines(owned, target)).toEqual([{ line: 12, text: '  // The owner keeps the board title short.' }])
+    expect(ownerChangeLines(owned, target)).toEqual([
+      { line: 12, text: '  // The owner keeps the board title short.' },
+    ])
     // The framework's lines are not reported.
     expect(ownerChangeLines(app, target)).toEqual([])
   })
 })
 
 describe('the app-owned scaffold files', () => {
-  it('never takes src/routes.ts as the template\'s, and takes src/app.ts only through the registration merge', () => {
+  it("never takes src/routes.ts as the template's, and takes src/app.ts only through the registration merge", () => {
     expect(KEPT_BY_THE_APP.has('src/routes.ts')).toBe(true)
     expect(KEPT_BY_THE_APP.has('src/app.ts')).toBe(false)
   })

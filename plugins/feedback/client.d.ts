@@ -9,7 +9,11 @@ export function frameViewOf(win: {
 export function elementLabel(element: Element): string
 
 /** The stored size of a screenshot: the whole view, downscaled to `maxSide`. */
-export function shotSize(width: number, height: number, maxSide?: number): { width: number; height: number }
+export function shotSize(
+  width: number,
+  height: number,
+  maxSide?: number,
+): { width: number; height: number }
 
 /** The largest screenshot the page sends (decoded bytes); the Host refuses more than 512 KB. */
 export const SHOT_MAX_BYTES: number

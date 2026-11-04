@@ -171,6 +171,18 @@ export const DRIVER_ROWS: readonly string[] = [
   // (`ui-deliverables`) is not mounted: the frame says it in one line under the answer.
   'subprocess',
   'workspace-changes',
+  // What ACRYL IDE's chat stands on beyond the conversation itself, from DSH's own web composition (the desktop app composes the same): the turn and
+  // step stats under the composer (`session-stats`, `session-turn-outline`), Like and Dislike on an answer (`message-feedback`), the background jobs
+  // roster (`job-controller`), the session header's "Open in" button (`open-in-app`), `/export` (`session-log-download`), session references in `@`
+  // (`session-reference`) and the workspace file reads the changed-files card uses (`workspace-files`).
+  'message-feedback',
+  'session-stats',
+  'session-turn-outline',
+  'job-controller',
+  'workspace-files',
+  'open-in-app',
+  'session-log-download',
+  'session-reference',
 ]
 
 /**
@@ -274,6 +286,25 @@ export const CLIENT_ROWS: readonly ClientRow[] = [
   { id: 'ui-tool', name: '@deepseek-ai/dsh-client-ui-tool' },
   { id: 'ui-approval', name: '@deepseek-ai/dsh-client-ui-approval' },
   { id: 'ui-attachment', name: '@deepseek-ai/dsh-client-ui-attachment' },
+  // The rest of ACRYL IDE's chat, the same DSH packages in the order DSH's web composition mounts them: the shortcuts surface, workflow runs, `/` skills,
+  // subagents, `@` references, the jobs roster, the goal bar, Like and Dislike, the model and effort selector, the permission picker (Read Only, Workspace
+  // Write, Full access), the agent-preset setting, the session log setting, user questions, the Trajectory tab, and the session header's "Open in".
+  // Not yet: `ui-plan` and `ui-deliverables` open in DSH's right sidebar (`sidebarRightTabs`), which the frame's right panel does not provide yet.
+  { id: 'ui-shortcuts', name: '@deepseek-ai/dsh-client-ui-shortcuts' },
+  { id: 'ui-workflow-run', name: '@deepseek-ai/dsh-client-ui-workflow-run' },
+  { id: 'ui-skill', name: '@deepseek-ai/dsh-client-ui-skill' },
+  { id: 'ui-subagent', name: '@deepseek-ai/dsh-client-ui-subagent' },
+  { id: 'ui-reference', name: '@deepseek-ai/dsh-client-ui-reference' },
+  { id: 'ui-jobs', name: '@deepseek-ai/dsh-client-ui-jobs' },
+  { id: 'ui-goal', name: '@deepseek-ai/dsh-client-ui-goal' },
+  { id: 'ui-message-feedback', name: '@deepseek-ai/dsh-client-ui-message-feedback' },
+  { id: 'ui-model-selection', name: '@deepseek-ai/dsh-client-ui-model-selection' },
+  { id: 'ui-permission', name: '@deepseek-ai/dsh-client-ui-permission-presets' },
+  { id: 'ui-agent-preset', name: '@deepseek-ai/dsh-client-ui-agent-preset' },
+  { id: 'ui-settings-session-log', name: '@deepseek-ai/dsh-client-ui-settings-session-log' },
+  { id: 'ui-user-questions', name: '@deepseek-ai/dsh-client-ui-user-questions' },
+  { id: 'ui-trajectory', name: '@deepseek-ai/dsh-client-ui-trajectory' },
+  { id: 'ui-open-in-app', name: '@deepseek-ai/dsh-client-ui-open-in-app' },
   { id: 'client-resources', name: '@deepseek-ai/dsh-client-resources' },
   { id: 'ui-input-trigger', name: '@deepseek-ai/dsh-client-ui-input-trigger' },
 ]
@@ -288,8 +319,13 @@ export function parseHostClientRows(hostText: string): ClientRow[] | undefined {
   try {
     const parsed: unknown = JSON.parse(match[1])
     if (!Array.isArray(parsed)) return undefined
-    return parsed.filter((row): row is ClientRow => row !== null && typeof row === 'object'
-      && typeof (row as { id?: unknown }).id === 'string' && typeof (row as { name?: unknown }).name === 'string')
+    return parsed.filter(
+      (row): row is ClientRow =>
+        row !== null &&
+        typeof row === 'object' &&
+        typeof (row as { id?: unknown }).id === 'string' &&
+        typeof (row as { name?: unknown }).name === 'string',
+    )
   } catch {
     return undefined
   }
@@ -303,19 +339,22 @@ export function parseHostClientRows(hostText: string): ClientRow[] | undefined {
  * @param appHost - the app's existing host script, when it has one.
  * @returns the text to write and the row names it added.
  */
-export function mergeHostClientRows(currentHost: string, appHost: string | undefined): { readonly text: string; readonly added: readonly string[] } {
+export function mergeHostClientRows(
+  currentHost: string,
+  appHost: string | undefined,
+): { readonly text: string; readonly added: readonly string[] } {
   if (appHost === undefined) return { text: currentHost, added: [] }
   const current = parseHostClientRows(currentHost)
   const app = parseHostClientRows(appHost)
   if (current === undefined || app === undefined) return { text: currentHost, added: [] }
-  const names = new Set(app.map(row => row.name))
-  const missing = current.filter(row => !names.has(row.name))
+  const names = new Set(app.map((row) => row.name))
+  const missing = current.filter((row) => !names.has(row.name))
   const block = CLIENT_ROWS_BLOCK.exec(currentHost)
   if (block === null) return { text: currentHost, added: [] }
   const merged = [...app, ...missing]
   return {
     text: currentHost.replace(block[0], `const clientRows = ${JSON.stringify(merged, null, 2)}`),
-    added: missing.map(row => row.name),
+    added: missing.map((row) => row.name),
   }
 }
 
@@ -623,7 +662,15 @@ function overlayOf(
     '      name: ./app/runtime.mjs',
     // The frame's index is not the app: the door drives the app's page in the canvas, never the frame around it (an agent's navigate would leave the frame).
     // The canvas prefix goes with it: `act navigate --path /board` reaches the app's /board at the canvas prefix, the same path it has on its own server.
-    ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts', '      config:', '        hostIndex: false', `        appBase: ${FRAME_PAGE_PREFIX}`] : []),
+    ...(door
+      ? [
+          '    - id: acryl-door',
+          '      name: ./plugins/acryl-door/src/index.ts',
+          '      config:',
+          '        hostIndex: false',
+          `        appBase: ${FRAME_PAGE_PREFIX}`,
+        ]
+      : []),
     ...appRows.flatMap((row) => [
       `    - id: ${row.id}`,
       `      name: ${row.name}`,

@@ -89,10 +89,22 @@ describe('the notes', () => {
 describe('the pins a page shows', () => {
   test('numbers the elements of that page in the order their first note came, and carries no note text', async () => {
     const store = new FeedbackStore(directory())
-    await store.add({ text: 'first', page: '/', element: { selector: 'main > li:nth-of-type(1)', label: 'task' } })
-    await store.add({ text: 'elsewhere', page: '/about', element: { selector: 'h1', label: 'heading' } })
+    await store.add({
+      text: 'first',
+      page: '/',
+      element: { selector: 'main > li:nth-of-type(1)', label: 'task' },
+    })
+    await store.add({
+      text: 'elsewhere',
+      page: '/about',
+      element: { selector: 'h1', label: 'heading' },
+    })
     await store.add({ text: 'general', page: '/' })
-    await store.add({ text: 'second', page: '/', element: { selector: 'main > li:nth-of-type(2)', label: 'task' } })
+    await store.add({
+      text: 'second',
+      page: '/',
+      element: { selector: 'main > li:nth-of-type(2)', label: 'task' },
+    })
     assert.deepEqual(await store.pins('/'), [
       { selector: 'main > li:nth-of-type(1)', number: 1 },
       { selector: 'main > li:nth-of-type(2)', number: 2 },
@@ -131,7 +143,12 @@ describe('the frame view', () => {
 })
 
 describe('a screenshot with a note', () => {
-  const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.from([0, 0, 0, 0]), Buffer.from('WEBP'), Buffer.from([0, 0, 0, 0])])
+  const webp = Buffer.concat([
+    Buffer.from('RIFF'),
+    Buffer.from([0, 0, 0, 0]),
+    Buffer.from('WEBP'),
+    Buffer.from([0, 0, 0, 0]),
+  ])
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
   const dataUrl = (type: string, bytes: Buffer) => `data:${type};base64,${bytes.toString('base64')}`
 
@@ -139,18 +156,43 @@ describe('a screenshot with a note', () => {
     const shot = parseScreenshot({ data: dataUrl('image/webp', webp), width: 800, height: 600 })
     assert.equal(typeof shot === 'string' ? shot : shot.mediaType, 'image/webp')
     assert.deepEqual(parseScreenshot({ data: dataUrl('image/png', png), width: 10, height: 12 }), {
-      mediaType: 'image/png', width: 10, height: 12, data: png,
+      mediaType: 'image/png',
+      width: 10,
+      height: 12,
+      data: png,
     })
-    assert.match(String(parseScreenshot({ data: dataUrl('image/gif', png), width: 1, height: 1 })), /WebP or PNG/)
-    assert.match(String(parseScreenshot({ data: dataUrl('image/webp', png), width: 1, height: 1 })), /not the image/)
-    assert.match(String(parseScreenshot({ data: dataUrl('image/webp', webp), width: 0, height: 1 })), /size/)
-    assert.match(String(parseScreenshot({ data: `data:image/webp;base64,${Buffer.alloc(LIMITS.screenshotBytes + 1).toString('base64')}`, width: 1, height: 1 })), /at most/)
+    assert.match(
+      String(parseScreenshot({ data: dataUrl('image/gif', png), width: 1, height: 1 })),
+      /WebP or PNG/,
+    )
+    assert.match(
+      String(parseScreenshot({ data: dataUrl('image/webp', png), width: 1, height: 1 })),
+      /not the image/,
+    )
+    assert.match(
+      String(parseScreenshot({ data: dataUrl('image/webp', webp), width: 0, height: 1 })),
+      /size/,
+    )
+    assert.match(
+      String(
+        parseScreenshot({
+          data: `data:image/webp;base64,${Buffer.alloc(LIMITS.screenshotBytes + 1).toString('base64')}`,
+          width: 1,
+          height: 1,
+        }),
+      ),
+      /at most/,
+    )
   })
 
   test('a note carries its screenshot to the store, which serves the bytes back', async () => {
     const dir = directory()
     const store = new FeedbackStore(dir)
-    const note = parseNewNote({ text: 'the button is cut', page: '/app/', screenshot: { data: dataUrl('image/webp', webp), width: 800, height: 600 } })
+    const note = parseNewNote({
+      text: 'the button is cut',
+      page: '/app/',
+      screenshot: { data: dataUrl('image/webp', webp), width: 800, height: 600 },
+    })
     assert.equal(typeof note, 'object')
     const stored = await store.add(note as Exclude<typeof note, string>)
     assert.equal(stored.screenshot?.mediaType, 'image/webp')
@@ -180,11 +222,16 @@ describe('the screenshot size', () => {
 })
 
 describe('the screenshot option', () => {
-  const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-  const edge = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
-  const firefox = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:132.0) Gecko/20100101 Firefox/132.0'
-  const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15'
-  const android = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+  const chrome =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+  const edge =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+  const firefox =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:132.0) Gecko/20100101 Firefox/132.0'
+  const safari =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15'
+  const android =
+    'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
 
   test('offers the tab capture only where the browser can target the tab', () => {
     assert.equal(canCaptureTab(chrome, true), true)
@@ -198,23 +245,43 @@ describe('the screenshot option', () => {
 
 describe('the label of a picked element', () => {
   /** Just enough of a DOM element for the label: attributes, a heading query, children and a tag. */
-  type Fake = { nodeType: number; tagName?: string; textContent?: string; childNodes?: Fake[]; heading?: Fake; attrs?: Record<string, string> }
+  type Fake = {
+    nodeType: number
+    tagName?: string
+    textContent?: string
+    childNodes?: Fake[]
+    heading?: Fake
+    attrs?: Record<string, string>
+  }
   const text = (value: string): Fake => ({ nodeType: 3, textContent: value })
-  const el = (tagName: string, childNodes: Fake[], extra: Partial<Fake> = {}): Fake => ({ nodeType: 1, tagName: tagName.toUpperCase(), childNodes, ...extra })
-  const dom = (fake: Fake): Element => ({
-    getAttribute: (name: string) => fake.attrs?.[name] ?? null,
-    querySelector: () => (fake.heading === undefined ? null : { textContent: fake.heading.textContent }),
-    childNodes: fake.childNodes ?? [],
-    tagName: fake.tagName,
-  }) as unknown as Element
+  const el = (tagName: string, childNodes: Fake[], extra: Partial<Fake> = {}): Fake => ({
+    nodeType: 1,
+    tagName: tagName.toUpperCase(),
+    childNodes,
+    ...extra,
+  })
+  const dom = (fake: Fake): Element =>
+    ({
+      getAttribute: (name: string) => fake.attrs?.[name] ?? null,
+      querySelector: () =>
+        fake.heading === undefined ? null : { textContent: fake.heading.textContent },
+      childNodes: fake.childNodes ?? [],
+      tagName: fake.tagName,
+    }) as unknown as Element
 
   test('a card is named by its first text, not by a bold name inside it', () => {
-    const card = el('div', [text('Fix the invite link'), el('div', [el('b', [text('Ben')]), text(' · due Thu')])])
+    const card = el('div', [
+      text('Fix the invite link'),
+      el('div', [el('b', [text('Ben')]), text(' · due Thu')]),
+    ])
     assert.equal(elementLabel(dom(card)), '"Fix the invite link"')
   })
 
   test('an element that says what it is, or shows nothing, keeps that name', () => {
-    assert.equal(elementLabel(dom(el('div', [], { attrs: { 'aria-label': 'Task card' } }))), 'Task card')
+    assert.equal(
+      elementLabel(dom(el('div', [], { attrs: { 'aria-label': 'Task card' } }))),
+      'Task card',
+    )
     assert.equal(elementLabel(dom(el('div', []))), 'div')
   })
 })

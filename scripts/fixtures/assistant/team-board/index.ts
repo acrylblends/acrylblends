@@ -1,8 +1,10 @@
 /**
- * The Team Board of the Blends frame mockup (scenario 10), as a plugin an agent would have built into an app: a board at `/board` with a new-task form, and
- * `/my-tasks` with a Due filter. The Assistant gate installs it into an app made from the agent template, so a visitor's question has something to open,
- * filter and fill in. Due dates are counted from the day the page is served, so "this week" (today and the six days after it) always holds the same two of
- * Ana's tasks.
+ * The Team Board of the Blends frame mockup (scenarios 1 and 10), as a plugin an agent would have built into an app: the app's first page and `/board` both
+ * show the board, `/my-tasks` has a Due filter. The Assistant gate installs it into an app made from the agent template, so a visitor's question has
+ * something to open, filter and fill in, and the app's first run shows the app itself rather than the template's placeholder page. The plugin mounts before
+ * the template's own routes row (the extensions row is ahead of it in every template's `blend.yaml`), and the router answers from the first mount, so this
+ * `/` is the app's home in production and in the frame's canvas alike. Due dates are counted from the day the page is served, so "this week" (today and the
+ * six days after it) always holds the same two of Ana's tasks.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Acryl } from 'acrylblends'
@@ -147,6 +149,8 @@ select.addEventListener('change',apply);apply()})()</script>`
 
 export function apply(ctx: Context): void {
   const app = new Acryl()
+    // The app's first page is the board: '/' and '/board' serve the same page, so production and the frame's canvas open on the app itself.
+    .get('/', (c) => c.html(boardPage(new Date())))
     .get('/board', (c) => c.html(boardPage(new Date())))
     .get('/my-tasks', (c) => c.html(myTasksPage(new Date())))
   ctx.router.route('/', app)

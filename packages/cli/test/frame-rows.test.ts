@@ -19,8 +19,10 @@ function rowRoutePath(): (prefix: string, path: string) => string {
 describe('the generated app-plugins row', () => {
   it('runs the app rows under a router whose mounts land under the frame prefix', () => {
     expect(row).toContain("import { composeInto } from '../src/app.ts'")
-    expect(row).toContain("const appScope = ctx.extend({ router: appRouter(ctx.router, prefix) })")
-    expect(row).toContain("const fibers = await composeInto(appScope, ctx.appInstance, { host: true })")
+    expect(row).toContain('const appScope = ctx.extend({ router: appRouter(ctx.router, prefix) })')
+    expect(row).toContain(
+      'const fibers = await composeInto(appScope, ctx.appInstance, { host: true })',
+    )
   })
 
   it('maps a plugin route under the prefix, keeping a route already under it as it is', () => {

@@ -217,7 +217,8 @@ test('the app has a /settings page with the appearance setting, and the home pag
 
 test('the frame row mounts the same routes under /app; the app on its own server keeps its old URLs', () =>
   inEnvironment({ NODE_ENV: 'test', ACRYL_PRODUCTION_KEEP: undefined }, async (app) => {
-    // The frame row requires the frame's web adapter (it mounts the app's prefix with it); the app's routes mount at the one prefix the app names.
+    // The frame row claims that prefix on the frame's web adapter only; the app's own rows mount the routes there (the generated app-plugins row),
+    // so the frame row does not ask for the host router (127 app URLs).
     const frame = await import('../src/frame.ts')
     assert.deepEqual([...frame.inject].sort(), ['routerHttp'])
     const { FRAME_MOUNT_PREFIX, routes } = await import('../src/routes.ts')

@@ -7,11 +7,15 @@
 //    (the bridge while the frame's client packages are unpublished), and a second init that must refuse and change nothing.
 // 2. `npm install` with no registry copy of the frame packages; `npm run profile` creates the app's own DSH profile from nothing.
 // 3. `npm run dev` boots the frame: every overlay row must be active (no pending, failed or "did not activate" entry), the page must render the
-//    ACRYL frame, the app must answer at /app, the door's page script must be on the page once and a door call must answer, and the app's own page
-//    must load in a tile in the frame's main surface (a browser tile opened through the workspace tab strip, driven in headless Chrome).
-// 4. It all stops and is removed; --keep leaves the scratch folder for a look.
+//    ACRYL Blends frame, the app must answer at /app, the door's page script must be on the app's page once and a door call must answer, and the
+//    app's own page must fill the canvas beside the chat (mockup scenario 1: first run).
+// 4. In headless Chrome, the frame's surfaces are checked against the mockup's development scenarios: first run (the app in the canvas, no DSH
+//    onboarding over it), the left panel's branches and versions, the chat tab with History and the + menu, Files and Git, a terminal tab, Preview,
+//    and Settings with its sections and the plugin navigator. The agent template also runs the app's own panel and its PTY routes and sends a chat
+//    message through a local model; no account is driven (starting Claude is the driver gate's trust-prompt case).
+// 5. It all stops and is removed; --keep leaves the scratch folder for a look.
 //
-// The template's page and the text it must show come from PAGES below; a template without an entry fails rather than skipping the tile check.
+// The template's page and the text it must show come from PAGES below; a template without an entry fails rather than skipping the canvas check.
 import { spawn, spawnSync } from 'node:child_process'
 import {
   existsSync,
@@ -330,12 +334,14 @@ try {
     if (init.status !== 0)
       fail(`init failed (exit ${String(init.status)}):\n${init.stdout}${init.stderr}`)
     const overlay = readFileSync(join(app, 'cordis.patch.yml'), 'utf8')
+    // The page's root is the Blends frame (`acryl-blends-frame`), not the IDE's workbench (`acryl-workspace`): the frame lists the branches, versions
+    // and the app; the workbench comes in as the frame's dependency, not as a row of its own.
     for (const row of [
       '- id: app-routes',
       'name: ./src/frame.ts',
       'name: ./plugins/acryl-door/src/index.ts',
       'name: acryl-app-shell',
-      'name: acryl-workspace',
+      'name: acryl-blends-frame',
     ])
       if (!overlay.includes(row)) fail(`the generated overlay is missing ${JSON.stringify(row)}`)
     const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
@@ -389,14 +395,6 @@ try {
     fail(`npm install failed:
 ${install.stdout}${install.stderr}`)
   log('installed the framework, the DSH driver and the frame packages')
-
-  // The precedence fixture of the profile slice (docs/plans/ide-host-inversion.md, section 20): the COMPOSITION also sets the welcome-notice key that
-  // Settings writes, so only a settings document that wins over the composition can keep the notice dismissed across a restart.
-  const overlayFile = join(app, 'cordis.patch.yml')
-  writeFileSync(
-    overlayFile,
-    `${readFileSync(overlayFile, 'utf8')}\n- id: ui-settings-general\n  config:\n    welcomeNoticeVersion: from-composition\n`,
-  )
 
   const bootEnv = {
     ...process.env,
@@ -479,112 +477,11 @@ ${composition.stdout}`)
     if (freed !== true) fail(`port ${port} stayed held after stopping the host`)
   }
 
-  let url = await startServer()
+  const url = await startServer()
   log(`the frame boots on our host at ${url}`)
 
-  let origin = new URL(url).origin
+  const origin = new URL(url).origin
 
-  /**
-   * The workshop's day-one path on a fresh profile: the Preview Notice appears, Continue saves its acknowledgement, and a host restart must find it
-   * dismissed (the settings document wins over the composition fixture that sets the same key). Runs its own short Chrome session, then restarts the host
-   * on the same port and refreshes the cookie jar through the new launch token.
-   */
-  const dismissNoticeAndRestart = async () => {
-    const profile = mkdtempSync(join(tmpdir(), 'ide-template-notice-'))
-    // A unique profile and Chrome's own port (from DevToolsActivePort), never a guessed one; a browser that will not start says why (its stderr and
-    // --enable-logging output travel in the error), and its whole process tree is killed before this function fails.
-    const launched = await startChrome(profile).catch((error) =>
-      fail(
-        `the notice check could not start headless Chrome: ${error instanceof Error ? error.message : String(error)}`,
-      ),
-    )
-    let cdp
-    try {
-      cdp = await devtools(launched.port)
-      await cdp.send('Page.enable')
-      await cdp.send('Runtime.enable')
-      for (const cookie of cookiesOf(jar))
-        await cdp.send('Network.setCookie', { ...cookie, url: `${origin}/` }).catch(() => {})
-      await cdp.send('Emulation.setDeviceMetricsOverride', {
-        width: 1440,
-        height: 900,
-        deviceScaleFactor: 1,
-        mobile: false,
-      })
-      const evaluate = async (expression) =>
-        (
-          await cdp.send('Runtime.evaluate', {
-            expression,
-            returnByValue: true,
-            awaitPromise: true,
-          })
-        ).result?.result?.value
-      await cdp.send('Page.navigate', { url })
-      const notice = await until(
-        async () =>
-          await evaluate(`(() => {
-            const dialog = document.querySelector('[role=dialog]')
-            return dialog !== null && dialog.innerText.includes('Preview Notice') ? dialog.innerText.slice(0, 120) : undefined
-          })()`),
-        60_000,
-      )
-      if (notice === undefined) fail('the Preview Notice did not appear on a fresh profile')
-      const noticeScroll = await evaluate(
-        `Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)`,
-      )
-      if (noticeScroll !== 0)
-        fail(
-          `the page scrolled to ${String(noticeScroll)} with the Preview Notice shown; the frame must never scroll at the document level`,
-        )
-      const clicked = await evaluate(`(() => {
-        const dialog = document.querySelector('[role=dialog]')
-        if (dialog === null) return false
-        const button = [...dialog.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Continue')
-        if (button === undefined) return false
-        button.click()
-        return true
-      })()`)
-      if (clicked !== true) fail('the Preview Notice has no Continue button')
-      const closed = await until(
-        async () =>
-          await evaluate(`(() => {
-            const dialog = document.querySelector('[role=dialog]')
-            return dialog === null || !dialog.innerText.includes('Preview Notice')
-          })()`),
-        20_000,
-      )
-      if (closed !== true) {
-        const detail = await evaluate(
-          `document.querySelector('[role=dialog]')?.innerText.slice(0, 400) ?? null`,
-        )
-        fail(`the Preview Notice did not close after Continue: ${JSON.stringify(detail)}`)
-      }
-      log('the Preview Notice is dismissed once and its acknowledgement saves')
-    } finally {
-      cdp?.close()
-      // The whole tree, not only the browser process: on Windows renderers and crashpad outlive a killed browser and hold the profile. Chrome keeps
-      // writing its profile for a moment after the kill, and removing it then is ENOTEMPTY (run 41352593171), so the removal below keeps its retries.
-      await launched.stop()
-      try {
-        rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
-      } catch {
-        // Windows can still hold a file of the closed browser for a moment; the folder sits in the temp directory, and a passed check stays passed.
-      }
-    }
-    const settingsFile = join(app, '.acrylblends', 'settings.patch.yml')
-    if (!existsSync(settingsFile))
-      fail('the settings document was not written by the acknowledgement')
-    if (!readFileSync(settingsFile, 'utf8').includes('welcomeNoticeVersion'))
-      fail('the settings document does not hold the notice acknowledgement')
-    // Restart on the same port: the cookie authority stays valid, and only a restart shows whether the acknowledgement persisted.
-    const heldPort = new URL(url).port
-    await stopServer()
-    bootEnv.ACRYLBLENDS_PORT = heldPort
-    const again = await startServer()
-    spawnSync('curl', ['-sL', '-b', jar, '-c', jar, '-o', '/dev/null', again], { encoding: 'utf8' })
-    log('the host restarts on the same port with the acknowledgement in settings.patch.yml')
-    return { url: again, origin: new URL(again).origin }
-  }
   const jar = join(scratch, 'cookies.txt')
   const fetchPage = (target, into) =>
     spawnSync('curl', ['-sL', '-b', jar, '-c', jar, '-o', into, '-w', '%{http_code}', target], {
@@ -612,12 +509,14 @@ ${composition.stdout}`)
         `the page's script tag ${match[0]} is not closed; the tags after it would be swallowed as its text`,
       )
   }
-  if (!html.includes('acryl-workspace/client.js'))
-    fail(`the page does not load the workspace client; server said:\n${output.slice(-2500)}`)
+  if (!html.includes('acryl-blends-frame/client.js'))
+    fail(`the page does not load the frame's client; server said:\n${output.slice(-2500)}`)
+  // The door drives the app's page, never the frame around it (its row is generated with `hostIndex: false`), so the frame's own page must not carry
+  // the script; the app's page carries it once (checked below). A copy here would make an agent's navigate leave the frame.
   const tags = html.split('/api/acryl-door/page.js').length - 1
-  if (tags !== 1)
-    fail(`the frame page carries the door script ${String(tags)} times, expected once`)
-  log('the page loads the workspace client and carries the door script once')
+  if (tags !== 0)
+    fail(`the frame page carries the door script ${String(tags)} times, expected none`)
+  log("the page loads the frame's client and leaves the app's page to the door")
 
   // The app answers at its prefix: its API route when the template has one (blank's and the agent's root, todo's list, the chat's and nodejs' health
   // route). Retried, because the app's rows mount a moment after the launcher prints its URL.
@@ -670,13 +569,11 @@ ${composition.stdout}`)
     fail(
       `the app's page at ${page.path} did not show "${page.text}"; server said:\n${output.slice(-2500)}`,
     )
-  log(`the app's page answers at ${page.path}`)
-
-  // The workshop's day-one path: the Preview Notice appears on a fresh profile, is dismissed once, and stays dismissed after a host restart because
-  // its acknowledgement is in the settings document (the precedence fixture above also sets the key in the composition).
-  const afterNotice = await dismissNoticeAndRestart()
-  url = afterNotice.url
-  origin = afterNotice.origin
+  // The page an agent drives inside the canvas carries the door's one script tag; an extra copy would drive the page twice.
+  const appTags = readFileSync(directFile, 'utf8').split('/api/acryl-door/page.js').length - 1
+  if (appTags !== 1)
+    fail(`the app's page carries the door script ${String(appTags)} times, expected once`)
+  log(`the app's page answers at ${page.path} and carries the door script once`)
 
   // The frame's look, for the workshop's agent template: three day-one states at one fixed viewport, captured here and compared with the committed
   // baseline at 2%. The compare runs only on Linux CI, where the runner's fonts are fixed; macOS and Windows keep the structural assertions (a cross-OS
@@ -845,9 +742,9 @@ function setInputValue(selector, value) {
 }
 
 /**
- * The app's page in the frame's main surface: open the workspace tab strip's browser tile, type the app's absolute URL and press Go, then read the
- * iframe's document (same origin, so the gate sees what a person sees). This is ACRYL's canvas browser tile, not DSH's right-sidebar browser row:
- * that package registers a tab type for DSH's right sidebar, while the owner's requirement is the main surface, which is the workspace canvas.
+ * The Blends frame in a real Chrome: the app fills the canvas beside the chat (same origin, so the gate reads what a person sees), and the frame's
+ * surfaces are driven through the mockup's development scenarios: branches and versions, the chat tab with History and the + menu, Files and Git, a
+ * terminal tab, Preview, and Settings with the plugin navigator. Settings > Models takes a key for a local mock model; no account is used.
  */
 async function checkTileInBrowser(url, origin, jar, page, output, mock, restartHost) {
   const profile = mkdtempSync(join(tmpdir(), 'ide-template-tile-'))
@@ -882,10 +779,12 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           if (
             message.method === 'Log.entryAdded' &&
             (message.params?.entry?.level === 'error' || message.params?.entry?.level === 'warning')
-          )
+          ) {
+            const url = message.params.entry.url
             return [
-              `${String(message.params.entry.level)}: ${String(message.params.entry.text ?? '')}`,
+              `${String(message.params.entry.level)}: ${String(message.params.entry.text ?? '')}${url === undefined || url === '' ? '' : ` (${String(url)})`}`,
             ]
+          }
           return []
         })
         .slice(-12)
@@ -914,7 +813,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             const src = frame.getAttribute('src')
             try { if (src !== null && new URL(src, location.href).origin !== location.origin) window.__acrylTileOutside.push({ at: Date.now(), src }) } catch {}
           }
-          const isTile = (node) => node instanceof HTMLIFrameElement && node.classList.contains('dshWorkspaceBrowserFrame')
+          const isTile = (node) => node instanceof HTMLIFrameElement && node.classList.contains('acrylAppCanvasFrame')
           new MutationObserver((records) => {
             for (const record of records) {
               if (record.type === 'attributes' && isTile(record.target)) {
@@ -923,7 +822,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
               }
               for (const node of record.addedNodes) {
                 if (isTile(node)) outside(node)
-                else if (node.querySelectorAll !== undefined) for (const frame of node.querySelectorAll('iframe.dshWorkspaceBrowserFrame')) outside(frame)
+                else if (node.querySelectorAll !== undefined) for (const frame of node.querySelectorAll('iframe.acrylAppCanvasFrame')) outside(frame)
               }
             }
           }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'], attributeOldValue: true })
@@ -967,22 +866,36 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       const frame = await until(
         async () =>
           await evaluate(`(() => {
-            const canvas = document.querySelector('.dshWorkspace')
-            const side = document.querySelector('.dshWorkspaceSide')
-            if (canvas === null || side === null) return undefined
-            return {
-              mode: document.body.dataset.dshDesktopMode,
-              frames: document.querySelectorAll('.dshDesktopFrame').length,
-              head: side.querySelector('.dshWorkspaceSideProjectsHead') !== null,
+            const shell = document.querySelector('.acrylBlendsFrame')
+            if (shell === null) return undefined
+            const surfaces = {
+              topbar: document.querySelector('.acrylBlendsBar') !== null,
+              left: document.querySelector('.acrylBlendsLeft') !== null,
+              right: document.querySelector('.acrylBlendsRight') !== null,
+              canvas: document.querySelector('iframe.acrylAppCanvasFrame') !== null,
             }
+            return Object.values(surfaces).every(Boolean) ? surfaces : undefined
           })()`),
-        30_000,
+        60_000,
       )
-      if (frame === undefined)
-        fail(`the ACRYL frame did not render in the page; server said:\n${output.slice(-2500)}`)
-      if (frame.mode !== 'advanced' || frame.frames !== 1)
-        fail(`the page is not the frame's advanced layout: ${JSON.stringify(frame)}`)
-      log('the page renders the ACRYL frame')
+      if (frame === undefined) {
+        const surfaces = await evaluate(`(() => {
+          const shell = document.querySelector('.acrylBlendsFrame')
+          if (shell === null) return null
+          return {
+            topbar: document.querySelector('.acrylBlendsBar') !== null,
+            left: document.querySelector('.acrylBlendsLeft') !== null,
+            right: document.querySelector('.acrylBlendsRight') !== null,
+            canvas: document.querySelector('iframe.acrylAppCanvasFrame') !== null,
+          }
+        })()`)
+        fail(
+          `the ACRYL Blends frame did not render its surfaces: ${JSON.stringify(surfaces)}; server said:\n${output.slice(-2500)}`,
+        )
+      }
+      log(
+        'the page renders the ACRYL Blends frame: the top bar, the left panel, the canvas and the right panel',
+      )
       // The frontend's component stylesheet is really in the document, not swallowed as the entry script's text. Without it every DSH dialog, button
       // and input falls back to browser defaults (the owner kit's flat grey buttons and the dialog without a surface or backdrop, 2026-11-02).
       const entry = await evaluate(`(() => {
@@ -1003,66 +916,104 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
       log(
         'the frontend stylesheet is in the document and the entry script holds no swallowed markup',
       )
-      // Day one under the frame (119): the app the person is building is already open in a tile, with no + and no typed address, and the document
-      // has not scrolled (a focused first-run card must not move the shell).
+      // Mockup scenario 1 (first run): the app the person is building is already in the canvas beside the chat. DSH's blocking onboarding never
+      // mounts inside the frame (the frame registers a no-op settings.onboarding step, src/client/index.ts NoOnboarding), so no dialog may cover the
+      // app; the document has not scrolled either.
       const firstRunTile = await until(async () => {
         const snapshot = await evaluate(`(() => {
-          const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+          const frame = document.querySelector('iframe.acrylAppCanvasFrame')
           const src = frame?.getAttribute('src') ?? ''
           const text = frame?.contentDocument?.body?.innerText ?? ''
-          const tabs = [...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())
           if (!src.includes('/app') || text.length === 0) return undefined
-          return { src, text: text.slice(0, 120), tabs: tabs.slice(0, 8), scrollTop: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) }
+          const dialogs = [...document.querySelectorAll('[role=dialog]')]
+            .filter(dialog => dialog.getClientRects().length > 0)
+            .map(dialog => dialog.innerText.slice(0, 120))
+          return { src, text: text.slice(0, 120), dialogs, scrollTop: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) }
         })()`)
         return snapshot
       }, 20_000)
       if (firstRunTile === undefined)
         fail(
-          `the app did not open itself in a tile on first run (no iframe at /app with content); tabs: ${JSON.stringify(await evaluate(`[...document.querySelectorAll('[role=tab]')].map((tab) => tab.textContent.trim())`))}`,
+          `the app did not open itself in the canvas on first run (no iframe at /app with content); body: ${JSON.stringify(await evaluate('document.body.innerText.slice(0, 500)'))}`,
+        )
+      if (firstRunTile.dialogs.some((text) => /Preview Notice|Add an API key/iu.test(text)))
+        fail(
+          `a DSH onboarding dialog covers the app on first run: ${JSON.stringify(firstRunTile.dialogs)}`,
         )
       if (firstRunTile.scrollTop !== 0)
         fail(
           `the page scrolled to ${String(firstRunTile.scrollTop)} on first run: ${JSON.stringify(firstRunTile)}`,
         )
       log(
-        `the app opens itself in a tile on first run ("${firstRunTile.text.trim().split('\n')[0]}")`,
+        `the app opens itself in the canvas on first run ("${firstRunTile.text.trim().split('\n')[0]}"), with no DSH onboarding over it`,
       )
-      if (
-        (await evaluate(
-          `document.querySelector('[role=dialog]')?.innerText.includes('Preview Notice') ?? false`,
-        )) === true
-      )
-        fail('the Preview Notice came back after the host restart')
-      log('the Preview Notice stays dismissed after the host restart')
 
-      // (i) The Settings day-one path: Models loads with no provider-directory error, takes the model key, and the chat then needs no key card.
-      // A profile without a key opens DSH's first-run "Add an API key" dialog over the frame; the guide's path is Settings > Models, so it is dismissed the
-      // way a user can ("Configure later") before Settings is opened. (Found on the frame jobs: the only dialog there was this one, with no settings nav.)
-      const firstRun = await until(async () => {
-        const state = await evaluate(`(() => {
-          const dialog = [...document.querySelectorAll('[role=dialog]')].find((candidate) => candidate.querySelector('input[aria-label="API key"]') !== null)
-          if (dialog === undefined) return 'none'
-          const later = [...dialog.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Configure later')
-          if (later === undefined) return 'no-later'
-          later.click()
-          return 'dismissed'
+      // Mockup scenarios 1, 2 and 5: the left panel carries the branch and its versions; the right panel carries the chat tab, History and the + menu.
+      const left = await until(async () => {
+        const snapshot = await evaluate(`(() => {
+          const side = document.querySelector('.acrylBlendsLeft')
+          if (side === null) return { state: 'missing' }
+          if (side.hidden) return { state: 'hidden' }
+          return {
+            state: 'shown',
+            labels: [...side.querySelectorAll('.acrylBlendsLabel')].map(label => label.textContent.trim()),
+            branches: side.querySelectorAll('.acrylBlendsBranchRow').length,
+            versions: side.querySelectorAll('.acrylBlendsVersion').length,
+          }
         })()`)
-        return state === 'none' ? undefined : state
-      }, 15_000)
-      if (firstRun === 'no-later') fail('the first-run key dialog has no "Configure later" button')
-      if (firstRun === 'dismissed') {
-        const closed = await until(
-          async () =>
-            (await evaluate(
-              `[...document.querySelectorAll('[role=dialog]')].some((candidate) => candidate.querySelector('input[aria-label="API key"]') !== null)`,
-            )) === false,
-          10_000,
+        // The versions list loads a moment after the branches (the Host reads the branch's log): wait for both before asserting them.
+        if (
+          snapshot?.state === 'shown' &&
+          snapshot.labels.some((label) => /^Branches$/iu.test(label)) &&
+          snapshot.branches >= 1 &&
+          snapshot.labels.some((label) => /^Versions of this branch$/iu.test(label)) &&
+          snapshot.versions >= 1
         )
-        if (closed !== true) fail('the first-run key dialog did not close after "Configure later"')
-        log(
-          'the first-run key dialog is dismissed (Configure later), so the key is entered in Settings > Models',
+          return snapshot
+        if (snapshot?.state === 'hidden') await click('Left panel: branches and versions')
+        return undefined
+      }, 20_000)
+      if (left === undefined)
+        fail(
+          `the left panel has no branches: ${JSON.stringify(await evaluate('document.body.innerText.slice(0, 500)'))}`,
         )
-      }
+      if (
+        !left.labels.some((label) => /^Versions of this branch$/iu.test(label)) ||
+        left.versions < 1
+      )
+        fail(`the left panel has no versions of the branch: ${JSON.stringify(left)}`)
+      log(
+        `the left panel shows ${String(left.branches)} branch(es) and ${String(left.versions)} version(s)`,
+      )
+
+      const right = await until(async () => {
+        const snapshot = await evaluate(`(() => {
+          const side = document.querySelector('.acrylBlendsRight')
+          if (side === null) return { state: 'missing' }
+          if (side.hidden) return { state: 'hidden' }
+          return {
+            state: 'shown',
+            tabs: [...side.querySelectorAll('.acrylBlendsTab')].map(tab => tab.textContent.trim()),
+            labels: [...side.querySelectorAll('button,[role=tab]')]
+              .map(element => element.getAttribute('aria-label') ?? element.textContent.trim())
+              .filter(Boolean),
+            text: side.innerText.slice(0, 500),
+          }
+        })()`)
+        if (snapshot?.state === 'shown' && snapshot.tabs.some((text) => /Chat/iu.test(text)))
+          return snapshot
+        if (snapshot?.state === 'hidden') await click('Right panel: agents')
+        return undefined
+      }, 20_000)
+      if (right === undefined)
+        fail(
+          `the right panel has no chat tab: ${JSON.stringify(await evaluate('document.body.innerText.slice(0, 500)'))}`,
+        )
+      if (!right.labels.includes('Open an agent, a terminal, files or git'))
+        fail(`the chat tab strip has no + menu: ${JSON.stringify(right)}`)
+      if (!right.text.includes('History'))
+        fail(`the chat has no History control: ${JSON.stringify(right)}`)
+      log('the right panel holds the chat tab, History and the + menu')
       // Close any palette or menu left open (a command named Settings lives in the palette too), then press the frame's own Settings button.
       for (const type of ['keyDown', 'keyUp'])
         await cdp.send('Input.dispatchKeyEvent', {
@@ -1073,14 +1024,14 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           nativeVirtualKeyCode: 27,
         })
       await sleep(300)
-      // The frame Settings dialog opens on its Models page on a fresh profile; press the left sidebar's Settings (the chat card has one of its own).
+      // The frame's Settings gear (the top bar's launcher for DSH's own Settings modal) opens the dialog.
       const settingsOpen = await until(
         async () =>
           await evaluate(`(() => {
             if ([...document.querySelectorAll('[role=dialog]')].some((candidate) => candidate.querySelector('nav') !== null)) return true
-            const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
-              (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
-            for (const button of buttons) button.click()
+            const gear = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
+              .find((candidate) => (candidate.getAttribute('aria-label') ?? '').trim() === 'Settings')
+            gear?.click()
             return false
           })()`),
         20_000,
@@ -1209,204 +1160,146 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         await sleep(300)
       }
 
-      // (a) The left panel: Projects/sessions. The rows arrive after the workspace host answers its projects call, so wait for them.
-      const left = await until(async () => {
+      // Mockup scenario 4 (files, search, git): the + menu offers the frame's agents and tools; Files searches the app's own folder, and Git shows
+      // the branch's changes and versions.
+      const openPlus = () =>
+        evaluate(`(() => {
+          const plus = [...document.querySelectorAll('button')]
+            .find((candidate) => (candidate.getAttribute('aria-label') ?? '') === 'Open an agent, a terminal, files or git')
+          if (plus === undefined) return false
+          plus.click()
+          return true
+        })()`)
+      const pick = (label) =>
+        evaluate(`(() => {
+          const item = [...document.querySelectorAll('[role=menuitem]')].find((candidate) => candidate.textContent.trim().startsWith(${JSON.stringify(label)}))
+          if (item === undefined) return false
+          item.click()
+          return true
+        })()`)
+      const tools = await until(async () => {
+        if ((await openPlus()) !== true) return undefined
+        const items = await evaluate(
+          `[...document.querySelectorAll('[role=menuitem]')].map((item) => item.textContent.replace(/\\s+/g, ' ').trim())`,
+        )
+        return Array.isArray(items) && items.length > 0 ? items : undefined
+      }, 15_000)
+      if (tools === undefined) fail('the + menu did not open')
+      for (const label of ['Chat', 'Claude Code', 'Codex', 'Pi', 'Terminal', 'Files', 'Git'])
+        if (!tools.some((text) => text.startsWith(label)))
+          fail(`the + menu has no ${label} item: ${JSON.stringify(tools)}`)
+      log(`the + menu offers the agents and the tools: ${tools.join(' | ')}`)
+      if ((await pick('Files')) !== true) fail('the + menu has no Files item')
+      const files = await until(async () => {
         const snapshot = await evaluate(`(() => {
-            const side = document.querySelector('.dshWorkspaceSide')
-            return {
-              head: side?.querySelector('.dshWorkspaceSideProjectsHead') !== null,
-              rows: side?.querySelectorAll('[role=treeitem]').length ?? 0,
-            }
-          })()`)
-        return snapshot?.head === true && (snapshot.rows ?? 0) >= 1 ? snapshot : undefined
+          const view = document.querySelector('.acrylBlendsFiles')
+          if (view === null) return undefined
+          return { search: view.querySelector('input[aria-label="Search files"]') !== null, text: view.innerText.slice(0, 300) }
+        })()`)
+        return snapshot?.search === true ? snapshot : undefined
       }, 20_000)
-      if (left === undefined) fail('the left panel has no Projects/session rows')
-      log(`the left panel shows Projects and ${String(left.rows)} tree rows`)
-
-      // (d) DSH chat as a tab. Its title arrives asynchronously and differs by timing: the frame's own "AcrylDSH Chat" until DSH's session title row
-      // names the session "New chat". Match the tab by what it is, not by one of its labels, and wait for it like every other surface here.
-      const chatTabs = () =>
-        evaluate(`[...document.querySelectorAll('[role=tab]')].map(tab => tab.textContent.trim())`)
-      const chatTab = await until(async () => {
-        const tabs = await chatTabs()
-        return Array.isArray(tabs) ? tabs.find((text) => /chat/iu.test(text)) : undefined
+      if (files === undefined) fail('the Files tab did not open with its search')
+      // The search reads the app's own folder: package.json is in every template.
+      await evaluate(setInputValue('input[aria-label="Search files"]', 'package.json'))
+      const found = await until(async () => {
+        const names = await evaluate(
+          `[...document.querySelectorAll('.acrylBlendsFiles .acrylBlendsFrow')].map((row) => row.textContent.trim())`,
+        )
+        return Array.isArray(names) && names.some((name) => name.includes('package.json'))
+          ? names
+          : undefined
+      }, 15_000)
+      if (found === undefined) fail('the Files search did not find package.json in the app')
+      log(`the Files tab searches the app's own files (${found.slice(0, 3).join(', ')})`)
+      if ((await openPlus()) !== true) fail('the + menu did not open again')
+      if ((await pick('Git')) !== true) fail('the + menu has no Git item')
+      const git = await until(async () => {
+        // The whole view, not a slice: an app with many changed files puts History below the changes list.
+        const text = await evaluate(
+          `document.querySelector('.acrylBlendsGit')?.innerText ?? undefined`,
+        )
+        return typeof text === 'string' && /History/iu.test(text) ? text : undefined
       }, 20_000)
-      if (chatTab === undefined)
-        fail(`the chat tab is not in the tab strip: ${JSON.stringify(await chatTabs())}`)
-      log(`the chat tab is in the tab strip ("${chatTab.trim()}")`)
+      if (git === undefined) {
+        const detail = await evaluate(`(() => ({
+          tabs: [...document.querySelectorAll('.acrylBlendsTab')].map((tab) => tab.textContent.trim()),
+          right: document.querySelector('.acrylBlendsRight')?.innerText.slice(0, 500) ?? null,
+          git: document.querySelector('.acrylBlendsGit')?.innerText.slice(0, 500) ?? null,
+        }))()`)
+        fail(`the Git tab did not open with its history: ${JSON.stringify(detail)}`)
+      }
+      log("the Git tab shows the app's changes and versions")
 
-      // (b) The right panel with the workspace's Files/Changes/Review views (DSH's right sidebar, which the workspace fills).
-      // The panel opens empty and fills after its tab types register; the toggle button also appears a moment after the frame, so the wait
-      // presses it again until the views are there (a press on an already-open panel finds no button and does nothing).
-      const right = await until(async () => {
+      // A terminal tab runs a real PTY in the right panel (mockup scenario 3's tool half; starting Claude itself is the trust-prompt case the driver
+      // gate covers, and this gate never drives an account).
+      if ((await openPlus()) !== true) fail('the + menu did not open for the terminal')
+      if ((await pick('Terminal')) !== true) fail('the + menu has no Terminal item')
+      const terminal = await until(async () => {
         const snapshot = await evaluate(`(() => {
-            const bar = document.querySelector('[data-acryl-slot=rightbar]')
-            if (bar === null) return undefined
-            const text = bar.innerText
-            if (!text.includes('Changes')) return undefined
-            const labels = [...bar.querySelectorAll('button,[role=tab]')]
-              .map(element => element.getAttribute('aria-label') ?? element.getAttribute('title') ?? element.textContent.trim())
-              .filter(Boolean)
-            return { text: text.slice(0, 600), labels: labels.slice(0, 60) }
-          })()`)
-        if (snapshot !== undefined) return snapshot
-        await click('Show right panel')
-        return undefined
+          const screen = document.querySelector('.acrylBlendsTermScreen')
+          return screen === null ? undefined : { tabs: [...document.querySelectorAll('.acrylBlendsTab')].map((tab) => tab.textContent.trim()) }
+        })()`)
+        return snapshot
       }, 20_000)
-      if (right === undefined) fail('the right panel did not open with its views')
-      const rightText = `${right.text}\n${right.labels.join('\n')}`
-      for (const label of ['Changes', 'Review'])
-        if (!rightText.includes(label))
-          fail(`the right panel has no ${label} view: ${JSON.stringify(right)}`)
-      if (!rightText.includes('Files') && !rightText.includes('Code'))
-        fail(`the right panel has no files view: ${JSON.stringify(right)}`)
-      log('the right panel offers Files, Changes and Review')
+      if (terminal === undefined) fail('a terminal tab did not open its PTY view')
+      log(`a terminal tab opened its PTY view (${terminal.tabs.join(' | ')})`)
 
-      // (f) The command palette (the same window event `acryl-shortcuts` sends when its shortcut runs).
-      await evaluate(`window.dispatchEvent(new Event('acryl:toggle-command-palette')), true`)
-      const palette = await until(
-        async () =>
-          await evaluate(
-            `document.querySelector('[role=dialog][aria-label="Command palette"]') !== null`,
-          ),
-        10_000,
+      // Mockup scenario 5 (chat history): the chat's History lists the branch's chats, and the button closes it again.
+      await evaluate(`(() => {
+        const chat = [...document.querySelectorAll('.acrylBlendsTab')].find((tab) => /Chat/iu.test(tab.textContent))
+        chat?.click()
+        return true
+      })()`)
+      await sleep(500)
+      await evaluate(`document.querySelector('.acrylBlendsHistoryButton')?.click()`)
+      const history = await until(async () => {
+        const text = await evaluate(
+          `document.querySelector('.acrylBlendsHistory')?.innerText.slice(0, 300) ?? undefined`,
+        )
+        return typeof text === 'string' && /New chat|main/iu.test(text) ? text : undefined
+      }, 15_000)
+      if (history === undefined) fail("the chat History did not open with the branch's chats")
+      log(
+        `the chat History lists the branch's chats ("${history.split('\n').slice(0, 3).join(' · ')}")`,
       )
-      if (palette !== true) fail('the command palette did not open')
-      log('the command palette opens')
+      await evaluate(`document.querySelector('.acrylBlendsHistoryButton')?.click()`)
       await pressEscape()
 
-      // (e) A terminal tab, in a real PTY.
-      const terminal = await until(async () => {
-        if ((await click('Choose what to open')) !== true) return undefined
-        await sleep(300)
-        if ((await click('New Terminal')) !== true) return undefined
-        return await until(
-          async () =>
-            await evaluate(`(() => {
-                const pane = document.querySelector('.dshWorkspaceXterm')
-                return pane === null ? undefined : pane.getAttribute('aria-label')
-              })()`),
-          20_000,
-        )
-      }, 15_000)
-      if (terminal === undefined) fail('a terminal tab did not open a PTY')
-      log(`a terminal tab runs a PTY (${String(terminal)})`)
-      if ((await click(`Close ${String(terminal).replace(/ terminal$/u, '')}`)) !== true)
-        await click('Close Terminal')
-
-      const opened = await until(async () => {
-        if ((await click('Choose what to open')) !== true) return undefined
-        await sleep(300)
-        return (await click('New Browser Tab')) === true ? true : undefined
-      }, 15_000)
-      if (opened !== true) {
-        const diagnostics = await evaluate(`(() => ({
-          menu: document.querySelector('[role=menu]')?.innerText.slice(0, 500) ?? null,
-          labels: [...document.querySelectorAll('button')].map(button => button.getAttribute('aria-label')).filter(Boolean).slice(0, 40),
-        }))()`)
-        const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
-        writeFileSync(
-          '/tmp/verify-ide-template-tile.png',
-          Buffer.from(shot.result?.data ?? '', 'base64'),
-        )
-        fail(
-          `the tab strip does not offer "New Browser Tab": ${JSON.stringify(diagnostics)} (screenshot /tmp/verify-ide-template-tile.png)`,
-        )
-      }
-      // The new tab is added beside the chat tab, whose "Connect a model" card stays in front: select the browser tab itself before reading its address bar.
-      const selected = await until(
-        async () =>
-          await evaluate(`(() => {
-            const tab = [...document.querySelectorAll('[role=tab]')]
-              .find(candidate => candidate.textContent.includes('Browser'))
-            if (tab === undefined) return undefined
-            tab.click()
-            return true
-          })()`),
-        10_000,
-      )
-      if (selected !== true) fail('the new browser tab is not in the tab strip')
-      const address = 'input[aria-label="Browser address"]'
-      const typed = await until(
-        async () => (await evaluate(setInputValue(address, `${origin}${page.path}`))) === true,
-        10_000,
-      )
-      if (typed !== true) {
-        const diagnostics = await evaluate(`(() => {
-          const input = document.querySelector(${JSON.stringify(address)})
-          let error = null
-          try {
-            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
-            if (input !== null && setter !== undefined) setter.call(input, 'probe')
-          } catch (cause) { error = String(cause) }
+      // Mockup scenario 7 (preview as a user): the Build/Preview switch hides the whole frame on the same app, and the pill takes the builder back.
+      await evaluate(`(() => {
+        const preview = [...document.querySelectorAll('.acrylBlendsModes button')].find((button) => button.textContent.trim() === 'Preview')
+        preview?.click()
+        return preview !== undefined
+      })()`)
+      const preview = await until(async () => {
+        const snapshot = await evaluate(`(() => {
+          const shell = document.querySelector('.acrylBlendsFrame')
+          if (shell?.getAttribute('data-mode') !== 'preview') return undefined
           return {
-            found: input !== null,
-            value: input?.value ?? null,
-            error,
-            browserPane: document.querySelectorAll('.dshWorkspaceBrowser').length,
-            tabs: [...document.querySelectorAll('[role=tab]')].map(tab => tab.textContent.trim()).slice(0, 8),
+            left: document.querySelector('.acrylBlendsLeft')?.hidden === true,
+            right: document.querySelector('.acrylBlendsRight')?.hidden === true,
+            back: document.querySelector('.acrylBlendsBackbar button')?.textContent.trim() ?? null,
+            app: (document.querySelector('iframe.acrylAppCanvasFrame')?.contentDocument?.body?.innerText ?? '').length > 0,
           }
         })()`)
-        const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
-        writeFileSync(
-          '/tmp/verify-ide-template-tile.png',
-          Buffer.from(shot.result?.data ?? '', 'base64'),
-        )
-        fail(
-          `the browser tile has no address input: ${JSON.stringify(diagnostics)} (screenshot /tmp/verify-ide-template-tile.png)`,
-        )
-      }
-      // One press of Go must load the page (the product reads the address field itself and remounts the frame on every press, and retries a
-      // same-origin load the browser replaced with its error page once). A second press here would prove nothing about what an attendee sees.
-      if ((await click('Go')) !== true) fail('the browser tile has no Go button')
-      const shown = await until(
+        return snapshot?.left === true && snapshot?.right === true ? snapshot : undefined
+      }, 20_000)
+      if (preview === undefined) fail('Preview did not hide the frame around the app')
+      if (preview.back !== 'Back to Build')
+        fail(`Preview has no Back to Build control: ${JSON.stringify(preview)}`)
+      if (preview.app !== true) fail('the app is not visible in Preview')
+      log('Preview hides the frame and shows the app on the same canvas')
+      await evaluate(`(() => {
+        const back = [...document.querySelectorAll('.acrylBlendsBackbar button')].find((button) => button.textContent.trim() === 'Back to Build')
+        back?.click()
+        return back !== undefined
+      })()`)
+      await until(
         async () =>
-          await evaluate(`(() => {
-            const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-            if (frame === null) return undefined
-            const text = frame.contentDocument?.body?.innerText ?? ''
-            return text.includes(${JSON.stringify(page.text)}) ? text.slice(0, 200) : undefined
-          })()`),
-        30_000,
-      )
-      if (shown === undefined) {
-        const diagnostics = await evaluate(`(() => {
-          const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
-          return {
-            src: frame?.getAttribute('src') ?? null,
-            title: frame?.contentDocument?.title ?? null,
-            text: frame?.contentDocument?.body?.innerText?.slice(0, 300) ?? null,
-            // A null document with a src is the browser's own error page (a same-origin page always exposes its document), so the failure
-            // says a request died rather than that the tile rendered nothing.
-            documentReadable: frame === null ? null : frame.contentDocument !== null,
-            browserPane: document.querySelectorAll('.dshWorkspaceBrowser').length,
-          }
-        })()`)
-        fail(
-          `the app's page did not load in the frame's browser tile after one Go: ${JSON.stringify(diagnostics)}; Chrome's net log: ${netLog}; server said:\n${output.slice(-1500)}`,
-        )
-      }
-      log(`the app's page is shown in the frame's browser tile: "${shown.trim().split('\n')[0]}"`)
-      // The new tab opened at its default address and Go sent it to the app: that must be a new frame for the app's address, not the old frame
-      // re-pointed. Checked again after the panel's run, which is when a late load from the old address used to replace the page.
-      const repointed = async (when) => {
-        const record = await evaluate(
-          '({ changes: window.__acrylTileRepointed ?? null, outside: window.__acrylTileOutside ?? null })',
-        )
-        if (!Array.isArray(record?.changes) || !Array.isArray(record?.outside))
-          fail(`the tile frame recorder is missing ${when}`)
-        if (record.changes.length > 0)
-          fail(
-            `a browser tile's frame was pointed at another address in place ${when}: ${JSON.stringify(record.changes)}`,
-          )
-        if (record.outside.length > 0)
-          fail(
-            `a browser tile loaded an outside site nobody asked for ${when}: ${JSON.stringify(record.outside)}`,
-          )
-      }
-      await repointed('when the app page was shown')
-      log(
-        'each browser tile address loads in a frame of its own (no frame is re-pointed), and a new tab never opens an outside site',
+          (await evaluate(
+            `document.querySelector('.acrylBlendsFrame')?.getAttribute('data-mode') === 'build'`,
+          )) === true,
+        15_000,
       )
 
       // The agent template's own plugins run beside the host (the composition check above proves every row active), and the panel's routes belong under
@@ -1416,7 +1309,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         const panel = await until(
           async () =>
             await evaluate(`(() => {
-            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const iframe = document.querySelector('iframe.acrylAppCanvasFrame')
             const host = iframe?.contentDocument?.querySelector('#agent-panel')
             const root = host?.shadowRoot
             const open = root?.querySelector('button.open')
@@ -1470,10 +1363,23 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           })()`),
           30_000,
         )
-        if (panel === undefined)
+        if (panel === undefined) {
+          const detail = await evaluate(`(() => {
+            const iframe = document.querySelector('iframe.acrylAppCanvasFrame')
+            const doc = iframe?.contentDocument
+            const host = doc?.querySelector('#agent-panel')
+            return {
+              href: iframe?.contentWindow?.location?.href ?? null,
+              title: doc?.title ?? null,
+              scripts: [...(doc?.querySelectorAll('script[src]') ?? [])].map((script) => script.getAttribute('src')),
+              host: host === null || host === undefined ? null : { ready: host.dataset.ready ?? null, hasShadow: host.shadowRoot !== null },
+              text: doc?.body?.innerText?.slice(0, 300) ?? null,
+            }
+          })()`)
           fail(
-            `the agent panel did not appear in the app's page, or its session did not load; server said:\n${output.slice(-2500)}`,
+            `the agent panel did not appear in the app's page, or its session did not load: ${JSON.stringify(detail)}; server said:\n${output.slice(-2500)}`,
           )
+        }
         if (panel.shown !== true)
           fail(
             `the agent panel did not switch to the agent's form when its driver was picked (no DOM repair by the gate): ${JSON.stringify(panel)}`,
@@ -1483,7 +1389,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         const answered = await until(
           async () =>
             await evaluate(`(() => {
-            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const iframe = document.querySelector('iframe.acrylAppCanvasFrame')
             const root = iframe?.contentDocument?.querySelector('#agent-panel')?.shadowRoot
             const logElement = root?.querySelector('#log')
             const log = logElement?.innerText ?? ''
@@ -1504,7 +1410,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           answered.stopped !== true
         ) {
           const detail = await evaluate(`(() => {
-            const iframe = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+            const iframe = document.querySelector('iframe.acrylAppCanvasFrame')
             const host = iframe?.contentDocument?.querySelector('#agent-panel')
             const root = host?.shadowRoot
             const gate = window.__acrylPanelGate
@@ -1556,7 +1462,6 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         log(
           "the panel opens in the app, asks the app's own agent, and shows the answer (run started and stopped)",
         )
-        await repointed('during the panel run')
         // The same admission as the app's own server, never a looser one: the mounted path refuses a cross-site request, and an ask without the token.
         const refused = (target, extra) =>
           spawnSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', ...extra, target], {
@@ -1646,62 +1551,48 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         log("the terminal's endpoints keep the app's origin and token admission under the mount")
       }
 
-      // A settings change is picked up on the next page load. The new chat is asked as soon as the frame is back - inside the window in which the frame
-      // restores the shown chat's worktree (the session list arrives, then the tree discovers the chat's folder). The product keeps that new chat waiting
-      // with a visible state and opens it on the restored worktree (ide/acryl-workspace: WorkspaceShellState.waitForSelection and
-      // WorkspaceCanvas.openChat); the gate neither waits for a selection first, clicks a fallback nor retries - the composer below is the proof.
+      // A settings change is picked up on the next page load, and the frame restores the branch's chat beside the app.
       await cdp.send('Page.navigate', { url: `${origin}/` })
       const reloaded = await until(
-        async () => await evaluate(`document.querySelector('.dshWorkspaceSide') !== null`),
+        async () =>
+          (await evaluate(
+            `document.querySelector('.acrylBlendsFrame') !== null && document.querySelector('iframe.acrylAppCanvasFrame') !== null`,
+          )) === true,
         60_000,
       )
       if (reloaded !== true) fail('the frame did not come back after the settings reload')
 
       // The workshop runs on the agent template; the blank app has no chat worktree, so its chat send is not checked here.
       if (template === 'agent') {
-        // A fresh chat from the tab menu: a session started after the key was saved shows no first-run card.
-        // The toolbar renders a moment after the frame; the worktree does not wait to be restored before this click - only the button has to be there.
-        const hasMenu = await until(
-          async () =>
-            await evaluate(
-              `[...document.querySelectorAll('button')].some((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Choose what to open')`,
-            ),
-          15_000,
-        )
-        if (hasMenu !== true) fail('the frame has no "Choose what to open" button')
-        // The menu is opened and the item is pressed when it appears; if the first press did not open it (the toolbar was still rendering), press again -
-        // a bounded retry of the menu, not of the worktree (which the product waits for on its own).
+        // A fresh chat from the frame's + menu: a session started after the key was saved shows no first-run card. The panel restores the branch's
+        // chat on its own; only the menu is retried while the frame is still rendering.
         let chatOpened = false
         for (let attempt = 0; attempt < 3 && chatOpened !== true; attempt += 1) {
-          await evaluate(
-            `(() => { const button = [...document.querySelectorAll('button')].find((candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Choose what to open'); button?.click(); return true })()`,
-          )
+          await evaluate(`(() => {
+            const plus = [...document.querySelectorAll('button')]
+              .find((candidate) => (candidate.getAttribute('aria-label') ?? '') === 'Open an agent, a terminal, files or git')
+            plus?.click()
+            return true
+          })()`)
           chatOpened = await until(
             async () =>
               await evaluate(`(() => {
-            const item = [...document.querySelectorAll('[role=menuitem],button,a')].find((candidate) => (candidate.textContent.trim()) === 'AcrylDSH Chat')
-            if (item === undefined) return false
-            item.click()
-            return true
-          })()`),
+                const item = [...document.querySelectorAll('[role=menuitem]')].find((candidate) => candidate.textContent.trim().startsWith('Chat'))
+                if (item === undefined) return false
+                item.click()
+                return true
+              })()`),
             3_000,
           )
           if (chatOpened !== true) await sleep(500)
         }
-        if (chatOpened !== true) fail('the tab menu has no AcrylDSH Chat item')
-        if (
-          (await evaluate(
-            `document.body.innerText.includes('Restoring the worktree of the open chat')`,
-          )) === true
-        )
-          log(
-            'the new chat was asked while the worktree was restoring, and opened on it once it was there',
-          )
-        await sleep(1500)
-        await sleep(1200)
-        await sleep(1500)
-        await evaluate(
-          `(() => { const tab = [...document.querySelectorAll('[role=tab]')].find(candidate => /chat/iu.test(candidate.textContent)); tab?.click(); return true })()`,
+        if (chatOpened !== true) fail('the + menu has no Chat item')
+        await until(
+          async () =>
+            (await evaluate(
+              `[...document.querySelectorAll('.acrylBlendsTab')].some((tab) => /Chat/iu.test(tab.textContent))`,
+            )) === true,
+          20_000,
         )
         await sleep(800)
         if (
@@ -1798,18 +1689,12 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             [...dialog.querySelectorAll('nav button')].some(isSection))
         })()`
         const pressSettingsExpression = `(() => {
-          // Press the product's own trigger once. The visible foot button goes through the frame's openSettings path (which activates the DSH trigger
-          // itself); pressing the hidden upstream trigger as well can toggle the just-opened dialog straight back shut, so it is only the fallback.
-          const labelOf = (element) => (element.getAttribute('aria-label') ?? element.textContent.trim())
-          const foot = [...document.querySelectorAll('.dshWorkspaceSideFoot button')].filter((candidate) => labelOf(candidate) === 'Settings')
-          const buttons = foot.length > 0 ? foot : [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) => labelOf(candidate) === 'Settings')
-          for (const button of buttons.slice(0, 1)) button.click()
-          if (buttons.length === 0) {
-            const trigger = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
-              .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))
-            trigger?.click()
-          }
-          return buttons.length
+          // The frame's top-bar gear is the one launcher (it fills DSH's settings.launcher); a second press of it toggles the dialog shut, so this
+          // presses exactly one button.
+          const gear = [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
+            .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))
+          gear?.click()
+          return gear === undefined ? 0 : 1
         })()`
         let opened = false
         let presses = 0
@@ -1834,8 +1719,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
               .map((candidate) => ({
                 tag: candidate.tagName,
                 className: String(candidate.className).slice(0, 80),
-                inFoot: candidate.closest('.dshWorkspaceSideFoot') !== null,
-                inUpstreamHost: candidate.closest('.dshWorkspaceUpstreamHost') !== null,
+                inTopbar: candidate.closest('.acrylBlendsBar') !== null,
                 inDialog: candidate.closest('[role=dialog]') !== null,
                 visible: candidate.getClientRects().length > 0,
                 disabled: candidate.disabled === true,
@@ -1915,11 +1799,47 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
             `Settings is missing ${missing.join(', ')}: ${JSON.stringify(settings).slice(0, 3000)}`,
           )
         log(`Settings has ${sections.join(', ')}`)
+        // Mockup scenario 6 (Settings: plugins): the navigator of everything the app is made of, with its search and its rows. A slow runner can
+        // lose the dialog between reading its sections and this step (the same settle that closed it under the sections wait), so the gear is pressed
+        // again whenever no visible dialog is up; a press while it is open would toggle it shut, which is why it is only the closed case.
+        const plugins = await until(async () => {
+          const open = await evaluate(
+            `[...document.querySelectorAll('[role=dialog]')].some((candidate) => candidate.getClientRects().length > 0 && candidate.querySelector('nav') !== null)`,
+          )
+          if (open !== true) {
+            await evaluate(pressSettingsExpression)
+            return undefined
+          }
+          const clicked = await evaluate(`(() => {
+            const item = [...document.querySelectorAll('[role=dialog] nav button')]
+              .find((button) => /Plugins|插件/u.test((button.getAttribute('aria-label') ?? '') + ' ' + button.textContent))
+            item?.click()
+            return item !== undefined
+          })()`)
+          if (clicked !== true) return undefined
+          const snapshot = await evaluate(`(() => {
+            const view = document.querySelector('.acrylBlendsPlugins')
+            if (view === null) return undefined
+            return { search: view.querySelector('input[aria-label="Search plugins"]') !== null, rows: view.querySelectorAll('.acrylBlendsPlug').length, text: view.innerText.slice(0, 300) }
+          })()`)
+          if (snapshot === undefined || snapshot.rows < 1) return undefined
+          return snapshot
+        }, 20_000)
+        if (plugins === undefined) {
+          const detail = await evaluate(
+            `document.querySelector('.acrylBlendsPlugins')?.innerText.slice(0, 400) ?? document.querySelector('[role=dialog]')?.innerText.slice(-400) ?? null`,
+          )
+          fail(
+            `Settings > Plugins did not open the plugin navigator with its rows: ${JSON.stringify(detail)}`,
+          )
+        }
+        if (plugins.search !== true) fail('Settings > Plugins has no search')
+        log(`Settings > Plugins lists ${String(plugins.rows)} plugins with its search`)
         await pressEscape()
       }
-      // The session banner (119): the browser's session is gone (its cookie is deleted, as Chrome loses it after a restart inside its flush window)
-      // and the host restarts under the open page. The connection cannot recover, so the frame must name the command instead of spinning - and the
-      // document must not scroll while it does.
+      // The browser's session is gone (its cookie is deleted, as Chrome loses it after a restart inside its flush window) and the host restarts
+      // under the open page. The frame keeps the app on screen instead of going blank, and the frame's own API refuses the stale page; the page
+      // does not scroll while it happens.
       const cookies = (await cdp.send('Network.getAllCookies')).result?.cookies ?? []
       for (const cookie of cookies)
         await cdp.send('Network.deleteCookies', {
@@ -1928,26 +1848,42 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           path: cookie.path,
         })
       const restartedUrl = await restartHost()
-      if (restartedUrl === undefined) fail('the host did not restart for the session banner check')
-      const banner = await until(async () => {
+      if (restartedUrl === undefined) fail('the host did not restart for the session check')
+      const stillShowing = await until(async () => {
         return await evaluate(`(() => {
-          const alert = [...document.querySelectorAll('[role=alert]')].find((element) => element.innerText.includes('session ended'))
-          if (alert === undefined) return undefined
-          return { text: alert.innerText.slice(0, 300), scrollTop: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) }
+          const frame = document.querySelector('.acrylBlendsFrame')
+          const canvas = document.querySelector('iframe.acrylAppCanvasFrame')
+          const text = canvas?.contentDocument?.body?.innerText ?? ''
+          if (frame === null || canvas === null || text.length === 0) return undefined
+          return {
+            text: text.slice(0, 80),
+            scrollTop: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop),
+          }
         })()`)
       }, 30_000)
-      if (banner === undefined) {
+      if (stillShowing === undefined) {
         const detail = await evaluate(`document.body.innerText.slice(0, 400)`)
         fail(
-          `the session banner did not appear after the host restarted without the browser's session: ${JSON.stringify(detail)}; server said:\n${output.slice(-1500)}`,
+          `the frame or the app disappeared after the host restarted without the browser's session: ${JSON.stringify(detail)}; server said:\n${output.slice(-1500)}`,
         )
       }
-      if (!banner.text.includes('npx acrylblends open'))
-        fail(`the session banner does not name the command: ${JSON.stringify(banner.text)}`)
-      if (banner.scrollTop !== 0)
-        fail(`the page scrolled to ${String(banner.scrollTop)} while the session banner showed`)
+      if (stillShowing.scrollTop !== 0)
+        fail(
+          `the page scrolled to ${String(stillShowing.scrollTop)} after the host restarted without the session`,
+        )
+      const staleApi = Number(
+        spawnSync(
+          'curl',
+          ['-s', '-o', '/dev/null', '-w', '%{http_code}', `${origin}/api/acryl-blends-frame/state`],
+          {
+            encoding: 'utf8',
+          },
+        ).stdout,
+      )
+      if (staleApi !== 401 && staleApi !== 403 && staleApi !== 303)
+        fail(`the frame's API admitted a page without a session (${String(staleApi)})`)
       log(
-        'the session banner names `npx acrylblends open` after the browser session ended, with the page unscrolled',
+        "after the host restarted without the browser's session, the app stays on screen and the frame's API refuses the stale page",
       )
     } catch (error) {
       const reported = pageReported()

@@ -8,9 +8,14 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { ownerChangeLines, stripRegistrations, withRegistrations, type ChangedLine } from './app-registration.ts'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
+import {
+  type ChangedLine,
+  ownerChangeLines,
+  stripRegistrations,
+  withRegistrations,
+} from './app-registration.ts'
 import { diffStat, unifiedDiff } from './diff'
 import { APP_PLUGINS_FILE, appFrameRows } from './frame-rows'
 import {
@@ -205,7 +210,11 @@ export function planFrameStep(
       const stripped = stripRegistrations(current, undefined, appFile.text)
       const target = withRegistrations(appFile.text, stripped.edits)
       if (stripped.text === appFile.text) {
-        files[appIndex] = { file: 'src/app.ts', text: target, state: target === current ? 'same' : 'update' }
+        files[appIndex] = {
+          file: 'src/app.ts',
+          text: target,
+          state: target === current ? 'same' : 'update',
+        }
       } else {
         conflictLines = { 'src/app.ts': ownerChangeLines(current, target) }
       }
@@ -284,7 +293,9 @@ export function frameReport(frame: FrameStep): string {
     if (file.state !== 'same')
       parts.push(`${file.file} ${file.state === 'update' ? 'updated' : 'added'}`)
   if (frame.profile.clientRowsAdded.length > 0)
-    parts.push(`scripts/ide-host.mjs client rows added (${frame.profile.clientRowsAdded.join(', ')})`)
+    parts.push(
+      `scripts/ide-host.mjs client rows added (${frame.profile.clientRowsAdded.join(', ')})`,
+    )
   for (const plugin of frame.hostPlugins) parts.push(`plugins/${plugin} added`)
   if (frame.removeProfileScript) parts.push(`${OLD_PROFILE_SCRIPT} removed`)
   if (frame.profile.manifestChanged)
@@ -329,9 +340,10 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
   const frame = planFrameStep(appDir, library)
   if (frame.kind === 'planned' && frame.conflicts.length > 0 && !options.force) {
     const own = frame.conflictLines?.['src/app.ts'] ?? []
-    const detail = own.length === 0
-      ? ''
-      : `\n  src/app.ts keeps the framework's plugin registrations; the app's own lines are ${own.map((line) => `line ${String(line.line)} (${JSON.stringify(line.text)})`).join(', ')}`
+    const detail =
+      own.length === 0
+        ? ''
+        : `\n  src/app.ts keeps the framework's plugin registrations; the app's own lines are ${own.map((line) => `line ${String(line.line)} (${JSON.stringify(line.text)})`).join(', ')}`
     io.stderr.write(
       `error: ${frame.conflicts.join(', ')} in ${appDir} ${frame.conflicts.length === 1 ? 'is' : 'are'} not the previous release's scaffold and acrylblends did not write ${frame.conflicts.length === 1 ? 'it' : 'them'}; nothing was changed.${detail} Move the app's version aside (or merge it into the template's) and run again, or run again with --force (the app's versions are saved under .acrylblends/upgrade-backup/ first)\n`,
     )

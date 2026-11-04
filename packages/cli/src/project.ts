@@ -271,7 +271,10 @@ export function writeAgentFiles(
   writeFileSync(join(target, 'CLAUDE.md'), text)
   const written = ['AGENTS.md', 'CLAUDE.md']
   for (const skill of sharedSkills(sharedDir)) {
-    const skillText = readFileSync(join(sharedDir, 'skills', skill, 'SKILL.md'), 'utf8').replaceAll('__APP_NAME__', name)
+    const skillText = readFileSync(join(sharedDir, 'skills', skill, 'SKILL.md'), 'utf8').replaceAll(
+      '__APP_NAME__',
+      name,
+    )
     for (const scope of ['.claude/skills', '.agents/skills']) {
       const folder = `${scope}/${skill}`
       mkdirSync(join(target, folder), { recursive: true })

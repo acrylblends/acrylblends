@@ -109,17 +109,22 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsPickingHint { padding: 4px 9px; border-radius: 7px; background: rgba(29,28,26,.86); color: #fff; font-size: 11.5px; white-space: nowrap; }
 
 .acrylBlendsTabs { position: relative; flex: none; border-bottom: 1px solid var(--bf-border); }
-.acrylBlendsTabStrip { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; overflow-x: auto; scrollbar-width: none; scroll-padding-right: 40px; }
+.acrylBlendsTabStrip { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; overflow-x: hidden; scrollbar-width: none; scroll-padding-right: 40px; }
+/* The sizing rule decides when the tabs cannot share the width (tab-sizing.ts): only then does the strip scroll, with every tab at the minimum. */
+.acrylBlendsTabStrip[data-scroll] { overflow-x: auto; }
 .acrylBlendsTabStrip::-webkit-scrollbar { display: none; }
-.acrylBlendsTabWrap { position: relative; display: flex; flex: none; }
-.acrylBlendsTab { padding: 6px 7px; border: 0; border-radius: 6px 6px 0 0; background: transparent; color: var(--bf-dim); display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; font-size: 12px; }
+/* Tabs share the strip's width: each one's max comes from tab-sizing.ts, its label ellipsizes inside it, and the strip only scrolls when even the
+   minimums do not fit (five open tabs at 412px still fit). */
+.acrylBlendsTabWrap { position: relative; display: flex; flex: 0 1 auto; min-width: 72px; }
+.acrylBlendsTab { flex: 1 1 auto; min-width: 0; overflow: hidden; padding: 6px 7px; border: 0; border-radius: 6px 6px 0 0; background: transparent; color: var(--bf-dim); display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; font-size: 12px; }
 .acrylBlendsTab:hover { color: #d4d4da; }
 .acrylBlendsTab[aria-selected="true"] { color: #fff; box-shadow: inset 0 -2px 0 var(--bf-accent); }
-.acrylBlendsTabKind { font-size: 10px; color: #77777f; }
+.acrylBlendsTabLabel { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acrylBlendsTabKind { flex: none; font-size: 10px; color: #77777f; }
 /* A file tab whose name another open file shares: the folder that tells them apart, dim, before the name. */
 .acrylBlendsTabPath { font-size: 10.5px; color: #77777f; }
 .acrylBlendsTabClose { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--bf-dim); font-size: 13px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
-.acrylBlendsTabWrap .acrylBlendsTabClose { position: absolute; top: 2px; right: -4px; opacity: 0; background: var(--bf-side); }
+.acrylBlendsTabWrap .acrylBlendsTabClose { position: absolute; top: 2px; right: 1px; opacity: 0; background: var(--bf-side); }
 .acrylBlendsTabWrap:hover .acrylBlendsTabClose, .acrylBlendsTabClose:focus-visible { opacity: 1; }
 .acrylBlendsTabClose:hover { background: var(--bf-surface-2); color: #fff; }
 /* Every open chat has a tab, so the strip can run past the panel: the + stays at its right edge, over a fade, and the tab shown scrolls into view. */
@@ -181,7 +186,6 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsHistory { flex: 1; overflow: auto; padding: 8px 10px; display: grid; gap: 2px; align-content: start; }
 .acrylBlendsHistoryGroup { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--bf-dim); padding: 8px 9px 3px; }
 .acrylBlendsHistoryRow:disabled { opacity: .5; cursor: default; }
-.acrylBlendsTabTitle { display: inline-block; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .acrylBlendsHistoryRow { display: grid; gap: 1px; padding: 7px 9px; border: 0; border-radius: 6px; background: transparent; color: #d4d4da; cursor: pointer; text-align: left; }
 .acrylBlendsHistoryRow:hover { background: var(--bf-surface-2); }
 .acrylBlendsHistoryRow[aria-current] { color: #fff; }
