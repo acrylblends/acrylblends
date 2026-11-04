@@ -57,6 +57,11 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
   // The page's root: the Blends frame (docs/design/blends-frame-mockup.html), never the IDE's workbench (`acryl-workspace`).
   { name: 'acryl-blends-frame', spec: '' },
   { name: 'acryl-plugin-admin', spec: '' },
+  // The agent's prompt as ACRYL IDE's agent has it: the identity line first, every section a tagged block (pi.dev's shape), empties dropped.
+  { name: 'acryl-system-prompt', spec: '' },
+  // The app builder's docs, the way ACRYL IDE's agent has its plugin docs: a routed index, verified example plugins and the prompt line that sends
+  // the agent to them before it writes a plugin.
+  { name: 'acryl-app-context', spec: '' },
   { name: 'acryl-support', spec: '' },
   { name: 'acryl-sign-in', spec: '' },
   {
@@ -152,6 +157,8 @@ export const DRIVER_ROWS: readonly string[] = [
   'workspace-controller',
   'tools',
   'system-prompt',
+  // The skills registry the preset's `skill-filesystem` fills from the app's `.agents/skills/` and its `tool-skill` reads (DSH keeps it on the host plane).
+  'skill',
   'file-upload',
   'fs-sandbox',
   'sandbox-policy',
@@ -199,11 +206,19 @@ export const AGENT_PRESET_ID = 'acryl-blends'
 
 /**
  * The plugins the frame's preset takes from DSH's own `standard` preset, as DSH declares them (config and prompt included), so they follow every DSH
- * bump instead of being restated here: plan mode and its `/plan` (`planning`, which ui-plan's plan card and Plan tab show), the To-dos list the
- * composer's dock shows (`tool-todo`), the questions the agent can ask (`tool-ask-user`), and context compaction (`compaction`), whose meter is the
- * footer's context %.
+ * bump instead of being restated here: the app's skills (`skill-filesystem` finds `.agents/skills/` in the app folder, the skills `acrylblends` writes
+ * there with every app, and `tool-skill` lets the agent load one), plan mode and its `/plan` (`planning`, which ui-plan's plan card and Plan tab show),
+ * the To-dos list the composer's dock shows (`tool-todo`), the questions the agent can ask (`tool-ask-user`), and context compaction (`compaction`),
+ * whose meter is the footer's context %.
  */
-export const DSH_STANDARD_PLUGINS: readonly string[] = ['planning', 'compaction', 'tool-ask-user', 'tool-todo']
+export const DSH_STANDARD_PLUGINS: readonly string[] = [
+  'skill-filesystem',
+  'tool-skill',
+  'planning',
+  'compaction',
+  'tool-ask-user',
+  'tool-todo',
+]
 
 export const AGENT_PRESET_ROWS: readonly {
   readonly id: string
