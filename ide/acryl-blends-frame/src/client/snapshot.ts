@@ -1,12 +1,12 @@
 /**
- * The left panel's Capture: the app's snapshot verb `capture` on the frame's Host, and the one line it reads as.
+ * The capture a Save point starts with: the app's snapshot verb `capture` on the frame's Host, so every version is a captured snapshot.
  */
 
 import { FRAME_SNAPSHOT_CAPTURE_PATH, parseSnapshotCapture, type SnapshotCapture } from '../contract.ts'
 
 export interface SnapshotPort {
-  /** @throws the Host's one line (an app made before the snapshot verbs, a `blend.yaml` that does not parse). */
-  capture(): Promise<SnapshotCapture>
+  /** Undefined when the app was made before the snapshot verbs. @throws the Host's one line (a `blend.yaml` that does not parse). */
+  capture(): Promise<SnapshotCapture | undefined>
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -26,15 +26,8 @@ export function createSnapshotApi(fetcher: FetchLike = (input, init) => fetch(in
         body: '{}',
       })
       if (!response.ok) throw await failure(response, 'The app could not be captured')
+      if (response.status === 204) return undefined
       return parseSnapshotCapture(await response.json())
     },
   }
-}
-
-/** "Captured: notes got a row; 4 plugins locked." or "Captured: every plugin already had a row; 3 plugins locked." */
-export function captureText(result: SnapshotCapture): string {
-  const plugins = `${String(result.modules)} plugin${result.modules === 1 ? '' : 's'} locked`
-  if (result.addedRows.length === 0) return `Captured: every plugin already had a row; ${plugins}.`
-  const names = result.addedRows.join(', ')
-  return `Captured: ${names} ${result.addedRows.length === 1 ? 'got a row' : 'got rows'}; ${plugins}.`
 }

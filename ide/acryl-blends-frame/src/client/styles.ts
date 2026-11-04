@@ -48,7 +48,13 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 
 .acrylBlendsPaneHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 6px; }
 .acrylBlendsPaneHead .acrylBlendsSmallButton { flex: none; white-space: nowrap; }
-.acrylBlendsVersionRemote { padding: 12px 6px 2px 12px; }
+.acrylBlendsPaneActions { display: flex; align-items: center; gap: 6px; flex: none; }
+.acrylBlendsRemoteChips { display: flex; gap: 4px; }
+.acrylBlendsRemoteChip { font-size: 11px; line-height: 16px; color: #c8c8d0; background: var(--bf-surface-2); border: 1px solid #2f2f35; border-radius: 999px; padding: 1px 7px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.acrylBlendsRemoteChip:disabled { cursor: default; opacity: .6; }
+.acrylBlendsRemoteChip[data-synced] { cursor: default; color: var(--bf-ok); border-color: transparent; background: transparent; padding: 1px 2px; }
+.acrylBlendsToast { position: fixed; left: 12px; bottom: 44px; z-index: 30; max-width: 224px; text-align: left; font: inherit; font-size: 12px; color: var(--bf-text); background: var(--bf-surface-2); border: 1px solid #34343a; border-radius: 8px; padding: 8px 10px; box-shadow: 0 6px 20px rgba(0,0,0,.4); cursor: pointer; overflow-wrap: anywhere; }
+.acrylBlendsToast[data-error] { border-color: #6b3a3a; color: #f1b4b4; }
 .acrylBlendsLabel { color: var(--bf-dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .acrylBlendsList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; padding: 0 6px; }
 .acrylBlendsSmallButton { font-size: 11px; color: #c8c8d0; background: var(--bf-surface-2); border: 1px solid #2f2f35; border-radius: 6px; padding: 2px 8px; cursor: pointer; }

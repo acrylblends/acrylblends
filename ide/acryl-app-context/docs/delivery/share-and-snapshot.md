@@ -25,9 +25,9 @@ row is in all of them without any export step:
   where it is, on the `extensions` row's `off` list. Ask the person before you apply.
 
 In the frame the same verbs are your tools `acryl_snapshot_capture`, `acryl_snapshot_verify` and `acryl_snapshot_apply` (the frame runs the
-app's own `plugins/manifest/snapshot.ts`), and the person has **Capture** next to **Save point** above the versions. Under the versions,
-**Push** and **Pull** send the branch's versions to its remote and bring the remote's new ones in (fast-forward only, never forced): those are
-the person's buttons, not yours.
+app's own `plugins/manifest/snapshot.ts`). Every version the frame saves (the save after your turn, the person's **Save point**) is captured
+first, so a version always holds the rows and the lock of what it saved. The `↑`/`↓` chips next to **Save point** send the branch's versions to
+its remote and bring the remote's new ones in (fast-forward only, never forced): those are the person's, not yours.
 
 ## What you do, and what only the person does
 

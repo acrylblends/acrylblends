@@ -20,7 +20,6 @@ import { LeftPanel, type BranchesPort, type ChatsPort, type FeedbackPort } from 
 import type { BranchChatsPort } from './branch-chats.ts'
 import { savedLabel, type VersionsPort } from './versions.ts'
 import type { GitSyncPort } from './git-sync.ts'
-import type { SnapshotPort } from './snapshot.ts'
 import { RightPanel, type SidebarPort } from './RightPanel.tsx'
 import type { FrameTabs } from './tabs.ts'
 import type { SwitchRequests } from './switch-request.ts'
@@ -40,8 +39,6 @@ export interface BlendsFrameInjected {
   readonly versions: VersionsPort
   /** The Git tab's push and pull (the Host runs git). */
   readonly gitSync: GitSyncPort
-  /** The app's snapshot verb `capture`, the left panel's Capture. */
-  readonly snapshot: SnapshotPort
   readonly tabs: FrameTabs
   readonly tools: FrameTools
   readonly feedback: FeedbackPort
@@ -73,7 +70,7 @@ const SelectIcon = () => (
   </svg>
 )
 
-export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, appReload, view, chats, versions, gitSync, snapshot, tabs, tools, feedback, branches, branchChats, switchRequests, renderSlot }: BlendsFrameProps) {
+export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, appReload, view, chats, versions, gitSync, tabs, tools, feedback, branches, branchChats, switchRequests, renderSlot }: BlendsFrameProps) {
   const state = useStore(frameState)
   const appError = useStore(appReload).error
   const frameView = useStore(view)
@@ -200,7 +197,6 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
               }}
               onVersionLabel={setVersionLabel}
               gitSync={gitSync}
-              snapshot={snapshot}
             />
           )}
           {state.status === 'error' && <p className="acrylBlendsNote" data-error>{state.message}</p>}

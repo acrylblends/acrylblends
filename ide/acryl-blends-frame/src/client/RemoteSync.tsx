@@ -1,12 +1,12 @@
 /**
- * The branch against its remote, with Pull and Push and the line the last one said: the Git tab's remote row, and the same row under the left
- * panel's versions. Read again whenever `revision` changes; `fetchOnOpen` asks the remote (a fetch) on the first read, later reads use the local
- * refs, and each push or pull asks it anyway.
+ * The branch against its remote, with Pull and Push and the line the last one said. Two faces on one hook: the Git tab's remote row, and the
+ * compact chips on the left panel's versions header (`↑2` / `↓1` / `✓`, with the line as a brief toast). Read again whenever `revision` changes;
+ * the first read asks the remote (a fetch), later ones read the local refs, and each push or pull asks it anyway.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import type { GitRemoteState } from '../contract.ts'
-import { remoteLabel, syncActions, type GitSyncPort } from './git-sync.ts'
+import { remoteChips, remoteLabel, syncActions, type GitSyncPort } from './git-sync.ts'
 
 type Remote =
   | { readonly status: 'loading' }
@@ -18,20 +18,11 @@ type Outcome = { readonly message: string; readonly failed: boolean }
 
 const messageOf = (cause: unknown, fallback: string): string => (cause instanceof Error && cause.message !== '' ? cause.message : fallback)
 
-export interface RemoteSyncProps {
-  readonly sync: GitSyncPort
-  readonly root: string
-  readonly revision: string
-  readonly fetchOnOpen?: boolean
-  /** The row's heading. */
-  readonly label?: string
-}
-
-export function RemoteSync({ sync, root, revision, fetchOnOpen = true, label = 'Remote' }: RemoteSyncProps) {
+function useRemoteSync(sync: GitSyncPort, root: string, revision: string) {
   const [remote, setRemote] = useState<Remote>({ status: 'loading' })
   const [busy, setBusy] = useState<'push' | 'pull' | undefined>(undefined)
   const [outcome, setOutcome] = useState<Outcome | undefined>(undefined)
-  const asked = useRef(!fetchOnOpen)
+  const asked = useRef(false)
 
   useEffect(() => {
     let live = true
@@ -59,12 +50,23 @@ export function RemoteSync({ sync, root, revision, fetchOnOpen = true, label = '
       },
     ).finally(() => setBusy(undefined))
   }
-
   const stateText = remote.status === 'loading' ? 'Asking the remote…' : remote.status === 'error' ? 'unknown' : remoteLabel(remote.state)
+  return { remote, busy, outcome, setOutcome, act, stateText }
+}
+
+export interface RemoteSyncProps {
+  readonly sync: GitSyncPort
+  readonly root: string
+  readonly revision: string
+}
+
+/** The Git tab's row. */
+export function RemoteSync({ sync, root, revision }: RemoteSyncProps) {
+  const { remote, busy, outcome, act, stateText } = useRemoteSync(sync, root, revision)
   const actions = remote.status === 'ready' ? syncActions(remote.state) : { push: false, pull: false }
   return (
     <>
-      <div className="acrylBlendsLabel acrylBlendsGitLabel">{label}</div>
+      <div className="acrylBlendsLabel acrylBlendsGitLabel">Remote</div>
       <div className="acrylBlendsGitRemote">
         <span className="acrylBlendsGitRemoteState" data-testid="git-remote-state" title={stateText}>{stateText}</span>
         <button type="button" className="acrylBlendsSmallButton" disabled={busy !== undefined || !actions.pull} onClick={() => act('pull')}>
@@ -81,6 +83,55 @@ export function RemoteSync({ sync, root, revision, fetchOnOpen = true, label = '
       )}
       {outcome !== undefined && (
         <p className="acrylBlendsNote" data-testid="git-sync-outcome" role="status" {...(outcome.failed ? { 'data-error': '' } : {})}>{outcome.message}</p>
+      )}
+    </>
+  )
+}
+
+/** How long a push's or pull's line stays: a failure longer, and a click on it dismisses it sooner. */
+const TOAST_MS = 4000
+const TOAST_FAILED_MS = 9000
+
+/** The versions header's chips; nothing when the branch has no remote. */
+export function RemoteChips({ sync, root, revision }: RemoteSyncProps) {
+  const { remote, busy, outcome, setOutcome, act, stateText } = useRemoteSync(sync, root, revision)
+  useEffect(() => {
+    if (outcome === undefined) return
+    const timer = setTimeout(() => { setOutcome(undefined) }, outcome.failed ? TOAST_FAILED_MS : TOAST_MS)
+    return () => { clearTimeout(timer) }
+  }, [outcome, setOutcome])
+  const chips = remote.status === 'ready' ? remoteChips(remote.state) : undefined
+  const fetchError = remote.status === 'ready' && remote.state.kind === 'tracking' ? remote.state.fetchError : undefined
+  const title = fetchError === undefined ? stateText : `${stateText} (the remote did not answer: ${fetchError})`
+  return (
+    <>
+      {chips !== undefined && (
+        <span className="acrylBlendsRemoteChips" data-testid="remote-chips">
+          {chips.synced && <span className="acrylBlendsRemoteChip" data-synced title={title} aria-label={title}>✓</span>}
+          {chips.pull !== undefined && (
+            <button type="button" className="acrylBlendsRemoteChip" title={`${title} · Pull`} aria-label={`Pull: ${title}`} disabled={busy !== undefined} onClick={() => act('pull')}>
+              {busy === 'pull' ? '…' : chips.pull}
+            </button>
+          )}
+          {chips.push !== undefined && (
+            <button type="button" className="acrylBlendsRemoteChip" title={`${title} · Push`} aria-label={`Push: ${title}`} disabled={busy !== undefined} onClick={() => act('push')}>
+              {busy === 'push' ? '…' : chips.push}
+            </button>
+          )}
+        </span>
+      )}
+      {outcome !== undefined && (
+        <button
+          type="button"
+          className="acrylBlendsToast"
+          data-testid="git-sync-outcome"
+          role="status"
+          title="Dismiss"
+          {...(outcome.failed ? { 'data-error': '' } : {})}
+          onClick={() => { setOutcome(undefined) }}
+        >
+          {outcome.message}
+        </button>
       )}
     </>
   )

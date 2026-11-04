@@ -82,3 +82,22 @@ export function syncActions(state: GitRemoteState): { readonly push: boolean; re
   if (state.fetchError !== undefined) return { push: true, pull: true }
   return { push: state.ahead > 0, pull: state.behind > 0 }
 }
+
+/**
+ * The versions header's compact remote control: `↑2` sends the versions only here, `↓1` brings the remote's in, `✓` says the branch and its
+ * remote agree; nothing at all without a remote (or off a branch). A first push shows a bare `↑`. Each chip's tooltip is the remote state's line.
+ */
+export interface RemoteChips {
+  readonly push?: string
+  readonly pull?: string
+  readonly synced: boolean
+}
+
+export function remoteChips(state: GitRemoteState): RemoteChips | undefined {
+  if (state.kind === 'detached' || state.kind === 'no-remote') return undefined
+  if (state.kind === 'unpublished') return state.remote === undefined ? undefined : { push: '↑', synced: false }
+  const actions = syncActions(state)
+  const push = state.ahead > 0 ? `↑${String(state.ahead)}` : actions.push ? '↑' : undefined
+  const pull = state.behind > 0 ? `↓${String(state.behind)}` : actions.pull ? '↓' : undefined
+  return { ...(push === undefined ? {} : { push }), ...(pull === undefined ? {} : { pull }), synced: push === undefined && pull === undefined }
+}

@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createAppSnapshot, loadSnapshotVerbs, type SnapshotVerbs, type VersionRemote } from '../src/app-snapshot.ts'
 import { FRAME_SNAPSHOT_CAPTURE_PATH, parseSnapshotCapture } from '../src/contract.ts'
-import { captureText, createSnapshotApi } from '../src/client/snapshot.ts'
+import { createSnapshotApi } from '../src/client/snapshot.ts'
+import { remoteChips } from '../src/client/git-sync.ts'
 import { frameRoutes } from '../src/index.ts'
 
 /** The repository root holds the template's `plugins/manifest/snapshot.ts`: the verbs every new app is made with. */
@@ -52,8 +53,12 @@ describe('the app snapshot service', () => {
     await expect(snapshot.apply('.')).rejects.toThrow('another folder than the app itself')
   })
 
-  it('says plainly when the app was made before the snapshot verbs', async () => {
-    await expect(loadSnapshotVerbs(temp())).rejects.toThrow('made before the snapshot verbs')
+  it('says plainly when the app was made before the snapshot verbs, and a save then goes on without a capture', async () => {
+    const old = temp()
+    await expect(loadSnapshotVerbs(old)).rejects.toThrow('made before the snapshot verbs')
+    const snapshot = createAppSnapshot(old, remote)
+    await expect(snapshot.capture()).rejects.toThrow('made before the snapshot verbs')
+    expect(await snapshot.captureForSave()).toBeUndefined()
   })
 
   it('runs the writing verbs one at a time and reads the app\'s verbs once', async () => {
@@ -91,7 +96,7 @@ describe('the app snapshot service', () => {
   })
 })
 
-describe('the Capture route and its line', () => {
+describe('the capture a Save point starts with', () => {
   const call = (path: string) => new Request(`http://127.0.0.1:43120${path}`, {
     method: 'POST',
     headers: { host: '127.0.0.1:43120', origin: 'http://127.0.0.1:43120', 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
@@ -100,24 +105,45 @@ describe('the Capture route and its line', () => {
   const connection = { connection: { remoteAddress: '127.0.0.1', localPort: 43120 } }
   const state = () => Promise.reject(new Error('not asked'))
 
-  it('answers what the capture did, or the Host\'s one line', async () => {
-    let fail = false
+  it('answers what the capture did, nothing for an app made before the verbs, or the Host\'s one line', async () => {
+    let answer: 'captured' | 'none' | 'broken' = 'captured'
     const app = frameRoutes({
       state,
-      snapshot: { capture: async () => { if (fail) throw new Error('This app has no plugins/manifest/snapshot.ts'); return { addedRows: ['notes'], modules: 3 } } },
+      snapshot: {
+        captureForSave: async () => {
+          if (answer === 'broken') throw new Error('blend.yaml: a row has no name')
+          return answer === 'none' ? undefined : { addedRows: ['notes'], modules: 3 }
+        },
+      },
     })
     const api = createSnapshotApi(async input => app.fetch(call(input), connection))
     expect(await api.capture()).toEqual({ addedRows: ['notes'], modules: 3 })
-    fail = true
-    await expect(api.capture()).rejects.toThrow('no plugins/manifest/snapshot.ts')
+    answer = 'none'
+    expect(await api.capture()).toBeUndefined()
+    answer = 'broken'
+    await expect(api.capture()).rejects.toThrow('a row has no name')
     const elsewhere = new Request(`http://127.0.0.1:43120${FRAME_SNAPSHOT_CAPTURE_PATH}`, { method: 'POST', headers: { host: '127.0.0.1:43120', origin: 'http://evil.example', 'content-type': 'application/json' }, body: '{}' })
     expect((await app.fetch(elsewhere, connection)).status).toBe(403)
+    expect(() => parseSnapshotCapture({ addedRows: 'notes', modules: 1 })).toThrow('not a result')
+  })
+})
+
+describe('the versions header\'s remote chips', () => {
+  const tracking = (ahead: number, behind: number, fetchError?: string) =>
+    ({ kind: 'tracking' as const, branch: 'main', upstream: 'origin/main', ahead, behind, ...(fetchError === undefined ? {} : { fetchError }) })
+
+  it('shows nothing without a remote, a check when in step, and counts that push or pull', () => {
+    expect(remoteChips({ kind: 'no-remote' })).toBeUndefined()
+    expect(remoteChips({ kind: 'detached' })).toBeUndefined()
+    expect(remoteChips({ kind: 'unpublished', branch: 'main' })).toBeUndefined()
+    expect(remoteChips({ kind: 'unpublished', branch: 'main', remote: 'origin' })).toEqual({ push: '↑', synced: false })
+    expect(remoteChips(tracking(0, 0))).toEqual({ synced: true })
+    expect(remoteChips(tracking(2, 0))).toEqual({ push: '↑2', synced: false })
+    expect(remoteChips(tracking(0, 1))).toEqual({ pull: '↓1', synced: false })
+    expect(remoteChips(tracking(1, 3))).toEqual({ push: '↑1', pull: '↓3', synced: false })
   })
 
-  it('reads as one line', () => {
-    expect(captureText({ addedRows: ['notes'], modules: 4 })).toBe('Captured: notes got a row; 4 plugins locked.')
-    expect(captureText({ addedRows: ['notes', 'todo'], modules: 5 })).toBe('Captured: notes, todo got rows; 5 plugins locked.')
-    expect(captureText({ addedRows: [], modules: 1 })).toBe('Captured: every plugin already had a row; 1 plugin locked.')
-    expect(() => parseSnapshotCapture({ addedRows: 'notes', modules: 1 })).toThrow('not a result')
+  it('keeps both open when the remote did not answer, since the counts may be old', () => {
+    expect(remoteChips(tracking(0, 0, 'Could not resolve host'))).toEqual({ push: '↑', pull: '↓', synced: false })
   })
 })

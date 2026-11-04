@@ -343,8 +343,8 @@ export interface FrameRoutesDeps {
   readonly shared?: (hashes: readonly string[]) => Promise<string[]>
   readonly realChats?: RealChatsPort
   readonly gitSync?: GitSyncPort
-  /** The app's snapshot verb `capture`: the left panel's Capture. */
-  readonly snapshot?: Pick<AppSnapshotService, 'capture'>
+  /** The capture a Save point starts with. */
+  readonly snapshot?: Pick<AppSnapshotService, 'captureForSave'>
   readonly appReload?: AppReloadPort
   /** The element picks waiting for the step that reads the message they belong to (./selection-context.ts). */
   readonly selection?: SelectionInbox
@@ -386,7 +386,8 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
     const failed = (cause: unknown, fallback: string): string => cause instanceof Error && cause.message !== '' ? cause.message : fallback
     app.post(FRAME_SNAPSHOT_CAPTURE_PATH, ownPage, jsonBody(), async (c) => {
       try {
-        return c.json(await snapshot.capture())
+        const captured = await snapshot.captureForSave()
+        return captured === undefined ? c.body(null, 204) : c.json(captured)
       } catch (cause) {
         return c.json(error(failed(cause, 'the app could not be captured')), 409)
       }
@@ -746,9 +747,15 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     // The chat's agent finished a turn that changed files: save a version by itself (./auto-save.ts), and remember which turn it was.
     const store = new SaveStore(join(ctx.appInstance.dshHome, 'chat-saves.json'), report)
     const versions = new Versions(git)
+    const gitSync = new GitSync(git, root)
+    const snapshot = createAppSnapshot(root, gitSync)
     const autoSave = new AutoSave({
       summary: (session, seq) => workspaceChangesOf(ctx.get('workspaceChanges'))?.summary(session, seq),
-      save: message => saveVersion(git, versions, root, message),
+      // Every version is a captured snapshot: a plugin folder the turn added gets its row, and the lock is written, before the commit.
+      save: async (message) => {
+        await snapshot.captureForSave().catch(report)
+        return saveVersion(git, versions, root, message)
+      },
       store,
       report,
     })
@@ -783,8 +790,6 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     // The element a chat message is about: posted by the composer at its send gesture, taken at the step that reads that message, so the
     // person's bubble keeps their words and the agent still gets the page and selector (./selection-context.ts).
     const selectionInbox = new SelectionInbox()
-    const gitSync = new GitSync(git, root)
-    const snapshot = createAppSnapshot(root, gitSync)
     ctx.effect(
       () => installSelectionContext(ctx, selectionInbox, (cause) => {
         ctx.logger.error(`acryl-blends-frame: the selected element did not reach the chat: ${cause instanceof Error ? cause.message : String(cause)}`)
