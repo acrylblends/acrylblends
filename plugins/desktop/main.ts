@@ -33,11 +33,18 @@ import {
   withoutToken,
 } from './frame.ts'
 import { hasSettings, settingsPlacement } from './menu.ts'
+import { firstRunRoot, readProduct } from './product.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { cascade, windowOptions, windowSize } from './window.ts'
 
-const projectRoot = fileURLToPath(new URL('../..', import.meta.url))
+/** The app shipped inside the bundle (a packaged product) or checked out by the person (an app made with `acrylblends init`). */
+const bundledRoot = fileURLToPath(new URL('../..', import.meta.url))
+// A product build runs on the copy it made in the person's Documents the first time it started: the bundle is read-only, and the app folder is theirs.
+const documents = process.env.ACRYLBLENDS_DOCUMENTS?.trim() || app.getPath('documents')
+const projectRoot = app.isPackaged && readProduct(bundledRoot) !== undefined
+  ? firstRunRoot(bundledRoot, documents)
+  : bundledRoot
 const chosen = selectInstance({ projectRoot, env: process.env })
 
 /** Where the window opens: `acrylblends.desktopPath` in package.json (the todo template sets `/todo`), else the root. */
@@ -104,9 +111,16 @@ if (!app.requestSingleInstanceLock()) {
         )
         url = runningAddress
       } else {
-        host = startFrameHost(projectRoot, process.env, (text) => {
-          process.stdout.write(text)
-        })
+        host = startFrameHost(
+          projectRoot,
+          process.env,
+          (text) => {
+            process.stdout.write(text)
+          },
+          // A packaged product carries no npm: its host runs on this app's own Electron runtime.
+          process.platform,
+          app.isPackaged ? { runtime: process.execPath } : {},
+        )
         try {
           url = await host.ready
         } catch (cause) {

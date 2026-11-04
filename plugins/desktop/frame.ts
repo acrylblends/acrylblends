@@ -154,18 +154,28 @@ export interface FrameHost {
   stop(): Promise<void>
 }
 
+export interface FrameHostLaunch {
+  /**
+   * A packaged product has no npm to run `npm run dev` with: the host runs on the app's own Electron runtime as Node, with the same loader the dev script uses.
+   */
+  readonly runtime?: string
+}
+
 /** Start the app's frame host as `npm run dev` does, in the app folder; its output is passed through to `write`. */
 export function startFrameHost(
   root: string,
   env: NodeJS.ProcessEnv,
   write: (text: string) => void,
   platform: NodeJS.Platform = process.platform,
+  launch: FrameHostLaunch = {},
 ): FrameHost {
-  const command = hostCommand(env, platform)
+  const command = launch.runtime === undefined
+    ? hostCommand(env, platform)
+    : { file: launch.runtime, args: ['--import', './plugins/acryl-node-server/src/register.ts', join(root, HOST_SCRIPT)], shell: false }
   // The host leads its own process group on macOS and Linux, so a stop reaches npm, the host and every terminal it runs; Windows stops the tree with taskkill.
   const child: ChildProcess = spawn(command.file, command.args, {
     cwd: root,
-    env: { ...env, ELECTRON_RUN_AS_NODE: undefined },
+    env: { ...env, ...(launch.runtime === undefined ? { ELECTRON_RUN_AS_NODE: undefined } : { ELECTRON_RUN_AS_NODE: '1' }) },
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: command.shell,
     detached: platform !== 'win32',
