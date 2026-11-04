@@ -149,19 +149,29 @@ if (!canListen)
   )
 
 test('stops listening when stopped', { skip }, async () => {
+  // One process at a time serves a folder's door, and in the frame the frame's own door serves this folder: this server starts without one.
+  const door = process.env.ACRYL_DOOR
+  process.env.ACRYL_DOOR = 'off'
   const home = await mkdtemp(join(scratch, 'app-test-'))
-  const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0))
-  await app.stop()
-  await assert.rejects(fetch(`${app.url}/health`))
-  await rm(home, { recursive: true, force: true })
+  try {
+    const app = await createApp(withPort(pinnedInstance(home, { root: projectRoot }), 0))
+    await app.stop()
+    await assert.rejects(fetch(`${app.url}/health`))
+  } finally {
+    if (door === undefined) delete process.env.ACRYL_DOOR
+    else process.env.ACRYL_DOOR = door
+    await rm(home, { recursive: true, force: true })
+  }
 })
 
 test('the manifest decides what is mounted: a parameter changes the server, an unknown value is refused', async () => {
   const { readManifest } = await import('../src/app.ts')
   const manifest = readManifest()
+  // The template's rows, in their order; a feature's row (plugins/<name>/) may sit between them.
+  const library = ['router', 'home', 'routes', 'extensions', 'server', 'acryl-door']
   assert.deepEqual(
-    manifest.plugins.map((row) => row.id),
-    ['router', 'home', 'routes', 'extensions', 'server', 'acryl-door'],
+    manifest.plugins.map((row) => row.id).filter((id) => library.includes(id)),
+    library,
   )
   assert.throws(() => readManifest({ nothing: 1 }), /parameter-override-unknown/)
 })
