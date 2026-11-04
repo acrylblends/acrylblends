@@ -171,6 +171,18 @@ export const DRIVER_ROWS: readonly string[] = [
   // (`ui-deliverables`) is not mounted: the frame says it in one line under the answer.
   'subprocess',
   'workspace-changes',
+  // What ACRYL IDE's chat stands on beyond the conversation itself, from DSH's own web composition (the desktop app composes the same): the turn and
+  // step stats under the composer (`session-stats`, `session-turn-outline`), Like and Dislike on an answer (`message-feedback`), the background jobs
+  // roster (`job-controller`), the session header's "Open in" button (`open-in-app`), `/export` (`session-log-download`), session references in `@`
+  // (`session-reference`) and the workspace file reads the changed-files card uses (`workspace-files`).
+  'message-feedback',
+  'session-stats',
+  'session-turn-outline',
+  'job-controller',
+  'workspace-files',
+  'open-in-app',
+  'session-log-download',
+  'session-reference',
 ]
 
 /**
@@ -274,6 +286,25 @@ export const CLIENT_ROWS: readonly ClientRow[] = [
   { id: 'ui-tool', name: '@deepseek-ai/dsh-client-ui-tool' },
   { id: 'ui-approval', name: '@deepseek-ai/dsh-client-ui-approval' },
   { id: 'ui-attachment', name: '@deepseek-ai/dsh-client-ui-attachment' },
+  // The rest of ACRYL IDE's chat, the same DSH packages in the order DSH's web composition mounts them: the shortcuts surface, workflow runs, `/` skills,
+  // subagents, `@` references, the jobs roster, the goal bar, Like and Dislike, the model and effort selector, the permission picker (Read Only, Workspace
+  // Write, Full access), the agent-preset setting, the session log setting, user questions, the Trajectory tab, and the session header's "Open in".
+  // Not yet: `ui-plan` and `ui-deliverables` open in DSH's right sidebar (`sidebarRightTabs`), which the frame's right panel does not provide yet.
+  { id: 'ui-shortcuts', name: '@deepseek-ai/dsh-client-ui-shortcuts' },
+  { id: 'ui-workflow-run', name: '@deepseek-ai/dsh-client-ui-workflow-run' },
+  { id: 'ui-skill', name: '@deepseek-ai/dsh-client-ui-skill' },
+  { id: 'ui-subagent', name: '@deepseek-ai/dsh-client-ui-subagent' },
+  { id: 'ui-reference', name: '@deepseek-ai/dsh-client-ui-reference' },
+  { id: 'ui-jobs', name: '@deepseek-ai/dsh-client-ui-jobs' },
+  { id: 'ui-goal', name: '@deepseek-ai/dsh-client-ui-goal' },
+  { id: 'ui-message-feedback', name: '@deepseek-ai/dsh-client-ui-message-feedback' },
+  { id: 'ui-model-selection', name: '@deepseek-ai/dsh-client-ui-model-selection' },
+  { id: 'ui-permission', name: '@deepseek-ai/dsh-client-ui-permission-presets' },
+  { id: 'ui-agent-preset', name: '@deepseek-ai/dsh-client-ui-agent-preset' },
+  { id: 'ui-settings-session-log', name: '@deepseek-ai/dsh-client-ui-settings-session-log' },
+  { id: 'ui-user-questions', name: '@deepseek-ai/dsh-client-ui-user-questions' },
+  { id: 'ui-trajectory', name: '@deepseek-ai/dsh-client-ui-trajectory' },
+  { id: 'ui-open-in-app', name: '@deepseek-ai/dsh-client-ui-open-in-app' },
   { id: 'client-resources', name: '@deepseek-ai/dsh-client-resources' },
   { id: 'ui-input-trigger', name: '@deepseek-ai/dsh-client-ui-input-trigger' },
 ]
