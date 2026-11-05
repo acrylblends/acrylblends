@@ -55,8 +55,10 @@ Not published: `acryl-brand` and `acryl-shortcuts`. The frame mounts neither and
 
 ## 4. Merge the release branch into main
 
-- [ ] The coordinator merges `129-create-1-2-0` into acrylblends `main`. The one conflict (`workshop-registry/test/rules.test.mjs`, both sides add
-      make-entry tests) is resolved as on the proof branch `129-merge-proof`, whose CI is green. The `check` and `ci` workflows on main must be green
+- [ ] The coordinator merges `129-create-1-2-0` into acrylblends `main` as the proof branch `129-merge-proof` does (its CI is green): the one
+      conflict (`workshop-registry/test/rules.test.mjs`, both sides add make-entry tests) keeps both sides, and a format commit (6892fcb3) runs
+      `biome format` over main's `workshop-registry/scripts/make-entry.mjs` and `publish-repo.mjs` and the merged test, which the branch's lint
+      checks. The branch's `!specs/*/design` lint exclusion also turns main's red `check` (spec 020's mockup HTML) green. CI on main must be green
       before step 5.
 
 ## 5. Tags (they start the release workflow)
