@@ -65,3 +65,13 @@ This list wins over an id written in a spec or in tasks.md.
 | 58 | Runlevel | `acrylblends.runtime-runlevel` | https://github.com/acrylblends/58-runtime-runlevel |
 | 59 | The Foundry | `acrylblends.libraries-foundry` | https://github.com/acrylblends/59-libraries-foundry |
 | 60 | Orbit API Console | `acrylblends.api-orbit-console` | https://github.com/acrylblends/60-api-orbit-console |
+| 61 | Relaycraft | `acrylblends.integration-relaycraft` | https://github.com/acrylblends/61-integration-relaycraft |
+| 62 | Mobiary | `acrylblends.mobile-mobiary` | https://github.com/acrylblends/62-mobile-mobiary |
+| 63 | Canvasmith Desktop | `acrylblends.desktop-canvasmith` | https://github.com/acrylblends/63-desktop-canvasmith |
+| 64 | Pagefoundry | `acrylblends.web-pagefoundry` | https://github.com/acrylblends/64-web-pagefoundry |
+| 65 | Termforge | `acrylblends.terminal-termforge` | https://github.com/acrylblends/65-terminal-termforge |
+| 66 | Luma Space | `acrylblends.xr-luma-space` | https://github.com/acrylblends/66-xr-luma-space |
+| 67 | Sensepath Lab | `acrylblends.hci-sensepath-lab` | https://github.com/acrylblends/67-hci-sensepath-lab |
+| 68 | LingoDesk | `acrylblends.localization-lingodesk` | https://github.com/acrylblends/68-localization-lingodesk |
+| 69 | Clearpath Audit | `acrylblends.accessibility-clearpath-audit` | https://github.com/acrylblends/69-accessibility-clearpath-audit |
+| 70 | Restorepoint | `acrylblends.backup-restorepoint` | https://github.com/acrylblends/70-backup-restorepoint |
