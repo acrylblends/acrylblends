@@ -123,6 +123,8 @@ function bothMoved(ahead: number, behind: number): Error {
  * `git@github.com:ana/notes.git` both read `github.com/ana/notes`; a folder stays its path.
  */
 export function remoteAddress(url: string): string {
+  // A Windows folder (C:\remotes\notes.git, D:/remotes) would parse as a URL whose scheme is the drive letter.
+  if (/^[A-Za-z]:[\\/]/u.test(url)) return url
   const scp = /^[\w.-]+@([\w.-]+):(.+?)(?:\.git)?\/?$/u.exec(url)
   if (scp !== null && !url.includes('://')) return `${scp[1] ?? ''}/${scp[2] ?? ''}`
   try {
