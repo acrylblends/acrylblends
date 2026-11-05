@@ -40,6 +40,15 @@ test('two windows are never exactly on top of each other, and a window with no p
   const second = cascade(first, work, size)
   assert.notDeepEqual(second, { x: first.x, y: first.y })
   assert.equal('x' in windowOptions({ title: 'a' }), false)
+  // A preload only when the product gives one, and never at the cost of the sandbox or the isolation.
+  assert.equal('preload' in windowOptions({ title: 'a' }).webPreferences, false)
+  assert.deepEqual(windowOptions({ title: 'a', preload: '/b/preload.cjs' }).webPreferences, {
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    webSecurity: true,
+    preload: '/b/preload.cjs',
+  })
   const placed = windowOptions({ title: 'a', x: 5, y: 6 })
   assert.deepEqual([placed.x, placed.y], [5, 6])
 })

@@ -5,7 +5,7 @@ const STYLE_ID = 'acryl-blends-frame-styles'
 const CSS = `
 /* DSH's dialogs and menus on the frame's dark surface, and its active Settings section in the frame's accent: the mockup's Settings. */
 html body[data-ds-dark-theme] { --dsw-alias-bg-layer-2: #18181b; --dsw-specific-sidebar-nav-item-active: rgba(84,104,255,.16); }
-.acrylBlendsFrame, .acrylBlendsPlugins {
+.acrylBlendsFrame, .acrylBlendsPlugins, .acrylBlendsApp {
   --bf-bg: #0b0b0d; --bf-side: #111113; --bf-surface: #18181b; --bf-surface-2: #222226; --bf-border: #2a2a2f;
   --bf-text: #e8e8ea; --bf-dim: #8b8b93; --bf-accent: #5468ff; --bf-accent-dim: rgba(84,104,255,.16); --bf-ok: #3fb67b; --bf-warn: #e0a43a;
   --bf-lw: 248px; --bf-rw: 412px;
@@ -271,6 +271,35 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsTog[aria-checked="true"] { background: #5468ff; }
 .acrylBlendsTog[aria-checked="true"]::after { left: 15px; }
 .acrylBlendsTog:disabled { opacity: .6; cursor: default; }
+
+/* Settings > App (a desktop product): the Plugins page's title, line and bordered rows; the controls sit right of the row's name. */
+.acrylBlendsApp { color: var(--bf-text); font-size: 13px; }
+.acrylBlendsApp h3 { font-size: 15px; margin: 0 0 2px; color: #fff; }
+.acrylBlendsApp > .acrylBlendsNote { margin: 0 0 10px; overflow-wrap: anywhere; }
+.acrylBlendsAppRow { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; align-items: center; padding: 9px 10px; border: 1px solid var(--bf-border); border-radius: 8px; margin: 0 0 6px; }
+.acrylBlendsAppRow b { color: #fff; font-weight: 600; font-size: 12.5px; }
+.acrylBlendsAppRow small { grid-column: 1 / -1; color: var(--bf-dim); font-size: 11.5px; }
+.acrylBlendsAppControls { grid-row: 1; grid-column: 2; display: inline-flex; align-items: center; gap: 8px; }
+.acrylBlendsAppRow .acrylBlendsAppName { width: 220px; }
+.acrylBlendsAppButton { padding: 4px 10px; border: 1px solid #34343a; border-radius: 6px; background: var(--bf-surface-2); color: #e8e8ea; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.acrylBlendsAppButton:hover:not(:disabled) { border-color: #4a4a52; color: #fff; }
+.acrylBlendsAppButton:disabled { opacity: .5; cursor: default; }
+.acrylBlendsAppButton[data-primary] { border-color: var(--bf-accent); background: var(--bf-accent); color: #fff; }
+.acrylBlendsAppButton[data-danger] { color: #f3a0a0; }
+.acrylBlendsShareConfirm[data-danger] { border-color: #b14646; background: rgba(177,70,70,.22); }
+.acrylBlendsAppCheck { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: #c8c8d0; cursor: pointer; }
+.acrylBlendsAppCheck input { margin: 0; accent-color: var(--bf-accent); }
+.acrylBlendsAppOther { display: inline-flex; gap: 8px; align-items: baseline; margin-right: 14px; color: #c8c8d0; }
+.acrylBlendsAppMade { color: var(--bf-dim); }
+
+/* The first start's question, over the frame, in the Settings dialog's look. */
+.acrylBlendsNameApp { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0,0,0,.5); pointer-events: auto; }
+.acrylBlendsNameAppCard { width: min(400px, calc(100vw - 32px)); padding: 20px 20px 16px; background: var(--bf-surface); border: 1px solid #34343a; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.6); color: var(--bf-text); }
+.acrylBlendsNameAppCard h2 { margin: 0 0 4px; font-size: 15px; color: #fff; }
+.acrylBlendsNameAppCard p { margin: 0 0 14px; color: var(--bf-dim); font-size: 12px; }
+.acrylBlendsNameAppCard .acrylBlendsSearch { padding: 7px 10px; font-size: 13px; background: var(--bf-bg); }
+.acrylBlendsNameAppCard .acrylBlendsNote { margin: 8px 0 0; }
+.acrylBlendsNameAppActions { display: flex; justify-content: flex-end; margin-top: 14px; }
 
 .acrylBlendsDialogBackdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.5); display: grid; place-items: center; }
 .acrylBlendsDialog { position: relative; width: min(980px, 92vw); height: min(680px, 88vh); background: var(--bf-surface); border: 1px solid #34343a; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.5); }

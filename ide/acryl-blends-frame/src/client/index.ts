@@ -31,6 +31,9 @@ import { attachDraft, draftInChat } from './chat-draft.ts'
 import type { FeedbackPort } from './LeftPanel.tsx'
 import { appPluginRow, createAppPluginsApi, framePluginRow, type NavigatorPlugin } from './plugins-navigator.ts'
 import { PluginsSection } from './PluginsSection.tsx'
+import { AppSection } from './AppSection.tsx'
+import { desktopApp } from './desktop-app.ts'
+import { NameYourApp } from './NameYourApp.tsx'
 import { SelectionChip, type SelectionChipInjected } from './SelectionChip.tsx'
 import { SelectionStore, carriesSelection, handOffSelection } from './selection.ts'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
@@ -57,7 +60,7 @@ declare module '@deepseek-ai/cordis' {
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    'acryl.blendsFrame': 'plugins'
+    'acryl.blendsFrame': 'plugins' | 'app'
   }
 }
 
@@ -325,12 +328,32 @@ export function apply(ctx: ClientContext): void {
       ...view.frame.map(framePluginRow),
     ]
   }
+  // A desktop product's window: its App page in Settings, and the first start's question (`./desktop-app.ts`); a browser tab has neither.
+  const desktop = desktopApp()
+  if (desktop !== undefined) {
+    ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+      name: 'shell.overlay',
+      id: 'acryl-blends-name-app',
+      inject: () => ({ app: desktop }),
+    }, NameYourApp))
+  }
   ctx.plugin({
     name: 'acryl-blends-frame-plugins-settings',
     inject: ['slots', 'locale'],
     apply(child: ClientContext): void {
-      child.effect(() => child.locale.register(LOCALE_NAMESPACE, { en: { plugins: 'Plugins' }, zh: { plugins: '插件' } }), 'acryl-blends-frame: dictionary')
+      child.effect(() => child.locale.register(LOCALE_NAMESPACE, { en: { plugins: 'Plugins', app: 'App' }, zh: { plugins: '插件', app: '应用' } }), 'acryl-blends-frame: dictionary')
       const t = child.locale.bind(LOCALE_NAMESPACE)
+      if (desktop !== undefined) {
+        child.slots.inject('settings.section', () => child.slots.register({
+          name: 'settings.section',
+          id: 'acryl-blends-app',
+          // After General, before Models (10).
+          order: 5,
+          label: () => t('app'),
+          locale: LOCALE_NAMESPACE,
+          inject: () => ({ app: desktop }),
+        }, AppSection))
+      }
       child.slots.inject('settings.section', () => child.slots.register({
         name: 'settings.section',
         id: 'acryl-blends-plugins',
@@ -467,6 +490,7 @@ export function apply(ctx: ClientContext): void {
       feedback,
       branchChats,
       switchRequests,
+      ...(desktop === undefined ? {} : { desktop }),
       branches: {
         api: branchesApi,
         changed: () => frameState.refresh(),

@@ -11,12 +11,13 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, Menu, MenuItem, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, MenuItem, screen, shell } from 'electron'
 import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
 import { readProduct } from '../instance/bundle.ts'
 import { type AppInstance, instanceEnv, selectInstance, withRunEnv } from '../instance/index.ts'
 import { type AppStorage, openProductStorage } from '../instance/storage.ts'
+import { APP_PAGE_CHANNEL, appPageHandler } from './app-page.ts'
 import { runningApp } from './attach.ts'
 import {
   type DesktopPort,
@@ -33,8 +34,9 @@ import {
   startFrameHost,
   withoutToken,
 } from './frame.ts'
+import { productGit, withGitFirst } from './git.ts'
 import { hasSettings, settingsPlacement } from './menu.ts'
-import { openProductApp } from './product.ts'
+import { openProductApp, seedSource } from './product.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { cascade, windowOptions, windowSize } from './window.ts'
@@ -44,13 +46,23 @@ const bundledRoot = fileURLToPath(new URL('../..', import.meta.url))
 // A product build keeps its apps in its own root in the OS per-user data folder, one sealed folder each, and runs on the source of the one it opens: the
 // bundle is the read-only Program (plugins/instance/storage.ts). An app made with `acrylblends init` runs on its own folder.
 const product = app.isPackaged ? readProduct(bundledRoot) : undefined
+/** The git the product ships beside the app (Resources/git), first on the frame host's PATH; the person's own git otherwise. */
+const git = product === undefined ? undefined : productGit(process.resourcesPath, process.platform)
 let storage: AppStorage | undefined
+/** The app the window shows. A product can switch to another of its apps (Settings > App: import, start over, open). */
 let chosen: AppInstance
 try {
   storage =
     product === undefined
       ? undefined
-      : openProductStorage({ product: product.product, writtenBy: app.getVersion() })
+      : openProductStorage({
+          product: product.product,
+          writtenBy: app.getVersion(),
+          ...(git === undefined ? {} : { git: git.executable }),
+          reveal: (path) => {
+            shell.showItemInFolder(path)
+          },
+        })
   chosen =
     storage === undefined || product === undefined
       ? selectInstance({ projectRoot: bundledRoot, env: process.env })
@@ -66,6 +78,11 @@ try {
 const projectRoot = chosen.root
 /** Where the Program is: the bundle of a product (its apps' sources hold only the person's files), else the app folder itself. */
 const programRoot = storage === undefined ? projectRoot : bundledRoot
+if (git !== undefined)
+  app.setAboutPanelOptions({
+    credits:
+      'Includes Git, free software under the GNU GPL version 2. Its licence and the offer of its source are in Settings > App.',
+  })
 
 /** Where the window opens: `acrylblends.desktopPath` in package.json (the todo template sets `/todo`), else the root. */
 function startPath(): string {
@@ -123,6 +140,23 @@ if (!app.requestSingleInstanceLock()) {
     const frame = isFrameApp(programRoot)
     const attached = frame ? undefined : await runningApp(projectRoot)
     let url: string
+    /** This window's own frame host on the chosen app; its address once it serves. */
+    const startHost = (): Promise<string> => {
+      // The host chooses the same home and port as this window: decided here once, never again from the folder it runs in. The product's git comes first
+      // on its PATH, so everything the host starts finds it by name.
+      const env = { ...process.env, ...instanceEnv(chosen) }
+      host = startFrameHost(
+        chosen.root,
+        git === undefined ? env : withGitFirst(env, git, process.platform),
+        (text) => {
+          process.stdout.write(text)
+        },
+        process.platform,
+        // A packaged product carries no npm: its host runs on this app's own Electron runtime.
+        app.isPackaged ? { runtime: process.execPath, program: programRoot } : {},
+      )
+      return host.ready
+    }
     if (frame) {
       // The frame that already runs for this folder (`npm run dev`, or another window's host), else a host of this window's own.
       const runningAddress = await runningFrame(chosen.home)
@@ -132,19 +166,8 @@ if (!app.requestSingleInstanceLock()) {
         )
         url = runningAddress
       } else {
-        host = startFrameHost(
-          projectRoot,
-          // The host chooses the same home and port as this window: decided here once, never again from the folder it runs in.
-          { ...process.env, ...instanceEnv(chosen) },
-          (text) => {
-            process.stdout.write(text)
-          },
-          // A packaged product carries no npm: its host runs on this app's own Electron runtime.
-          process.platform,
-          app.isPackaged ? { runtime: process.execPath, program: programRoot } : {},
-        )
         try {
-          url = await host.ready
+          url = await startHost()
         } catch (cause) {
           console.error(`desktop: ${cause instanceof Error ? cause.message : String(cause)}`)
           await shutdown.request(1)
@@ -164,13 +187,16 @@ if (!app.requestSingleInstanceLock()) {
       running = await createApp(chosen)
       url = running.url
     }
-    const origin = new URL(url).origin
+    // Both change when a product switches to another of its apps (each app has its own port); the handlers below read them when they run.
+    let origin = new URL(url).origin
     /** Where a window opens: the frame's address (with its token) for a frame app, else a path of the app (`acrylblends.desktopPath`, else the root). */
     const addressOf = (path: string | undefined): string =>
       frame && path === undefined ? url : new URL(path ?? startPath(), url).href
     /** One window on an address of the app. Navigation follows `navigation` in frame.ts. The user agent names the window to the door (`AcrylWindow/<id>`), so an agent can drive it with `--window <id>`. */
     // Where each window was opened: `window list` shows it until the page reports its own address (Electron gives none while the first load has not started).
     const openedOn = new Map<number, string>()
+    /** The App pages are a product's, on a frame host this window started: a host it attached to belongs to another process. */
+    const appPage = storage !== undefined && frame && host !== undefined
     const createWindow = (path: string | undefined): BrowserWindow => {
       // A window opened while another is open sits a step down and to the right of it, not exactly on top.
       const beside =
@@ -192,7 +218,15 @@ if (!app.requestSingleInstanceLock()) {
           .map(([x = 0, y = 0]) => ({ x, y }))
         return cascade(bounds, work, size, taken)
       })()
-      const created = new BrowserWindow(windowOptions({ title: chosen.name, ...size, ...where }))
+      const created = new BrowserWindow(
+        windowOptions({
+          title: chosen.name,
+          ...size,
+          ...where,
+          // A product's window page gets the bridge of its App pages (Settings > App, Name your app).
+          ...(appPage ? { preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) } : {}),
+        }),
+      )
       const address = addressOf(path)
       openedOn.set(created.id, new URL(address).pathname)
       created.webContents.setUserAgent(
@@ -310,6 +344,98 @@ if (!app.requestSingleInstanceLock()) {
         target?.insert(placement.at + 1, new MenuItem({ type: 'separator' }))
       Menu.setApplicationMenu(menu)
     }
-    stopDoorShell = startDoorShell(projectRoot, { desktop, log: console.log })
+    stopDoorShell = startDoorShell(chosen.root, { desktop, log: console.log })
+
+    if (appPage && storage !== undefined && product !== undefined) {
+      const productStorage = storage
+      /** Stop the host, run `next`, start the host on the app it returns and show it in every window; the app that ran comes back when `next` fails. */
+      const switchTo = async (next: () => AppInstance): Promise<void> => {
+        const previous = chosen
+        await host?.stop()
+        host = undefined
+        let failure: unknown
+        try {
+          chosen = withRunEnv(next(), process.env)
+        } catch (cause) {
+          failure = cause
+          chosen = previous
+        }
+        try {
+          url = await startHost()
+        } catch (cause) {
+          console.error(`desktop: ${cause instanceof Error ? cause.message : String(cause)}`)
+          if (chosen === previous) {
+            await shutdown.request(1)
+            return
+          }
+          // The new app does not start: the one that ran comes back, if its folders are still there.
+          failure = cause
+          chosen = previous
+          url = await startHost()
+        }
+        origin = new URL(url).origin
+        app.setName(chosen.name)
+        stopDoorShell?.()
+        stopDoorShell = startDoorShell(chosen.root, { desktop, log: console.log })
+        for (const shown of live())
+          shown.loadURL(url).catch((cause: unknown) => {
+            console.warn(
+              `desktop: the window could not load the app: ${cause instanceof Error ? cause.message : String(cause)}`,
+            )
+          })
+        console.log(`desktop: now showing the app "${chosen.name}" (${chosen.id}) at ${origin}`)
+        if (failure !== undefined) throw failure
+      }
+      const dialogParent = (): BrowserWindow | undefined =>
+        BrowserWindow.getFocusedWindow() ?? live()[0]
+      const archiveFilter = [{ name: 'ACRYL Blends app', extensions: ['acrylblend'] }]
+      const handle = appPageHandler({
+        storage: productStorage,
+        current: () => chosen.id,
+        seed: (source) => {
+          seedSource(bundledRoot, source, product.program)
+        },
+        switchTo,
+        chooseExportFile: async (suggested) => {
+          const parent = dialogParent()
+          const options = { defaultPath: suggested, filters: archiveFilter }
+          const answer = await (parent === undefined
+            ? dialog.showSaveDialog(options)
+            : dialog.showSaveDialog(parent, options))
+          return answer.canceled || answer.filePath === undefined || answer.filePath === ''
+            ? undefined
+            : answer.filePath
+        },
+        chooseImportFile: async () => {
+          const parent = dialogParent()
+          const options = { filters: archiveFilter, properties: ['openFile' as const] }
+          const answer = await (parent === undefined
+            ? dialog.showOpenDialog(options)
+            : dialog.showOpenDialog(parent, options))
+          return answer.canceled ? undefined : answer.filePaths[0]
+        },
+        openPath: async (path) => {
+          const problem = await shell.openPath(path)
+          if (problem !== '') throw new Error(problem)
+        },
+        renamed: (renamed) => {
+          chosen = Object.freeze({ ...chosen, name: renamed.name })
+          app.setName(renamed.name)
+        },
+        platform: process.platform,
+        ...(git === undefined ? {} : { git }),
+      })
+      ipcMain.handle(APP_PAGE_CHANNEL, (event, op: unknown, arg: unknown) => {
+        // Only the window's own page on the frame's origin: never the app's iframe, never a page the window was sent to.
+        const sender = event.senderFrame
+        if (
+          sender === null ||
+          sender !== event.sender.mainFrame ||
+          new URL(sender.url).origin !== origin
+        )
+          return { ok: false, message: 'only the frame page can ask this' }
+        return handle(op, arg)
+      })
+    }
   })
 }

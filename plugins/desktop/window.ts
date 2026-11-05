@@ -7,6 +7,8 @@ export interface WindowSpec {
   /** Where the window's top left corner goes; Electron centers the window when these are left out. */
   readonly x?: number
   readonly y?: number
+  /** A product's preload (`preload.cjs`): the narrow bridge its App pages use. Sandboxed, isolated, main frame only. */
+  readonly preload?: string
 }
 
 export interface Rect {
@@ -84,6 +86,7 @@ export interface WindowOptions {
     readonly nodeIntegration: boolean
     readonly sandbox: boolean
     readonly webSecurity: boolean
+    readonly preload?: string
   }
 }
 
@@ -101,6 +104,7 @@ export function windowOptions(spec: WindowSpec): WindowOptions {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      ...(spec.preload === undefined ? {} : { preload: spec.preload }),
     },
   }
 }
