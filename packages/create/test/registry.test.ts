@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { ownLock, ownManifest } from '../src/registry'
+import { manifestName, ownLock, ownManifest, profileNameFor } from '../src/registry'
 
 const STARTER = [
   'apiVersion: blends.acryl.dev/v1alpha1',
@@ -27,9 +27,19 @@ describe('a pulled starter becomes the new app', () => {
 
   it('keeps its lock true to that manifest, and leaves a lock it cannot read alone', () => {
     const owned = ownManifest(STARTER, 'my-notes')
-    const modules = [{ name: 'notes', origin: 'local', digest: 'sha256:abc', source: 'plugins/notes' }]
+    const modules = [
+      { name: 'notes', origin: 'local', digest: 'sha256:abc', source: 'plugins/notes' },
+    ]
     const lock = JSON.parse(
-      ownLock(JSON.stringify({ formatVersion: 3, origin: { id: 'inboxxobni.notes', kind: 'Blueprint', version: '0.1.0', digest: 'old' }, modules }), owned, 'my-notes'),
+      ownLock(
+        JSON.stringify({
+          formatVersion: 3,
+          origin: { id: 'inboxxobni.notes', kind: 'Blueprint', version: '0.1.0', digest: 'old' },
+          modules,
+        }),
+        owned,
+        'my-notes',
+      ),
     )
     expect(lock.origin).toEqual({
       id: 'acrylblends.my-notes',
@@ -40,5 +50,19 @@ describe('a pulled starter becomes the new app', () => {
     expect(lock.modules).toEqual(modules)
     expect(ownLock('not json', owned, 'my-notes')).toBe('not json')
     expect(ownLock('{"formatVersion":3}', owned, 'my-notes')).toBe('{"formatVersion":3}')
+  })
+})
+
+describe("a starter's own name", () => {
+  it('is read from its manifest only when it is one word, quoted or not', () => {
+    expect(manifestName(STARTER)).toBe('notes')
+    expect(manifestName('metadata:\n  id: x.y\n  name: my-app # mine\n')).toBe('my-app')
+    expect(manifestName('metadata:\n  name: Notes with a desktop window\n')).toBeUndefined()
+    expect(manifestName('spec:\n  name: notes\n')).toBeUndefined()
+  })
+
+  it("names the app's DSH profile the way the scaffold does", () => {
+    expect(profileNameFor('My Notes!')).toBe('acrylblends-my-notes')
+    expect(profileNameFor('---')).toBe('acrylblends-app')
   })
 })
