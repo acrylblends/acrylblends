@@ -85,3 +85,13 @@ This list wins over an id written in a spec or in tasks.md.
 | 78 | Identra Directory | `acrylblends.identity-identra` | https://github.com/acrylblends/78-identity-identra |
 | 79 | Keyway Auth Lab | `acrylblends.authentication-keyway` | https://github.com/acrylblends/79-authentication-keyway |
 | 80 | Cipherdesk | `acrylblends.cryptography-cipherdesk` | https://github.com/acrylblends/80-cryptography-cipherdesk |
+| 81 | Controlroom | `acrylblends.controlroom` | https://github.com/acrylblends/81-controlroom |
+| 82 | Signalglass | `acrylblends.signalglass` | https://github.com/acrylblends/82-signalglass |
+| 83 | Optima | `acrylblends.optima` | https://github.com/acrylblends/83-optima |
+| 84 | Shiftwell | `acrylblends.shiftwell` | https://github.com/acrylblends/84-shiftwell |
+| 85 | Flowstate | `acrylblends.flowstate` | https://github.com/acrylblends/85-flowstate |
+| 86 | Papertrail | `acrylblends.papertrail` | https://github.com/acrylblends/86-papertrail |
+| 87 | Fieldnotes | `acrylblends.fieldnotes` | https://github.com/acrylblends/87-fieldnotes |
+| 88 | Indexia | `acrylblends.indexia` | https://github.com/acrylblends/88-indexia |
+| 89 | Daymark | `acrylblends.daymark` | https://github.com/acrylblends/89-daymark |
+| 90 | HearthOS | `acrylblends.hearthos` | https://github.com/acrylblends/90-hearthos |
