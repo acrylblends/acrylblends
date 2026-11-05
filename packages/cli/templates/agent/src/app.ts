@@ -12,8 +12,10 @@ import { builder } from '../plugins/builder/index.ts'
 import { extensions } from '../plugins/extensions/index.ts'
 import { type AppInstance, instance } from '../plugins/instance/index.ts'
 import {
+  appPluginNames,
   blueprintsIn,
   compose,
+  loadAppPlugins,
   loadManifest,
   type ParameterValue,
 } from '../plugins/manifest/index.ts'
@@ -44,6 +46,8 @@ export const registry = {
 
 /** The manifest next to this app's source. */
 export const MANIFEST = join(fileURLToPath(new URL('..', import.meta.url)), 'blend.yaml')
+/** The app's own plugins (a feature each), which `blend.yaml` mounts by their folder name next to the library copies `registry` imports. */
+const PLUGINS_DIR = join(fileURLToPath(new URL('..', import.meta.url)), 'plugins')
 
 /**
  * The app's manifest, resolved. A Blend finds its Blueprint in `blueprints/<id>.yaml`; an app that is itself a Blueprint never looks.
@@ -51,7 +55,7 @@ export const MANIFEST = join(fileURLToPath(new URL('..', import.meta.url)), 'ble
  */
 export function readManifest(values?: Readonly<Record<string, ParameterValue>>) {
   return loadManifest(MANIFEST, {
-    known: Object.keys(registry),
+    known: [...Object.keys(registry), ...appPluginNames(PLUGINS_DIR)],
     getBlueprint: blueprintsIn(join(fileURLToPath(new URL('..', import.meta.url)), 'blueprints')),
     ...(values ? { values } : {}),
   })
@@ -182,53 +186,68 @@ export async function composeInto(
     console.warn(
       `WARNING: the Assistant has no model, so it answers every visitor "${ASSISTANT_NO_MODEL}" Set the app's model (ACRYLBLENDS_MODEL_URL and ACRYLBLENDS_MODEL, or model.json in the app's home).`,
     )
+  // The rows that name one of the app's own plugin folders (a feature: plugins/<name>/ and its row) rather than a registry import. Each one that runs
+  // is imported here; all of them, off or on, belong to their row, so the extensions row never starts them a second time.
+  const ownRows = [
+    ...new Set(read.plugins.map((row) => row.use).filter((use) => !Object.hasOwn(registry, use))),
+  ]
+  const ownPlugins = await loadAppPlugins(
+    PLUGINS_DIR,
+    ownRows.filter((use) => manifest.plugins.some((row) => row.use === use && !row.disabled)),
+  )
   const fibers: Fiber[] = [
     // The `model` row mounts the scripted model, or the real one when a model is configured.
-    ...(await compose(ctx, manifest, modelConfig ? { ...registry, model: openai } : registry, {
-      ...(modelConfig ? { model: { ...modelConfig } } : {}),
-      // Runtime values the manifest cannot hold: the manifest's own digest (every task records it), and who may install.
-      tasks: { manifest: `sha256:${manifest.digest}` },
-      // The `approval` parameter in blend.yaml (the extensions row) turns this source into one that asks.
-      extensions: {
-        ...(extensionsReadOnly ? { readOnly: true } : {}),
-        sources: [
-          { dir: extensionsDir, trust: 'install' },
-          ...(legacy ? [{ dir: legacyDir, trust: 'install' as const }] : []),
-        ],
+    ...(await compose(
+      ctx,
+      manifest,
+      { ...registry, ...ownPlugins, ...(modelConfig ? { model: openai } : {}) },
+      {
+        ...(modelConfig ? { model: { ...modelConfig } } : {}),
+        // Runtime values the manifest cannot hold: the manifest's own digest (every task records it), and who may install.
+        tasks: { manifest: `sha256:${manifest.digest}` },
+        // The `approval` parameter in blend.yaml (the extensions row) turns this source into one that asks.
+        extensions: {
+          ...(extensionsReadOnly ? { readOnly: true } : {}),
+          sources: [
+            { dir: extensionsDir, trust: 'install' },
+            ...(legacy ? [{ dir: legacyDir, trust: 'install' as const }] : []),
+          ],
+          rows: ownRows,
+        },
+        builder: { dir: extensionsDir },
+        ...(assistant
+          ? {
+              // Every answer comes right after a look, so it says what the visitor's page shows now.
+              agent: { tools: ASSISTANT_TOOLS, steps: ASSISTANT_STEPS, answerAfter: 'door_look' },
+              'acryl-door': { pageOnly: true },
+              'agent-panel': { assistant: true },
+              // The visitor reaches the agent through the panel only: no /ask, /tasks or /extensions routes.
+              routes: { agentRoutes: false },
+            }
+          : {}),
+        // The rows that serve routes of their own mount them under the app's prefix, as makeApp does. On the app's own server that prefix is the root (the
+        // row's default); the frame host serves the app at FRAME_MOUNT_PREFIX, and its own `/api` routes would answer for a row left at the root. The
+        // app's own routes row takes the same prefix for its mount and for the absolute URLs its pages write, so the page and its assets answer at `/app`.
+        ...(options.host === true
+          ? {
+              'agent-panel': { mount: FRAME_MOUNT_PREFIX },
+              'driver-pty': { mount: FRAME_MOUNT_PREFIX },
+              feedback: { mount: FRAME_MOUNT_PREFIX },
+              routes: { prefix: FRAME_MOUNT_PREFIX, ...(assistant ? { agentRoutes: false } : {}) },
+            }
+          : {}),
+        // The frame host runs the server itself and its app instance carries no port; only the app's own server configures one.
+        ...(options.host === true
+          ? {}
+          : {
+              server: {
+                port: chosen.port.start,
+                scan: chosen.port.scan ? 20 : 0,
+                hostname: chosen.host,
+              },
+            }),
       },
-      builder: { dir: extensionsDir },
-      ...(assistant
-        ? {
-            // Every answer comes right after a look, so it says what the visitor's page shows now.
-            agent: { tools: ASSISTANT_TOOLS, steps: ASSISTANT_STEPS, answerAfter: 'door_look' },
-            'acryl-door': { pageOnly: true },
-            'agent-panel': { assistant: true },
-            // The visitor reaches the agent through the panel only: no /ask, /tasks or /extensions routes.
-            routes: { agentRoutes: false },
-          }
-        : {}),
-      // The rows that serve routes of their own mount them under the app's prefix, as makeApp does. On the app's own server that prefix is the root (the
-      // row's default); the frame host serves the app at FRAME_MOUNT_PREFIX, and its own `/api` routes would answer for a row left at the root. The
-      // app's own routes row takes the same prefix for its mount and for the absolute URLs its pages write, so the page and its assets answer at `/app`.
-      ...(options.host === true
-        ? {
-            'agent-panel': { mount: FRAME_MOUNT_PREFIX },
-            'driver-pty': { mount: FRAME_MOUNT_PREFIX },
-            feedback: { mount: FRAME_MOUNT_PREFIX },
-            routes: { prefix: FRAME_MOUNT_PREFIX, ...(assistant ? { agentRoutes: false } : {}) },
-          }
-        : {}),
-      // The frame host runs the server itself and its app instance carries no port; only the app's own server configures one.
-      ...(options.host === true
-        ? {}
-        : {
-            server: {
-              port: chosen.port.start,
-              scan: chosen.port.scan ? 20 : 0,
-              hostname: chosen.host,
-            },
-          }),
-    })),
+    )),
   ]
   // Without a model the scripted one would echo the visitor's words back: it says in one sentence that the Assistant is not set up.
   if (assistant && !options.model)

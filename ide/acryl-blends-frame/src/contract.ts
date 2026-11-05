@@ -17,6 +17,39 @@ export const FRAME_GIT_PUSH_PATH = `${FRAME_API_PREFIX}/git/push`
 /** POST: bring the upstream's new versions in, by fast-forward only; a branch that has moved on both sides is left as it is. Answers a {@link GitSyncResult}. */
 export const FRAME_GIT_PULL_PATH = `${FRAME_API_PREFIX}/git/pull`
 
+/** POST: the app's snapshot verb `capture` (a row for every plugin folder that has none, then `blend.lock.json`). Answers a {@link SnapshotCapture}. */
+export const FRAME_SNAPSHOT_CAPTURE_PATH = `${FRAME_API_PREFIX}/snapshot/capture`
+
+/** What a capture did: the plugin folders that got a row, and how many plugins the lock now records. */
+export interface SnapshotCapture {
+  readonly addedRows: readonly string[]
+  readonly modules: number
+}
+
+/** A snapshot against its lock: `problems` names `blend.yaml` or each plugin folder that changed since the capture. */
+export interface SnapshotVerify {
+  readonly ok: boolean
+  readonly problems: readonly string[]
+  readonly checked: number
+}
+
+/** What an apply did; nothing is written when `ok` is false. `extra` are the app's folders the snapshot lacks, kept and switched off. */
+export interface SnapshotApply {
+  readonly ok: boolean
+  readonly problems: readonly string[]
+  readonly modules: ReadonlyArray<{ readonly name: string; readonly status: 'added' | 'unchanged' | 'conflict' | 'skipped'; readonly detail?: string }>
+  readonly manifestChanged: boolean
+  readonly extra: readonly string[]
+}
+
+const isWords = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === 'string')
+
+/** @throws when the answer is not a capture result. */
+export function parseSnapshotCapture(value: unknown): SnapshotCapture {
+  if (!isRecord(value) || !isWords(value.addedRows) || !isCount(value.modules)) throw new Error('snapshot capture: not a result')
+  return { addedRows: value.addedRows, modules: value.modules }
+}
+
 /**
  * The checked-out branch against its remote:
  * - `detached`: the folder is on no branch, so there is nothing to push or pull;
@@ -178,12 +211,50 @@ export function parseFrameState(value: unknown): FrameState {
 
 export const FRAME_PLUGINS_PATH = `${FRAME_API_PREFIX}/plugins`
 export const FRAME_PLUGINS_SWITCH_PATH = `${FRAME_API_PREFIX}/plugins/switch`
+/** POST `{ name }`: what sharing this local plugin would do (a {@link SharePlan}); nothing leaves the machine. */
+export const FRAME_PLUGINS_SHARE_PLAN_PATH = `${FRAME_API_PREFIX}/plugins/share-plan`
+/** POST `{ name, confirm }`: publish it, only when `confirm` is the plan the person said yes to and it still holds. */
 export const FRAME_PLUGINS_SHARE_PATH = `${FRAME_API_PREFIX}/plugins/share`
 
 /** Where a shared plugin went: its GitHub repository and the released version other apps install. */
 export interface SharedPluginView {
   readonly url: string
   readonly version: string
+}
+
+export type ShareVisibility = 'private' | 'public'
+
+/**
+ * What a share will do, shown to the person before anything is sent: the GitHub repository it goes to (created when it does not exist), the version
+ * it releases and who can see it. A share publishes exactly this plan, or nothing.
+ */
+export interface SharePlan {
+  readonly owner: string
+  readonly repo: string
+  readonly version: string
+  readonly visibility: ShareVisibility
+  /** The repository does not exist yet: the share creates it. */
+  readonly createsRepository: boolean
+  /** The version already released there; the plan then releases the next patch. */
+  readonly released?: string
+}
+
+const GITHUB_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
+
+/** @throws when the value is not a share plan. */
+export function parseSharePlan(value: unknown): SharePlan {
+  if (!isRecord(value)) throw new Error('share plan: not a plan')
+  const { owner, repo, version, visibility, createsRepository, released } = value
+  if (typeof owner !== 'string' || !GITHUB_NAME.test(owner) || typeof repo !== 'string' || !GITHUB_NAME.test(repo)) throw new Error('share plan: repository')
+  if (typeof version !== 'string' || version === '' || (released !== undefined && (typeof released !== 'string' || released === ''))) throw new Error('share plan: version')
+  if ((visibility !== 'private' && visibility !== 'public') || typeof createsRepository !== 'boolean') throw new Error('share plan: visibility')
+  return { owner, repo, version, visibility, createsRepository, ...(released === undefined ? {} : { released }) }
+}
+
+/** The same plan: what the person confirmed is what would be published now. */
+export function samePlan(a: SharePlan, b: SharePlan): boolean {
+  return a.owner === b.owner && a.repo === b.repo && a.version === b.version && a.visibility === b.visibility
+    && a.createsRepository === b.createsRepository && a.released === b.released
 }
 
 /**

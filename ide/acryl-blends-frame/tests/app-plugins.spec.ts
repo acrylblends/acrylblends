@@ -1,14 +1,16 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  bumpPackageVersion, commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, packageAppPlugin, parseBlendRows, pluginPackageManifest,
-  readSharedRecords, recordShare, setMadeOn, setRowOn,
+  bumpPackageVersion, commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, packageAppPlugin, parseBlendRows, planAppPluginShare,
+  pluginPackageManifest, pluginPackagesOf, readAppPlugins, readSharedRecords, recordShare, setMadeOn, setRowOn, shareAppPlugin, switchAppPlugin,
+  type SharePorts,
 } from '../src/app-plugins.ts'
-import { appPluginRow, createAppPluginsApi, filterPlugins, framePluginRow, madeWhen } from '../src/client/plugins-navigator.ts'
+import { appPluginRow, createAppPluginsApi, filterPlugins, framePluginRow, madeWhen, shareQuestion } from '../src/client/plugins-navigator.ts'
 import { feedbackPlace, feedbackTask } from '../src/client/feedback.ts'
-import { parseAppPluginsView, parseFeedbackView } from '../src/contract.ts'
+import { frameRoutes } from '../src/index.ts'
+import { parseAppPluginsView, parseFeedbackView, parseSharePlan, type SharePlan } from '../src/contract.ts'
 
 const BLEND = `spec:
   runtime: cordis
@@ -92,12 +94,46 @@ describe('the plugins navigator', () => {
   })
 })
 
+describe('the app\'s own plugins', () => {
+  const noGit = { run: () => Promise.reject(new Error('not a repository')) }
+
+  it('lists a plugin its blend.yaml row mounts once, as made, and switches it by that row', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'frame-own-'))
+    try {
+      for (const name of ['notes', 'loose', 'home']) {
+        mkdirSync(join(root, 'plugins', name), { recursive: true })
+        writeFileSync(join(root, 'plugins', name, 'index.ts'), `/** The ${name} plugin. */\nexport function apply() {}\n`)
+      }
+      writeFileSync(join(root, 'plugins', 'library.json'), '{"plugins":["home"]}\n')
+      writeFileSync(join(root, 'blend.yaml'), 'spec:\n  rows:\n    - id: home\n      name: home\n    - id: notes\n      name: notes\n    - id: extensions\n      name: extensions\n')
+      const listed = await readAppPlugins(root, noGit)
+      expect(listed.map(plugin => [plugin.name, plugin.kind, plugin.on])).toEqual([
+        ['loose', 'made', true],
+        ['notes', 'made', true],
+        ['home', 'row', true],
+        ['extensions', 'row', true],
+      ])
+      await switchAppPlugin(root, 'made', 'notes', false)
+      const text = readFileSync(join(root, 'blend.yaml'), 'utf8')
+      expect(parseBlendRows(text).find(row => row.id === 'notes')?.disabled).toBe(true)
+      expect(extensionsOff(text)).toEqual([])
+      expect((await readAppPlugins(root, noGit)).find(plugin => plugin.name === 'notes')?.on).toBe(false)
+      await switchAppPlugin(root, 'made', 'loose', false)
+      expect(extensionsOff(readFileSync(join(root, 'blend.yaml'), 'utf8'))).toEqual(['loose'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('sharing a local plugin', () => {
   const plugin = { name: 'hello-share', kind: 'made' as const, by: 'Ana', at: '2026-11-03T09:00:00', description: 'A shared plugin', on: true }
   const where = { url: 'https://github.com/inboxxobni/hello-share', version: '0.1.0' }
 
+  const plan: SharePlan = { owner: 'tester', repo: 'hello-share', version: '0.1.0', visibility: 'private', createsRepository: true }
+
   it('offers Share on a local row, and a shared row shows where it went', () => {
-    const share = () => Promise.resolve({ status: 'shared' as const, ...where })
+    const share = { plan: () => Promise.resolve(plan), publish: () => Promise.resolve(where) }
     expect(appPluginRow(plugin, () => Promise.resolve(), share).share).toBe(share)
     expect(appPluginRow({ ...plugin, shared: where }, () => Promise.resolve()).shared).toEqual(where)
     // A library row is already published by its library; it is not shared from the app.
@@ -105,13 +141,26 @@ describe('sharing a local plugin', () => {
     expect(appPluginRow(library, () => Promise.resolve(), share).share).toBeUndefined()
   })
 
-  it('packages a local plugin the way the builder does, and remembers only a completed share', async () => {
+  it('asks a question naming the repository, whether it is created, the version and who can see it', () => {
+    expect(shareQuestion(plan)).toBe('Create repository tester/hello-share on GitHub and publish v0.1.0? It will be private.')
+    expect(shareQuestion({ ...plan, createsRepository: false, version: '0.1.1', released: '0.1.0', visibility: 'public' }))
+      .toBe('Publish v0.1.1 to tester/hello-share on GitHub? v0.1.0 is released there, so this is the next version. It will be public.')
+    expect(parseSharePlan(JSON.parse(JSON.stringify(plan)))).toEqual(plan)
+    expect(() => parseSharePlan({ ...plan, owner: '../x' })).toThrow('repository')
+    expect(() => parseSharePlan(undefined)).toThrow('not a plan')
+  })
+
+  it('packages a local plugin the way the builder does, under the app\'s home, and remembers only a completed share', async () => {
     const root = mkdtempSync(join(tmpdir(), 'frame-share-'))
     try {
       mkdirSync(join(root, 'plugins', 'hello-share'), { recursive: true })
       writeFileSync(join(root, 'plugins', 'hello-share', 'index.ts'), '/** A shared plugin: says hello. */\nexport function apply() {}\n')
       writeFileSync(join(root, 'plugins', 'library.json'), '{"plugins":[]}\n')
-      const dir = await packageAppPlugin(root, 'hello-share')
+      const home = join(root, '.acrylblends')
+      const dir = await packageAppPlugin(root, 'hello-share', pluginPackagesOf(home))
+      expect(dir).toBe(join(home, 'plugin-packages', 'hello-share'))
+      // Nothing lands in the app's own folder, so a share leaves no file to save.
+      expect(existsSync(join(root, 'plugin-packages'))).toBe(false)
       const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as Record<string, unknown>
       expect(manifest.name).toBe('hello-share')
       expect(manifest.version).toBe('0.1.0')
@@ -130,32 +179,120 @@ describe('sharing a local plugin', () => {
     expect(pluginPackageManifest('hello-share', 'd').keywords).toEqual(['cordis', 'cordis-plugin', 'acrylblends'])
   })
 
-  it('posts a share and keeps only the repository and version the Host answers', async () => {
+  /** A GitHub that records what it was asked to do, and a git that clones into an empty folder: nothing leaves the machine. */
+  function standIn(repos: Record<string, { readonly releases: string[] }> = {}) {
+    const did: string[] = []
+    const ports: SharePorts = {
+      host: {
+        login: () => { did.push('login'); return 'tester' },
+        repository: (owner, repo) => (repos[`${owner}/${repo}`] === undefined ? undefined : { visibility: 'private', url: `https://github.com/${owner}/${repo}` }),
+        createRepository: (owner, repo, visibility) => { did.push(`create ${owner}/${repo} ${visibility}`); repos[`${owner}/${repo}`] = { releases: [] } },
+        setVisibility: (owner, repo, visibility) => { did.push(`visibility ${owner}/${repo} ${visibility}`) },
+        addTopics: () => {},
+        releaseExists: (owner, repo, tag) => repos[`${owner}/${repo}`]?.releases.includes(tag) === true,
+        createRelease: (owner, repo, tag) => { did.push(`release ${owner}/${repo} ${tag}`); repos[`${owner}/${repo}`]?.releases.push(tag); return `https://github.com/${owner}/${repo}/releases/${tag}` },
+        cloneUrl: (owner, repo) => `https://github.com/${owner}/${repo}.git`,
+      },
+      git: {
+        clone: (_url, dir) => { mkdirSync(dir, { recursive: true }) },
+        commitAll: () => true,
+        tag: () => {},
+        push: (_dir, tag) => { did.push(`push ${tag}`) },
+      },
+    }
+    return { ports, did }
+  }
+
+  function appWithPlugin(): { root: string; home: string } {
+    const root = mkdtempSync(join(tmpdir(), 'frame-share-'))
+    mkdirSync(join(root, 'plugins', 'hello-share'), { recursive: true })
+    writeFileSync(join(root, 'plugins', 'hello-share', 'index.ts'), '/** A shared plugin: says hello. */\nexport function apply() {}\n')
+    writeFileSync(join(root, 'plugins', 'library.json'), '{"plugins":[]}\n')
+    return { root, home: join(root, '.acrylblends') }
+  }
+
+  it('plans without sending anything, and publishes exactly the confirmed plan', async () => {
+    const { root, home } = appWithPlugin()
+    try {
+      const { ports, did } = standIn()
+      expect(await planAppPluginShare(root, home, 'hello-share', {}, ports)).toEqual(plan)
+      expect(did).toEqual(['login'])
+      const shared = await shareAppPlugin(root, home, 'hello-share', plan, {}, ports)
+      expect(shared).toEqual({ url: 'https://github.com/tester/hello-share', version: '0.1.0', owner: 'tester', repo: 'hello-share', tag: 'v0.1.0' })
+      expect(did.slice(1)).toEqual(['login', 'create tester/hello-share private', 'push v0.1.0', 'release tester/hello-share v0.1.0'])
+      expect(await readSharedRecords(join(home, 'shared-plugins.json'))).toEqual({ 'hello-share': { url: shared.url, version: '0.1.0' } })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('sends nothing when the plan changed after the yes: another owner, or a repository made meanwhile', async () => {
+    const { root, home } = appWithPlugin()
+    try {
+      // The frame is set to share to a test organization: the plan the person saw named their own account.
+      const { ports, did } = standIn()
+      await expect(shareAppPlugin(root, home, 'hello-share', plan, { owner: 'inboxxobni' }, ports)).rejects.toThrow('nothing was sent')
+      const meanwhile = standIn({ 'tester/hello-share': { releases: [] } })
+      await expect(shareAppPlugin(root, home, 'hello-share', plan, {}, meanwhile.ports)).rejects.toThrow('changed since you confirmed')
+      expect([...did, ...meanwhile.did].filter(step => step !== 'login')).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('shares to the configured organization, and plans the next patch once a version is released', async () => {
+    const { root, home } = appWithPlugin()
+    try {
+      const { ports, did } = standIn({ 'inboxxobni/hello-share': { releases: ['v0.1.0'] } })
+      const next = await planAppPluginShare(root, home, 'hello-share', { owner: 'inboxxobni' }, ports)
+      expect(next).toEqual({ owner: 'inboxxobni', repo: 'hello-share', version: '0.1.1', visibility: 'private', createsRepository: false, released: '0.1.0' })
+      expect((await shareAppPlugin(root, home, 'hello-share', next, { owner: 'inboxxobni' }, ports)).tag).toBe('v0.1.1')
+      // The account signed in is never asked when the frame names the owner.
+      expect(did).toEqual(['push v0.1.1', 'release inboxxobni/hello-share v0.1.1'])
+      expect(JSON.parse(readFileSync(join(pluginPackagesOf(home), 'hello-share', 'package.json'), 'utf8')).version).toBe('0.1.1')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('asks the Host for the plan, then posts the share with the confirmed plan', async () => {
     const calls: Array<{ url: string; body: string }> = []
     const api = createAppPluginsApi(async (url, init) => {
       calls.push({ url, body: String(init?.body) })
-      return new Response(JSON.stringify({ url: where.url, version: where.version, owner: 'inboxxobni', repo: 'hello-share', tag: 'v0.1.0' }), { status: 200 })
+      return new Response(JSON.stringify(url.endsWith('/share-plan') ? plan : { url: where.url, version: where.version, owner: 'inboxxobni', repo: 'hello-share', tag: 'v0.1.0' }), { status: 200 })
     })
-    expect(await api.share('hello-share')).toEqual({ status: 'shared', ...where })
-    expect(calls[0]?.url).toBe('/api/acryl-blends-frame/plugins/share')
+    expect(await api.planShare('hello-share')).toEqual(plan)
+    expect(await api.share('hello-share', plan)).toEqual(where)
+    expect(calls.map(call => call.url)).toEqual(['/api/acryl-blends-frame/plugins/share-plan', '/api/acryl-blends-frame/plugins/share'])
     expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ name: 'hello-share' })
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({ name: 'hello-share', confirm: plan })
     const failed = createAppPluginsApi(async () => new Response(JSON.stringify({ error: 'it could not be shared' }), { status: 409 }))
-    await expect(failed.share('hello-share')).rejects.toThrow('it could not be shared')
+    await expect(failed.share('hello-share', plan)).rejects.toThrow('it could not be shared')
   })
 
-  it('asks before bumping a released version, and sends the bump on the second call', async () => {
-    const bodies: string[] = []
-    const api = createAppPluginsApi(async (_url, init) => {
-      bodies.push(String(init?.body))
-      const bump = JSON.parse(String(init?.body)) as { bump?: boolean }
-      return new Response(JSON.stringify(bump.bump === true
-        ? { status: 'shared', url: where.url, version: '0.1.3' }
-        : { status: 'released', version: '0.1.2', nextVersion: '0.1.3' }), { status: 200 })
+  it('the Host publishes only a confirmed plan, never on a bare request', async () => {
+    const shares: SharePlan[] = []
+    const app = frameRoutes({
+      state: () => Promise.reject(new Error('not asked')),
+      plugins: {
+        read: () => Promise.reject(new Error('not asked')),
+        switch: () => Promise.reject(new Error('not asked')),
+        planShare: async () => plan,
+        share: async (_name, confirmed) => { shares.push(confirmed); return { ...where, owner: 'tester', repo: 'hello-share', tag: 'v0.1.0' } },
+      },
     })
-    expect(await api.share('hello-share')).toEqual({ status: 'released', version: '0.1.2', nextVersion: '0.1.3' })
-    expect(await api.share('hello-share', { bump: true })).toEqual({ status: 'shared', url: where.url, version: '0.1.3' })
-    expect(JSON.parse(bodies[0] ?? '{}')).toEqual({ name: 'hello-share' })
-    expect(JSON.parse(bodies[1] ?? '{}')).toEqual({ name: 'hello-share', bump: true })
+    const post = (path: string, body: unknown) => app.fetch(new Request(`http://127.0.0.1:43120${path}`, {
+      method: 'POST',
+      headers: { host: '127.0.0.1:43120', origin: 'http://127.0.0.1:43120', 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }), { connection: { remoteAddress: '127.0.0.1', localPort: 43120 } })
+    expect(await (await post('/api/acryl-blends-frame/plugins/share-plan', { name: 'hello-share' })).json()).toEqual(plan)
+    const bare = await post('/api/acryl-blends-frame/plugins/share', { name: 'hello-share' })
+    expect(bare.status).toBe(400)
+    expect(await bare.json()).toEqual({ error: 'a share is published only after the person confirms its plan' })
+    expect(shares).toEqual([])
+    expect((await post('/api/acryl-blends-frame/plugins/share', { name: 'hello-share', confirm: plan })).status).toBe(200)
+    expect(shares).toEqual([plan])
   })
 
   it('bumps a package folder one patch and writes it back', async () => {

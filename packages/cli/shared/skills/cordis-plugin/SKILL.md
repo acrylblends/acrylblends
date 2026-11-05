@@ -1,6 +1,6 @@
 ---
 name: cordis-plugin
-description: Add a Cordis plugin to __APP_NAME__ - a plugins/<name>/ folder with name, inject, apply and an optional check, its routes as an Acryl app, how to mount it in blend.yaml and src/app.ts or install it live through the door, and how to verify it. Use when a feature should be its own plugin, or when asked to extend the app.
+description: Add a Cordis plugin to __APP_NAME__ - a plugins/<name>/ folder with name, inject, apply and an optional check, its routes as an Acryl app, how its blend.yaml row mounts it, and how to verify it. Use when a feature should be its own plugin, or when asked to extend the app.
 ---
 
 # Adding a Cordis plugin
@@ -20,7 +20,7 @@ export function apply(ctx: Context): void {
 }
 ```
 
-- **Routes** are an `Acryl` app mounted with `ctx.router.route('/due-dates', app)`; removing the plugin removes them. Write the app's own path: the frame that hosts the app in development adds its canvas prefix, so the same route answers `/due-dates` under `npm start` and `/app/due-dates` in the canvas. Never put the frame's prefix in a plugin's route. Import the framework by name (`acrylblends`, `acrylblends/body-limit`, `acryl-router`); a row's relative imports of its sibling plugins also work.
+- **Routes** are an `Acryl` app mounted with `ctx.router.route('/due-dates', app)`; removing the plugin removes them. Write the app's own path: the frame that hosts the app in development adds its canvas prefix, so the same route answers `/due-dates` under `npm start` and `/app/due-dates` in the canvas. Never put the frame's prefix in a plugin's route. Import the framework by name (`acrylblends`, `acrylblends/body-limit`); never guess a relative path into another plugin.
 - **State** lives in cells: `ctx.state.cell('due-dates.tasks', [])`. A page follows one with `watch` from `/api/state/client.js`, never with an `EventSource`, and never by polling what `watch` already pushes.
-- **Two ways in.** A plugin the app keeps: add a row to `blend.yaml` (`- id: <name>` and `name: <name>`) and import it in the `registry` of `src/app.ts`. A plugin installed while the app runs: `.acryl/bin/acryl plugin add plugins/<name>` (the `extensions` row loads it again at every start). The app keeps the previous version when a live install fails to start or fails its `check(ctx)`.
+- **Its row starts it.** Add a row to `blend.yaml` (`- id: <name>` and `name: <name>`, before the `acryl-node-server` row); `src/app.ts` finds the folder by that name, so it is never imported there. `disabled: true` on the row switches it off (Settings > Plugins does the same). `.acryl/bin/acryl plugin add plugins/<name>` installs a folder without a row live, for trying it; a folder with a row is the app's.
 - **Check it.** `npm test` and `npm run check` must pass. With the app running, use the door: `.acryl/bin/acryl look` reads the page as text with refs and `acryl act ...` acts on it; an install or reload shows the new feature in the page.

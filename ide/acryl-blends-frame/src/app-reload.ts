@@ -163,17 +163,24 @@ export function isNoise(filename: string): boolean {
 }
 
 /**
- * Calls `onChange` once, `debounceMs` after the last change of a file under `dir` (recursively), whoever made it. Returns the function that stops
- * watching; a folder that does not exist is not watched (an app without `src/` has no code to load again).
+ * Calls `onChange` once, `debounceMs` after the last change of a file under `dir` (recursively, or only the `only` files at its top), whoever made it.
+ * Returns the function that stops watching; a folder that does not exist is not watched (an app without `src/` has no code to load again).
  */
-export function watchFolder(dir: string, onChange: () => void, options: { readonly debounceMs?: number; readonly report?: (cause: unknown) => void } = {}): () => void {
+export function watchFolder(
+  dir: string,
+  onChange: () => void,
+  options: { readonly debounceMs?: number; readonly report?: (cause: unknown) => void; readonly only?: readonly string[] } = {},
+): () => void {
   if (!existsSync(dir)) return () => {}
   const debounceMs = options.debounceMs ?? RELOAD_DEBOUNCE_MS
   let timer: NodeJS.Timeout | undefined
   const startedAt = Date.now()
-  const watcher = watch(dir, { recursive: true }, (_event, filename) => {
+  // `only`: the files at the folder's top that count (the app's blend.yaml in its root); the folder is then not watched below its top.
+  const only = options.only
+  const watcher = watch(dir, { recursive: only === undefined }, (_event, filename) => {
     // macOS replays the folder's latest changes (a scaffold written a moment ago) as the watch starts: those are the code the host just loaded, not a change.
     if (Date.now() - startedAt < REPLAY_WINDOW_MS) return
+    if (only !== undefined && (typeof filename !== 'string' || !only.includes(filename))) return
     if (typeof filename === 'string' && isNoise(filename)) return
     clearTimeout(timer)
     timer = setTimeout(onChange, debounceMs)

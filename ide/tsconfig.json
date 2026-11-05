@@ -65,6 +65,8 @@
   "exclude": [
     "**/node_modules/**",
     "**/lib/**",
-    "**/tests/fixtures/**"
+    "**/tests/fixtures/**",
+    // Workaround, to be fixed with a types-only import path: dsh-tools' Context augmentation (server-side `sessions`) leaks into the client packages.
+    "acryl-app-context/**"
   ]
 }

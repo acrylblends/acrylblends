@@ -10,8 +10,8 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
-import { bumpVersion, gitCli, githubCli, parseVersion, PluginStore, sharePlugin, storeRootOf } from '@webboxes/plugin-hub'
-import type { AppPluginView, FramePluginState, FramePluginView, SharedPluginView } from './contract.ts'
+import { bumpVersion, gitCli, githubCli, parseVersion, PluginStore, sharePlugin, storeRootOf, type PublishGitPort, type RepositoryHostPort } from '@webboxes/plugin-hub'
+import { samePlan, type AppPluginView, type FramePluginState, type FramePluginView, type SharedPluginView, type SharePlan } from './contract.ts'
 
 /** One row of `blend.yaml`'s `spec.rows`: where its block starts and ends (line indexes, end exclusive). */
 export interface BlendRow {
@@ -207,42 +207,51 @@ async function libraryVersions(root: string): Promise<Map<string, string>> {
   return versions
 }
 
-/** Every plugin of the app: the `blend.yaml` rows in their order, then the plugins written into `plugins/`. */
+/**
+ * Every plugin of the app: first the app's own plugins (the folders of `plugins/` that are not library copies), each mounted by its `blend.yaml` row
+ * or, without one, started by the `extensions` row; then the library rows of `blend.yaml` in their order.
+ */
 export async function readAppPlugins(root: string, git: GitPort, sharedFile?: string): Promise<AppPluginView[]> {
   const text = await readFile(join(root, 'blend.yaml'), 'utf8')
   const off = new Set(extensionsOff(text))
   const versions = await libraryVersions(root)
   const shareRecords = await readSharedRecords(sharedFile)
-  const rows = await Promise.all(parseBlendRows(text).map(async (row): Promise<AppPluginView> => {
-    const description = row.comment !== '' ? firstSentence(row.comment) : await packageDescription(join(root, 'plugins', row.name))
-    const version = versions.get(row.name)
-    return { name: row.name, kind: 'row', ...(version === undefined ? {} : { version }), description, on: !row.disabled }
-  }))
-  const made = await Promise.all((await madePlugins(root)).map(async (name): Promise<AppPluginView> => {
+  const blendRows = parseBlendRows(text)
+  const own = await madePlugins(root)
+  const made = await Promise.all(own.map(async (name): Promise<AppPluginView> => {
     const [description, first] = await Promise.all([packageDescription(join(root, 'plugins', name)), firstCommit(git, root, `plugins/${name}`)])
     const shared = shareRecords[name]
+    const row = blendRows.find(entry => entry.name === name)
     return {
       name,
       kind: 'made',
       ...(first === undefined ? { unsaved: true } : { by: first.by, at: first.at }),
       ...(shared === undefined ? {} : { shared }),
       description,
-      on: !off.has(name),
+      on: row === undefined ? !off.has(name) : !row.disabled,
     }
+  }))
+  const rows = await Promise.all(blendRows.filter(row => !own.includes(row.name)).map(async (row): Promise<AppPluginView> => {
+    const description = row.comment !== '' ? firstSentence(row.comment) : await packageDescription(join(root, 'plugins', row.name))
+    const version = versions.get(row.name)
+    return { name: row.name, kind: 'row', ...(version === undefined ? {} : { version }), description, on: !row.disabled }
   }))
   return [...made, ...rows]
 }
 
-/** Switch one plugin in `blend.yaml`. @throws when there is no such plugin. */
+/**
+ * Switch one plugin in `blend.yaml`: a row (a library row, or one of the app's own plugins that has a row) gets or loses `disabled: true`; an own
+ * plugin without a row is put in or taken out of the `extensions` row's `off` list. @throws when there is no such plugin.
+ */
 export async function switchAppPlugin(root: string, kind: 'row' | 'made', name: string, on: boolean): Promise<void> {
   const file = join(root, 'blend.yaml')
   const text = await readFile(file, 'utf8')
+  const row = parseBlendRows(text).find(entry => entry.name === name)
   let next: string
-  if (kind === 'made') {
+  if (kind === 'made' && row === undefined) {
     if (!(await madePlugins(root)).includes(name)) throw new Error(`plugins/ has no plugin "${name}"`)
     next = setMadeOn(text, name, on)
   } else {
-    const row = parseBlendRows(text).find(entry => entry.name === name)
     if (row === undefined) throw new Error(`blend.yaml has no row "${name}"`)
     next = setRowOn(text, row.id, on)
   }
@@ -356,11 +365,14 @@ export async function recordShare(file: string, name: string, shared: SharedPlug
   await writeFile(file, `${JSON.stringify(records, null, 2)}\n`)
 }
 
-/** Copy one local plugin into its package folder, the way the builder's package_plugin does; answers the folder. */
-export async function packageAppPlugin(root: string, name: string): Promise<string> {
+/** Where the frame packages the plugins it shares: under the app's home, never in the app's folder, so a share leaves no file to save. */
+export const pluginPackagesOf = (home: string): string => join(home, 'plugin-packages')
+
+/** Copy one local plugin into its package folder under `packages`, the way the builder's package_plugin does; answers the folder. */
+export async function packageAppPlugin(root: string, name: string, packages: string): Promise<string> {
   if (!(await madePlugins(root)).includes(name)) throw new Error(`plugins/ has no local plugin "${name}"`)
   const source = join(root, 'plugins', name)
-  const target = join(root, 'plugin-packages', name)
+  const target = join(packages, name)
   let version = '0.1.0'
   try {
     const previous = JSON.parse(await readFile(join(target, 'package.json'), 'utf8')) as { version?: unknown }
@@ -385,16 +397,6 @@ export async function packageAppPlugin(root: string, name: string): Promise<stri
   return target
 }
 
-/** The version a package folder names, or undefined when it has none yet. */
-export async function packageVersion(dir: string): Promise<string | undefined> {
-  try {
-    const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as { version?: unknown }
-    return typeof manifest.version === 'string' ? manifest.version : undefined
-  } catch {
-    return undefined
-  }
-}
-
 /** Bump one package folder's patch version (what the hub asks for after a release), and answer the new version. */
 export async function bumpPackageVersion(dir: string): Promise<string> {
   const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as Record<string, unknown>
@@ -406,45 +408,66 @@ export async function bumpPackageVersion(dir: string): Promise<string> {
   return next
 }
 
-/** A share's answer: where it went, or the version that is already released and the patch that would follow. */
-export type ShareAppPluginResult =
-  | ({ readonly status: 'shared' } & SharedPluginView & { readonly owner: string; readonly repo: string; readonly tag: string })
-  | { readonly status: 'released'; readonly version: string; readonly nextVersion: string }
+/** Where a share goes through: the user's own `gh` (the repository host) and `git`; a test passes stand-ins, so no test publishes. */
+export interface SharePorts {
+  readonly host: RepositoryHostPort
+  readonly git: PublishGitPort
+}
+
+export const githubSharePorts = (): SharePorts => ({ host: githubCli(), git: gitCli() })
+
+/** A completed share: where it went. */
+export type ShareAppPluginResult = SharedPluginView & { readonly owner: string; readonly repo: string; readonly tag: string }
 
 /**
- * Share one local plugin through the plugin-hub path: package it, then publish the package to its own GitHub repository with a release. The user's
- * own `gh` and `git` do the publishing (the hub reads no token), and the local store keeps the tarball as it does for every share.
- * @param root - the app folder.
- * @param home - the app's home (the hub's store lives under it).
- * @param name - the local plugin's folder name.
- * @param options - the repository owner (the signed-in account when absent), the visibility (the plugin's own when absent), and whether to bump
- * the patch version before sharing (the answer after a version was already released).
+ * What sharing one local plugin would do, read without sending anything: it packages the plugin under the app's home and asks the host who is
+ * signed in, whether the repository exists and whether this version is released there (then the plan releases the next patch).
+ * @param options - the repository owner (the signed-in account when absent).
+ */
+export async function planAppPluginShare(root: string, home: string, name: string, options: { readonly owner?: string }, ports: SharePorts): Promise<SharePlan> {
+  const dir = await packageAppPlugin(root, name, pluginPackagesOf(home))
+  const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as { version?: unknown; acryl?: { visibility?: unknown } }
+  const current = typeof manifest.version === 'string' && parseVersion(manifest.version) !== undefined ? manifest.version : undefined
+  if (current === undefined) throw new Error(`${name}: its package has no semantic version`)
+  const owner = options.owner ?? ports.host.login()
+  const repo = name
+  const visibility = manifest.acryl?.visibility === 'public' ? 'public' : 'private'
+  const existing = ports.host.repository(owner, repo)
+  const released = existing !== undefined && ports.host.releaseExists(owner, repo, `v${current}`)
+  return {
+    owner,
+    repo,
+    version: released ? bumpVersion(current, 'patch') : current,
+    visibility,
+    createsRepository: existing === undefined,
+    ...(released ? { released: current } : {}),
+  }
+}
+
+/**
+ * Share one local plugin through the plugin-hub path, exactly as the person confirmed it: the plan is read again, and when it no longer matches
+ * (another account signed in, the repository made meanwhile, a version released) nothing is sent and the error says to look again. The hub then
+ * publishes to that repository, version and visibility with the user's own `gh` and `git` (it reads no token), and the local store keeps the
+ * tarball as it does for every share.
+ * @param confirmed - the plan the person said yes to.
+ * @param options - the repository owner the frame is configured with (the signed-in account when absent).
  */
 export async function shareAppPlugin(
   root: string,
   home: string,
   name: string,
-  options: { readonly owner?: string; readonly visibility?: 'private' | 'public'; readonly bump?: boolean } = {},
+  confirmed: SharePlan,
+  options: { readonly owner?: string },
+  ports: SharePorts,
 ): Promise<ShareAppPluginResult> {
-  const dir = await packageAppPlugin(root, name)
-  if (options.bump === true) await bumpPackageVersion(dir)
-  const current = await packageVersion(dir)
-  const result = await sharePlugin(
-    dir,
-    {
-      ...(options.owner === undefined ? {} : { owner: options.owner }),
-      ...(options.visibility === undefined ? {} : { visibility: options.visibility }),
-    },
-    { host: githubCli(), git: gitCli(), store: new PluginStore(storeRootOf(home)) },
-  )
-  if (result.status === 'refused') {
-    // A version is released once: the person is asked first, then the frame shares the next patch.
-    const released = /already has release v([^\s;]+)/u.exec(result.reason)
-    if (released !== null && current !== undefined && parseVersion(current) !== undefined)
-      return { status: 'released', version: released[1] ?? current, nextVersion: bumpVersion(current, 'patch') }
-    throw new Error(result.reason)
-  }
+  const plan = await planAppPluginShare(root, home, name, options, ports)
+  if (!samePlan(plan, confirmed)) throw new Error(`The share changed since you confirmed it (${plan.owner}/${plan.repo} v${plan.version}); nothing was sent. Look at it again.`)
+  const dir = join(pluginPackagesOf(home), name)
+  // A version is released once: the confirmed plan names the next patch, written now.
+  if (plan.released !== undefined && (await bumpPackageVersion(dir)) !== plan.version) throw new Error(`${name}: the next version is not v${plan.version}; nothing was sent`)
+  const result = await sharePlugin(dir, { owner: plan.owner, repo: plan.repo, visibility: plan.visibility }, { ...ports, store: new PluginStore(storeRootOf(home)) })
+  if (result.status === 'refused') throw new Error(result.reason)
   // Only a completed share is remembered: the hub prepares the package.json repository before its guards, so that field alone does not prove a release.
   await recordShare(join(home, 'shared-plugins.json'), name, { url: result.url, version: result.version })
-  return { status: 'shared', url: result.url, version: result.version, owner: result.owner, repo: result.repo, tag: result.tag }
+  return { url: result.url, version: result.version, owner: result.owner, repo: result.repo, tag: result.tag }
 }

@@ -248,6 +248,7 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
                 view.showRight()
               }}
               onVersionLabel={setVersionLabel}
+              gitSync={gitSync}
             />
           )}
           {state.status === 'error' && <p className="acrylBlendsNote" data-error>{state.message}</p>}

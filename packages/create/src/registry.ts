@@ -3,6 +3,7 @@
  * starter under `blends/<id>/`. Its CI says in the index which runtime an entry is for: only `runtime: acrylblends` entries are apps this package can make (the folder is the
  * app, with an `acryl.template.json`); the others are ACRYL app starters and are refused with one line. Nothing is run: the entry is downloaded, unpacked and copied.
  */
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SourceError } from './source'
@@ -28,17 +29,18 @@ export interface RegistryEntry {
 }
 
 /** The folder of an unpacked registry that holds `index.json`: the root, or its `registry/` folder (the public registry lives in its site's repository). */
-export function registryRoot(unpacked: string): string {
+/** @param label - the registry as the person named it (a folder's path, `github:owner/repo`), for the one line when it has no index. */
+export function registryRoot(unpacked: string, label = 'this registry'): string {
   for (const candidate of [unpacked, join(unpacked, 'registry')])
     if (existsSync(join(candidate, 'index.json'))) return candidate
   throw new SourceError(
-    'this registry has no index.json (it is a folder with index.json and blends/<id>/)',
+    `${label} has no index.json (a registry is a folder with index.json and blends/<id>/, or index.json in its registry/ folder)`,
   )
 }
 
 /** Read the index of an unpacked registry. */
-export function readRegistry(unpacked: string): { root: string; entries: RegistryEntry[] } {
-  const root = registryRoot(unpacked)
+export function readRegistry(unpacked: string, label?: string): { root: string; entries: RegistryEntry[] } {
+  const root = registryRoot(unpacked, label)
   let data: unknown
   try {
     data = JSON.parse(readFileSync(join(root, 'index.json'), 'utf8'))
@@ -108,4 +110,25 @@ export function ownManifest(text: string, name: string): string {
   for (let at = end - 1; at > start; at -= 1)
     if (/^\s+license:/.test(lines[at] ?? '')) lines.splice(at, 1)
   return lines.join('\n')
+}
+
+/**
+ * Keep a pulled starter's `blend.lock.json` true to the app made from it: the lock's origin names the manifest it was written from (its id and the digest of its text,
+ * as blends-core's `manifestDigest`), and {@link ownManifest} has just changed both. The plugin folders are copied unchanged, so their digests stand. A lock it cannot
+ * read is left as it is (`npm run snapshot capture` writes it again).
+ */
+export function ownLock(text: string, manifestText: string, name: string): string {
+  let lock: unknown
+  try {
+    lock = JSON.parse(text)
+  } catch {
+    return text
+  }
+  const origin = (lock as { origin?: unknown } | null)?.origin
+  if (origin === null || typeof origin !== 'object') return text
+  const owned = {
+    ...(lock as object),
+    origin: { ...origin, id: `acrylblends.${name}`, digest: createHash('sha256').update(manifestText).digest('hex') },
+  }
+  return `${JSON.stringify(owned, null, 2)}\n`
 }

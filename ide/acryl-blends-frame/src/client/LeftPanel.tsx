@@ -9,6 +9,8 @@ import { backText, backToMessage, chatTime, saveBeforeBackMessage, shortTime, ve
 import { branchClick, saveBeforeSwitchMessage, type BranchesApi } from './branches.ts'
 import type { BranchChatsPort } from './branch-chats.ts'
 import type { SwitchRequests } from './switch-request.ts'
+import type { GitSyncPort } from './git-sync.ts'
+import { RemoteChips } from './RemoteSync.tsx'
 import { feedbackPlace, type FeedbackApi } from './feedback.ts'
 
 /** A chat on the branch, as the left panel lists it. */
@@ -96,9 +98,11 @@ export interface LeftPanelProps {
   readonly showTab: (id: string) => void
   /** Told the newest version's label ("v7"), for the top bar. */
   readonly onVersionLabel: (label: string | undefined) => void
+  /** The branch's remote: the versions header's ↑/↓ chips send the versions there and bring its new ones in (the Git tab's Push and Pull). */
+  readonly gitSync: GitSyncPort
 }
 
-export function LeftPanel({ state, chats, versions, tabs, feedback, branches, branchChats, switchRequests, showTab, onVersionLabel }: LeftPanelProps) {
+export function LeftPanel({ state, chats, versions, tabs, feedback, branches, branchChats, switchRequests, showTab, onVersionLabel, gitSync }: LeftPanelProps) {
   const subscribe = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const chatRows = useSyncExternalStore(subscribe, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
@@ -456,10 +460,13 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
       </div>
       <div className="acrylBlendsSep" />
       <div className="acrylBlendsPaneHead">
-        <span className="acrylBlendsLabel">Versions of this branch</span>
-        <button type="button" className="acrylBlendsSmallButton" onClick={() => { setSaving(current => (current === undefined ? '' : undefined)) }}>
-          Save point
-        </button>
+        <span className="acrylBlendsLabel">Versions</span>
+        <span className="acrylBlendsPaneActions">
+          <RemoteChips sync={gitSync} root={state.appRoot} revision={`${state.head ?? ''}:${String(state.upstreamHead ?? '')}`} />
+          <button type="button" className="acrylBlendsSmallButton" onClick={() => { setSaving(current => (current === undefined ? '' : undefined)) }}>
+            Save point
+          </button>
+        </span>
       </div>
       {saving !== undefined && (
         <form className="acrylBlendsSaveForm" onSubmit={(event) => { event.preventDefault(); void save() }}>

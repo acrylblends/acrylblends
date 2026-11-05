@@ -107,7 +107,7 @@ test('the same app in development has all three (so the test above is sensitive)
   assert.equal((await app.router.request('/api/agent-panel/session', { headers: OWN })).status, 200)
 })
 
-test('the web templates leave the door and the live plugin install (extensions) out in production, and the agent template also leaves out its agent, builder and extensions unless ACRYL_PRODUCTION_KEEP names them', () => {
+test('the web templates leave the door out in production and start their plugins read-only (their features stay, nothing can be installed), and the agent template also leaves out its agent, builder and extensions unless ACRYL_PRODUCTION_KEEP names them', () => {
   const read = (template: string) =>
     readFileSync(
       join(
@@ -124,12 +124,12 @@ test('the web templates leave the door and the live plugin install (extensions) 
       ),
       'utf8',
     )
-  for (const template of ['nodejs', 'notes', 'chat']) {
+  for (const template of ['blank', 'nodejs', 'notes', 'chat']) {
     const text = read(template)
     assert.match(
       text,
-      /NODE_ENV === 'production'\) leaveOut\.add\('extensions'\)/u,
-      `${template} keeps extensions in production`,
+      /NODE_ENV === 'production' \? \{ readOnly: true \}/u,
+      `${template} lets plugins be installed in production`,
     )
     assert.match(text, /leaveOut\.add\('acryl-door'\)/u, `${template} keeps the door in production`)
   }

@@ -5,6 +5,8 @@
     "acryl-node-server",
     "manifest",
     "save",
+    "home",
+    "extensions",
     "acryl-door",
     "acryl-web-server",
     "acryl-page"

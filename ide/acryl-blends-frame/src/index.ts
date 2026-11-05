@@ -20,11 +20,11 @@ import { GitRunner, Versions } from 'acryl-versions'
 import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
-import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
+import { githubSharePorts, planAppPluginShare, readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
-import { AppReloader, watchFolders, type AppRow } from './app-reload.ts'
+import { AppReloader, watchFolder, watchFolders, type AppRow } from './app-reload.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
 import { guardToolCalls, type HostIdentity, type ToolCallEvents } from './tool-call-guard.ts'
 import { installSelectionContext, parseSelectionContext, SelectionInbox, sessionOf } from './selection-context.ts'
@@ -45,8 +45,10 @@ import {
   FRAME_GIT_PULL_PATH,
   FRAME_GIT_PUSH_PATH,
   FRAME_GIT_REMOTE_PATH,
+  FRAME_SNAPSHOT_CAPTURE_PATH,
   FRAME_PLUGINS_PATH,
   FRAME_PLUGINS_SHARE_PATH,
+  FRAME_PLUGINS_SHARE_PLAN_PATH,
   FRAME_PLUGINS_SWITCH_PATH,
   FRAME_STATE_PATH,
   FRAME_VERSIONS_SHARED_PATH,
@@ -56,12 +58,15 @@ import {
   type ChatSavesView,
   type FeedbackView,
   parseFeedbackNotes,
+  parseSharePlan,
+  type SharePlan,
   type FrameBranch,
   type FrameState,
   type GitRemoteState,
   type GitSyncResult,
 } from './contract.ts'
 import { GitSync, upstreamHead } from './git-sync.ts'
+import { createAppSnapshot, type AppSnapshotService } from './app-snapshot.ts'
 
 /**
  * The part of the runtime's `appInstance` service ACRYL plugins read (a separated interface: plugins do not import the runtime). Every plugin
@@ -96,7 +101,10 @@ interface CanvasServer {
 export interface FrameConfig {
   /** Where the app's own page is served (`/app`); the frame shows no app without it. */
   readonly appPage?: string
-  /** The GitHub account or organization a local plugin is shared to; the signed-in `gh` account when absent. */
+  /**
+   * The GitHub account or organization a local plugin is shared to; the signed-in `gh` account when absent. A rehearsal sets a test organization
+   * (`shareOwner: inboxxobni`) so nothing lands on the person's own account.
+   */
   readonly shareOwner?: string
 }
 
@@ -205,8 +213,10 @@ async function readAppName(root: string): Promise<string> {
 export interface PluginsPort {
   read(): Promise<AppPluginsView>
   switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
-  /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path; `bump` releases the next patch. */
-  share(name: string, bump?: boolean): Promise<ShareAppPluginResult>
+  /** What sharing one local plugin would do (repository, version, visibility); nothing is sent. */
+  planShare(name: string): Promise<SharePlan>
+  /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path: only the plan the person confirmed. */
+  share(name: string, confirmed: SharePlan): Promise<ShareAppPluginResult>
 }
 
 function parseSwitch(body: unknown): { kind: AppPluginKind; name: string; on: boolean } | undefined {
@@ -341,12 +351,14 @@ export interface FrameRoutesDeps {
   readonly shared?: (hashes: readonly string[]) => Promise<string[]>
   readonly realChats?: RealChatsPort
   readonly gitSync?: GitSyncPort
+  /** The capture a Save point starts with. */
+  readonly snapshot?: Pick<AppSnapshotService, 'captureForSave'>
   readonly appReload?: AppReloadPort
   /** The element picks waiting for the step that reads the message they belong to (./selection-context.ts). */
   readonly selection?: SelectionInbox
 }
 
-export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, gitSync, appReload, selection }: FrameRoutesDeps): Acryl {
+export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, gitSync, snapshot, appReload, selection }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
   if (appReload !== undefined) {
     app.get(FRAME_APP_PATH, ownPage, async (c) => {
@@ -375,6 +387,17 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(await gitSync.pull())
       } catch (cause) {
         return c.json(error(failed(cause, 'the branch could not be pulled')), 409)
+      }
+    })
+  }
+  if (snapshot !== undefined) {
+    const failed = (cause: unknown, fallback: string): string => cause instanceof Error && cause.message !== '' ? cause.message : fallback
+    app.post(FRAME_SNAPSHOT_CAPTURE_PATH, ownPage, jsonBody(), async (c) => {
+      try {
+        const captured = await snapshot.captureForSave()
+        return captured === undefined ? c.body(null, 204) : c.json(captured)
+      } catch (cause) {
+        return c.json(error(failed(cause, 'the app could not be captured')), 409)
       }
     })
   }
@@ -510,14 +533,33 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be switched'), 409)
       }
     })
+    const pluginName = (fields: Record<string, unknown> | undefined): string | undefined =>
+      typeof fields?.name === 'string' && /^[a-z0-9][a-z0-9-]*$/u.test(fields.name) ? fields.name : undefined
+    app.post(FRAME_PLUGINS_SHARE_PLAN_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const name = pluginName(body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : body as Record<string, unknown>)
+      if (name === undefined) return c.json(error('name one local plugin'), 400)
+      try {
+        return c.json(await plugins.planShare(name))
+      } catch (cause) {
+        report(cause)
+        return c.json(error(cause instanceof Error ? cause.message : 'the share could not be planned'), 409)
+      }
+    })
+    // A share leaves the machine under the person's name: it publishes only a plan they confirmed, never on a bare request.
     app.post(FRAME_PLUGINS_SHARE_PATH, ownPage, jsonBody(), async (c) => {
       const body = await readJson(c)
-      const fields = body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : body as { name?: unknown; bump?: unknown }
-      const name = fields?.name
-      if (typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/u.test(name) || (fields?.bump !== undefined && typeof fields.bump !== 'boolean'))
-        return c.json(error('name one local plugin'), 400)
+      const fields = body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : body as Record<string, unknown>
+      const name = pluginName(fields)
+      if (name === undefined) return c.json(error('name one local plugin'), 400)
+      let confirmed: SharePlan
       try {
-        return c.json(await plugins.share(name, fields?.bump === true))
+        confirmed = parseSharePlan(fields?.confirm)
+      } catch {
+        return c.json(error('a share is published only after the person confirms its plan'), 400)
+      }
+      try {
+        return c.json(await plugins.share(name, confirmed))
       } catch (cause) {
         report(cause)
         return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be shared'), 409)
@@ -646,6 +688,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
   const appPage = typeof config.appPage === 'string' && config.appPage.startsWith('/') ? config.appPage : undefined
   // The app's GitHub owner for shares; the signed-in gh account when the app names none.
   const shareOwner = typeof config.shareOwner === 'string' && /^[A-Za-z0-9-]+$/u.test(config.shareOwner) ? config.shareOwner : undefined
+  const shareTo = shareOwner === undefined ? {} : { owner: shareOwner }
   const root = (ctx.appInstance as { readonly root?: unknown }).root
   if (typeof root !== 'string') throw new Error('acryl-blends-frame: the app instance has no app folder (root)')
   const appBase = appPage === undefined ? undefined : appPage.replace(/\/+$/u, '')
@@ -724,17 +767,21 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       },
       // A local plugin goes to GitHub through the plugin-hub path: the same pack, secret check, repository, release and local store an
       // ACRYL plugin share uses, with the user's own gh and git doing the publishing.
-      share: async (name, bump) => shareAppPlugin(root, ctx.appInstance.home, name, {
-        ...(shareOwner === undefined ? {} : { owner: shareOwner }),
-        ...(bump === true ? { bump: true } : {}),
-      }),
+      planShare: async (name) => planAppPluginShare(root, ctx.appInstance.home, name, shareTo, githubSharePorts()),
+      share: async (name, confirmed) => shareAppPlugin(root, ctx.appInstance.home, name, confirmed, shareTo, githubSharePorts()),
     }
     // The chat's agent finished a turn that changed files: save a version by itself (./auto-save.ts), and remember which turn it was.
     const store = new SaveStore(join(ctx.appInstance.dshHome, 'chat-saves.json'), report)
     const versions = new Versions(git)
+    const gitSync = new GitSync(git, root)
+    const snapshot = createAppSnapshot(root, gitSync)
     const autoSave = new AutoSave({
       summary: (session, seq) => workspaceChangesOf(ctx.get('workspaceChanges'))?.summary(session, seq),
-      save: message => saveVersion(git, versions, root, message),
+      // Every version is a captured snapshot: a plugin folder the turn added gets its row, and the lock is written, before the commit.
+      save: async (message) => {
+        await snapshot.captureForSave().catch(report)
+        return saveVersion(git, versions, root, message)
+      },
       store,
       report,
     })
@@ -752,8 +799,15 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     // agent in a terminal, an editor. Only where the launcher installed the generation hook (./app-generation.ts); elsewhere the app's code is as it started.
     const generation = appGeneration()
     const appReload = generation === undefined ? undefined : new AppReloader({ generation, rows: () => appRowsOf(ctx.get('loader')), appRoot: realpathSync(root), report })
-    // The app's code is its src/ and its plugins/: an agent editing a plugin sees it live like a route, with no reason to restart the host.
-    const stopWatching = appReload === undefined ? () => {} : watchFolders([join(root, 'src'), join(root, 'plugins')], () => { void appReload.reload() }, { report })
+    // The app is its blend.yaml (which plugins run, in which order, which are off), its src/ and its plugins/: an agent adding a row, editing a plugin
+    // or writing a route sees it live, with no reason to restart the host.
+    const reloadApp = (): void => { void appReload?.reload() }
+    const stopWatchingCode = appReload === undefined ? () => {} : watchFolders([join(root, 'src'), join(root, 'plugins')], reloadApp, { report })
+    const stopWatchingBlend = appReload === undefined ? () => {} : watchFolder(root, reloadApp, { report, only: ['blend.yaml'] })
+    const stopWatching = (): void => {
+      stopWatchingCode()
+      stopWatchingBlend()
+    }
     /** git's own line as the message a person reads: the runner keeps it as the failure's detail. */
     const gitReason = (cause: unknown, fallback: string): Error => {
       const detail = (cause as { detail?: unknown }).detail
@@ -816,10 +870,14 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       ...(appReload === undefined ? {} : { appReload }),
       shared: (hashes) => sharedVersions(git, root, hashes),
       realChats: { read: () => realChatList.read() },
-      gitSync: new GitSync(git, root),
+      gitSync,
+      snapshot,
     }))
     ctx.routerHttp.mount(FRAME_API_PREFIX)
+    // The snapshot verbs for the agent's tools (acryl-app-context), on the same git runner and queue as the left panel's buttons.
+    const stopSnapshot = ctx.reflect.provide('appSnapshot', snapshot)
     return () => {
+      void stopSnapshot()
       stopListening()
       stopGuard()
       stopWatching()

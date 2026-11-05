@@ -280,6 +280,19 @@ describe('starters from a registry', () => {
     expect(s.runs).toHaveLength(0)
   })
 
+  it('takes a registry folder written as a bare path, and says in one line, naming the folder, when it has no index.json', async () => {
+    const bare = fakeIo()
+    const name = registry().slice(scratch.length + 1)
+    expect(await runCreate(['bare', '--from', 'acrylblends.notes-desktop', '--registry', name, '-y'], bare.io), bare.err()).toBe(0)
+    const empty = join(scratch, `registry-${counter++}`)
+    mkdirSync(join(empty, 'blends'), { recursive: true })
+    const missing = fakeIo()
+    expect(await runCreate(['no3', '--from', 'acrylblends.notes-desktop', '--registry', empty, '-y'], missing.io)).toBe(1)
+    expect(missing.err()).toContain(`error: ${empty} has no index.json`)
+    expect(missing.err()).not.toContain('Usage:')
+    expect(existsSync(join(scratch, 'no3'))).toBe(false)
+  })
+
   it('reads a registry that keeps its index in a registry/ folder, like the public one', async () => {
     const s = fakeIo()
     expect(

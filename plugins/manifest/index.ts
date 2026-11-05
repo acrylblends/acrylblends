@@ -13,8 +13,9 @@
  *   which of this Blend's overrides and rows it breaks.
  *
  * Problems are diagnostics with a code and a path, never a bare "invalid". The code an app can use stays in `src/app.ts` as a static
- * registry of imports (so it type-checks); the manifest chooses, orders, configures and switches those plugins. Extensions are not
- * listed here: they come and go while the app runs.
+ * registry of imports (so it type-checks); the manifest chooses, orders, configures and switches those plugins. A row may also name one of the
+ * app's own plugin folders (`plugins/<name>/`, app-plugins.ts): that is how a feature is mounted. Extensions are not listed here: they come and go
+ * while the app runs.
  */
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
@@ -633,3 +634,12 @@ export function blueprintsIn(directory: string): (id: string) => string | undefi
     return DEFINITION_ID.test(id) && existsSync(file) ? file : undefined
   }
 }
+
+export {
+  type AppPluginModule,
+  appPluginNames,
+  libraryCopies,
+  loadAppPlugins,
+  PLUGIN_ENTRIES,
+  pluginEntry,
+} from './app-plugins.ts'
