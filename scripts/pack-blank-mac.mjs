@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * The Blank app as a macOS product (M10 T002): scaffold a Blank app with the desktop shell, install it, make the workspace links real files, mark it as a
- * product, and package it with electron-builder as an unsigned DMG. First run only, for this Mac's CPU.
+ * product, and package it with electron-builder as an ad-hoc signed DMG. First run only, for this Mac's CPU.
  *
  *   node scripts/pack-blank-mac.mjs [--out <dir>] [--arch arm64|x64]
  *
@@ -146,7 +146,10 @@ manifest.build = {
   directories: { output: 'dist' },
   mac: {
     target: [{ target: 'dmg', arch: [arch] }],
-    identity: null,
+    // Ad-hoc, not notarized: null skips signing and macOS calls the app damaged; Developer ID and notarization need the owner's credentials.
+    identity: '-',
+    // The app's git objects are read-only data that the signer takes for binaries; the bundle's seal still covers them.
+    signIgnore: ['/template-git/'],
     category: 'public.app-category.developer-tools',
     icon: undefined,
   },
