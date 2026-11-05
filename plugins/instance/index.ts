@@ -11,8 +11,8 @@ import { createHash } from 'node:crypto'
 import { basename, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 
-/** How the instance was chosen: from the project folder, or a home the caller pinned. */
-export type AppInstanceKind = 'project' | 'pinned'
+/** How the instance was chosen: from the project folder, a home the caller pinned, or an app of a desktop product's root (`storage.ts`). */
+export type AppInstanceKind = 'project' | 'pinned' | 'product'
 
 /** Where the app listens first, and whether it moves to the next free port when that one is taken. Port 0 means any free port. */
 export interface PortPreference {
@@ -128,6 +128,24 @@ export function pinnedInstance(
     root,
     home: absolute,
     port: { start: stablePort(id), scan: true },
+  })
+}
+
+/**
+ * An app of a desktop product (`storage.ts`): its source is the project folder, its data the home (the engine's home too, so its logs land in
+ * `data/logs`), and its id, the registry's, seeds the port. The name is the person's label for it.
+ */
+export function productInstance(
+  folders: { readonly id: string; readonly source: string; readonly data: string },
+  name: string,
+): AppInstance {
+  return family({
+    kind: 'product',
+    id: folders.id,
+    name,
+    root: folders.source,
+    home: folders.data,
+    port: { start: stablePort(folders.id), scan: true },
   })
 }
 
