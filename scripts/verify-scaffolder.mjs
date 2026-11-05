@@ -697,17 +697,12 @@ spec:
   // The desktop shell (spec 018): `init --desktop` adds electron as a development dependency and a script, the app's own code never imports electron, the whole app type-checks
   // against electron's types, and the app's server starts and stops with no Electron involved (the project's own tests). The window itself is verify-desktop.mjs.
   const desktop = join(scratch, 'desktop')
-  capture(process.execPath, [
-    cli,
-    'init',
-    desktop,
-    '--name',
-    'verify-desktop',
-    '--yes',
-    '--template',
-    'todo',
-    '--desktop',
-  ])
+  // The shell on the framework alone: the frame a desktop app installs by default is the frame gates' (verify-ide-template, verify-desktop-door).
+  capture(
+    process.execPath,
+    [cli, 'init', desktop, '--name', 'verify-desktop', '--yes', '--template', 'todo', '--desktop'],
+    { env: { ...process.env, ACRYLBLENDS_FRAME_PACKAGES: 'none' } },
+  )
   const desktopPackage = JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8'))
   if (
     desktopPackage.devDependencies?.electron === undefined ||

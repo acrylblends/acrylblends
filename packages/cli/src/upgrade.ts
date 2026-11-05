@@ -17,9 +17,9 @@ import {
   withRegistrations,
 } from './app-registration.ts'
 import { diffStat, unifiedDiff } from './diff'
+import { frameProfileForApp, frameProfileInput } from './frame-release'
 import { APP_PLUGINS_FILE, appFrameRows } from './frame-rows'
 import {
-  frameProfileForApp,
   GENERATED_MARKER,
   type IdeProfileInput,
   type IdeProfileWritePlan,
@@ -259,14 +259,7 @@ export function planFrameStep(
   const oldScript = join(appDir, OLD_PROFILE_SCRIPT)
   const removeProfileScript =
     existsSync(oldScript) && GENERATED_MARKER.test(readText(oldScript).split('\n', 1)[0] ?? '')
-  const input: IdeProfileInput = {
-    appName: name,
-    dshVersion: specs.dshVersion,
-    frameworkVersion: specs.frameworkVersion,
-    spec: (packageName) => specs.packages[packageName],
-    dependencies: specs.packages,
-    rows: rows.rows,
-  }
+  const input: IdeProfileInput = frameProfileInput(specs, name, rows.rows)
   const profile = planIdeProfileWrite(appDir, input)
   const conflicts = [
     ...files.filter((file) => file.state === 'conflict').map((file) => file.file),
@@ -302,7 +295,7 @@ export function frameReport(frame: FrameStep): string {
   if (frame.kind === 'no-frame-template')
     return `the ${frame.template} template has no src/frame.ts yet: left standalone`
   if (frame.kind === 'unavailable')
-    return 'no frame packages to install: set ACRYLBLENDS_FRAME_PACKAGES while they are unpublished'
+    return 'left on the framework alone: not a desktop app (`acrylblends add desktop` makes it one), or ACRYLBLENDS_FRAME_PACKAGES is none'
   const parts: string[] = []
   for (const file of frame.files)
     if (file.state !== 'same')

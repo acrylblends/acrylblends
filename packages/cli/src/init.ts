@@ -2,8 +2,9 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+import { frameProfileForInit, frameProfileInput } from './frame-release'
 import { APP_PLUGINS_FILE, appFrameRows } from './frame-rows'
-import { applyIdeProfile, frameProfileFromEnv } from './ide-profile'
+import { applyIdeProfile } from './ide-profile'
 import type { Io } from './io'
 import { closure, copyPlugin, readLibrary } from './library'
 import {
@@ -178,9 +179,8 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
   }
   addNodePreflight(directory)
   // The ACRYL frame (docs/plans/ide-port.md, slice 6): a template with a frame row (`src/frame.ts`) gets the app's own DSH profile and overlay, so
-  // `npm run dev` opens it inside the frame with its page at /app. The frame's client packages are not published yet, so the specs come from
-  // ACRYLBLENDS_FRAME_PACKAGES (JSON: {dshVersion, frameworkVersion, packages: {name: spec}}); without it the app keeps the framework-only script
-  // and says so, instead of writing a profile that cannot install.
+  // `npm run dev` opens it inside the frame with its page at /app. A desktop app installs the frame's published packages (frame/packages.json);
+  // ACRYLBLENDS_FRAME_PACKAGES overrides them (a checkout's build, or `none`), and an app with neither stays on the framework alone and says so.
   // The ACRYL frame's layer needs two rows for the app itself: its routes row (src/frame.ts), and the one composition row that runs the app's own plugins
   // beside the host through composeInto (frame/app-plugins.mjs), with the services they provide isolated through the Loader's entry option. appFrameRows is
   // the one home for those rows, their isolate rule and the generated file; `upgrade` writes the same ones for an app made before the frame.
@@ -191,20 +191,14 @@ export async function init(options: InitOptions, io: Io): Promise<number> {
   }
   const frameRow = frame.rows
   if (frameRow.length > 0) {
-    const specs = frameProfileFromEnv()
+    const specs = frameProfileForInit(options.desktop)
     if (specs === undefined) {
-      io.stdout.write(
-        'note: the ACRYL frame is not published yet; this app runs on the framework alone (docs/plans/ide-port-status.md)\n',
-      )
+      const why = options.desktop
+        ? 'ACRYLBLENDS_FRAME_PACKAGES is none'
+        : 'init --desktop puts it inside the ACRYL frame'
+      io.stdout.write(`note: this app runs on the framework alone; ${why}\n`)
     } else {
-      const wrote = applyIdeProfile(directory, {
-        appName: name,
-        dshVersion: specs.dshVersion,
-        frameworkVersion: specs.frameworkVersion,
-        spec: (packageName) => specs.packages[packageName],
-        dependencies: specs.packages,
-        rows: frameRow,
-      })
+      const wrote = applyIdeProfile(directory, frameProfileInput(specs, name, frameRow))
       io.stdout.write(`frame: wrote ${wrote.written.join(', ') || 'nothing (already right)'}\n`)
     }
   }
