@@ -29,6 +29,11 @@ describe('what a shell command sends out of the machine', () => {
     expect(outwardAction('npm test && npm run check')).toBeUndefined()
     expect(outwardAction('npm pack --dry-run')).toBeUndefined()
     expect(outwardAction('echo publish')).toBeUndefined()
+    // A rehearsal sends nothing (the live run's agent checked with one before pushing).
+    expect(outwardAction('git fetch origin; git push --dry-run origin main 2>&1 | tail -5')).toBeUndefined()
+    expect(outwardAction('git push -n')).toBeUndefined()
+    expect(outwardAction('npm publish --dry-run')).toBeUndefined()
+    expect(outwardAction('git push --dry-run && git push')).toBe('git push')
   })
 
   it('asks for a shell call that pushes and for the app\'s save_app tool, and for nothing else', () => {

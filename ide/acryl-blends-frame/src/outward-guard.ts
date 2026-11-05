@@ -76,12 +76,15 @@ function ghApiWrites(args: readonly string[]): boolean {
   return false
 }
 
+/** A rehearsal that sends nothing: `git push --dry-run` (or `-n`), `npm publish --dry-run`. */
+const rehearses = (args: readonly string[], short?: string): boolean => args.some(word => word === '--dry-run' || (short !== undefined && word === short))
+
 /** What one simple command sends out, as the person would name it; undefined when it sends nothing. */
 function outwardOf(words: readonly string[]): string | undefined {
   const [first, ...args] = fromProgram(words)
   if (first === undefined) return undefined
   const name = program(first)
-  if (name === 'git') return gitSubcommand(args) === 'push' ? 'git push' : undefined
+  if (name === 'git') return gitSubcommand(args) === 'push' && !rehearses(args, '-n') ? 'git push' : undefined
   if (name === 'gh') {
     const [group, verb] = args.filter(word => !word.startsWith('-'))
     if (group === 'api') return ghApiWrites(args) ? 'gh api (a write)' : undefined
@@ -90,7 +93,7 @@ function outwardOf(words: readonly string[]): string | undefined {
   }
   if (PACKAGE_MANAGERS.has(name)) {
     const verb = args.find(word => !word.startsWith('-'))
-    return verb !== undefined && PUBLISH_VERBS.has(verb) ? `${name} ${verb}` : undefined
+    return verb !== undefined && PUBLISH_VERBS.has(verb) && !rehearses(args) ? `${name} ${verb}` : undefined
   }
   return undefined
 }
