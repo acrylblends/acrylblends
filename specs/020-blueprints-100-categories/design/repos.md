@@ -75,3 +75,13 @@ This list wins over an id written in a spec or in tasks.md.
 | 68 | LingoDesk | `acrylblends.localization-lingodesk` | https://github.com/acrylblends/68-localization-lingodesk |
 | 69 | Clearpath Audit | `acrylblends.accessibility-clearpath-audit` | https://github.com/acrylblends/69-accessibility-clearpath-audit |
 | 70 | Restorepoint | `acrylblends.backup-restorepoint` | https://github.com/acrylblends/70-backup-restorepoint |
+| 71 | Northstar GRC | `acrylblends.compliance-northstar-grc` | https://github.com/acrylblends/71-compliance-northstar-grc |
+| 72 | Blockscope Explorer | `acrylblends.blockchain-blockscope` | https://github.com/acrylblends/72-blockchain-blockscope |
+| 73 | Federary Network | `acrylblends.decentralized-federary` | https://github.com/acrylblends/73-decentralized-federary |
+| 74 | Swarmdrop | `acrylblends.p2p-swarmdrop` | https://github.com/acrylblends/74-p2p-swarmdrop |
+| 75 | Strata CMS | `acrylblends.content-strata-cms` | https://github.com/acrylblends/75-content-strata-cms |
+| 76 | Filewell | `acrylblends.file-filewell` | https://github.com/acrylblends/76-file-filewell |
+| 77 | Musevault DAM | `acrylblends.dam-musevault` | https://github.com/acrylblends/77-dam-musevault |
+| 78 | Identra Directory | `acrylblends.identity-identra` | https://github.com/acrylblends/78-identity-identra |
+| 79 | Keyway Auth Lab | `acrylblends.authentication-keyway` | https://github.com/acrylblends/79-authentication-keyway |
+| 80 | Cipherdesk | `acrylblends.cryptography-cipherdesk` | https://github.com/acrylblends/80-cryptography-cipherdesk |
