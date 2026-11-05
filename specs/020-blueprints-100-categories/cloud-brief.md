@@ -19,7 +19,7 @@ Read first:
 - Your batch's designs, which are the task for each blueprint: specs/020-blueprints-100-categories/design/batch-<NN>/ in ACR (README.md, specs/<n>-<name>.md and
   mockups/<n>-<name>.html, one pair per task). Build each app to its spec (intent, screens, data, seed, states, routes, flows) and make its pages look and work like
   its mockup; do not replace them with a generic dashboard. Open the mockup in a headless browser and compare it with your first page before you publish.
-  Where tasks.md and the spec differ, the spec wins.
+  Where tasks.md and the spec differ, the spec wins, except the id: each blueprint's registry id is the one in design/repos.md.
 - ACR, branch main (the latest acrylblends, the same 1.1.0 the published CLI is): specs/020-blueprints-100-categories/spec.md (what a blueprint is and when one is done) and tasks.md (your batch: the ten tasks marked [B<NN>]).
 - A finished blueprint, as the pattern to follow: `git -C SITE fetch origin blueprints/batch-01` and read registry/blends/acrylblends.system-monitor/ on that branch
   (src/monitor.ts is the plugin, src/monitor/ its domain code, test/ the tests, README.md, and AGENTS.md's last section). Do not copy its job; copy its shape.
