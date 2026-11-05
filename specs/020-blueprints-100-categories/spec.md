@@ -21,6 +21,8 @@ The app opens in the ACRYL frame and already does the category's job. From there
 - An ordinary acrylblends app, made with the published CLI (`npm create acrylblends@latest <dir> -- --template blank`; use `--template agent` only
   where the app's own job is an agent). Its domain code is the app's own plugins and routes, built with the framework's documented parts (router,
   state, page, db port) and no extra frameworks.
+- Composed from Cordis plugins only (owner, 2026-11-05): each feature is a plugin in `plugins/<feature>/` with its own row in `blend.yaml`, so `blend.yaml` reads as
+  what the app is made of.
 - Small and real: one clear job, two to five screens, real data shapes, and seed data so the first start shows something. No sign-in to an outside
   service, no API key, no paid service and no network call it cannot do without. Whatever needs a key reads it from settings and says so on the page.
 - Its own tests (`npm test`) cover the domain logic and every route.

@@ -37,7 +37,11 @@ For each of your ten tasks:
 1. Make the app with the published CLI, outside both repositories:
      cd WORK && npm create acrylblends@latest <name> -- --template blank --yes
    (npm needs the --. Use --template agent only where the task says agent template.) It is a Cordis app: src/main.ts, src/app.ts, blend.yaml, plugins/.
-2. Build the app's job. The pattern, as in the example: a plugin file src/<feature>.ts (export name, inject = ['router'], apply(ctx, config) that builds one Acryl app and
+2. Composition rule (owner): a blueprint is composed from Cordis plugins and nothing else. Every feature is its own plugin in its own folder
+   plugins/<feature>/ (index.ts exporting name, inject and apply; its domain code beside it), registered in the `registry` of src/app.ts and listed as its own row in
+   blend.yaml. No feature code in src/app.ts, src/main.ts or a shared routes file; an app with several domains (say tasks and calendar) has several plugins, one row each.
+   blend.yaml is the app's composition: reading its rows must tell what the app is made of.
+   Build the app's job. The pattern, as in the example (which keeps its plugin in src/; yours go in plugins/<feature>/): a plugin file (export name, inject = ['router'], apply(ctx, config) that builds one Acryl app and
    mounts it with ctx.router.route('/', app)), its domain code in src/<feature>/, registered in the `registry` of src/app.ts and as a row in blend.yaml before the
    acryl-node-server row. Replace the template's src/routes.ts and src/about.tsx and their test; test/app.test.ts counts the manifest's rows, update it. Put the first
    page at `/` with seed data (or the real machine's data) so it shows something at once. Keep the parts that touch the outside world (the clock, the disk, the network,
@@ -61,7 +65,8 @@ For each of your ten tasks:
 6. Prove the entry as a person gets it: cd WORK && npm create acrylblends@latest t-<name> -- --from acrylblends.<name> --registry SITE/registry
    then, in t-<name>: npm install, npm test, and `ACRYLBLENDS_PORT=<free port> npm start` with the first page fetched. (--registry takes SITE/registry; SITE itself works too.)
 
-Do not create repositories. After review the coordinator gives every blueprint its own repository in the acrylblends organization, named
+Do not create repositories (the session cannot). After review the coordinator merges your branch so the entry shows on https://acrylblends.github.io/blends and
+https://acryl.dev/blends, and gives every blueprint its own repository in the acrylblends organization, named
 <NN>-<category>-<name> like 01-system-system-monitor (workshop-registry/scripts/publish-repo.mjs), and the site and acryl.dev/blends list it from the registry.
 
 Commit each blueprint as its own commit in SITE (the entry folder, registry/index.json and the registry-placement.ts line), on branch blueprints/batch-<NN>, and push that
