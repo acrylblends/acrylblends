@@ -316,7 +316,7 @@ export function apply(ctx: ClientContext): void {
           await appPlugins.switch(plugin.kind, plugin.name, on)
           canvas.reload()
         },
-        plugin.kind === 'made' ? options => appPlugins.share(plugin.name, options) : undefined,
+        plugin.kind === 'made' ? { plan: () => appPlugins.planShare(plugin.name), publish: confirmed => appPlugins.share(plugin.name, confirmed) } : undefined,
       )),
       ...view.frame.map(framePluginRow),
     ]

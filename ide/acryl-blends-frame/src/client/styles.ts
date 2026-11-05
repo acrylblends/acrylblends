@@ -248,9 +248,10 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsShareButton:disabled { color: #66666e; cursor: default; }
 .acrylBlendsShared { color: #8fb0ff; text-decoration: none; }
 .acrylBlendsShared:hover { text-decoration: underline; }
-.acrylBlendsBumpAsk { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #e0a43a; }
-.acrylBlendsBumpShare, .acrylBlendsBumpCancel { padding: 1px 7px; border: 1px solid #34343a; border-radius: 5px; background: var(--bf-surface-2); color: #cfcfd6; font: inherit; font-size: 11px; cursor: pointer; }
-.acrylBlendsBumpShare { border-color: var(--bf-accent); color: #fff; background: var(--bf-accent-dim); }
+.acrylBlendsShareAsk { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; color: #e0a43a; }
+.acrylBlendsShareConfirm, .acrylBlendsShareCancel { padding: 1px 7px; border: 1px solid #34343a; border-radius: 5px; background: var(--bf-surface-2); color: #cfcfd6; font: inherit; font-size: 11px; cursor: pointer; }
+.acrylBlendsShareConfirm { border-color: var(--bf-accent); color: #fff; background: var(--bf-accent-dim); }
+.acrylBlendsShareConfirm:disabled { opacity: .5; cursor: default; }
 .acrylBlendsTog { grid-row: 1 / span 2; grid-column: 3; width: 30px; height: 17px; border: 0; padding: 0; border-radius: 99px; background: #3a3a40; position: relative; cursor: pointer; }
 .acrylBlendsTog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: left .12s ease; }
 .acrylBlendsTog[aria-checked="true"] { background: #5468ff; }

@@ -211,12 +211,50 @@ export function parseFrameState(value: unknown): FrameState {
 
 export const FRAME_PLUGINS_PATH = `${FRAME_API_PREFIX}/plugins`
 export const FRAME_PLUGINS_SWITCH_PATH = `${FRAME_API_PREFIX}/plugins/switch`
+/** POST `{ name }`: what sharing this local plugin would do (a {@link SharePlan}); nothing leaves the machine. */
+export const FRAME_PLUGINS_SHARE_PLAN_PATH = `${FRAME_API_PREFIX}/plugins/share-plan`
+/** POST `{ name, confirm }`: publish it, only when `confirm` is the plan the person said yes to and it still holds. */
 export const FRAME_PLUGINS_SHARE_PATH = `${FRAME_API_PREFIX}/plugins/share`
 
 /** Where a shared plugin went: its GitHub repository and the released version other apps install. */
 export interface SharedPluginView {
   readonly url: string
   readonly version: string
+}
+
+export type ShareVisibility = 'private' | 'public'
+
+/**
+ * What a share will do, shown to the person before anything is sent: the GitHub repository it goes to (created when it does not exist), the version
+ * it releases and who can see it. A share publishes exactly this plan, or nothing.
+ */
+export interface SharePlan {
+  readonly owner: string
+  readonly repo: string
+  readonly version: string
+  readonly visibility: ShareVisibility
+  /** The repository does not exist yet: the share creates it. */
+  readonly createsRepository: boolean
+  /** The version already released there; the plan then releases the next patch. */
+  readonly released?: string
+}
+
+const GITHUB_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
+
+/** @throws when the value is not a share plan. */
+export function parseSharePlan(value: unknown): SharePlan {
+  if (!isRecord(value)) throw new Error('share plan: not a plan')
+  const { owner, repo, version, visibility, createsRepository, released } = value
+  if (typeof owner !== 'string' || !GITHUB_NAME.test(owner) || typeof repo !== 'string' || !GITHUB_NAME.test(repo)) throw new Error('share plan: repository')
+  if (typeof version !== 'string' || version === '' || (released !== undefined && (typeof released !== 'string' || released === ''))) throw new Error('share plan: version')
+  if ((visibility !== 'private' && visibility !== 'public') || typeof createsRepository !== 'boolean') throw new Error('share plan: visibility')
+  return { owner, repo, version, visibility, createsRepository, ...(released === undefined ? {} : { released }) }
+}
+
+/** The same plan: what the person confirmed is what would be published now. */
+export function samePlan(a: SharePlan, b: SharePlan): boolean {
+  return a.owner === b.owner && a.repo === b.repo && a.version === b.version && a.visibility === b.visibility
+    && a.createsRepository === b.createsRepository && a.released === b.released
 }
 
 /**

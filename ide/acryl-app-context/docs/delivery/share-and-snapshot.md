@@ -7,9 +7,9 @@ row is in all of them without any export step:
   left panel lists the versions of the branch. Going back to a version restores its `blend.yaml` and `plugins/`, and the canvas follows: a
   plugin added after that version is gone, and comes back with the newer version.
 - **A shared plugin** is one folder of `plugins/`, packaged for the CordisPlugins registry (https://cordisplugins.github.io/plugins): Settings >
-  Plugins > Share on the plugin's row writes its `package.json` and Loader patch, checks it holds no secret, and publishes it to a GitHub
-  repository of the person's own account (through their own `gh` and `git` login), then shows the repository and version on the row. Another
-  app takes it as a folder in its `plugins/` plus a row.
+  Plugins > Share on the plugin's row writes its `package.json` and Loader patch, checks it holds no secret, says what it will create (the
+  GitHub repository, the version, private or public) and publishes only on the person's yes, through their own `gh` and `git` login, then
+  shows the repository and version on the row. Another app takes it as a folder in its `plugins/` plus a row.
 - **A blueprint** is a copy of the app folder (without `node_modules`, `.git` and data) as an entry of a Blends registry; an app made from it
   starts the same rows, its own plugins included.
 
@@ -35,4 +35,4 @@ its remote and bring the remote's new ones in (fast-forward only, never forced):
   sentence says what it does: it becomes the package's description.
 - Sharing sends the person's work to GitHub under their name. Never share, push or publish yourself: tell the person to press **Share** on the
   plugin's row in Settings > Plugins. Never ask for or handle a token.
-- A fix to a plugin that was already shared needs a new version: Share again offers the next patch version and asks first.
+- A fix to a plugin that was already shared needs a new version: Share again plans the next patch version, and the question names it.

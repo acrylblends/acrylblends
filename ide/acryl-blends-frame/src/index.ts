@@ -20,7 +20,7 @@ import { GitRunner, Versions } from 'acryl-versions'
 import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
-import { readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
+import { githubSharePorts, planAppPluginShare, readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
@@ -48,6 +48,7 @@ import {
   FRAME_SNAPSHOT_CAPTURE_PATH,
   FRAME_PLUGINS_PATH,
   FRAME_PLUGINS_SHARE_PATH,
+  FRAME_PLUGINS_SHARE_PLAN_PATH,
   FRAME_PLUGINS_SWITCH_PATH,
   FRAME_STATE_PATH,
   FRAME_VERSIONS_SHARED_PATH,
@@ -57,6 +58,8 @@ import {
   type ChatSavesView,
   type FeedbackView,
   parseFeedbackNotes,
+  parseSharePlan,
+  type SharePlan,
   type FrameBranch,
   type FrameState,
   type GitRemoteState,
@@ -98,7 +101,10 @@ interface CanvasServer {
 export interface FrameConfig {
   /** Where the app's own page is served (`/app`); the frame shows no app without it. */
   readonly appPage?: string
-  /** The GitHub account or organization a local plugin is shared to; the signed-in `gh` account when absent. */
+  /**
+   * The GitHub account or organization a local plugin is shared to; the signed-in `gh` account when absent. A rehearsal sets a test organization
+   * (`shareOwner: inboxxobni`) so nothing lands on the person's own account.
+   */
   readonly shareOwner?: string
 }
 
@@ -207,8 +213,10 @@ async function readAppName(root: string): Promise<string> {
 export interface PluginsPort {
   read(): Promise<AppPluginsView>
   switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
-  /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path; `bump` releases the next patch. */
-  share(name: string, bump?: boolean): Promise<ShareAppPluginResult>
+  /** What sharing one local plugin would do (repository, version, visibility); nothing is sent. */
+  planShare(name: string): Promise<SharePlan>
+  /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path: only the plan the person confirmed. */
+  share(name: string, confirmed: SharePlan): Promise<ShareAppPluginResult>
 }
 
 function parseSwitch(body: unknown): { kind: AppPluginKind; name: string; on: boolean } | undefined {
@@ -525,14 +533,33 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be switched'), 409)
       }
     })
+    const pluginName = (fields: Record<string, unknown> | undefined): string | undefined =>
+      typeof fields?.name === 'string' && /^[a-z0-9][a-z0-9-]*$/u.test(fields.name) ? fields.name : undefined
+    app.post(FRAME_PLUGINS_SHARE_PLAN_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const name = pluginName(body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : body as Record<string, unknown>)
+      if (name === undefined) return c.json(error('name one local plugin'), 400)
+      try {
+        return c.json(await plugins.planShare(name))
+      } catch (cause) {
+        report(cause)
+        return c.json(error(cause instanceof Error ? cause.message : 'the share could not be planned'), 409)
+      }
+    })
+    // A share leaves the machine under the person's name: it publishes only a plan they confirmed, never on a bare request.
     app.post(FRAME_PLUGINS_SHARE_PATH, ownPage, jsonBody(), async (c) => {
       const body = await readJson(c)
-      const fields = body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : body as { name?: unknown; bump?: unknown }
-      const name = fields?.name
-      if (typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/u.test(name) || (fields?.bump !== undefined && typeof fields.bump !== 'boolean'))
-        return c.json(error('name one local plugin'), 400)
+      const fields = body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : body as Record<string, unknown>
+      const name = pluginName(fields)
+      if (name === undefined) return c.json(error('name one local plugin'), 400)
+      let confirmed: SharePlan
       try {
-        return c.json(await plugins.share(name, fields?.bump === true))
+        confirmed = parseSharePlan(fields?.confirm)
+      } catch {
+        return c.json(error('a share is published only after the person confirms its plan'), 400)
+      }
+      try {
+        return c.json(await plugins.share(name, confirmed))
       } catch (cause) {
         report(cause)
         return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be shared'), 409)
@@ -661,6 +688,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
   const appPage = typeof config.appPage === 'string' && config.appPage.startsWith('/') ? config.appPage : undefined
   // The app's GitHub owner for shares; the signed-in gh account when the app names none.
   const shareOwner = typeof config.shareOwner === 'string' && /^[A-Za-z0-9-]+$/u.test(config.shareOwner) ? config.shareOwner : undefined
+  const shareTo = shareOwner === undefined ? {} : { owner: shareOwner }
   const root = (ctx.appInstance as { readonly root?: unknown }).root
   if (typeof root !== 'string') throw new Error('acryl-blends-frame: the app instance has no app folder (root)')
   const appBase = appPage === undefined ? undefined : appPage.replace(/\/+$/u, '')
@@ -739,10 +767,8 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       },
       // A local plugin goes to GitHub through the plugin-hub path: the same pack, secret check, repository, release and local store an
       // ACRYL plugin share uses, with the user's own gh and git doing the publishing.
-      share: async (name, bump) => shareAppPlugin(root, ctx.appInstance.home, name, {
-        ...(shareOwner === undefined ? {} : { owner: shareOwner }),
-        ...(bump === true ? { bump: true } : {}),
-      }),
+      planShare: async (name) => planAppPluginShare(root, ctx.appInstance.home, name, shareTo, githubSharePorts()),
+      share: async (name, confirmed) => shareAppPlugin(root, ctx.appInstance.home, name, confirmed, shareTo, githubSharePorts()),
     }
     // The chat's agent finished a turn that changed files: save a version by itself (./auto-save.ts), and remember which turn it was.
     const store = new SaveStore(join(ctx.appInstance.dshHome, 'chat-saves.json'), report)

@@ -16,10 +16,14 @@ The canvas page reads the frame's view (`src/client/frame-view.ts`): Build keeps
 agent-panel's button and the feedback button), and Preview shows what production shows without a reload. The page's plugins read the handle
 through `window.parent`; a page opened directly is unchanged.
 
-A feedback note shows its screenshot as a thumbnail, and handing it to the chat puts the page and selector text in the composer with the picture as a real attachment. Settings > Plugins shares a local plugin: the frame packages it (the builder's package shape, plus the Loader patch the plugin-hub needs),
-publishes it with `@webboxes/plugin-hub` through the user's own `gh` and `git` to its own GitHub repository and release, and the row then shows
-the repository and version. A second app installs it with `acrylblends add <the package folder>`; the plugin-hub refuses a package with secrets
-before anything is sent. `shareOwner` in the frame row's config names the GitHub account or organization (the signed-in account when absent). Sharing a version that is already released asks first and then releases the next patch.
+A feedback note shows its screenshot as a thumbnail, and handing it to the chat puts the page and selector text in the composer with the picture as a real attachment. Settings > Plugins shares a local plugin: the frame packages it under the app's home (`plugin-packages/<name>`; the builder's package shape,
+plus the Loader patch the plugin-hub needs) and first says what it will do, for example "Create repository ana/notes on GitHub and publish
+v0.1.0? It will be private.", with Cancel as the default. Only on the person's yes does it publish, with `@webboxes/plugin-hub` through the user's
+own `gh` and `git`, exactly that repository, version and visibility; when the plan changed meanwhile nothing is sent. The Host refuses a share
+that does not carry the confirmed plan. The row then shows the repository and version. A second app installs it with `acrylblends add <the
+package folder>`; the plugin-hub refuses a package with secrets before anything is sent. `shareOwner` in the frame row's config names the GitHub
+account or organization (the signed-in account when absent); a rehearsal sets a test organization there (`shareOwner: inboxxobni`). A version
+already released there is planned as the next patch, and the question says so.
 
 It owns the page's `root` slot, so it is mounted instead of the IDE's workbench (`acryl-workspace`), never beside it. The Host half serves one
 private route, `GET /api/acryl-blends-frame/state` (the app's name, folder, page and branches); `appPage` in the row's config says where the
