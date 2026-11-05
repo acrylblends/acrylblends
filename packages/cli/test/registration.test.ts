@@ -87,7 +87,7 @@ describe('the framework registration lines', () => {
 })
 
 describe('the app-owned scaffold files', () => {
-  it("never takes src/routes.ts as the template's, and takes src/app.ts only through the registration merge", () => {
+  it('never writes over an edited src/routes.ts, and takes src/app.ts only through the registration merge', () => {
     expect(KEPT_BY_THE_APP.has('src/routes.ts')).toBe(true)
     expect(KEPT_BY_THE_APP.has('src/app.ts')).toBe(false)
   })

@@ -133,8 +133,14 @@ interface FrameFileWrite {
   readonly state: 'add' | 'same' | 'update' | 'conflict'
 }
 
-/** Scaffold files the app owns from its first edit: the release's copy is only the starting point, and the upgrade never writes or refuses over it. */
+/**
+ * Scaffold files the app owns from its first edit: the release's copy is only the starting point, so an edited (or removed) one is never written, refused
+ * over or backed up. A copy the app never edited is still the release's and is updated like any other scaffold file.
+ */
 export const KEPT_BY_THE_APP = new Set(['src/routes.ts'])
+
+/** What the frame row of every template imports from `src/routes.ts`: an app-owned copy without it cannot be shown in the frame. */
+const FRAME_PREFIX_EXPORT = /\bexport const FRAME_MOUNT_PREFIX\b/u
 
 /** What `upgrade` does about the frame for one app: nothing (and why), or a plan computed before anything is written. */
 export type FrameStep =
@@ -150,6 +156,8 @@ export type FrameStep =
       readonly profile: IdeProfileWritePlan
       /** The app's scaffold, its frame row and the generated composition row. */
       readonly files: readonly FrameFileWrite[]
+      /** App-owned scaffold files left exactly as the app has them (edited or removed), each with whether the frame can mount it. */
+      readonly kept: readonly { readonly file: string; readonly mountable: boolean }[]
       /** Frame plugins the app does not carry yet. */
       readonly hostPlugins: readonly string[]
       /** The DSH-profile script of the older layout, removed when it is acrylblends' own. */
@@ -190,10 +198,19 @@ export function planFrameStep(
   const specs = frameProfileForApp(appDir)
   if (specs === undefined) return { kind: 'unavailable', template }
   const released = readLegacy(appDir, template, name)
-  // src/routes.ts is the app's own from its first edit: it is never taken as the template's, never refused over, and never overwritten with
-  // --force (the backup list takes its files from this list too).
+  // src/routes.ts is the app's own from its first edit: an edited or removed one is never taken as the template's, never refused over, and never
+  // overwritten with --force (the backup list takes its files from this list too). An untouched released copy is updated: the frame row needs the new one.
+  const ownedByTheApp = (file: { file: string; state: FrameFileWrite['state'] }) =>
+    KEPT_BY_THE_APP.has(file.file) && (file.state === 'conflict' || file.state === 'add')
+  const kept = released.files.filter(ownedByTheApp).map((file) => {
+    const path = join(appDir, file.file)
+    return {
+      file: file.file,
+      mountable: existsSync(path) && FRAME_PREFIX_EXPORT.test(readText(path)),
+    }
+  })
   const files: FrameFileWrite[] = released.files
-    .filter((file) => !KEPT_BY_THE_APP.has(file.file))
+    .filter((file) => !ownedByTheApp(file))
     .map((file) => ({
       file: file.file,
       text: file.text,
@@ -267,6 +284,7 @@ export function planFrameStep(
     input,
     profile,
     files,
+    kept,
     hostPlugins,
     removeProfileScript,
     conflicts,
@@ -300,6 +318,11 @@ export function frameReport(frame: FrameStep): string {
   if (frame.removeProfileScript) parts.push(`${OLD_PROFILE_SCRIPT} removed`)
   if (frame.profile.manifestChanged)
     parts.push('package.json merged (dev runs scripts/ide-host.mjs)')
+  for (const { file, mountable } of frame.kept)
+    if (!mountable)
+      parts.push(
+        `${file} kept as the app's (edited): it does not export FRAME_MOUNT_PREFIX, so the frame cannot show the app until it does (a fresh app's ${file} shows how)`,
+      )
   return parts.length === 0 ? 'up to date' : parts.join(', ')
 }
 

@@ -102,8 +102,6 @@ describe('upgrading a pre-frame app to the host layout', () => {
   it('writes the launcher, the overlay, the runtime row and the frame row, and prints each change', async () => {
     const root = await preFrameApp('framed-later')
     const blendBefore = read(root, 'blend.yaml')
-    // src/routes.ts is the app's own from its first edit: the upgrade must leave it exactly as it was.
-    const routesBefore = read(root, 'src/routes.ts')
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { code, out } = await runUpgrade(root)
     expect(code).toBe(0)
@@ -131,15 +129,30 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(manifest.dependencies['acryl-app-shell']).toBe('file:/checkout/ide/acryl-app-shell')
     // The app's own configuration is untouched.
     expect(read(root, 'blend.yaml')).toBe(blendBefore)
-    expect(read(root, 'src/routes.ts')).toBe(routesBefore)
+    // The 1.1.0 src/routes.ts the app never edited is still the release's: it becomes the one the frame row mounts (FRAME_MOUNT_PREFIX).
+    expect(read(root, 'src/routes.ts')).toContain("export const FRAME_MOUNT_PREFIX = '/app'")
     const report = out()
     expect(report).toMatch(/frame\s+.*src\/frame\.ts added/u)
-    // Never written, never reported, never backed up: the app owns that file from its first edit.
-    expect(report).not.toMatch(/src\/routes\.ts/u)
+    expect(report).toMatch(/src\/routes\.ts updated/u)
     expect(report).toMatch(/scripts\/ide-host\.mjs added/u)
     expect(report).toMatch(/cordis\.patch\.yml added/u)
     expect(report).toMatch(/plugins\/acryl-page added/u)
     expect(report).toMatch(/package\.json merged/u)
+  })
+
+  it('keeps an edited src/routes.ts exactly, never refuses over it, and says when the frame cannot mount it', async () => {
+    // A blank app's only scaffold file is src/routes.ts, so an edited one leaves it unidentified; nodejs also ships src/app.ts.
+    const root = await preFrameApp('routes-edited', 'nodejs')
+    const edited = `${read(root, 'src/routes.ts')}// The owner's own line.\n`
+    writeFileSync(join(root, 'src', 'routes.ts'), edited)
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    expect(read(root, 'src/routes.ts')).toBe(edited)
+    expect(existsSync(join(root, '.acrylblends', 'upgrade-backup', 'src', 'routes.ts'))).toBe(false)
+    expect(out()).toMatch(
+      /src\/routes\.ts kept as the app's \(edited\): it does not export FRAME_MOUNT_PREFIX, so the frame cannot show the app until it does/u,
+    )
   })
 
   it('gives the agent template the composition row with its entry isolate and the mount config', async () => {
