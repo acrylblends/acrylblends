@@ -1,42 +1,20 @@
 /**
  * A product build (M10 T002): a desktop package that ships an app as its own starting point. `product.json` at the bundle root marks it. The bundle is
  * the Program, read-only (a mounted DMG can never be written to); the person's apps live in the product's root in the OS per-user data folder, one
- * sealed folder each (plugins/instance/storage.ts, specs/049-framework-architecture/app-storage.md in ACRYL). This file knows only what the bundle
- * carries: which product it is and how its starting app becomes a new app's source.
+ * sealed folder each (plugins/instance/storage.ts, specs/049-framework-architecture/app-storage.md in ACRYL). A new app's source gets the person's
+ * part of the starting app only; the Program (product.json's `program`: the framework's plugins, the generated host, the packages) stays in the bundle
+ * and is served from there (plugins/instance/bundle.ts), so an update replaces it for every app.
  */
 
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
+import { inProgram, type Product } from '../instance/bundle.ts'
 import type { AppInstance } from '../instance/index.ts'
 import type { AppStorage } from '../instance/storage.ts'
 
-export interface Product {
-  /** The product's name: its root folder in the OS per-user data folder (`ACRYL Blends Blank`). */
-  readonly product: string
-  /** The name the first app gets, until the person names it (`Blank`). */
-  readonly appName: string
-}
-
-/** The product marker at the bundle root, or undefined for an app made with `acrylblends init` and started with `npm run desktop`. */
-export function readProduct(root: string): Product | undefined {
-  try {
-    const value: unknown = JSON.parse(readFileSync(join(root, 'product.json'), 'utf8'))
-    if (value === null || typeof value !== 'object') return undefined
-    const { product, appName } = value as { product?: unknown; appName?: unknown }
-    if (typeof product !== 'string' || product.trim() === '') return undefined
-    return {
-      product: product.trim(),
-      appName:
-        typeof appName === 'string' && appName.trim() !== '' ? appName.trim() : product.trim(),
-    }
-  } catch {
-    return undefined
-  }
-}
-
 /**
- * What a new app's source does not carry from the bundle: build output, the bundle's own app data, and the carrier names the packager keeps files under.
- * The scaffold's repository travels as `template-git` and becomes the source's `.git`; the other carriers become their files (see `CARRIED`).
+ * What a new app's source does not carry from the bundle besides the Program: build output, the bundle's own app data, and the carrier names the packager
+ * keeps files under. The scaffold's repository travels as `template-git` and becomes the source's `.git`; the other carriers become their files (see `CARRIED`).
  */
 const SKIPPED = new Set([
   'dist',
@@ -80,19 +58,28 @@ function ignoreProductFiles(source: string): void {
 }
 
 /**
- * Fill a new app's empty source folder with the bundle's starting app: its files, its repository and the files the packager could only carry under
- * another name. Run once, when the app is made (`AppStorage.create`); an app's source is the person's from then on and is never written here again.
+ * Fill a new app's empty source folder with the person's part of the bundle's starting app: its files, its repository and the files the packager could
+ * only carry under another name, without the Program. Run once, when the app is made (`AppStorage.create`); an app's source is the person's from then on
+ * and is never written here again.
  * @param bundle - the bundled app (read-only).
  * @param source - the new app's source folder.
+ * @param program - the Program's paths (product.json), which stay in the bundle.
  */
-export function seedSource(bundle: string, source: string): void {
+export function seedSource(bundle: string, source: string, program: readonly string[]): void {
   cpSync(bundle, source, {
     recursive: true,
     dereference: true,
     errorOnExist: false,
     force: true,
-    // The bundled root arrives as a URL's directory and can end in a separator: the first segment is taken relative to it, never by index.
-    filter: (path) => !SKIPPED.has(relative(bundle, path).split(sep)[0] ?? ''),
+    // The bundled root arrives as a URL's directory and can end in a separator: paths are taken relative to it, never by index.
+    filter: (path) => {
+      const parts = relative(bundle, path).split(sep)
+      if (parts[0] === '') return true
+      if (SKIPPED.has(parts[0] ?? '')) return false
+      // A folder is compared with its trailing separator, so `plugins/acryl-router` is the Program's `plugins/acryl-router/`.
+      const tree = parts.join('/')
+      return !inProgram(program, tree) && !inProgram(program, `${tree}/`)
+    },
   })
   const templateGit = join(bundle, 'template-git')
   if (existsSync(templateGit))
@@ -118,7 +105,7 @@ export function openProductApp(
   if (app === undefined) {
     log(`product: making the app "${product.appName}" from the bundled app (first start, one time)`)
     app = storage.create(product.appName, (source) => {
-      seedSource(bundle, source)
+      seedSource(bundle, source, product.program)
     })
   }
   return storage.open(app.id)

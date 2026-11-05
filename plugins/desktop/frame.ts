@@ -7,6 +7,7 @@ import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 /** The launcher every frame app has; without it the app runs on its own server (made before the frame). */
 export const HOST_SCRIPT = join('scripts', 'ide-host.mjs')
@@ -151,6 +152,11 @@ export interface FrameHostLaunch {
    * A packaged product has no npm to run `npm run dev` with: the host runs on the app's own Electron runtime as Node, with the same loader the dev script uses.
    */
   readonly runtime?: string
+  /**
+   * Where the Program is when it is not in the app folder: a product's bundle. The host, its loader and the resolver that serves the Program from there
+   * and the person's files from the app's source (plugins/instance/bundle-overlay.ts) start from it; the host still runs in the app folder.
+   */
+  readonly program?: string
 }
 
 /** Start the app's frame host as `npm run dev` does, in the app folder; its output is passed through to `write`. */
@@ -161,15 +167,23 @@ export function startFrameHost(
   platform: NodeJS.Platform = process.platform,
   launch: FrameHostLaunch = {},
 ): FrameHost {
+  const program = launch.program ?? root
   const command =
     launch.runtime === undefined
       ? hostCommand(env, platform)
       : {
           file: launch.runtime,
           args: [
+            // The loader first and the overlay second: a hook registered later runs first, so the overlay sees every import before the loader's aliases.
             '--import',
-            './plugins/acryl-node-server/src/register.ts',
-            join(root, HOST_SCRIPT),
+            pathToFileURL(join(program, 'plugins', 'acryl-node-server', 'src', 'register.ts')).href,
+            ...(program === root
+              ? []
+              : [
+                  '--import',
+                  pathToFileURL(join(program, 'plugins', 'instance', 'bundle-overlay.ts')).href,
+                ]),
+            join(program, HOST_SCRIPT),
           ],
           shell: false,
         }

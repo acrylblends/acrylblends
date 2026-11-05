@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import {
+  cpSync,
   existsSync,
   mkdtempSync,
   readdirSync,
@@ -43,6 +44,17 @@ function folder(): string {
   const dir = mkdtempSync(join(tmpdir(), 'acrylblends-frame-url-'))
   scratch.push(dir)
   return dir
+}
+
+/** A frame app's folder as far as `open` reads it: the app's own family (plugins/instance), which decides its home. */
+function frameApp(): string {
+  const app = folder()
+  cpSync(
+    join(import.meta.dirname, '..', '..', '..', 'plugins', 'instance', 'index.ts'),
+    join(app, 'plugins', 'instance', 'index.ts'),
+  )
+  writeFileSync(join(app, 'package.json'), '{"type":"module"}\n')
+  return app
 }
 
 function fakeIo(cwd: string): { io: Io; out: string[]; err: string[] } {
@@ -99,11 +111,12 @@ describe('the frame address record', () => {
     assert.equal(readFrameUrl(home)?.token, 'old')
   })
 
-  it('follows ACRYLBLENDS_HOME, the same rule the launcher uses', () => {
-    const app = folder()
+  it('asks the app’s own family, as the launcher does: ACRYLBLENDS_HOME when set, else the app folder', () => {
+    const app = frameApp()
     assert.equal(frameHome(app, {}), join(app, '.acrylblends'))
     const pinned = folder()
     assert.equal(frameHome(app, { ACRYLBLENDS_HOME: pinned }), pinned)
+    assert.throws(() => frameHome(folder(), {}), /not a frame app/u)
   })
 
   it('reads nothing from a malformed or foreign record, and removes only its own', () => {
@@ -121,7 +134,7 @@ describe('the frame address record', () => {
 
 describe('acrylblends open', () => {
   it('prints the address of the running frame, and only the address', async () => {
-    const app = folder()
+    const app = frameApp()
     const home = join(app, '.acrylblends')
     const server = createNetServer()
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
@@ -140,7 +153,7 @@ describe('acrylblends open', () => {
   })
 
   it('explains a stopped frame instead of handing out a dead token', async () => {
-    const app = folder()
+    const app = frameApp()
     const home = join(app, '.acrylblends')
     const port = await closedPort()
     writeFrameUrl(home, `http://127.0.0.1:${String(port)}/?token=gone`)
@@ -161,7 +174,7 @@ describe('acrylblends open', () => {
   })
 
   it('--new rotates the token in the running host and keeps the new address', async () => {
-    const app = folder()
+    const app = frameApp()
     const home = join(app, '.acrylblends')
     let current = 'stored-token'
     const seen: string[] = []
@@ -201,7 +214,7 @@ describe('acrylblends open', () => {
   })
 
   it('--new with nothing running forgets the address, and the next start mints a new one', async () => {
-    const app = folder()
+    const app = frameApp()
     const home = join(app, '.acrylblends')
     const port = await closedPort()
     writeFrameUrl(home, `http://127.0.0.1:${String(port)}/?token=gone`)

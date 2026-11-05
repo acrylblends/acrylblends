@@ -23,6 +23,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { createRequire } from 'node:module'
 import { connect } from 'node:net'
 import { join, resolve } from 'node:path'
 import type { Io } from './io'
@@ -42,15 +43,27 @@ export interface FrameUrlRecord {
   readonly writtenAt: string
 }
 
-/** The app home the frame uses: `ACRYLBLENDS_HOME` when set, else `<app>/.acrylblends` (the launcher's own rule). */
+/** Where an app keeps its own family: the instance plugin its launcher imports. */
+const familyOf = (appRoot: string): string =>
+  join(resolve(appRoot), 'plugins', 'instance', 'index.ts')
+
+/**
+ * The app home the frame uses, as the app's own family chooses it (`plugins/instance`, which its launcher asks too): the CLI never keeps a second copy
+ * of that rule. A folder without the family is not a frame app.
+ */
 export function frameHome(
   appRoot: string,
   env: Record<string, string | undefined> = process.env,
 ): string {
-  const pinned = env.ACRYLBLENDS_HOME?.trim()
-  return pinned === undefined || pinned === ''
-    ? join(resolve(appRoot), '.acrylblends')
-    : resolve(pinned)
+  const family = familyOf(appRoot)
+  if (!existsSync(family))
+    throw new Error(`${appRoot} is not a frame app: it has no plugins/instance/index.ts`)
+  const { selectInstance } = createRequire(import.meta.url)(family) as {
+    selectInstance(options: { projectRoot: string; env?: Record<string, string | undefined> }): {
+      home: string
+    }
+  }
+  return selectInstance({ projectRoot: resolve(appRoot), env }).home
 }
 
 export function frameUrlPath(home: string): string {
@@ -208,6 +221,12 @@ export async function openFrame(args: readonly string[], io: Io): Promise<number
     return 2
   }
   const directory = resolve(io.cwd, rest[0] ?? '.')
+  if (!existsSync(familyOf(directory))) {
+    io.stderr.write(
+      `no frame has run in ${directory}: it is not a frame app (it has no plugins/instance)\n`,
+    )
+    return 1
+  }
   const found = await lookUpFrameUrl(directory)
   if (found.kind === 'none') {
     io.stderr.write(`no frame has run in ${directory} yet; start it with npm run dev\n`)

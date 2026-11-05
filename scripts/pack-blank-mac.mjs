@@ -75,6 +75,8 @@ const init = spawnSync(
 )
 if (init.status !== 0) throw new Error(`init failed (${String(init.status)})`)
 log(`scaffolded ${app}`)
+// The manifest the person's app starts from, before the packaging below declares every installed package in it.
+const scaffoldManifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
 
 // 2. Its packages, as npm installs them.
 const install = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], {
@@ -200,18 +202,52 @@ manifest.build = {
   dmg: { title: 'ACRYL Blends Blank' },
 }
 writeFileSync(join(app, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-// The product's root in the OS per-user data folder is named after it; the first app the person gets is called Blank until they name it.
+// The product's root in the OS per-user data folder is named after it; the first app the person gets is called Blank until they name it. The Program is
+// what stays in the bundle and is served from there (plugins/instance/bundle.ts): the packages, the generated host and its composition, and every
+// framework plugin the library copied in (plugins/library.lock.json). A new app's source gets everything else: the person's part.
+const libraryPlugins = Object.keys(
+  JSON.parse(readFileSync(join(app, 'plugins', 'library.lock.json'), 'utf8')).plugins ?? {},
+)
+const program = [
+  'node_modules/',
+  'app/',
+  'frame/',
+  'scripts/',
+  'cordis.yml',
+  'cordis.patch.yml',
+  ...libraryPlugins.map((name) => `plugins/${name}/`),
+]
 writeFileSync(
   join(app, 'product.json'),
-  `${JSON.stringify({ product: 'ACRYL Blends Blank', appName: 'Blank' }, null, 2)}\n`,
+  `${JSON.stringify({ product: 'ACRYL Blends Blank', appName: 'Blank', program }, null, 2)}\n`,
 )
+log(`the Program: ${program.join(', ')}`)
 
 // 4b. The packager drops or rewrites files the app owns: `.git` and `.gitignore` never enter a bundle (electron-builder excludes those names), and the
 // manifest it ships is filtered (the scripts go). Each travels under a plain carrier name and a new app's source gets it back as itself
 // (plugins/desktop/product.ts). The product's own build-time files stay out of the repository's status through its local exclude, never the app's tracked
 // .gitignore.
 cpSync(join(app, '.gitignore'), join(app, 'gitignore-product'))
-cpSync(join(app, 'package.json'), join(app, 'package-product.json'))
+// The source's manifest lists no framework package as its own: the bundle provides every package the scaffold declared, so they are peers, at the
+// version installed here (never a build machine's file: path). Its scripts name Program files and a product runs no npm, so they stay with the bundle.
+// What the person installs later is theirs: `dependencies` in their source.
+const installedVersion = (name) =>
+  JSON.parse(readFileSync(join(app, 'node_modules', name, 'package.json'), 'utf8')).version
+const {
+  scripts: _scripts,
+  dependencies: scaffoldDependencies = {},
+  devDependencies: _devDependencies,
+  ...ownFields
+} = scaffoldManifest
+const sourceManifest = {
+  ...ownFields,
+  peerDependencies: Object.fromEntries(
+    Object.keys(scaffoldDependencies)
+      .sort()
+      .map((name) => [name, installedVersion(name)]),
+  ),
+}
+writeFileSync(join(app, 'package-product.json'), `${JSON.stringify(sourceManifest, null, 2)}\n`)
 const exclude = join(app, '.git', 'info', 'exclude')
 const excluded = existsSync(exclude) ? readFileSync(exclude, 'utf8') : ''
 const productNames = ['product.json', 'gitignore-product', 'package-product.json', 'template-git/']
@@ -229,8 +265,9 @@ if (missingNames.length > 0) {
     `${excluded === '' || excluded.endsWith('\n') ? '' : '\n'}${missingNames.join('\n')}\n`,
   )
 }
-// The manifest the packer wrote (entry point, declared dependencies, build fields) becomes the app folder's own history, so the copy starts clean instead of
-// showing the packaging as an unsaved change. The identity is the product's, not whatever the build machine configures.
+// The repository a new app starts with records the person's part only: the source's manifest, and none of the Program (which a source never holds,
+// so it would show as deleted). The bundle's own files are left as they are; the commit is made in the index. The identity is the product's, not
+// whatever the build machine configures.
 const gitIdentity = [
   '-c',
   'user.name=ACRYL Blends',
@@ -239,19 +276,38 @@ const gitIdentity = [
   '-c',
   'commit.gpgsign=false',
 ]
-if (
-  execFileSync('git', ['status', '--porcelain', '--', 'package.json'], {
-    cwd: app,
-    encoding: 'utf8',
-  }).trim() !== ''
-) {
-  execFileSync('git', [...gitIdentity, 'add', 'package.json'], { cwd: app, stdio: 'inherit' })
-  execFileSync(
-    'git',
-    [...gitIdentity, 'commit', '-m', 'product: the manifest the packaged app carries'],
-    { cwd: app, stdio: 'inherit' },
-  )
-}
+execFileSync(
+  'git',
+  [
+    'rm',
+    '-r',
+    '-q',
+    '--cached',
+    '--ignore-unmatch',
+    '--',
+    ...program.map((path) => path.replace(/\/$/u, '')),
+  ],
+  { cwd: app, stdio: 'inherit' },
+)
+const manifestBlob = execFileSync('git', ['hash-object', '-w', 'package-product.json'], {
+  cwd: app,
+  encoding: 'utf8',
+}).trim()
+execFileSync('git', ['update-index', '--cacheinfo', `100644,${manifestBlob},package.json`], {
+  cwd: app,
+  stdio: 'inherit',
+})
+execFileSync(
+  'git',
+  [
+    ...gitIdentity,
+    'commit',
+    '-q',
+    '-m',
+    "product: the person's part of the app; the framework is served from the product's bundle",
+  ],
+  { cwd: app, stdio: 'inherit' },
+)
 // The scaffold's repository travels as `template-git` (the packager drops `.git`), with that commit in it.
 if (existsSync(join(app, '.git')))
   rmSync(join(app, 'template-git'), { recursive: true, force: true })

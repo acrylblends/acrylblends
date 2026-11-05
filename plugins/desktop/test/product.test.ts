@@ -10,10 +10,13 @@ import {
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { test } from 'node:test'
+import { readProduct } from '../../instance/bundle.ts'
 import { openProductStorage } from '../../instance/storage.ts'
-import { openProductApp, readProduct, seedSource } from '../product.ts'
+import { openProductApp, seedSource } from '../product.ts'
 
 const scratch = (): string => mkdtempSync(join(tmpdir(), 'acryl-product-'))
+
+const PROGRAM = ['node_modules/', 'plugins/acryl-router/', 'scripts/', 'cordis.yml']
 
 /** A bundle as electron-builder leaves it: no `.git`, a filtered manifest, and the carriers the packer adds. */
 function bundle(root: string): void {
@@ -23,7 +26,19 @@ function bundle(root: string): void {
   mkdirSync(join(root, 'node_modules'), { recursive: true })
   mkdirSync(join(root, 'template-git', 'objects'), { recursive: true })
   writeFileSync(join(root, 'package.json'), '{}\n')
-  writeFileSync(join(root, 'product.json'), '{"product":"Test Product","appName":"Test App"}\n')
+  writeFileSync(
+    join(root, 'product.json'),
+    `${JSON.stringify({ product: 'Test Product', appName: 'Test App', program: PROGRAM })}\n`,
+  )
+  // The Program: framework plugins next to the person's own, the generated host, the packages.
+  mkdirSync(join(root, 'plugins', 'acryl-router'), { recursive: true })
+  mkdirSync(join(root, 'plugins', 'notes'), { recursive: true })
+  mkdirSync(join(root, 'scripts'), { recursive: true })
+  writeFileSync(join(root, 'plugins', 'acryl-router', 'index.ts'), 'export {}\n')
+  writeFileSync(join(root, 'plugins', 'acryl-router-extra.ts'), 'export {}\n')
+  writeFileSync(join(root, 'plugins', 'notes', 'index.ts'), 'export {}\n')
+  writeFileSync(join(root, 'scripts', 'ide-host.mjs'), '// host\n')
+  writeFileSync(join(root, 'cordis.yml'), '[]\n')
   writeFileSync(
     join(root, 'package-product.json'),
     '{"name":"test-app","scripts":{"dev":"node x"}}\n',
@@ -52,17 +67,21 @@ test('reads the product marker: its name, and the first app’s name (the produc
   writeFileSync(join(root, 'product.json'), '{"appFolder":"Test App"}\n')
   assert.equal(readProduct(root), undefined)
   writeFileSync(join(root, 'product.json'), '{"product":"Test Product"}\n')
-  assert.deepEqual(readProduct(root), { product: 'Test Product', appName: 'Test Product' })
+  assert.deepEqual(readProduct(root), {
+    product: 'Test Product',
+    appName: 'Test Product',
+    program: [],
+  })
   writeFileSync(join(root, 'product.json'), '{"product":"Test Product","appName":" Mine "}\n')
-  assert.deepEqual(readProduct(root), { product: 'Test Product', appName: 'Mine' })
+  assert.deepEqual(readProduct(root), { product: 'Test Product', appName: 'Mine', program: [] })
 })
 
-test('a new app’s source is the bundled app with what the packager drops or filters written back, and without build output, app data or the marker', () => {
+test('a new app’s source is the person’s part of the bundled app, with what the packager drops or filters written back, and without the Program, build output, app data or the marker', () => {
   const root = scratch()
   const source = join(scratch(), 'source')
   bundle(root)
   // The bundled root arrives as a URL's directory, with a trailing separator: the skip list must still name the bundle's top level.
-  seedSource(`${root}${sep}`, source)
+  seedSource(`${root}${sep}`, source, PROGRAM)
   // The `.gitignore` and the manifest the packager refused to ship are there as themselves.
   assert.equal(readFileSync(join(source, '.gitignore'), 'utf8'), 'node_modules/\n.acrylblends/\n')
   assert.equal(
@@ -78,11 +97,17 @@ test('a new app’s source is the bundled app with what the packager drops or fi
     'product.json',
     'dist',
     '.acrylblends',
+    // The Program stays in the bundle and is served from there.
+    'node_modules',
+    'plugins/acryl-router',
+    'scripts',
+    'cordis.yml',
   ])
     assert.equal(existsSync(join(source, absent)), false, absent)
   assert.equal(readFileSync(join(source, 'src', 'app.ts'), 'utf8'), 'export {}\n')
-  // The packages still travel with the source until the framework resolves from the bundle (app-storage.md slice 3).
-  assert.equal(readFileSync(join(source, 'node_modules', 'dep.js'), 'utf8'), 'x')
+  // The person's plugins are theirs; a name that only starts like a Program folder is not the Program.
+  assert.ok(existsSync(join(source, 'plugins', 'notes', 'index.ts')))
+  assert.ok(existsSync(join(source, 'plugins', 'acryl-router-extra.ts')))
   // The product's names are ignored locally, never through the app's own `.gitignore`.
   assert.match(excludeOf(source), /^product\.json$/mu)
 })
@@ -91,7 +116,7 @@ test('the first start makes one app in the product’s root, never in Documents;
   const root = scratch()
   bundle(root)
   const home = scratch()
-  const product = { product: 'Test Product', appName: 'Test App' }
+  const product = { product: 'Test Product', appName: 'Test App', program: PROGRAM }
   const lines: string[] = []
   const first = openProductApp(storageIn(home), product, root, (line) => lines.push(line))
   assert.equal(first.kind, 'product')
@@ -114,6 +139,28 @@ test('the first start makes one app in the product’s root, never in Documents;
   assert.equal(lines.length, 1)
   assert.equal(storageIn(home).apps().length, 1)
   assert.ok(storageIn(home).apps()[0]?.lastOpened !== undefined)
+})
+
+test('nothing the product writes names the bundle: no file under its root holds the bundle’s path, so a moved or updated bundle opens every app', () => {
+  const root = scratch()
+  bundle(root)
+  const home = scratch()
+  openProductApp(
+    storageIn(home),
+    { product: 'Test Product', appName: 'Test App', program: PROGRAM },
+    root,
+    () => {},
+  )
+  const offenders: string[] = []
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) walk(path)
+      else if (readFileSync(path, 'utf8').includes(root)) offenders.push(path)
+    }
+  }
+  walk(home)
+  assert.deepEqual(offenders, [])
 })
 
 test('a seed that fails leaves no app behind: no registry entry and no folder', () => {

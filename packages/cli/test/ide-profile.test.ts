@@ -126,7 +126,8 @@ test("the chat view's rows are mounted, so an answer and its tool calls are draw
 test("the overlay keeps the first chat's workspace in the app's own data home", () => {
   assert.match(
     ideProfilePlan(input).overlay,
-    /- id: workspace-controller\n {2}config:\n {4}documentsDirectory: !!js process\.env\.ACRYLBLENDS_HOME \?\? process\.cwd\(\) \+ '\/\.acrylblends'/u,
+    // The launcher sets DSH_HOME to the home the app's family chose, before any row loads: the overlay names no folder of its own.
+    /- id: workspace-controller\n {2}config:\n {4}documentsDirectory: !!js process\.env\.DSH_HOME\n/u,
   )
 })
 
@@ -155,10 +156,13 @@ test("the manifest carries the DSH pin, the framework, the frame packages, and k
 
 test("the launcher listens on the app's own stable port, so a restart keeps the frame's origin and its cookie", () => {
   const plan = ideProfilePlan(input)
+  // The app's own family chooses the app, its home and its port once: this folder, or the source a desktop product names.
   assert.match(
     plan.hostScript,
-    /selectInstance\(\{ projectRoot: appRoot, env: process\.env \}\)\.port\.start/u,
+    /const chosen = selectInstance\(\{ projectRoot: frameworkRoot, env: process\.env \}\)\nconst appRoot = chosen\.root\nconst home = chosen\.home\n/u,
   )
+  assert.match(plan.hostScript, /const port = String\(chosen\.port\.start\)/u)
+  assert.doesNotMatch(plan.hostScript, /process\.env\.ACRYLBLENDS_HOME/u)
   assert.doesNotMatch(plan.hostScript, /ACRYLBLENDS_PORT \?\? '0'/u)
 })
 
@@ -185,10 +189,10 @@ test("the launcher writes every layer's rows as absolute URLs, so a Settings wri
   assert.match(hostScript, /import \{ dirname, isAbsolute, join, resolve \} from 'node:path'/u)
   assert.match(hostScript, /function anchorRows\(patches, baseDir\) \{/u)
   assert.match(hostScript, /row\.name = pathToFileURL\(resolve\(baseDir, row\.name\)\)\.href/u)
-  // The app's overlay and the host's own rows belong to the app folder.
+  // The app's overlay and the host's own rows belong to the app folder; the overlay file is the framework's, read beside the launcher.
   assert.match(
     hostScript,
-    /const frameLayer = anchorRows\(load\(readFileSync\(join\(appRoot, 'cordis\.patch\.yml'\), 'utf8'\)\) \?\? \[\], appRoot\)/u,
+    /const frameLayer = anchorRows\(load\(readFileSync\(join\(frameworkRoot, 'cordis\.patch\.yml'\), 'utf8'\)\) \?\? \[\], appRoot\)/u,
   )
   assert.match(hostScript, /const hostLayer = anchorRows\(\[\{/u)
   assert.match(hostScript, /\}\], appRoot\)/u)

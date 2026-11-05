@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, Menu, MenuItem, screen, shell } from 'electron'
 import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
-import { type AppInstance, instanceEnv, selectInstance } from '../instance/index.ts'
+import { readProduct } from '../instance/bundle.ts'
+import { type AppInstance, instanceEnv, selectInstance, withRunEnv } from '../instance/index.ts'
 import { type AppStorage, openProductStorage } from '../instance/storage.ts'
 import { runningApp } from './attach.ts'
 import {
@@ -33,7 +34,7 @@ import {
   withoutToken,
 } from './frame.ts'
 import { hasSettings, settingsPlacement } from './menu.ts'
-import { openProductApp, readProduct } from './product.ts'
+import { openProductApp } from './product.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { cascade, windowOptions, windowSize } from './window.ts'
@@ -53,7 +54,7 @@ try {
   chosen =
     storage === undefined || product === undefined
       ? selectInstance({ projectRoot: bundledRoot, env: process.env })
-      : openProductApp(storage, product, bundledRoot)
+      : withRunEnv(openProductApp(storage, product, bundledRoot), process.env)
 } catch (cause) {
   // A root of a newer version, or one this version cannot read: said once, in a dialog, and nothing is started or written.
   const message = cause instanceof Error ? cause.message : String(cause)
@@ -63,6 +64,8 @@ try {
   throw cause
 }
 const projectRoot = chosen.root
+/** Where the Program is: the bundle of a product (its apps' sources hold only the person's files), else the app folder itself. */
+const programRoot = storage === undefined ? projectRoot : bundledRoot
 
 /** Where the window opens: `acrylblends.desktopPath` in package.json (the todo template sets `/todo`), else the root. */
 function startPath(): string {
@@ -117,7 +120,7 @@ if (!app.requestSingleInstanceLock()) {
     // The hook above is registered before the app's modules are loaded, so the app may have .tsx pages: they are loaded here, not as a static import.
     // A dev server is already running from this folder (`npm run dev`): the door allows one process per folder, so the window opens on that server instead of starting a second one,
     // and closing the window leaves it running.
-    const frame = isFrameApp(projectRoot)
+    const frame = isFrameApp(programRoot)
     const attached = frame ? undefined : await runningApp(projectRoot)
     let url: string
     if (frame) {
@@ -138,7 +141,7 @@ if (!app.requestSingleInstanceLock()) {
           },
           // A packaged product carries no npm: its host runs on this app's own Electron runtime.
           process.platform,
-          app.isPackaged ? { runtime: process.execPath } : {},
+          app.isPackaged ? { runtime: process.execPath, program: programRoot } : {},
         )
         try {
           url = await host.ready

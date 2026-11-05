@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { instanceEnv, productInstance, selectInstance, stablePort } from '../index.ts'
+import { instanceEnv, productInstance, selectInstance, stablePort, withRunEnv } from '../index.ts'
 import {
   appFolders,
   createApp,
@@ -225,12 +225,25 @@ test('a product app is an AppInstance: source is its root, data its home and the
 
 test('a child started with instanceEnv chooses the same home and start port, whatever folder it runs in', () => {
   const chosen = productInstance(appFolders('/root', 'shop-3f2a'), 'Shop')
-  const child = selectInstance({ projectRoot: chosen.root, env: instanceEnv(chosen) })
+  // The host runs from the bundle: its own folder is not the app, and the environment names the app's source.
+  const child = selectInstance({ projectRoot: '/bundle', env: instanceEnv(chosen) })
+  assert.equal(child.root, chosen.root)
   assert.equal(child.home, chosen.home)
   assert.equal(child.dshHome, chosen.dshHome)
   assert.equal(child.port.start, chosen.port.start)
   assert.deepEqual(Object.keys(instanceEnv(chosen)).sort(), [
     'ACRYLBLENDS_HOME',
     'ACRYLBLENDS_PORT',
+    'ACRYLBLENDS_ROOT',
   ])
+})
+
+test('a product app listens where the environment says, as any instance does', () => {
+  const chosen = productInstance(appFolders('/root', 'shop-3f2a'), 'Shop')
+  assert.equal(withRunEnv(chosen, {}), chosen)
+  const pinned = withRunEnv(chosen, { ACRYLBLENDS_PORT: '3741', ACRYLBLENDS_HOST: '0.0.0.0' })
+  assert.deepEqual(pinned.port, { start: 3741, scan: true })
+  assert.equal(pinned.host, '0.0.0.0')
+  assert.equal(pinned.home, chosen.home)
+  assert.equal(withRunEnv(chosen, { PORT: '0' }).port.scan, false)
 })
