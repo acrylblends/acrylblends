@@ -974,7 +974,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           snapshot?.state === 'shown' &&
           snapshot.labels.some((label) => /^Branches$/iu.test(label)) &&
           snapshot.branches >= 1 &&
-          snapshot.labels.some((label) => /^Versions of this branch$/iu.test(label)) &&
+          snapshot.labels.some((label) => /^Versions$/iu.test(label)) &&
           snapshot.versions >= 1
         )
           return snapshot
@@ -985,7 +985,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         fail(
           `the left panel has no branches: ${JSON.stringify(await evaluate('document.body.innerText.slice(0, 500)'))}`,
         )
-      if (!left.labels.some((label) => /^Versions of this branch$/iu.test(label)) || left.versions < 1)
+      if (!left.labels.some((label) => /^Versions$/iu.test(label)) || left.versions < 1)
         fail(`the left panel has no versions of the branch: ${JSON.stringify(left)}`)
       log(
         `the left panel shows ${String(left.branches)} branch(es) and ${String(left.versions)} version(s)`,
