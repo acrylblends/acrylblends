@@ -306,11 +306,6 @@ function startMockLlm() {
 }
 
 const DSH_VERSION = process.env.IDE_PROFILE_DSH_VERSION ?? '0.2.0-rc.2'
-/** The framework release this CLI scaffolds an app for (`copyTemplate` writes the same range into the app's package.json). */
-const cliVersion = JSON.parse(
-  readFileSync(join(root, 'packages', 'cli', 'package.json'), 'utf8'),
-).version
-const frameworkVersion = `^${cliVersion}`
 
 const scratch = mkdtempSync(join(tmpdir(), `ide-template-${template}-`))
 const app = existing === undefined ? join(scratch, `${template}-app`) : resolve(existing)
@@ -323,7 +318,7 @@ let cleanupError
 try {
   const env = {
     ...process.env,
-    ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, { dshVersion: DSH_VERSION, frameworkVersion }),
+    ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, { dshVersion: DSH_VERSION }),
   }
   if (existing === undefined) {
     const init = spawnSync(
@@ -553,6 +548,19 @@ ${composition.stdout}`)
   }, 30_000)
   if (brief === undefined) fail('a door call did not answer within 30s')
   log('a door call answers')
+
+  // One framework copy: the frame packages' middleware runs on the router of the host that serves it. With two copies (the frame linked from the
+  // checkout, the framework from npm) a known private path asked with another method found no match result and answered 500 instead of 405.
+  const wrongMethod = spawnSync(
+    'curl',
+    ['-s', '-o', '/dev/null', '-D', '-', '-X', 'POST', `${origin}/api/acryl-support/diagnostics`],
+    { encoding: 'utf8' },
+  ).stdout
+  if (!/^HTTP\/[\d.]+ 405\b/mu.test(wrongMethod) || !/^allow: .*\bGET\b/imu.test(wrongMethod))
+    fail(
+      `POST to a GET-only private route did not answer 405 with its Allow:\n${wrongMethod}\nserver said:\n${output.slice(-2500)}`,
+    )
+  log('a private route asked with another method answers 405 with its Allow')
 
   // The app's own page answers directly, so a tile failure is never the app's own route.
   const directFile = join(scratch, 'direct.html')
@@ -977,10 +985,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         fail(
           `the left panel has no branches: ${JSON.stringify(await evaluate('document.body.innerText.slice(0, 500)'))}`,
         )
-      if (
-        !left.labels.some((label) => /^Versions of this branch$/iu.test(label)) ||
-        left.versions < 1
-      )
+      if (!left.labels.some((label) => /^Versions of this branch$/iu.test(label)) || left.versions < 1)
         fail(`the left panel has no versions of the branch: ${JSON.stringify(left)}`)
       log(
         `the left panel shows ${String(left.branches)} branch(es) and ${String(left.versions)} version(s)`,

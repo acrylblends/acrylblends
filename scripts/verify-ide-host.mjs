@@ -6,7 +6,7 @@
 //
 //   node --import ./scripts/workspace-source.mjs scripts/verify-ide-host.mjs [--keep]
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
@@ -21,9 +21,6 @@ const fail = (message) => {
 const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
 const app = join(scratch, 'app')
 const home = join(scratch, 'home')
-const cliVersion = JSON.parse(
-  readFileSync(join(root, 'packages', 'cli', 'package.json'), 'utf8'),
-).version
 
 const run = (command, args, cwd = app, extraEnv = {}) => {
   const result = spawnSync(command, args, {
@@ -42,7 +39,6 @@ try {
   const env = {
     ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, {
       dshVersion: '0.2.0-rc.2',
-      frameworkVersion: `^${cliVersion}`,
     }),
   }
   run(

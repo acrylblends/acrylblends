@@ -483,14 +483,10 @@ try {
 
   async function frameDesktop() {
     const frameApp = join(scratch, 'frame-app')
-    const cliVersion = JSON.parse(
-      readFileSync(join(root, 'packages', 'cli', 'package.json'), 'utf8'),
-    ).version
     const frameEnv = {
       ...env,
       ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, {
         dshVersion: process.env.IDE_PROFILE_DSH_VERSION ?? '0.2.0-rc.2',
-        frameworkVersion: `^${cliVersion}`,
       }),
     }
     const init = spawnSync(
