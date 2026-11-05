@@ -38,6 +38,8 @@ function logView(): VersionsLogView {
   }
 }
 
+const plan = { upstream: 'origin/main', address: 'github.com/ana/notes', ahead: 2, head: 'a'.repeat(40) }
+
 function api(overrides: Partial<VersionsApi> = {}): VersionsApi {
   return {
     log: vi.fn(async () => logView()),
@@ -49,6 +51,7 @@ function api(overrides: Partial<VersionsApi> = {}): VersionsApi {
       restored: older.short,
       commit: { hash: 'c'.repeat(40), short: 'ccccccc', subject: `Restore ${older.short}` },
     })),
+    planShare: vi.fn(async () => plan),
     share: vi.fn(async () => ({ pushed: true as const, upstream: 'origin/main' })),
     ...overrides,
   }
@@ -138,8 +141,28 @@ describe('VersionsSection', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
+  it('asks before a share, with Cancel focused, and pushes only the plan the person confirmed', async () => {
+    const client = api()
+    render(<VersionsSection path="/repo" api={client} />)
+    await screen.findByText('second version')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    await screen.findByText('Push 2 versions to origin/main (github.com/ana/notes)?')
+    expect(client.share).not.toHaveBeenCalled()
+    expect(document.activeElement?.textContent).toBe('Cancel')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText('Push 2 versions to origin/main (github.com/ana/notes)?')).toBeNull()
+    expect(client.share).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Push' }))
+    await screen.findByText('Pushed to origin/main.')
+    expect(client.share).toHaveBeenCalledWith('/repo', plan)
+  })
+
   it('shows the reason a share was refused', async () => {
-    const client = api({ share: vi.fn(async () => { throw new Error('the branch has no upstream: publish it first') }) })
+    const client = api({ planShare: vi.fn(async () => { throw new Error('the branch has no upstream: publish it first') }) })
     render(<VersionsSection path="/repo" api={client} />)
     await screen.findByText('second version')
 

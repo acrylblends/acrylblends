@@ -10,6 +10,7 @@ export const VERSIONS_API_PREFIX = '/api/acryl-versions'
 export const VERSIONS_LOG_PATH = `${VERSIONS_API_PREFIX}/log`
 export const VERSIONS_SAVE_PATH = `${VERSIONS_API_PREFIX}/save`
 export const VERSIONS_RESTORE_PATH = `${VERSIONS_API_PREFIX}/restore`
+export const VERSIONS_SHARE_PLAN_PATH = `${VERSIONS_API_PREFIX}/share-plan`
 export const VERSIONS_SHARE_PATH = `${VERSIONS_API_PREFIX}/share`
 
 /** The log's page size when the caller names none. */
@@ -72,6 +73,56 @@ export interface VersionsRestoreView {
   readonly restored: string
   /** The new commit; history was not rewritten. */
   readonly commit: VersionsCommitView
+}
+
+/**
+ * What a share would send, read without sending anything: the person confirms exactly this, and the share sends nothing when it changed meanwhile.
+ */
+export interface VersionsSharePlan {
+  /** The branch's upstream (`origin/main`). */
+  readonly upstream: string
+  /** Where the remote is, without any credential (`github.com/ana/notes`, or a local path). */
+  readonly address: string
+  /** How many versions the upstream does not have yet. */
+  readonly ahead: number
+  /** The commit that would be sent: 40 to 64 hexadecimal characters. */
+  readonly head: string
+}
+
+/** A plan as the client sent it back, checked field by field; undefined when it is not one. */
+export function parseSharePlan(value: unknown): VersionsSharePlan | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const { upstream, address, ahead, head } = value as Record<string, unknown>
+  if (typeof upstream !== 'string' || upstream === '' || typeof address !== 'string' || address === '') return undefined
+  if (typeof ahead !== 'number' || !Number.isInteger(ahead) || ahead < 0) return undefined
+  if (typeof head !== 'string' || !/^[0-9a-f]{40,64}$/.test(head)) return undefined
+  return { upstream, address, ahead, head }
+}
+
+/** Two plans send the same thing. */
+export const sameSharePlan = (a: VersionsSharePlan, b: VersionsSharePlan): boolean =>
+  a.upstream === b.upstream && a.address === b.address && a.ahead === b.ahead && a.head === b.head
+
+/** The question the person answers before a share, for example "Push 2 versions to origin/main (github.com/ana/notes)?". */
+export function shareQuestion(plan: VersionsSharePlan): string {
+  return `Push ${String(plan.ahead)} ${plan.ahead === 1 ? 'version' : 'versions'} to ${plan.upstream} (${plan.address})?`
+}
+
+/**
+ * A remote's address as the person may see it: the host and path, with any user name or token removed (`https://user:token@github.com/ana/notes.git`
+ * and `git@github.com:ana/notes.git` both read `github.com/ana/notes`); a local path stays as it is.
+ */
+export function remoteAddress(url: string): string {
+  const trimmed = url.trim().replace(/\.git$/, '')
+  const scp = /^[^@/\s]+@([^:/\s]+):(.+)$/.exec(trimmed)
+  if (scp !== null) return `${scp[1]}/${scp[2]}`
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.protocol === 'file:') return decodeURIComponent(parsed.pathname)
+    return `${parsed.host}${parsed.pathname}`.replace(/\/$/, '')
+  } catch {
+    return trimmed
+  }
 }
 
 /** The answer to a share: the push went through to this upstream. */

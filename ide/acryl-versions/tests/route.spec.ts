@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { VersionsLogView } from '../src/contract.ts'
-import { VERSIONS_LOG_PATH, VERSIONS_RESTORE_PATH, VERSIONS_SAVE_PATH } from '../src/contract.ts'
+import { VERSIONS_LOG_PATH, VERSIONS_RESTORE_PATH, VERSIONS_SAVE_PATH, VERSIONS_SHARE_PATH, VERSIONS_SHARE_PLAN_PATH } from '../src/contract.ts'
 import { GitRunner } from '../src/git/runner.ts'
 import { versionsRoutes } from '../src/route.ts'
 import { Versions } from '../src/versions.ts'
@@ -101,5 +101,21 @@ describe('Versions routes', () => {
     const res = await post(app(), VERSIONS_RESTORE_PATH, { path: repo.dir, hash: first.slice(0, 8) })
     expect(res.status).toBe(409)
     expect((await res.json() as { error: string }).error).toBe('commit or discard the uncommitted changes first')
+  })
+
+  it('refuses a share that does not carry a confirmed plan, and plans without sending', async () => {
+    const repo = repository()
+    writeFile(repo.dir, 'a.txt', 'one')
+    commitAll(repo.dir, 'first')
+
+    const bare = await post(app(), VERSIONS_SHARE_PATH, { path: repo.dir })
+    expect(bare.status).toBe(400)
+    expect((await bare.json() as { error: string }).error).toBe('a share is sent only after the person confirms its plan')
+    const forged = await post(app(), VERSIONS_SHARE_PATH, { path: repo.dir, confirmed: { upstream: 'origin/main' } })
+    expect(forged.status).toBe(400)
+
+    const planned = await post(app(), VERSIONS_SHARE_PLAN_PATH, { path: repo.dir })
+    expect(planned.status).toBe(409)
+    expect((await planned.json() as { error: string }).error).toBe('the branch has no upstream: publish it first')
   })
 })
