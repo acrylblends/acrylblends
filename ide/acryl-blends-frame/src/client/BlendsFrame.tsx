@@ -236,6 +236,7 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
           {state.status === 'ready' && (
             <LeftPanel
               state={state.state}
+              readState={() => frameState.current()}
               chats={chats}
               versions={versions}
               tabs={tabs}

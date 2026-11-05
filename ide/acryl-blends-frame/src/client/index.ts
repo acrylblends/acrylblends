@@ -255,9 +255,12 @@ export function apply(ctx: ClientContext): void {
     void frameState.refresh()
     const timer = window.setInterval(read, FRAME_STATE_INTERVAL_MS)
     document.addEventListener('visibilitychange', read)
+    // Back from another window (an editor, a terminal) the count is read at once, not at the next tick.
+    window.addEventListener('focus', read)
     return () => {
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', read)
+      window.removeEventListener('focus', read)
     }
   }, 'acryl-blends-frame: read the frame state')
 
