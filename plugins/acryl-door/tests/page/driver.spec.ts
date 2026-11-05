@@ -81,6 +81,20 @@ describe('snapshot', () => {
     expect(JSON.stringify(s)).not.toMatch(/Pass|Key field|Card number|token|Inside/)
   })
 
+  it('lists the choices of a select, so an agent knows what it can pick', async () => {
+    document.body.innerHTML = `<select aria-label="Due"><option value="all">Any time</option><option>Today</option><option value="week">This week</option><option hidden>Never</option></select>`
+    const s = await snap(makeDriver())
+    expect(s.nodes[0]).toMatchObject({ role: 'combobox', name: 'Due', value: 'Any time', options: ['Any time', 'Today', 'This week'] })
+    expect(renderSnapshot(s)).toContain('combobox "Due" value="Any time" options=["Any time","Today","This week"]')
+  })
+
+  it('cuts a long list of choices and says how many more there are', async () => {
+    document.body.innerHTML = `<select aria-label="Country">${Array.from({ length: 30 }, (_, i) => `<option>c${String(i)}</option>`).join('')}</select>`
+    const s = await snap(makeDriver())
+    expect(s.nodes[0]?.options).toHaveLength(21)
+    expect(s.nodes[0]?.options?.at(-1)).toBe('(10 more)')
+  })
+
   it('caps the size and pages through the rest without losing or repeating elements', async () => {
     document.body.innerHTML = Array.from({ length: 25 }, (_, i) => `<button>b${String(i)}</button>`).join('')
     const driver = makeDriver()
@@ -104,11 +118,36 @@ describe('snapshot', () => {
     expect(s.nodes.map(n => n.name)).toEqual(['Visible', 'Below'])
   })
 
+  it('takes a new snapshot for cursor 0, even before any snapshot was taken', async () => {
+    document.body.innerHTML = '<button>a</button><button>b</button>'
+    const driver = makeDriver()
+    const first = (await driver.handle({ op: 'snapshot', cursor: 0, maxNodes: 5 })) as UiSnapshot
+    expect(first.nodes.map(n => n.name)).toEqual(['a', 'b'])
+    document.body.innerHTML = '<button>c</button>'
+    const again = (await driver.handle({ op: 'snapshot', cursor: 0 })) as UiSnapshot
+    expect(again.nodes.map(n => n.name)).toEqual(['c'])
+    expect(again.generation).not.toBe(first.generation)
+  })
+
   it('refuses a page of a snapshot that was replaced', async () => {
     document.body.innerHTML = '<button>a</button><button>b</button><button>c</button>'
     const driver = makeDriver()
     await driver.handle({ op: 'snapshot', maxNodes: 1 })
     expect(await codeOf(driver.handle({ op: 'snapshot', cursor: 99 }))).toBe('stale-ref')
+  })
+})
+
+describe('acts that take the page away', () => {
+  it('a click that starts a navigation says the page is leaving; one that does not, does not', async () => {
+    document.body.innerHTML = '<a href="/next">Next</a><button>Stay</button>'
+    // jsdom does not navigate: the link's click starts a navigation the way a browser does, by asking beforeunload.
+    document.querySelector('a')!.addEventListener('click', (event) => { event.preventDefault(); window.dispatchEvent(new Event('beforeunload')) })
+    const driver = makeDriver()
+    const s = await snap(driver)
+    const left = (await driver.handle({ op: 'click', ref: refOf(s, 'link', 'Next') })) as UiActionResult
+    expect(left).toMatchObject({ ok: true, leaving: true, target: { role: 'link', name: 'Next' } })
+    const stayed = (await driver.handle({ op: 'click', ref: refOf(await snap(driver), 'button', 'Stay') })) as UiActionResult
+    expect(stayed.leaving).toBeUndefined()
   })
 })
 

@@ -171,3 +171,100 @@ test('with tasks mounted, a run cancelled by its signal is recorded as failed, n
   assert.equal((await run).status, 'cancelled')
   assert.deepEqual(events, ['agent-run fail the run was cancelled'])
 })
+
+test('with a tools list, a run sees only those tools and a call to any other fails', async () => {
+  const root = new Context()
+  for (const plugin of [model, tools, memory]) await root.plugin(plugin).await()
+  await root.plugin(agent, { tools: ['look'] }).await()
+  let seen: string[] = []
+  scripted(root.model)?.teach(({ step, tools: offered }) => {
+    seen = (offered ?? []).map((tool) => tool.name)
+    return step === 0 ? { tool: 'add', input: [1, 1] } : { text: 'stopped' }
+  })
+  const result = await root.agent.run('add 1 1')
+  assert.deepEqual(seen, [])
+  assert.equal(result.trace[0]?.error, 'no tool named "add" is allowed in this run')
+})
+
+test('two runs at once each keep their own budget and both finish', async () => {
+  const root = new Context()
+  for (const plugin of [model, tools, memory]) await root.plugin(plugin).await()
+  await root.plugin(agent).await()
+  const release: Array<() => void> = []
+  // The first step of each run waits until both runs are inside their own fiber.
+  scripted(root.model)?.teach(({ step, question }) =>
+    step === 0 ? undefined : { text: `done ${question}` },
+  )
+  const slow = root.model.complete
+  root.model.complete = (input) =>
+    input.step === 0
+      ? new Promise((done) => release.push(() => done({ tool: 'add', input: [1, 2] })))
+      : slow(input)
+  const first = root.agent.run('one')
+  const second = root.agent.run('two')
+  // Bounded: a second run that could not start never reaches its first step.
+  for (let waited = 0; release.length < 2 && waited < 2000; waited += 5)
+    await new Promise((done) => setTimeout(done, 5))
+  for (const go of release) go()
+  const [a, b] = await Promise.allSettled([first, second])
+  assert.deepEqual(
+    [a, b].map((settled) =>
+      settled.status === 'fulfilled' ? settled.value.status : String(settled.reason),
+    ),
+    ['completed', 'completed'],
+  )
+})
+
+test('with answerAfter, an answer right after an act gets a look first, and the model answers from what it shows', async () => {
+  const root = new Context()
+  for (const plugin of [model, tools, memory]) await root.plugin(plugin).await()
+  await root.plugin(agent, { answerAfter: 'look' }).await()
+  let shown = 'all'
+  root.tools.register('look', { description: 'the page', run: async () => `filter: ${shown}` })
+  root.tools.register('act', {
+    description: 'change it',
+    run: async () => {
+      shown = 'week'
+      return 'done'
+    },
+  })
+  scripted(root.model)?.teach(({ question, step, toolResult }) => {
+    if (question === 'say hi') return { text: 'hi' }
+    // Acts, then answers at once, as a weak model does; the second answer comes after the agent's look.
+    return step === 0
+      ? { tool: 'act', input: {} }
+      : { text: `answered after ${JSON.stringify(toolResult)}` }
+  })
+  const result = await root.agent.run('filter it')
+  assert.equal(result.status === 'completed' && result.output, 'answered after "filter: week"')
+  assert.deepEqual(
+    result.trace.map((call) => call.tool),
+    ['act', 'look'],
+  )
+  // An answer with no call before it needs no look.
+  assert.deepEqual(await root.agent.run('say hi'), {
+    status: 'completed',
+    output: 'hi',
+    steps: 1,
+    trace: [],
+  })
+})
+
+test('with answerAfter, the agent looks once per answer: a model that answers again after the look is taken', async () => {
+  const root = new Context()
+  for (const plugin of [model, tools, memory]) await root.plugin(plugin).await()
+  await root.plugin(agent, { answerAfter: 'look' }).await()
+  root.tools.register('look', {
+    description: 'the page',
+    run: () => Promise.reject(new Error('no page')),
+  })
+  root.tools.register('act', { description: 'change it', run: async () => 'done' })
+  scripted(root.model)?.teach(({ step }) =>
+    step === 0 ? { tool: 'act', input: {} } : { text: 'done anyway' },
+  )
+  const result = await root.agent.run('go')
+  assert.deepEqual(
+    [result.status, result.steps, result.trace.map((call) => call.tool)],
+    ['completed', 3, ['act', 'look']],
+  )
+})

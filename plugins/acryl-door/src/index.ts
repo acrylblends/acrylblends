@@ -18,6 +18,7 @@ import { clientModules } from 'acryl-node-server/client-modules'
 import { auditPath, AuditLog } from './host/audit.ts'
 import { UiChannel } from './host/channel.ts'
 import { registerChatTools } from './host/chat-tools.ts'
+import { PAGE_VERBS, VERBS } from './host/verbs.ts'
 import { Door, type ExtensionsPort, type ToolsPort } from './host/door.ts'
 import { assertDoorIsFree, newSecret, removeDoorFile, stateDir, writeDoorFile } from './host/door-file.ts'
 import { DOOR_PREFIX, privateApi } from './host/http.ts'
@@ -68,13 +69,34 @@ export interface Config {
    * run it in production (a packaged desktop app whose user drives it with an agent) says so here; `ACRYL_DOOR=off` still wins.
    */
   allowInProduction?: boolean
+  /**
+   * Page only, for a production assistant: the page channel and two chat tools, `door_look` and `door_act`, and nothing else - no operator routes, no MCP, no desktop
+   * shell channel, no `.acryl/` file, no plugin, tool or window verbs. The app's agent can then use the page for a visitor and cannot change the app. Runs in production
+   * without `allowInProduction`; `ACRYL_DOOR=off` still wins.
+   */
+  pageOnly?: boolean
   /** Reload the open pages after a live plugin change, so an agent that built a feature sees it on the page it has open. Default: true. */
   reloadOnChange?: boolean
+  /**
+   * Put the page script in the host's own index page (DSH's web UI) too, so an agent can drive that UI. Default: true. A host whose index is a frame
+   * around the app (the ACRYL Blends frame, whose centre shows the app's page) turns it off: the door then drives the app's page in the canvas, and an
+   * agent's `act navigate` or a reload after a plugin change never takes the person's tab out of the frame.
+   */
+  hostIndex?: boolean
+  /**
+   * The host prefix the app's pages are served under (the frame's canvas, `/app`); absent on the app's own server, where they are at the root. The
+   * door puts it on every page as `<meta name="acryl-app-base">`, and `act navigate` with an app path goes under it: a page the app serves at
+   * `/board` is reached at `/app/board` in the frame and at `/board` in production, and the same verb works in both.
+   */
+  appBase?: string
 }
 
 export const Config: z<Config> = z.object({
   allowInProduction: z.boolean().default(false).description('Run in production too (NODE_ENV=production); ACRYL_DOOR=off still turns it off.'),
+  pageOnly: z.boolean().default(false).description('Only the page and the look and act chat tools (a production assistant); runs in production.'),
   reloadOnChange: z.boolean().default(true).description('Reload the open pages after a plugin was added, removed or reloaded while the app runs.'),
+  hostIndex: z.boolean().default(true).description("Put the page script in the host's own index page too; off when that index is a frame around the app."),
+  appBase: z.string().default('').description('The prefix the app pages are served under (the frame canvas), without a trailing slash; empty at the root.'),
   tools: z.object({
     // Not a `door_` name: those are the door's own verbs in the registry, never offered back as app tools.
     expose: z.array(z.string().pattern(/^(?!door_)[A-Za-z][A-Za-z0-9_-]{0,63}$/u)).description('App tools (from the tools registry) the door offers; none by default.'),
@@ -118,7 +140,8 @@ export function notFoundPage(path: string, scriptTag: string): string {
 export function apply(ctx: Context, rawConfig: Config = {}): void {
   const config = Config(rawConfig)
   // Development only: nothing is started, mounted or written in production, or when switched off.
-  if (process.env.ACRYL_DOOR === 'off' || (process.env.NODE_ENV === 'production' && config.allowInProduction !== true)) return
+  const pageOnly = config.pageOnly === true
+  if (process.env.ACRYL_DOOR === 'off' || (process.env.NODE_ENV === 'production' && config.allowInProduction !== true && !pageOnly)) return
   const app = ctx.get('appInstance') as unknown as AppFolder
   // The carrier, as the host provides it: DSH's `acrylWeb`, or the plain node server's own url. Read when used, never captured at apply time.
   const carrier = (): Listening | undefined => {
@@ -139,18 +162,25 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   }
   const address: { url: string } = { url: '' }
   // The rival check runs at activation, not in the deferred write: a folder another live process serves fails the row at once (the write waits for a bound port).
-  assertDoorIsFree(app.root)
+  // A page-only door writes no file, so it has no rival to check.
+  if (!pageOnly) assertDoorIsFree(app.root)
   const secret = newSecret()
   // A look right after a navigate or reload waits up to two seconds for the page that is moving to register again, and a read-only call that no page acknowledged gives a page that just registered one more try.
-  const channel = new UiChannel({ attachWaitMs: 2000 })
+  // A page-only door serves every visitor of the app on one channel: each call goes to the page of the visitor whose run made it, never to another visitor's page.
+  const channel = new UiChannel({ attachWaitMs: 2000, requirePage: pageOnly })
   const shell = new ShellChannel()
   const audit = new AuditLog(auditPath(stateDir(app.root)))
+  // Where the app's pages answer under this host (`/app` in the frame): `act navigate` sends an app path there, and a page may read it from the
+  // head. The app's own server has no prefix and no meta.
+  const rawBase = typeof config.appBase === 'string' ? config.appBase.trim() : ''
+  const appBase = rawBase.startsWith('/') && rawBase !== '/' ? rawBase.replace(/\/+$/u, '') : ''
   const door = new Door({
     channel,
     shell,
     audit,
     // The address is read when it is used, not when the plugin applies: the carrier binds after the fiber starts (DSH's webServer reports its listening port only then).
     app: { name: app.name, root: app.root, get url() { return address.url } },
+    ...(appBase === '' ? {} : { appBase }),
     extensions: () => ctx.get('extensions') as unknown as ExtensionsPort | undefined,
     tools: () => ctx.get('tools') as unknown as ToolsPort | undefined,
     expose: config.tools?.expose ?? [],
@@ -163,8 +193,9 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     .get(`${DOOR_PREFIX}/page.js`, c => c.body(`import '${DOOR_PREFIX}/page/main.ts'\n`, 200, { 'content-type': 'text/javascript; charset=utf-8' }))
     .route(`${DOOR_PREFIX}/page`, clientModules({ root: PAGE_DIR, mount: `${DOOR_PREFIX}/page` }))
   // The page script on every HTML page the app answers, whenever its plugin was mounted (the pages of a plugin that loaded at boot, before this one, included): a page an agent writes
-  // can be looked at and driven without anyone adding the tag. A page that already carries it (the templates' own pages) is left as it is. Development only, like the rest of the door.
+  // can be looked at and driven without anyone adding the tag. A page that already carries it keeps one copy. Development only, like the rest of the door.
   const tag = `<script type="module" src="${DOOR_PREFIX}/page.js"></script>`
+  const meta = appBase === '' ? '' : `<meta name="acryl-app-base" content="${appBase}">`
   const addScript = async (c: { res: Response; req: { path: string; header(name: string): string | undefined } }, next: () => Promise<void>): Promise<void> => {
     await next()
     if (!(c.res.headers.get('content-type') ?? '').includes('text/html')) {
@@ -174,11 +205,14 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
         c.res = new Response(notFoundPage(c.req.path, tag), { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } })
       return
     }
-    const html = await c.res.text()
+    let html = await c.res.text()
     const headers = new Headers(c.res.headers)
     headers.delete('content-length')
-    const carries = html.includes(`${DOOR_PREFIX}/page.js`)
-    c.res = new Response(carries ? html : html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag, { status: c.res.status, headers })
+    if (meta !== '' && !html.includes('name="acryl-app-base"'))
+      html = html.includes('</head>') ? html.replace('</head>', `${meta}</head>`) : meta + html
+    if (!html.includes(`${DOOR_PREFIX}/page.js`))
+      html = html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag
+    c.res = new Response(html, { status: c.res.status, headers })
   }
   const router = ctx.router as unknown as { wrap?: (middleware: typeof addScript) => unknown }
   // An app whose router copy is older than this plugin has no `wrap`: the middleware then covers the routes mounted after the door, as the agent panel's does.
@@ -186,7 +220,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
   else ctx.router.route('/', new Acryl().use('*', addScript as never))
   // DSH's own index.html is not a framework route, so `router.wrap` never sees it: the tag goes in through the web server's index-inject hook instead. The
   // tap is owned by this plugin's fiber, so unloading the door takes the tag with it, and the new activation's page routes answer under the new secret.
-  ctx.inject(['webServer'], inner => {
+  if (config.hostIndex !== false) ctx.inject(['webServer'], inner => {
     inner.effect(() => {
       const taps = inner.get('webServer') as unknown as { tapIndex?: (transform: (html: string) => string) => () => void } | undefined
       if (typeof taps?.tapIndex !== 'function') return () => {}
@@ -258,17 +292,21 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     DOOR_PREFIX,
     pageModule,
     pageChannelRoutes(channel, { prefix: DOOR_PREFIX }),
-    shellRoutes(DOOR_PREFIX, secret, shell),
-    operatorRoutes(DOOR_PREFIX, secret, door, reportError),
-    mcpRoutes(DOOR_PREFIX, secret, door, reportError),
+    ...(pageOnly ? [] : [
+      shellRoutes(DOOR_PREFIX, secret, shell),
+      operatorRoutes(DOOR_PREFIX, secret, door, reportError),
+      mcpRoutes(DOOR_PREFIX, secret, door, reportError),
+    ]),
   ))
   // The built-in chat's agent reads the `tools` registry: the verbs are in it while both are up.
   ctx.inject(['tools'], (inner) => {
-    inner.effect(() => registerChatTools(inner.get('tools') as unknown as ToolsPort, door), 'acryl-door: the verbs in the tools registry')
+    inner.effect(() => registerChatTools(inner.get('tools') as unknown as ToolsPort, door, pageOnly ? PAGE_VERBS : VERBS), 'acryl-door: the verbs in the tools registry')
   })
   ctx.effect(function* () {
     yield ctx.reflect.provide('door', door)
   }, 'acryl-door: the door service')
+  // A page-only door leaves no file and no command for an operator.
+  if (pageOnly) return
   // The carrier binds asynchronously (DSH's webServer, the node server before it): the address and the file are written once it reports a real port.
   ctx.effect(async () => {
     let bound = carrier()
@@ -286,7 +324,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
 }
 
 export { Door, DoorError, type VerbAnswer } from './host/door.ts'
-export { chatToolName, VERB_SPECS, VERBS, type Verb, type VerbSpec } from './host/verbs.ts'
+export { chatToolName, PAGE_VERBS, VERB_SPECS, VERBS, type Verb, type VerbSpec } from './host/verbs.ts'
 export { mcpTools } from './host/mcp-routes.ts'
 export { DOOR_PREFIX } from './host/http.ts'
 export { assertDoorIsFree, doorFilePath, readDoorFile, STATE_DIR, type DoorFile } from './host/door-file.ts'

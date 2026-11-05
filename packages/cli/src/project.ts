@@ -250,7 +250,10 @@ export function appendGitignore(appDir: string, lines: readonly string[] | undef
   return missing
 }
 
-/** The generated app's guide for a coding agent: the shared core, then the template's own part. `CLAUDE.md` is only an import of it. */
+/**
+ * The generated app's guide for a coding agent: the shared core, then the template's own part. `CLAUDE.md` is only an import of it. The skills
+ * every app ships (`shared/skills/<name>/SKILL.md`) go to `.claude/skills/` (Claude Code) and `.agents/skills/` (the other agents), the same text in both.
+ */
 export function writeAgentFiles(
   sharedDir: string,
   templateDir: string,
@@ -263,17 +266,33 @@ export function writeAgentFiles(
     : ''
   const defaults = readFileSync(join(sharedDir, 'DEFAULTS.md'), 'utf8')
   const text = `${core}${defaults}${own}`.replaceAll('__APP_NAME__', name)
-  // AGENTS.md and CLAUDE.md are the same text; the one skill is written where each kind of agent looks for skills.
+  // AGENTS.md and CLAUDE.md are the same text; the skills are written where each kind of agent looks for them.
   writeFileSync(join(target, 'AGENTS.md'), text)
   writeFileSync(join(target, 'CLAUDE.md'), text)
-  const skill = readFileSync(join(sharedDir, 'SKILL.md'), 'utf8').replaceAll('__APP_NAME__', name)
   const written = ['AGENTS.md', 'CLAUDE.md']
-  for (const folder of ['.claude/skills/app-guide', '.agents/skills/app-guide']) {
-    mkdirSync(join(target, folder), { recursive: true })
-    writeFileSync(join(target, folder, 'SKILL.md'), skill)
-    written.push(`${folder}/SKILL.md`)
+  for (const skill of sharedSkills(sharedDir)) {
+    const skillText = readFileSync(join(sharedDir, 'skills', skill, 'SKILL.md'), 'utf8').replaceAll(
+      '__APP_NAME__',
+      name,
+    )
+    for (const scope of ['.claude/skills', '.agents/skills']) {
+      const folder = `${scope}/${skill}`
+      mkdirSync(join(target, folder), { recursive: true })
+      writeFileSync(join(target, folder, 'SKILL.md'), skillText)
+      written.push(`${folder}/SKILL.md`)
+    }
   }
   return written
+}
+
+/** The skills every generated app carries: the folder name of each under `shared/skills/`. */
+export function sharedSkills(sharedDir: string): string[] {
+  const root = join(sharedDir, 'skills')
+  if (!existsSync(root)) return []
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, 'SKILL.md')))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b))
 }
 
 /**

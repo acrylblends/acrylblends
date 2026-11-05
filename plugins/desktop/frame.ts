@@ -102,8 +102,8 @@ export function withoutToken(href: string): string {
 }
 
 /**
- * What the Settings... menu item runs in a frame window: the window event the frame's workspace opens its own Settings on (`acryl-workspace`,
- * `OPEN_SETTINGS_EVENT`; keep the string in step). The same dialog as the left panel's Settings button, never a second one.
+ * What the Settings... menu item runs in a frame window: the window event the page's root owner opens its own Settings on (`acryl-blends-frame`'s
+ * `OPEN_SETTINGS_EVENT`, and the IDE's `acryl-workspace`; keep the string in step). The same dialog as the top bar's gear, never a second one.
  */
 export const openFrameSettings = "window.dispatchEvent(new Event('acryl:open-settings'))"
 

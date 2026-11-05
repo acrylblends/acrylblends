@@ -16,8 +16,8 @@ export type ChatEvent =
 export interface ChatDriver {
   readonly kind: 'chat'
   readonly name: string
-  /** Runs one message. Aborting `signal` stops the run. */
-  start(options: { message: string; signal: AbortSignal }): AsyncIterable<ChatEvent>
+  /** Runs one message. Aborting `signal` stops the run. `page` is the door's id of the page whose panel asked, when it sent one: a driver that uses the page drives that one. */
+  start(options: { message: string; signal: AbortSignal; page?: string }): AsyncIterable<ChatEvent>
 }
 
 /** A live pseudo-terminal session. */

@@ -34,7 +34,21 @@ export function frameSpecs(root) {
   return Object.fromEntries(closure.map((name) => [name, `file:${folders.get(name)}`]))
 }
 
+/**
+ * The framework as the checkout's frame packages see it: `packages/cli` of the same checkout. A `file:` package is installed as a link, so it resolves its
+ * `acrylblends` peer from its real folder, here; the app has to install that same folder, or the host serves the frame's routes on one copy of the
+ * framework while their middleware runs on another (a request the second copy did not make has no match result: a wrong method on a private route was a
+ * 500 instead of 405). A published release dedupes the peer by itself.
+ */
+export function frameworkSpec(root) {
+  return `file:${join(root, 'packages', 'cli')}`
+}
+
 /** `ACRYLBLENDS_FRAME_PACKAGES`, the scaffold gate's bridge while the ide packages are unpublished: what the CLI writes into a template's profile. */
-export function frameSpecsEnv(root, { dshVersion, frameworkVersion }) {
-  return JSON.stringify({ dshVersion, frameworkVersion, packages: frameSpecs(root) })
+export function frameSpecsEnv(root, { dshVersion }) {
+  return JSON.stringify({
+    dshVersion,
+    frameworkVersion: frameworkSpec(root),
+    packages: frameSpecs(root),
+  })
 }

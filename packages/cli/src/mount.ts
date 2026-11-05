@@ -22,6 +22,7 @@ export const MOUNTED: readonly Mounted[] = [
   { name: 'agent-panel', local: 'panel', needs: ['agent', 'extensions'] },
   { name: 'driver-pty', local: 'driverPty', needs: ['agent-panel'], after: 'agent-panel' },
   { name: 'driver-acp', local: 'driverAcp', needs: ['agent-panel'], after: 'agent-panel' },
+  { name: 'feedback', local: 'feedback', needs: ['acryl-router'] },
 ]
 
 /** A row, in either line ending: a file edited on Windows (or checked out with core.autocrlf) is still a Blend. */

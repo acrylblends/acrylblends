@@ -24,6 +24,8 @@ export type RunResult = (
 export interface RunOptions {
   /** Aborting it stops the run: the model call or tool in flight is dropped and the run ends `{ status: 'cancelled' }`. */
   readonly signal?: AbortSignal
+  /** The door's id of the page the run was asked from: every tool call carries it, so the page tools drive that page and no other (a production assistant serves many visitors). */
+  readonly page?: string
 }
 
 export interface Agent {
@@ -39,6 +41,16 @@ export interface Budget {
 export interface AgentConfig {
   /** Steps per run before it stops. */
   steps?: number
+  /**
+   * The only tools a run may see and call; absent: every tool in the registry. A production assistant gets the page tools alone (`door_look`, `door_act`), so whatever
+   * a visitor asks, the agent can use the app and never change it. A call to any other name fails as an unknown tool would.
+   */
+  tools?: readonly string[]
+  /**
+   * The tool whose result an answer must come right after. When the model answers after another tool call (it acted and did not look), the agent calls this tool
+   * itself, once, and asks the model again with what it shows. The production assistant sets `door_look`, so what it tells a visitor is what the page shows now.
+   */
+  answerAfter?: string
 }
 
 /**
@@ -91,6 +103,8 @@ export const agent = {
   inject: ['model', 'tools', 'memory'],
   apply(ctx: Context, config?: AgentConfig) {
     const limit = config?.steps ?? 6
+    const allowed = config?.tools === undefined ? undefined : new Set(config.tools)
+    const answerAfter = config?.answerAfter
     let runs = 0
     ctx.provide('agent', {
       async run(question, options) {
@@ -104,13 +118,15 @@ export const agent = {
         )
         // Assigned inside the run's fiber; `as` keeps TypeScript from narrowing it to this first value.
         let result = { status: 'budget_exceeded', steps: 0, trace } as RunResult
-        const task = ctx.plugin({
+        // Each run's `budget` is its own: runs may overlap (the production Assistant serves visitors at once), and a service name is shared unless isolated.
+        const task = ctx.isolate('budget').plugin({
           name: `task-${runs}`,
           inject: ['model', 'tools', 'memory'],
           async apply(scope: Context) {
             scope.provide('budget', { steps: 0, limit } satisfies Budget)
             const budget = scope.budget
             let toolResult: unknown
+            let looked = false
             while (budget.steps < budget.limit) {
               if (signal.aborted) {
                 result = { status: 'cancelled', steps: budget.steps, trace }
@@ -124,7 +140,7 @@ export const agent = {
                     step: budget.steps,
                     toolResult,
                     trace: [...trace],
-                    tools: scope.tools.list(),
+                    tools: scope.tools.list().filter((tool) => allowed?.has(tool.name) ?? true),
                     signal,
                   }),
                   signal,
@@ -136,16 +152,31 @@ export const agent = {
               }
               budget.steps += 1
               if (step.tool === undefined) {
-                scope.memory.remember(`${question} => ${step.text}`)
-                result = { status: 'completed', output: step.text, steps: budget.steps, trace }
-                return
-              }
+                const last = trace.at(-1)
+                const unseen =
+                  answerAfter !== undefined &&
+                  last !== undefined &&
+                  last.tool !== answerAfter &&
+                  !looked
+                if (!unseen) {
+                  scope.memory.remember(`${question} => ${step.text}`)
+                  result = { status: 'completed', output: step.text, steps: budget.steps, trace }
+                  return
+                }
+                step = { tool: answerAfter, input: {} }
+                looked = true
+              } else looked = false
               const call = record
                 ? recorder?.start(`tool:${step.tool}`, step.input, { parent: record.id })
                 : undefined
               try {
+                if (allowed !== undefined && !allowed.has(step.tool))
+                  throw new Error(`no tool named "${step.tool}" is allowed in this run`)
                 toolResult = await until(
-                  scope.tools.call(step.tool, step.input, { signal }),
+                  scope.tools.call(step.tool, step.input, {
+                    signal,
+                    ...(options?.page === undefined ? {} : { page: options.page }),
+                  }),
                   signal,
                 )
                 trace.push({

@@ -4,11 +4,16 @@
 // acrylblends.github.io checkout to publish there. The taxonomy placement (category and subcategory shown on the site) is not in blend.yaml: it is src/lib/registry-placement.ts in that checkout.
 // Copies the app to blends/<login>.<name>/ without what an entry does not carry (node_modules, dist, data, .git, the framework docs, the agent's scratch), makes its blend.yaml public
 // and licensed under that id, and writes acryl.template.json, which marks the entry as an app for acrylblends. Then: commit, push to your fork, open a pull request.
+// An app's blend.lock.json (every version the frame saves has one) must match the app: a stale snapshot is refused in one line before anything is copied. In
+// the entry the lock is kept true: its origin takes the new id, version and blend.yaml digest, so the entry verifies against its own lock and another app can
+// apply it (npm run snapshot apply <entry>).
+import { createHash } from 'node:crypto'
 import {
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -35,6 +40,13 @@ if (!existsSync(join(app, 'blend.yaml')) || !existsSync(join(app, 'package.json'
   console.error(`${app} is not an acrylblends app (no blend.yaml and package.json)`)
   process.exit(1)
 }
+const stale = staleSnapshot(app)
+if (stale) {
+  console.error(
+    `${stale} changed since the last capture; run npm run snapshot capture (or Save point in the frame) and try again`,
+  )
+  process.exit(1)
+}
 const target = join(root, 'blends', id)
 if (existsSync(target)) {
   console.error(`${target} exists already; change that entry by editing it, or choose another name`)
@@ -58,6 +70,7 @@ cpSync(app, target, {
 if (existsSync(join(target, '.gitignore')))
   renameSync(join(target, '.gitignore'), join(target, 'gitignore'))
 const manifestFile = join(target, 'blend.yaml')
+const lockFile = join(target, 'blend.lock.json')
 const text = readFileSync(manifestFile, 'utf8')
 const meta = /^metadata:\n(?:[ \t]+.*\n|[ \t]*\n)*/mu.exec(text)
 if (!meta) {
@@ -84,6 +97,23 @@ writeFileSync(
     ].join('\n'),
   ),
 )
+if (existsSync(lockFile)) {
+  const lock = JSON.parse(readFileSync(lockFile, 'utf8'))
+  if (
+    lock !== null &&
+    typeof lock === 'object' &&
+    lock.origin !== null &&
+    typeof lock.origin === 'object'
+  ) {
+    lock.origin = {
+      ...lock.origin,
+      id,
+      version: '0.1.0',
+      digest: createHash('sha256').update(readFileSync(manifestFile, 'utf8')).digest('hex'),
+    }
+    writeFileSync(lockFile, `${JSON.stringify(lock, null, 2)}\n`)
+  }
+}
 writeFileSync(
   join(target, 'acryl.template.json'),
   `${JSON.stringify({ name, description, plugins: [] }, null, 2)}\n`,
@@ -93,3 +123,60 @@ console.log(
     ? `made blends/${id}/. Next:  git add blends/${id} && git commit -m "add ${id}" && git push, then open a pull request.`
     : `made ${target}`,
 )
+
+/**
+ * What in the app no longer matches its blend.lock.json (blend.yaml, or a plugin folder the lock names), or undefined when it matches or the app has no lock.
+ * The digests are blends-core's (`manifestDigest`, `digestFolder`), computed here with node:crypto so a fork needs no install to run this script.
+ */
+function staleSnapshot(appRoot) {
+  const lockFile = join(appRoot, 'blend.lock.json')
+  if (!existsSync(lockFile)) return undefined
+  let lock
+  try {
+    lock = JSON.parse(readFileSync(lockFile, 'utf8'))
+  } catch {
+    return 'blend.lock.json'
+  }
+  const manifest = createHash('sha256')
+    .update(readFileSync(join(appRoot, 'blend.yaml')))
+    .digest('hex')
+  if (typeof lock?.origin?.digest === 'string' && lock.origin.digest !== manifest)
+    return 'blend.yaml'
+  for (const module of Array.isArray(lock?.modules) ? lock.modules : []) {
+    if (
+      module?.origin !== 'local' ||
+      typeof module.source !== 'string' ||
+      typeof module.digest !== 'string'
+    )
+      continue
+    if (!/^(plugins|src\/plugins|extensions)\/[a-z0-9][a-z0-9._-]*$/u.test(module.source))
+      return 'blend.lock.json'
+    const folder = join(appRoot, module.source)
+    if (!existsSync(folder) || `sha256:${digestFolder(folder)}` !== module.digest)
+      return module.source
+  }
+  return undefined
+}
+
+/** blends-core's digestFolder: sha256 over each file's `/`-separated path and bytes, in code-unit order, skipping dependencies, git and ACRYL's staging. */
+function digestFolder(dir) {
+  const files = []
+  const walk = (at, prefix) => {
+    for (const entry of readdirSync(at, { withFileTypes: true })) {
+      if (
+        ['node_modules', '.git', 'acryl-source.json'].includes(entry.name) ||
+        entry.name.startsWith('acryl-v-')
+      )
+        continue
+      const path = join(at, entry.name)
+      if (entry.isDirectory()) walk(path, `${prefix}${entry.name}/`)
+      else files.push([`${prefix}${entry.name}`, path])
+    }
+  }
+  walk(dir, '')
+  files.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+  const hash = createHash('sha256')
+  for (const [relative, path] of files)
+    hash.update(relative).update('\0').update(readFileSync(path)).update('\0')
+  return hash.digest('hex')
+}

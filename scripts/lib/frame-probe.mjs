@@ -1,9 +1,8 @@
 /**
- * What every surface of the ACRYL frame must show, asserted through a DevTools connection to the page: the left panel (Projects and its rows), the right
- * panel (Files, Changes, Review), Settings with its sections, and the app's own page in the frame's browser tile. The selectors and the way each surface is
- * opened are the frame gate's (`scripts/verify-ide-template.mjs`), which checks the same things in headless Chrome; the desktop gate checks them in the
- * Electron window. A panel the window's width keeps closed (the left panel's rail, the right panel) is opened with its own button, as a person opens it.
- * `evaluate` runs an expression in the page and returns its value.
+ * What every surface of the ACRYL frame must show, asserted through a DevTools connection to the page: the left panel (the app's branches and the versions
+ * of this branch), the right panel (the chat's tab strip, its History button and the + menu's tools), DSH's Settings opened from the bar's gear, and the app's
+ * own page in the frame's canvas. `scripts/verify-desktop-door.mjs` is the only caller: it checks these in the Electron window. A panel the window's width
+ * keeps closed is opened with the bar's own button, as a person opens it. `evaluate` runs an expression in the page and returns its value.
  */
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -33,8 +32,8 @@ export function evaluator(session) {
 }
 
 /**
- * Assert the frame. `appText` is text the app's own page shows in the tile. Returns what it found, for the gate's log; throws with what the page held when a
- * surface is missing.
+ * Assert the frame. `appText` is text the app's own page shows in the canvas. Returns what it found, for the gate's log; throws with what the page held when
+ * a surface is missing.
  */
 export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
   const click = (label) =>
@@ -47,23 +46,31 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
     })()`)
   const body = () => evaluate(`document.body?.innerText?.slice(0, 1500) ?? ''`)
 
+  // The left panel: the app's branches, the checked-out one among them, and the versions of this branch with their rows.
   const left = await until(async () => {
     const snapshot = await evaluate(`(() => {
-      const side = document.querySelector('.dshWorkspaceSide')
-      return { head: side?.querySelector('.dshWorkspaceSideProjectsHead') != null, rows: side?.querySelectorAll('[role=treeitem]').length ?? 0 }
+      const side = document.querySelector('.acrylBlendsLeft')
+      if (side === null || side.hidden) return undefined
+      const branches = [...side.querySelectorAll('.acrylBlendsBranchName')].map((name) => name.textContent.trim()).filter(Boolean)
+      const versions = side.querySelectorAll('.acrylBlendsVersion').length
+      return { branches, versions }
     })()`)
-    if (snapshot?.head === true && snapshot.rows >= 1) return snapshot
-    // A narrow window (CI's 1024x768 screens) shows the left panel as a rail: a person opens it with its button.
-    await click('Open sidebar')
+    if (snapshot !== undefined && snapshot.branches.length >= 1 && snapshot.versions >= 1)
+      return snapshot
+    // A narrow window shows the panel closed: a person opens it with the bar's own button.
+    await click('Left panel: branches and versions')
     return undefined
   }, timeoutMs)
   if (left === undefined)
-    throw new Error(`the left panel has no Projects/session rows: ${JSON.stringify(await body())}`)
+    throw new Error(
+      `the left panel has no branches or versions of this branch: ${JSON.stringify(await body())}`,
+    )
 
+  // The app's own page, drawn in the frame's canvas as an iframe of the host's /app.
   const tile = await until(
     () =>
       evaluate(`(() => {
-        const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+        const frame = document.querySelector('iframe.acrylAppCanvasFrame')
         const text = frame?.contentDocument?.body?.innerText ?? ''
         return text.includes(${JSON.stringify(appText)}) ? text.slice(0, 120) : undefined
       })()`),
@@ -71,36 +78,60 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
   )
   if (tile === undefined)
     throw new Error(
-      `the app's page is not in the frame's browser tile: ${JSON.stringify(
+      `the app's page is not in the frame's canvas: ${JSON.stringify(
         await evaluate(`(() => {
-          const frame = document.querySelector('iframe.dshWorkspaceBrowserFrame')
+          const frame = document.querySelector('iframe.acrylAppCanvasFrame')
           return { src: frame?.getAttribute('src') ?? null, text: frame?.contentDocument?.body?.innerText?.slice(0, 200) ?? null }
         })()`),
       )}`,
     )
 
+  // The right panel: the chat's tab strip, its History button, and the + that opens the tools.
   const right = await until(async () => {
     const snapshot = await evaluate(`(() => {
-      const bar = document.querySelector('[data-acryl-slot=rightbar]')
-      if (bar === null || !bar.innerText.includes('Changes')) return undefined
-      const labels = [...bar.querySelectorAll('button,[role=tab]')]
-        .map(element => element.getAttribute('aria-label') ?? element.getAttribute('title') ?? element.textContent.trim())
-        .filter(Boolean)
-      return { text: bar.innerText.slice(0, 600), labels: labels.slice(0, 60) }
+      const side = document.querySelector('.acrylBlendsRight')
+      if (side === null || side.hidden) return undefined
+      const tabs = [...side.querySelectorAll('.acrylBlendsTab')].map((tab) => tab.textContent.trim()).filter(Boolean)
+      return {
+        tabs,
+        history: side.querySelector('.acrylBlendsHistoryButton') !== null,
+        plus: side.querySelector('.acrylBlendsPlus') !== null,
+      }
     })()`)
-    if (snapshot !== undefined) return snapshot
-    await click('Show right panel')
+    if (snapshot?.tabs.some((text) => text.startsWith('Chat')) && snapshot.history && snapshot.plus)
+      return snapshot
+    await click('Right panel: agents')
     return undefined
   }, timeoutMs)
-  if (right === undefined) throw new Error('the right panel did not open with its views')
-  const rightText = `${right.text}\n${right.labels.join('\n')}`
-  for (const label of ['Changes', 'Review'])
-    if (!rightText.includes(label))
-      throw new Error(`the right panel has no ${label} view: ${rightText}`)
-  if (!rightText.includes('Files') && !rightText.includes('Code'))
-    throw new Error(`the right panel has no files view: ${rightText}`)
+  if (right === undefined)
+    throw new Error(
+      `the right panel did not open with the chat's tabs: ${JSON.stringify(await body())}`,
+    )
 
-  // Settings the way a person opens it (the left panel's foot), pressed only while no Settings dialog is up; only a visible dialog whose nav has a real section counts.
+  // The + menu holds the tools the frame has: a terminal, Files and Git (the canvas is the browser, so it does not offer one).
+  const tools = await until(async () => {
+    const items = await evaluate(`(() => {
+      const plus = document.querySelector('.acrylBlendsRight .acrylBlendsPlus')
+      if (plus === null) return undefined
+      if (plus.getAttribute('aria-expanded') !== 'true') plus.click()
+      return [...document.querySelectorAll('.acrylBlendsMenuItem')].map((item) => item.textContent.trim()).filter(Boolean)
+    })()`)
+    if (items === undefined || items.length === 0) return undefined
+    // Closed again, so the person's next click lands where they mean it to (and Settings' gear is not under the menu).
+    await evaluate(`(() => {
+      const plus = document.querySelector('.acrylBlendsRight .acrylBlendsPlus')
+      if (plus?.getAttribute('aria-expanded') === 'true') plus.click()
+      return true
+    })()`)
+    return items
+  }, 10_000)
+  if (tools === undefined)
+    throw new Error(`the right panel's + menu did not open: ${JSON.stringify(await body())}`)
+  for (const tool of ['Terminal', 'Files', 'Git'])
+    if (!tools.some((text) => text.startsWith(tool)))
+      throw new Error(`the right panel's + menu offers no ${tool}: ${tools.join(', ')}`)
+
+  // Settings the way a person opens it (the bar's gear), pressed only while no Settings dialog is up; only a visible dialog whose nav has a real section counts.
   const opened = await until(
     () =>
       evaluate(`(() => {
@@ -108,12 +139,8 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
         const open = [...document.querySelectorAll('[role=dialog]')].some((dialog) =>
           dialog.getClientRects().length > 0 && [...dialog.querySelectorAll('nav button')].some(isSection))
         if (open) return true
-        const buttons = [...document.querySelectorAll('.dshWorkspaceSide button')].filter((candidate) =>
-          (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Settings')
-        for (const button of buttons) button.click()
-        if (buttons.length === 0)
-          [...document.querySelectorAll('button[aria-haspopup="dialog"]')]
-            .find((button) => ['Settings', '设置'].includes(button.getAttribute('aria-label') ?? ''))?.click()
+        const gear = [...document.querySelectorAll('button[aria-label="Settings"]')].find((button) => button.getClientRects().length > 0)
+        gear?.click()
         return false
       })()`),
     timeoutMs,
@@ -134,5 +161,12 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
   const missing = sections.filter((section) => !new RegExp(section, 'iu').test(settingsText))
   if (missing.length > 0) throw new Error(`Settings is missing ${missing.join(', ')}`)
 
-  return { rows: left.rows, tile: tile.trim().split('\n')[0], sections }
+  return {
+    rows: left.branches.length,
+    branches: left.branches,
+    versions: left.versions,
+    tabs: right.tabs,
+    tile: tile.trim().split('\n')[0],
+    sections,
+  }
 }

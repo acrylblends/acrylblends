@@ -72,7 +72,7 @@ export function makeApp(prefix = ''): Acryl {
       .get('/', (c) =>
         (c.req.header('accept') ?? '').includes('text/html')
           ? c.html(
-              `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${APP_NAME}</title>${APPEARANCE_STYLE}${appearanceScript(prefix)}</head><body><h1>${APP_NAME}</h1><p>This app runs an agent unless it is switched off (production switches it off, see ACRYL_PRODUCTION_KEEP in AGENTS.md). Ask it for a feature in the agent panel on this page (or with <code>POST /ask</code>).</p>${DOOR_TAG}</body></html>`,
+              `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${APP_NAME}</title>${APPEARANCE_STYLE}${appearanceScript(prefix)}</head><body><h1>${APP_NAME}</h1><p>This app runs an agent unless it is switched off (production switches it off, see ACRYL_PRODUCTION_KEEP in AGENTS.md). In ACRYL, ask it for a change in the chat beside the app (or with <code>POST /ask</code>); published with the assistant on, it helps visitors use the app without changing it.</p>${DOOR_TAG}</body></html>`,
             )
           : c.json({ app: APP_NAME, ok: true }),
       )
@@ -91,7 +91,7 @@ export function makeApp(prefix = ''): Acryl {
 export const routes = {
   name: 'routes',
   inject: ['router'],
-  apply(ctx: Context, options: { readonly prefix?: string } = {}) {
+  apply(ctx: Context, options: { readonly prefix?: string; readonly agentRoutes?: boolean } = {}) {
     const prefix = options.prefix ?? ''
     // A body here is a name, an id or a question; anything bigger is refused before it is read.
     const json = async (c: {
@@ -104,6 +104,8 @@ export const routes = {
     // The app's own page and routes at the one prefix; the agent routes below mount at the same prefix.
     ctx.router.route(prefix === '' ? '/' : prefix, makeApp(prefix))
     // The routes that give a visitor the agent: mounted only while the agent, the extensions and the tasks run (see the header).
+    // `agentRoutes: false` (the production Assistant) keeps them unmounted although the agent runs.
+    if (options.agentRoutes === false) return
     ctx.inject(['agent', 'extensions', 'tasks'], (inner) => {
       const app = new Acryl().use(limit).get('/extensions', (c) =>
         c.json({

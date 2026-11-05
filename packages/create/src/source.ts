@@ -68,6 +68,17 @@ export function parseSource(text: string, cwd: string): Source | undefined {
   return undefined
 }
 
+/**
+ * A registry, as `--registry` names it: a source, or a folder written as a bare path (`my-registry`, `run/registry`). A registry is never a template name, so a
+ * path that is an existing folder is taken as one without the `./` a template source needs.
+ */
+export function parseRegistrySource(text: string, cwd: string): Source | undefined {
+  const source = parseSource(text, cwd)
+  if (source !== undefined) return source
+  const path = resolve(cwd, text)
+  return existsSync(path) && lstatSync(path).isDirectory() ? { kind: 'folder', path } : undefined
+}
+
 /** How the bytes of a source are obtained; real by default, replaced in tests. */
 export interface Fetchers {
   /** The body at a URL (a GitHub tarball). */

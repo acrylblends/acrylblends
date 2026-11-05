@@ -139,11 +139,16 @@ describe('a coding agent in a generated app', () => {
       expect(agents).toContain(`## This app (${template})`)
       expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe(agents)
       expect(agents).toContain('## Defaults you can swap')
-      const skill = readFileSync(join(dir, '.claude/skills/app-guide/SKILL.md'), 'utf8')
-      expect(readFileSync(join(dir, '.agents/skills/app-guide/SKILL.md'), 'utf8')).toBe(skill)
-      expect(skill).toContain(`Working in app-${template}`)
-      // One plugin folder: the generated text names no second one except to forbid it.
-      for (const text of [agents, skill])
+      const appSkill = readFileSync(join(dir, '.claude/skills/acryl-app/SKILL.md'), 'utf8')
+      expect(readFileSync(join(dir, '.agents/skills/acryl-app/SKILL.md'), 'utf8')).toBe(appSkill)
+      expect(appSkill).toContain(`Working in app-${template}`)
+      const pluginSkill = readFileSync(join(dir, '.claude/skills/cordis-plugin/SKILL.md'), 'utf8')
+      expect(readFileSync(join(dir, '.agents/skills/cordis-plugin/SKILL.md'), 'utf8')).toBe(
+        pluginSkill,
+      )
+      expect(pluginSkill).toContain('Adding a Cordis plugin')
+      // One plugin folder: the generated text and both skills name no second one except to forbid it.
+      for (const text of [agents, appSkill, pluginSkill])
         expect(
           text.replace(
             /Do not create `src\/plugins\/` or `extensions\/`\.|There is no `src\/plugins\/` and no `extensions\/`\./gu,
@@ -596,7 +601,8 @@ describe('add agent-panel and driver-pty', () => {
     const dir = join(scratch, 'blank-panel')
     const refused = fakeIo()
     expect(await runCli(['add', 'agent-panel', '--dir', dir], refused.io)).toBe(1)
-    expect(refused.err()).toContain('needs the `agent` and `extensions` rows')
+    // A blank app has the extensions row (its own plugins start by their rows next to it); the agent row is the agent template's.
+    expect(refused.err()).toContain('needs the `agent` row in blend.yaml')
     expect(refused.err()).toContain('npm create acrylblends@latest my-app agent')
     expect(refused.err()).toContain('Nothing was changed')
     expect(existsSync(join(dir, 'plugins/agent-panel'))).toBe(false)
@@ -611,7 +617,9 @@ describe('add agent-panel and driver-pty', () => {
     ).toBe(0)
     const dir = join(scratch, 'agent-panel-app')
     const shipped = readFileSync(join(dir, 'blend.yaml'), 'utf8')
-    expect(shipped).toMatch(/- id: agent-panel\n {6}name: agent-panel\n {4}- id: routes\n/u)
+    expect(shipped).toMatch(
+      /- id: agent-panel\n {6}name: agent-panel\n(?: {4}#[^\n]*\n)* {4}- id: routes\n/u,
+    )
     expect(readFileSync(join(dir, 'src/app.ts'), 'utf8')).toContain("'agent-panel': panel,")
     expect(existsSync(join(dir, 'plugins/agent-panel/index.ts'))).toBe(true)
     const again = fakeIo()
@@ -624,7 +632,7 @@ describe('add agent-panel and driver-pty', () => {
     ).toBe(0)
     const rows = readFileSync(join(dir, 'blend.yaml'), 'utf8')
     expect(rows).toMatch(
-      /- id: agent-panel\n {6}name: agent-panel\n(?: {4}- id: driver-(?:pty|acp)\n {6}name: driver-(?:pty|acp)\n){2} {4}- id: routes\n/u,
+      /- id: agent-panel\n {6}name: agent-panel\n(?: {4}- id: driver-(?:pty|acp)\n {6}name: driver-(?:pty|acp)\n){2}(?: {4}#[^\n]*\n)* {4}- id: routes\n/u,
     )
     const app = readFileSync(join(dir, 'src/app.ts'), 'utf8')
     expect(app).toContain("import * as driverPty from '../plugins/driver-pty/index.ts'")

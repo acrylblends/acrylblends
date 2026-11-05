@@ -1,7 +1,7 @@
 /** Builds a bounded, redacted accessibility snapshot of the page, with refs. */
 
 import { DEFAULT_SNAPSHOT_NODES, MAX_SNAPSHOT_NODES, UiControlError, type UiNode, type UiSnapshot } from '../protocol.ts'
-import { isHidden, levelOf, NAMED_BY_CONTENT, nameOf, roleOf, SHOWN_AS_VALUE, statesOf, TEXT_ROLE, textRun, valueOf } from './accessibility.ts'
+import { isHidden, levelOf, NAMED_BY_CONTENT, nameOf, optionsOf, roleOf, SHOWN_AS_VALUE, statesOf, TEXT_ROLE, textRun, valueOf } from './accessibility.ts'
 import type { RefTable } from './ref-table.ts'
 import { isProtected, isSensitive } from './sensitivity.ts'
 
@@ -90,7 +90,8 @@ export class SnapshotBuilder {
     const root = this.root()
     const view = root.ownerDocument.defaultView
     let offset = options.cursor ?? 0
-    if (options.cursor === undefined) {
+    // Cursor 0 is the first page, which is a new snapshot: a model that passes it on its first look gets one instead of a stale-ref.
+    if (offset === 0) {
       this.refs.begin()
       const all = collect(root)
       // What the user can see comes first, so a long page is cut from the bottom, not the middle of the window.
@@ -105,6 +106,7 @@ export class SnapshotBuilder {
       if (isProtected(candidate.element)) states.push('protected')
       const value = valueOf(candidate.element, candidate.role)
       const level = candidate.role === 'heading' ? levelOf(candidate.element) : undefined
+      const options = optionsOf(candidate.element)
       return {
         ref: this.refs.issue(candidate.element, candidate.role, candidate.name),
         role: candidate.role,
@@ -113,6 +115,7 @@ export class SnapshotBuilder {
         states,
         ...(value === undefined ? {} : { value }),
         ...(level === undefined ? {} : { level }),
+        ...(options === undefined ? {} : { options }),
       }
     })
     const end = offset + page.length

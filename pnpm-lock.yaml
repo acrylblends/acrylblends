@@ -227,6 +227,33 @@ importers:
         specifier: 3.25.76
         version: 3.25.76
 
+  ide/acryl-app-context:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.0.4
+        version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.5)
+      '@deepseek-ai/dsh-tools':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(52b5a8ab481be2b3d891c22a71641755)
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      acryl-router:
+        specifier: workspace:*
+        version: link:../../plugins/acryl-router
+      acrylblends:
+        specifier: workspace:*
+        version: link:../../packages/cli
+      tsdown:
+        specifier: 0.23.0
+        version: 0.23.0(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.19.1)(jsdom@29.1.1)(msw@2.15.0(@types/node@24.19.1)(typescript@6.0.3))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(yaml@2.9.0))
+
   ide/acryl-app-shell:
     dependencies:
       '@acryl/ui':
@@ -257,6 +284,91 @@ importers:
       '@types/react-dom':
         specifier: ^18
         version: 18.3.7(@types/react@18.3.31)
+      jsdom:
+        specifier: 29.1.1
+        version: 29.1.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
+      tsdown:
+        specifier: 0.23.0
+        version: 0.23.0(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.19.1)(jsdom@29.1.1)(msw@2.15.0(@types/node@24.19.1)(typescript@6.0.3))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(yaml@2.9.0))
+
+  ide/acryl-blends-frame:
+    dependencies:
+      '@webboxes/plugin-hub':
+        specifier: 0.1.0
+        version: 0.1.0
+      acryl-app-shell:
+        specifier: workspace:*
+        version: link:../acryl-app-shell
+      acryl-loopback-http:
+        specifier: workspace:*
+        version: link:../acryl-loopback-http
+      acryl-versions:
+        specifier: workspace:*
+        version: link:../acryl-versions
+      acryl-workspace:
+        specifier: workspace:*
+        version: link:../acryl-workspace
+    devDependencies:
+      '@acryl/ui':
+        specifier: workspace:*
+        version: link:../acryl-ui
+      '@deepseek-ai/cordis':
+        specifier: 4.0.4
+        version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.5)
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: 1.0.5
+        version: 1.0.5(@deepseek-ai/cordis@4.0.4)(node-addon-require-builtin@0.1.9)
+      '@deepseek-ai/dsh-client-modules':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-client-ui-sidebar':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-client-ui-sidebar-right':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-llm':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@testing-library/dom':
+        specifier: ^10.4.1
+        version: 10.4.2
+      '@testing-library/react':
+        specifier: ^16.3.2
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      '@types/react':
+        specifier: ^18
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ^18
+        version: 18.3.7(@types/react@18.3.31)
+      acrylblends:
+        specifier: workspace:*
+        version: link:../../packages/cli
       jsdom:
         specifier: 29.1.1
         version: 29.1.1
@@ -612,6 +724,28 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@types/node@24.19.1)(jsdom@29.1.1)(msw@2.15.0(@types/node@24.19.1)(typescript@6.0.3))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(yaml@2.9.0))
 
+  ide/acryl-system-prompt:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: ~3.18.4
+        version: 3.18.4
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.0.4
+        version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.5)
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      tsdown:
+        specifier: 0.23.0
+        version: 0.23.0(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.19.1)(jsdom@29.1.1)(msw@2.15.0(@types/node@24.19.1)(typescript@6.0.3))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(yaml@2.9.0))
+
   ide/acryl-ui:
     dependencies:
       yaml:
@@ -681,6 +815,61 @@ importers:
       lightningcss:
         specifier: 1.32.0
         version: 1.32.0
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
+      tsdown:
+        specifier: 0.23.0
+        version: 0.23.0(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.19.1)(jsdom@29.1.1)(msw@2.15.0(@types/node@24.19.1)(typescript@6.0.3))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(yaml@2.9.0))
+
+  ide/acryl-versions:
+    dependencies:
+      acryl-loopback-http:
+        specifier: workspace:*
+        version: link:../acryl-loopback-http
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.0.4
+        version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.5)
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: 1.0.5
+        version: 1.0.5(@deepseek-ai/cordis@4.0.4)(node-addon-require-builtin@0.1.9)
+      '@deepseek-ai/dsh-client-modules':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@testing-library/dom':
+        specifier: ^10.4.1
+        version: 10.4.2
+      '@testing-library/react':
+        specifier: ^16.3.2
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      '@types/react':
+        specifier: ^18
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ^18
+        version: 18.3.7(@types/react@18.3.31)
+      acrylblends:
+        specifier: workspace:*
+        version: link:../../packages/cli
+      jsdom:
+        specifier: 29.1.1
+        version: 29.1.1
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -2906,6 +3095,11 @@ packages:
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
 
+  '@webboxes/app-persistence@0.1.0':
+    resolution: {integrity: sha512-O2ivsZ2W3hvnGizeXkTULbeY6B7xhPuHUmfTY7DjnC5sKbl9nZ/D2ac+ZCesoXPllXCI/VtHWVlpcL19sUB74g==}
+    engines: {node: ^22.19.0 || >=24.0.0}
+    hasBin: true
+
   '@webboxes/app-persistence@0.1.1':
     resolution: {integrity: sha512-evbzvtxDsd0mfaj/KboAT1sNjA9xl0VIWTrKxjVmKvWAYYD1LiYoZDFcFeA6g1tXNK2fGjTjGuKxGFwg69XEMw==}
     engines: {node: ^22.19.0 || >=24.0.0}
@@ -2915,6 +3109,10 @@ packages:
     resolution: {integrity: sha512-gL6PnxafWh/siXyo2e1bq7U7/eKBkuqJ9nd4B5KKFMd9gyvr63cAO96VtS/DSn9+8vrUidGkVbSLPZXJ7GkwMw==}
     engines: {node: ^22.19.0 || >=24.0.0}
     hasBin: true
+
+  '@webboxes/plugin-hub@0.1.0':
+    resolution: {integrity: sha512-liYeLpFXXcvgLC3YsuE2cQPITqSLzkbGrE8nSB4DhrA3q7F5+KVAtOkc9Fut1hPHDAanmg0F8Y9BOVkp32c0wg==}
+    engines: {node: ^22.19.0 || >=24.0.0}
 
   '@whatwg-node/fetch@0.9.23':
     resolution: {integrity: sha512-7xlqWel9JsmxahJnYVUj/LLxWcnA93DR4c9xlw3U814jWTiYalryiH1qToik1hOxweKKRLi4haXHM5ycRksPBA==}
@@ -6005,6 +6203,10 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.2.0
 
+  '@webboxes/app-persistence@0.1.0':
+    dependencies:
+      yaml: 2.9.0
+
   '@webboxes/app-persistence@0.1.1':
     dependencies:
       yaml: 2.9.0
@@ -6013,6 +6215,10 @@ snapshots:
     dependencies:
       ajv: 8.20.0
       yaml: 2.9.0
+
+  '@webboxes/plugin-hub@0.1.0':
+    dependencies:
+      '@webboxes/app-persistence': 0.1.0
 
   '@whatwg-node/fetch@0.9.23':
     dependencies:

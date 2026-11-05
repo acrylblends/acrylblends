@@ -15,6 +15,8 @@
     "acryl-plugin-admin": "plugin-admin",
     "acryl-support": "support",
     "acryl-loopback-http": "loopback-http",
-    "acryl-web": "web"
+    "acryl-web": "web",
+    "acryl-system-prompt": "system-prompt",
+    "acryl-app-context": "app-context"
   }
 }

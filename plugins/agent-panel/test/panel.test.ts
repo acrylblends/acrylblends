@@ -6,7 +6,7 @@ import { afterEach, test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import * as router from '../../acryl-router/src/index.ts'
 import * as state from '../../acryl-state/src/index.ts'
-import { agent, memory, model, tools } from '../../agent/index.ts'
+import { agent, memory, model, scripted, tools } from '../../agent/index.ts'
 import { builder } from '../../builder/index.ts'
 import { extensions } from '../../extensions/index.ts'
 import { instance, pinnedInstance } from '../../instance/index.ts'
@@ -137,7 +137,7 @@ test("only the app's own page gets a session, and the token is needed to ask", a
     await app.router.request('/api/agent-panel/session', { headers: OWN })
   ).json()) as { token: string; drivers: Array<{ name: string; kind: string }> }
   assert.deepEqual(session.drivers, [{ name: 'agent', kind: 'chat' }])
-  assert.match(session.token, /^[0-9a-f]{48}$/u)
+  assert.match(session.token, /^[\w-]{32}$/u)
   const ask = (headers: Record<string, string>, body: unknown) =>
     app.router.request('/api/agent-panel/ask', {
       method: 'POST',
@@ -421,4 +421,114 @@ test('a run belongs to the app: it goes on when the page that asked goes away, a
     ).status,
     403,
   )
+})
+
+test("as the Assistant every visitor is their own: their own cookie, token, run, Stop and replay, and only the app's agent", async () => {
+  const { app } = await boot({}, { panel: { assistant: true } })
+  // A tool that holds a run until it is released or stopped, so two runs can go at once.
+  const released = new Set<string>()
+  const stopped = new Set<string>()
+  app.tools.register('hold', {
+    description: 'holds the run',
+    run: async (input, options) => {
+      const who = String((input as { who?: string }).who)
+      while (!released.has(who)) {
+        if (options?.signal?.aborted) {
+          stopped.add(who)
+          throw options.signal.reason
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      return `released ${who}`
+    },
+  })
+  scripted(app.model)?.teach(({ question, step, toolResult }) =>
+    step === 0
+      ? { tool: 'hold', input: { who: question } }
+      : { text: `answer to ${question}: ${String(toolResult)}` },
+  )
+  // A plugin's driver is never offered to a visitor, and its endpoints refuse them.
+  app.drivers.register({
+    kind: 'chat',
+    name: 'coder',
+    async *start() {
+      yield { event: 'text', data: { text: 'coding' } }
+    },
+  })
+
+  const visit = async () => {
+    const response = await app.router.request('/api/agent-panel/session', { headers: OWN })
+    const cookie = (response.headers.get('set-cookie') ?? '').split(';')[0] ?? ''
+    const session = (await response.json()) as { token: string; drivers: Array<{ name: string }> }
+    const headers = {
+      'content-type': 'application/json',
+      ...OWN,
+      cookie,
+      'x-agent-panel-token': session.token,
+    }
+    return { cookie, token: session.token, drivers: session.drivers, headers }
+  }
+  const a = await visit()
+  const b = await visit()
+  assert.match(a.cookie, /^acryl-visitor=[\w-]+$/u)
+  assert.notEqual(a.cookie, b.cookie)
+  assert.notEqual(a.token, b.token)
+  assert.deepEqual(
+    a.drivers.map((driver) => driver.name),
+    ['agent'],
+  )
+  assert.equal(app.drivers.authorized(new Headers(a.headers)), false)
+  const ask = (who: typeof a, message: string, driver = 'agent') =>
+    app.router.request('/api/agent-panel/ask', {
+      method: 'POST',
+      headers: who.headers,
+      body: JSON.stringify({ message, driver }),
+    })
+  assert.equal((await ask(a, 'code something', 'coder')).status, 400)
+
+  // A asks; B asks while A's run goes, and is not refused for it.
+  const askedA = await ask(a, 'A')
+  assert.equal(askedA.status, 200)
+  const askedB = await ask(b, 'B')
+  assert.equal(askedB.status, 200)
+  // A token works with its own cookie only.
+  assert.equal(
+    (
+      await app.router.request('/api/agent-panel/run', {
+        headers: { ...b.headers, 'x-agent-panel-token': a.token },
+      })
+    ).status,
+    403,
+  )
+  // B's Stop stops B's run, not A's.
+  assert.equal(
+    (await app.router.request('/api/agent-panel/stop', { method: 'POST', headers: b.headers }))
+      .status,
+    200,
+  )
+  const eventsB = await eventsOf(askedB)
+  // The run ends cancelled at once; the held tool sees its signal at its next check.
+  for (let tries = 0; tries < 100 && !stopped.has('B'); tries++)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  assert.equal(stopped.has('B'), true)
+  assert.equal(stopped.has('A'), false)
+  assert.equal(
+    eventsB.some((e) => String(e.data.text ?? '').includes('answer to')),
+    false,
+  )
+  released.add('A')
+  const eventsA = await eventsOf(askedA)
+  assert.equal(
+    eventsA.some((e) => e.data.text === 'answer to A: released A'),
+    true,
+  )
+  // Each replay is the visitor's own latest run.
+  const replayA = await eventsOf(
+    await app.router.request('/api/agent-panel/run', { headers: a.headers }),
+  )
+  const replayB = await eventsOf(
+    await app.router.request('/api/agent-panel/run', { headers: b.headers }),
+  )
+  assert.equal(replayA[0]?.data.message, 'A')
+  assert.equal(replayB[0]?.data.message, 'B')
 })

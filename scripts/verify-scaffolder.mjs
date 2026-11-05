@@ -823,7 +823,9 @@ spec:
         env: { ...process.env, NODE_ENV: 'production', ACRYL_PRODUCTION_KEEP: 'chat' },
       },
     )
-    if (!/^200 .*javascript/.test(production.trim()))
+    // The probe prints its answer last: the app's plugins may log as they start (extensions says what it found).
+    const served = production.trim().split('\n').at(-1) ?? ''
+    if (!/^200 .*javascript/.test(served))
       fail(`${kind}: production serving of dist/client answered ${production}`)
     // The door: the running app writes `.acryl/bin/acryl` and answers `brief`; for notes a real browser is opened and the signed-in page is read through `look`.
     {

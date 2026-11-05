@@ -24,10 +24,13 @@ spec:
       name: tasks
       config:
         store: "{{parameters.taskStore}}"
+    # The model the agent asks at each step: a scripted offline one until a provider key is set.
     - id: model
       name: model
+    # The tools the agent can call, each with what it does and the input it takes.
     - id: tools
       name: tools
+    # Long-term memory for the agent.
     - id: memory
       name: memory
     - id: agent
@@ -51,6 +54,7 @@ spec:
     # The panel: a chat button on every page in development (the app's own agent, or Codex, Claude or pi started in this folder). It starts nothing in production.
     - id: agent-panel
       name: agent-panel
+    # The app's own pages and API.
     - id: routes
       name: routes
     - id: server
