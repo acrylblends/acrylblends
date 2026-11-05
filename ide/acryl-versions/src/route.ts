@@ -14,7 +14,10 @@ import {
   VERSIONS_RESTORE_PATH,
   VERSIONS_SAVE_PATH,
   VERSIONS_SHARE_PATH,
+  VERSIONS_SHARE_PLAN_PATH,
   VERSIONS_API_PREFIX,
+  parseSharePlan,
+  type VersionsSharePlan,
 } from './contract.ts'
 import { VersionsGitError } from './git/errors.ts'
 import type { Versions } from './versions.ts'
@@ -44,6 +47,7 @@ interface RestoreRequest {
 
 interface ShareRequest {
   readonly path: string
+  readonly confirmed: VersionsSharePlan
 }
 
 function parseSave(body: Record<string, unknown>): SaveRequest | undefined {
@@ -69,9 +73,16 @@ function parseRestore(body: Record<string, unknown>): RestoreRequest | undefined
     : { path: body.path, hash: body.hash, message: body.message }
 }
 
-function parseShare(body: Record<string, unknown>): ShareRequest | undefined {
+function parseSharePlanRequest(body: Record<string, unknown>): { path: string } | undefined {
   if (Object.keys(body).length !== 1 || typeof body.path !== 'string' || body.path === '') return undefined
   return { path: body.path }
+}
+
+/** A share carries the plan the person confirmed; a request without one is refused, so nothing is pushed in one call. */
+function parseShare(body: Record<string, unknown>): ShareRequest | undefined {
+  if (Object.keys(body).length !== 2 || typeof body.path !== 'string' || body.path === '') return undefined
+  const confirmed = parseSharePlan(body.confirmed)
+  return confirmed === undefined ? undefined : { path: body.path, confirmed }
 }
 
 /**
@@ -113,7 +124,9 @@ export function versionsRoutes(versions: Versions, report: ReportError = () => {
     input => versions.save(input.path, input.message)))
   app.post(VERSIONS_RESTORE_PATH, ownPage, jsonBody(), write('restore a version', 'invalid restore request', parseRestore,
     input => versions.restore(input.path, input.hash, input.message)))
-  app.post(VERSIONS_SHARE_PATH, ownPage, jsonBody(), write('share the branch', 'invalid share request', parseShare,
-    input => versions.share(input.path)))
+  app.post(VERSIONS_SHARE_PLAN_PATH, ownPage, jsonBody(), write('plan a share', 'invalid share plan request', parseSharePlanRequest,
+    input => versions.planShare(input.path)))
+  app.post(VERSIONS_SHARE_PATH, ownPage, jsonBody(), write('share the branch', 'a share is sent only after the person confirms its plan', parseShare,
+    input => versions.share(input.path, input.confirmed)))
   return privateApi(VERSIONS_API_PREFIX, app)
 }

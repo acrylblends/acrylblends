@@ -6,11 +6,14 @@ import {
   VERSIONS_RESTORE_PATH,
   VERSIONS_SAVE_PATH,
   VERSIONS_SHARE_PATH,
+  VERSIONS_SHARE_PLAN_PATH,
+  parseSharePlan,
   type VersionsCommitView,
   type VersionsEntry,
   type VersionsLogView,
   type VersionsRestoreView,
   type VersionsSaveView,
+  type VersionsSharePlan,
   type VersionsShareView,
 } from '../contract.ts'
 
@@ -20,7 +23,10 @@ export interface VersionsApi {
   save(path: string, message: string): Promise<VersionsSaveView>
   /** Bring a version back as a new commit; `message` names that commit (else the Host's "Restore <id>"). */
   restore(path: string, hash: string, message?: string): Promise<VersionsRestoreView>
-  share(path: string): Promise<VersionsShareView>
+  /** What a share would send, without sending anything. */
+  planShare(path: string): Promise<VersionsSharePlan>
+  /** Send the plan the person confirmed; the Host sends nothing when it changed meanwhile. */
+  share(path: string, confirmed: VersionsSharePlan): Promise<VersionsShareView>
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -137,6 +143,7 @@ export function createVersionsApi(fetchImpl: FetchLike = (input, init) => fetch(
     },
     save: (path, message) => post(VERSIONS_SAVE_PATH, { path, message }, parseSave),
     restore: (path, hash, message) => post(VERSIONS_RESTORE_PATH, message === undefined ? { path, hash } : { path, hash, message }, parseRestore),
-    share: path => post(VERSIONS_SHARE_PATH, { path }, parseShare),
+    planShare: path => post(VERSIONS_SHARE_PLAN_PATH, { path }, parseSharePlan),
+    share: (path, confirmed) => post(VERSIONS_SHARE_PATH, { path, confirmed }, parseShare),
   }
 }
