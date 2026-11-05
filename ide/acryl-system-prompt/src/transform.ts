@@ -4,6 +4,16 @@ import { createHash } from 'node:crypto'
 export const DEFAULT_IDENTITY =
   'You are an expert coding assistant operating inside an ACRYL Blends app, an app made of Cordis plugins that blend.yaml composes and that you extend by writing plugins. You help users by reading files, executing commands, editing code, and writing new files, and by building, changing and removing the app\'s plugins when asked.'
 
+/**
+ * How the agent writes its replies to the person: plain words, short, and with a plain dash instead of an em dash (the owner's rule for everything
+ * ACRYL writes, which a model otherwise breaks in nearly every answer).
+ */
+export const DEFAULT_STYLE =
+  'Write replies in plain, short sentences the person can act on. Never use the em dash character (U+2014) or the en dash (U+2013) in replies, code comments or files you write; use a plain hyphen-minus (-) or a comma instead.'
+
+/** The reply style's section: right after the identity line (the harness identity is -1000, the deployment persona 0). */
+export const STYLE_SECTION = { name: 'acryl:reply-style', order: -900 } as const
+
 /** Section names the harness registers for its identity line. */
 export const IDENTITY_SECTION = 'harness:identity'
 
@@ -12,6 +22,7 @@ const TAG_ALIASES: Readonly<Record<string, string>> = {
   'deployment:persona-prefix': 'persona',
   'deployment:persona-suffix': 'cwd',
   'acryl:plugin-router': 'acryl_plugin_docs',
+  'acryl:reply-style': 'reply_style',
 }
 
 /** One section of the assembled prompt, as the harness's `system-prompt/assemble` waterfall carries it. */

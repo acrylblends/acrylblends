@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import * as plugin from '../src/index.ts'
-import { DEFAULT_IDENTITY, normalizeVolatile, shapeSections, tagName, upstreamSnapshot } from '../src/transform.ts'
+import { DEFAULT_IDENTITY, DEFAULT_STYLE, normalizeVolatile, shapeSections, tagName, upstreamSnapshot } from '../src/transform.ts'
 
 const sections = [
   { name: 'harness:identity', text: 'You are an AI agent powered by DeepSeek Harness.' },
@@ -66,8 +66,14 @@ describe('the prompt shape', () => {
 describe('the plugin', () => {
   it('shapes the assembled prompt on the waterfall and lets go when disposed', async () => {
     const root = new Context()
-    root.provide('systemPrompt', {})
-    const fiber = root.plugin(plugin, { identity: 'You build this app.', tagSections: true, dropEmpty: true })
+    const contributed: { name: string; order: number; text: string }[] = []
+    root.provide('systemPrompt', {
+      section(section: { name: string; order: number; text: string }) {
+        contributed.push(section)
+        return () => { contributed.splice(contributed.indexOf(section), 1) }
+      },
+    })
+    const fiber = root.plugin(plugin, { identity: 'You build this app.', style: DEFAULT_STYLE, tagSections: true, dropEmpty: true })
     await fiber.await()
     const assemble = () => (root as unknown as { waterfall(name: string, ...args: unknown[]): Promise<{ sections: { name: string; text: string }[] }> })
       .waterfall('system-prompt/assemble', {}, {}, async () => ({ sections }))
@@ -76,5 +82,21 @@ describe('the plugin', () => {
     expect((root as unknown as { acrylSystemPrompt: { lastUpstream(): unknown[] } }).acrylSystemPrompt.lastUpstream().length).toBe(5)
     await fiber.dispose()
     expect((await assemble()).sections).toBe(sections)
+    expect(contributed).toEqual([])
+  })
+
+  it('asks for replies without an em dash, right after the identity, and leaves the section out when the style is empty', async () => {
+    expect(DEFAULT_STYLE).toMatch(/Never use the em dash/)
+    expect(DEFAULT_STYLE).not.toMatch(/[\u2013\u2014]/u)
+    expect(tagName('acryl:reply-style')).toBe('reply_style')
+    for (const style of [DEFAULT_STYLE, '']) {
+      const root = new Context()
+      const contributed: { name: string; order: number; text: string }[] = []
+      root.provide('systemPrompt', { section: (section: { name: string; order: number; text: string }) => { contributed.push(section); return () => {} } })
+      const fiber = root.plugin(plugin, { identity: 'x', style, tagSections: true, dropEmpty: true })
+      await fiber.await()
+      expect(contributed).toEqual(style === '' ? [] : [{ name: 'acryl:reply-style', order: -900, text: DEFAULT_STYLE }])
+      await fiber.dispose()
+    }
   })
 })
