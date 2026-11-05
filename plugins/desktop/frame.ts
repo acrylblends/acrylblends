@@ -169,13 +169,27 @@ export function startFrameHost(
   platform: NodeJS.Platform = process.platform,
   launch: FrameHostLaunch = {},
 ): FrameHost {
-  const command = launch.runtime === undefined
-    ? hostCommand(env, platform)
-    : { file: launch.runtime, args: ['--import', './plugins/acryl-node-server/src/register.ts', join(root, HOST_SCRIPT)], shell: false }
+  const command =
+    launch.runtime === undefined
+      ? hostCommand(env, platform)
+      : {
+          file: launch.runtime,
+          args: [
+            '--import',
+            './plugins/acryl-node-server/src/register.ts',
+            join(root, HOST_SCRIPT),
+          ],
+          shell: false,
+        }
   // The host leads its own process group on macOS and Linux, so a stop reaches npm, the host and every terminal it runs; Windows stops the tree with taskkill.
   const child: ChildProcess = spawn(command.file, command.args, {
     cwd: root,
-    env: { ...env, ...(launch.runtime === undefined ? { ELECTRON_RUN_AS_NODE: undefined } : { ELECTRON_RUN_AS_NODE: '1' }) },
+    env: {
+      ...env,
+      ...(launch.runtime === undefined
+        ? { ELECTRON_RUN_AS_NODE: undefined }
+        : { ELECTRON_RUN_AS_NODE: '1' }),
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: command.shell,
     detached: platform !== 'win32',

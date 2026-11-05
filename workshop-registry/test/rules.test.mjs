@@ -220,16 +220,21 @@ describe('make-entry', () => {
       'apiVersion: blends.acryl.dev/v1alpha1\nkind: Blueprint\nmetadata:\n  id: acrylblends.board\n  name: board\n  version: 0.3.0\nspec:\n  runtime: cordis\n  rows:\n    - id: extensions\n      name: extensions\n',
     )
     mkdirSync(join(app, 'plugins', 'notes2', 'lib'), { recursive: true })
-    writeFileSync(join(app, 'plugins', 'notes2', 'index.ts'), "export const name = 'notes2'\nexport function apply() {}\n")
+    writeFileSync(
+      join(app, 'plugins', 'notes2', 'index.ts'),
+      "export const name = 'notes2'\nexport function apply() {}\n",
+    )
     writeFileSync(join(app, 'plugins', 'notes2', 'lib', 'store.ts'), 'export const notes = []\n')
     const { captureApp } = await import(join(repo, '..', 'plugins', 'manifest', 'snapshot.ts'))
     captureApp(app)
     return app
   }
   const make = (registry, app, id) =>
-    spawnSync(process.execPath, [join(registry, 'scripts', 'make-entry.mjs'), app, id], { encoding: 'utf8' })
+    spawnSync(process.execPath, [join(registry, 'scripts', 'make-entry.mjs'), app, id], {
+      encoding: 'utf8',
+    })
 
-  test('keeps the app\'s lock true to the entry: the origin takes the new id, version and blend.yaml digest', async () => {
+  test("keeps the app's lock true to the entry: the origin takes the new id, version and blend.yaml digest", async () => {
     const registry = fork()
     const app = await capturedApp()
     const before = JSON.parse(readFileSync(join(app, 'blend.lock.json'), 'utf8'))
@@ -241,7 +246,9 @@ describe('make-entry', () => {
       ...before.origin,
       id: 'octo.board',
       version: '0.1.0',
-      digest: createHash('sha256').update(readFileSync(join(entry, 'blend.yaml'))).digest('hex'),
+      digest: createHash('sha256')
+        .update(readFileSync(join(entry, 'blend.yaml')))
+        .digest('hex'),
     })
     assert.deepEqual(lock.modules, before.modules)
   })
@@ -249,7 +256,10 @@ describe('make-entry', () => {
   test('refuses a snapshot changed since the last capture, in one line, and copies nothing', async () => {
     const registry = fork()
     const app = await capturedApp()
-    writeFileSync(join(app, 'plugins', 'notes2', 'lib', 'store.ts'), 'export const notes = ["edited"]\n')
+    writeFileSync(
+      join(app, 'plugins', 'notes2', 'lib', 'store.ts'),
+      'export const notes = ["edited"]\n',
+    )
     const plugin = make(registry, app, 'octo.board')
     assert.equal(plugin.status, 1)
     assert.equal(
@@ -259,8 +269,14 @@ describe('make-entry', () => {
     assert.equal(existsSync(join(registry, 'blends')), false)
     const { captureApp } = await import(join(repo, '..', 'plugins', 'manifest', 'snapshot.ts'))
     captureApp(app)
-    writeFileSync(join(app, 'blend.yaml'), `${readFileSync(join(app, 'blend.yaml'), 'utf8')}# edited\n`)
-    assert.match(make(registry, app, 'octo.board').stderr, /^blend\.yaml changed since the last capture/)
+    writeFileSync(
+      join(app, 'blend.yaml'),
+      `${readFileSync(join(app, 'blend.yaml'), 'utf8')}# edited\n`,
+    )
+    assert.match(
+      make(registry, app, 'octo.board').stderr,
+      /^blend\.yaml changed since the last capture/,
+    )
     captureApp(app)
     assert.equal(make(registry, app, 'octo.board').status, 0)
   })

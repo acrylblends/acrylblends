@@ -9,7 +9,18 @@
  * read-only; the packaged app copies it into the person's Documents on first start (plugins/desktop/product.ts).
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -25,7 +36,10 @@ const work = join(root, 'dist', 'blank-mac-work')
 const app = join(work, 'app')
 const log = (line) => console.log(`pack-blank-mac: ${line}`)
 
-if (!existsSync(join(root, 'ide', 'acryl-blends-frame', 'lib')) || !existsSync(join(root, 'packages', 'cli', 'dist')))
+if (
+  !existsSync(join(root, 'ide', 'acryl-blends-frame', 'lib')) ||
+  !existsSync(join(root, 'packages', 'cli', 'dist'))
+)
   throw new Error('the checkout is not built: run `corepack pnpm run build` first')
 
 // 1. A Blank app with the desktop shell, made by this checkout's CLI, exactly as a person would make one.
@@ -35,17 +49,37 @@ const { frameSpecsEnv } = await import(join(root, 'scripts/lib/ide-specs.mjs'))
 const cliVersion = JSON.parse(readFileSync(join(root, 'packages/cli/package.json'), 'utf8')).version
 const init = spawnSync(
   process.execPath,
-  [join(root, 'packages/cli/bin/acrylblends.js'), 'init', app, '--name', 'acryl-blends-blank', '--template', 'blank', '--desktop', '--yes', '--no-next'],
+  [
+    join(root, 'packages/cli/bin/acrylblends.js'),
+    'init',
+    app,
+    '--name',
+    'acryl-blends-blank',
+    '--template',
+    'blank',
+    '--desktop',
+    '--yes',
+    '--no-next',
+  ],
   {
     stdio: 'inherit',
-    env: { ...process.env, ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, { dshVersion: '0.2.0-rc.2', frameworkVersion: `^${cliVersion}` }) },
+    env: {
+      ...process.env,
+      ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, {
+        dshVersion: '0.2.0-rc.2',
+        frameworkVersion: `^${cliVersion}`,
+      }),
+    },
   },
 )
 if (init.status !== 0) throw new Error(`init failed (${String(init.status)})`)
 log(`scaffolded ${app}`)
 
 // 2. Its packages, as npm installs them.
-const install = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: app, stdio: 'inherit' })
+const install = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], {
+  cwd: app,
+  stdio: 'inherit',
+})
 if (install.status !== 0) throw new Error(`npm install failed (${String(install.status)})`)
 
 // 3. npm links the workspace packages (file: specs) instead of copying them, and those links point at this checkout: a bundle must carry the files.
@@ -88,7 +122,8 @@ const packagesIn = (dir) => {
     if (entry.startsWith('@')) {
       for (const scoped of readdirSync(path)) {
         const scopedPath = join(path, scoped)
-        if (lstatSync(scopedPath).isDirectory()) found.push({ name: `${entry}/${scoped}`, path: scopedPath })
+        if (lstatSync(scopedPath).isDirectory())
+          found.push({ name: `${entry}/${scoped}`, path: scopedPath })
       }
     } else found.push({ name: entry, path })
   }
@@ -100,7 +135,10 @@ for (let round = 1; round <= 4; round += 1) {
     const manifestPath = join(pkg.path, 'package.json')
     if (!existsSync(manifestPath)) continue
     const own = JSON.parse(readFileSync(manifestPath, 'utf8'))
-    for (const [dependency, range] of Object.entries({ ...own.dependencies, ...own.peerDependencies })) {
+    for (const [dependency, range] of Object.entries({
+      ...own.dependencies,
+      ...own.peerDependencies,
+    })) {
       const wantedRange = String(range)
       if (wantedRange.startsWith('workspace:')) continue
       if (missing.has(dependency)) continue
@@ -111,8 +149,13 @@ for (let round = 1; round <= 4; round += 1) {
   if (missing.size === 0) break
   const specs = [...missing].map(([dependency, range]) => `${dependency}@${range}`)
   log(`round ${String(round)}: installing ${String(specs.length)} dependencies the app was missing`)
-  const extra = spawnSync('npm', ['install', '--save-exact', '--no-audit', '--no-fund', '--loglevel=error', ...specs], { cwd: app, stdio: 'inherit' })
-  if (extra.status !== 0) throw new Error(`installing missing dependencies failed (${String(extra.status)})`)
+  const extra = spawnSync(
+    'npm',
+    ['install', '--save-exact', '--no-audit', '--no-fund', '--loglevel=error', ...specs],
+    { cwd: app, stdio: 'inherit' },
+  )
+  if (extra.status !== 0)
+    throw new Error(`installing missing dependencies failed (${String(extra.status)})`)
 }
 
 // 3c. The packager keeps only what the app declares, and a dependency that arrived transitively (an optional one, say) is still needed at run time: every
@@ -129,7 +172,10 @@ for (const pkg of packagesIn(modules)) {
 const before = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
 const merged = { ...before.dependencies, ...declared }
 JSON.parse(JSON.stringify(before)) // the manifest is rewritten below with the product fields; dependencies travel with it
-writeFileSync(join(app, 'package.json'), `${JSON.stringify({ ...before, dependencies: merged }, null, 2)}\n`)
+writeFileSync(
+  join(app, 'package.json'),
+  `${JSON.stringify({ ...before, dependencies: merged }, null, 2)}\n`,
+)
 log(`declared ${String(Object.keys(declared).length)} installed packages`)
 
 // 4. The product marker, and what Electron needs to find its main process and the packager its identity.
@@ -142,7 +188,7 @@ manifest.build = {
   productName: 'ACRYL Blends Blank',
   asar: false,
   npmRebuild: false,
-  files: ['**/*', '!dist/**', '!**/.acrylblends/**', '!**/*.map', ],
+  files: ['**/*', '!dist/**', '!**/.acrylblends/**', '!**/*.map'],
   directories: { output: 'dist' },
   mac: {
     target: [{ target: 'dmg', arch: [arch] }],
@@ -153,7 +199,10 @@ manifest.build = {
   dmg: { title: 'ACRYL Blends Blank' },
 }
 writeFileSync(join(app, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-writeFileSync(join(app, 'product.json'), `${JSON.stringify({ appFolder: 'ACRYL Blends Blank' }, null, 2)}\n`)
+writeFileSync(
+  join(app, 'product.json'),
+  `${JSON.stringify({ appFolder: 'ACRYL Blends Blank' }, null, 2)}\n`,
+)
 
 // 4b. The packager drops or rewrites files the app owns: `.git` and `.gitignore` never enter a bundle (electron-builder excludes those names), and the
 // manifest it ships is filtered (the scripts go). Each travels under a plain carrier name and the first start writes it back as itself
@@ -164,37 +213,70 @@ cpSync(join(app, 'package.json'), join(app, 'package-product.json'))
 const exclude = join(app, '.git', 'info', 'exclude')
 const excluded = existsSync(exclude) ? readFileSync(exclude, 'utf8') : ''
 const productNames = ['product.json', 'gitignore-product', 'package-product.json', 'template-git/']
-const missingNames = productNames.filter((name) => !excluded.split('\n').map((line) => line.trim()).includes(name))
+const missingNames = productNames.filter(
+  (name) =>
+    !excluded
+      .split('\n')
+      .map((line) => line.trim())
+      .includes(name),
+)
 if (missingNames.length > 0) {
   mkdirSync(join(app, '.git', 'info'), { recursive: true })
-  appendFileSync(exclude, `${excluded === '' || excluded.endsWith('\n') ? '' : '\n'}${missingNames.join('\n')}\n`)
+  appendFileSync(
+    exclude,
+    `${excluded === '' || excluded.endsWith('\n') ? '' : '\n'}${missingNames.join('\n')}\n`,
+  )
 }
 // The manifest the packer wrote (entry point, declared dependencies, build fields) becomes the app folder's own history, so the copy starts clean instead of
 // showing the packaging as an unsaved change. The identity is the product's, not whatever the build machine configures.
-const gitIdentity = ['-c', 'user.name=ACRYL Blends', '-c', 'user.email=build@acrylblends.dev', '-c', 'commit.gpgsign=false']
-if (execFileSync('git', ['status', '--porcelain', '--', 'package.json'], { cwd: app, encoding: 'utf8' }).trim() !== '') {
+const gitIdentity = [
+  '-c',
+  'user.name=ACRYL Blends',
+  '-c',
+  'user.email=build@acrylblends.dev',
+  '-c',
+  'commit.gpgsign=false',
+]
+if (
+  execFileSync('git', ['status', '--porcelain', '--', 'package.json'], {
+    cwd: app,
+    encoding: 'utf8',
+  }).trim() !== ''
+) {
   execFileSync('git', [...gitIdentity, 'add', 'package.json'], { cwd: app, stdio: 'inherit' })
-  execFileSync('git', [...gitIdentity, 'commit', '-m', 'product: the manifest the packaged app carries'], { cwd: app, stdio: 'inherit' })
+  execFileSync(
+    'git',
+    [...gitIdentity, 'commit', '-m', 'product: the manifest the packaged app carries'],
+    { cwd: app, stdio: 'inherit' },
+  )
 }
 // The scaffold's repository travels as `template-git` (the packager drops `.git`), with that commit in it.
-if (existsSync(join(app, '.git'))) rmSync(join(app, 'template-git'), { recursive: true, force: true })
-if (existsSync(join(app, '.git'))) cpSync(join(app, '.git'), join(app, 'template-git'), { recursive: true })
+if (existsSync(join(app, '.git')))
+  rmSync(join(app, 'template-git'), { recursive: true, force: true })
+if (existsSync(join(app, '.git')))
+  cpSync(join(app, '.git'), join(app, 'template-git'), { recursive: true })
 
 // 5. Package it. The builder is not a dependency of this repo yet; a checkout of ACRYL has one, and npx fetches one otherwise.
 const builder = process.env.ELECTRON_BUILDER
 const command = builder === undefined ? 'npx' : process.execPath
-const builderArgs = builder !== undefined
-  ? [builder, '--mac', 'dmg', `--${arch}`, '--publish', 'never']
-  : ['--yes', 'electron-builder@26.15.7', '--mac', 'dmg', `--${arch}`, '--publish', 'never']
+const builderArgs =
+  builder !== undefined
+    ? [builder, '--mac', 'dmg', `--${arch}`, '--publish', 'never']
+    : ['--yes', 'electron-builder@26.15.7', '--mac', 'dmg', `--${arch}`, '--publish', 'never']
 log(`packaging with ${builder ?? 'npx electron-builder@26.15.7'}`)
-const pack = spawnSync(command, builderArgs, { cwd: app, stdio: 'inherit', env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' } })
+const pack = spawnSync(command, builderArgs, {
+  cwd: app,
+  stdio: 'inherit',
+  env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' },
+})
 if (pack.status !== 0) throw new Error(`electron-builder failed (${String(pack.status)})`)
 
 // 6. The DMG, under the name the person is given.
 const produced = readdirSync(join(app, 'dist')).filter((file) => file.endsWith('.dmg'))
 if (produced.length === 0) throw new Error('electron-builder wrote no .dmg')
 mkdirSync(out, { recursive: true })
-for (const file of readdirSync(out)) if (file.endsWith('.dmg')) rmSync(join(out, file), { force: true })
+for (const file of readdirSync(out))
+  if (file.endsWith('.dmg')) rmSync(join(out, file), { force: true })
 const target = join(out, 'ACRYL-Blends-Blank-arm64.dmg')
 cpSync(join(app, 'dist', produced[0]), target)
 log(`done: ${target} (${String(Math.round(statSync(target).size / 1024 / 1024))} MB)`)

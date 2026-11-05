@@ -42,9 +42,10 @@ import { cascade, windowOptions, windowSize } from './window.ts'
 const bundledRoot = fileURLToPath(new URL('../..', import.meta.url))
 // A product build runs on the copy it made in the person's Documents the first time it started: the bundle is read-only, and the app folder is theirs.
 const documents = process.env.ACRYLBLENDS_DOCUMENTS?.trim() || app.getPath('documents')
-const projectRoot = app.isPackaged && readProduct(bundledRoot) !== undefined
-  ? firstRunRoot(bundledRoot, documents)
-  : bundledRoot
+const projectRoot =
+  app.isPackaged && readProduct(bundledRoot) !== undefined
+    ? firstRunRoot(bundledRoot, documents)
+    : bundledRoot
 const chosen = selectInstance({ projectRoot, env: process.env })
 
 /** Where the window opens: `acrylblends.desktopPath` in package.json (the todo template sets `/todo`), else the root. */
