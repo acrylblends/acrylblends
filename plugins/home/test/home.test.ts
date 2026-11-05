@@ -27,6 +27,9 @@ test('a widget is on the page while its plugin runs and leaves with it', async (
   // The widgets come with the frame's card look, once, before them.
   assert.ok(page.startsWith(`<style data-home-widgets>${home.WIDGET_STYLES}</style>`))
   assert.match(home.WIDGET_STYLES, /^\.widget\{/)
+  // A row's own button sits at the right at its size, after a text node or an element alike, never stretched.
+  assert.match(home.WIDGET_STYLES, /\.widget li>:last-child:is\(button,form\)\{margin-left:auto\}/)
+  assert.doesNotMatch(home.WIDGET_STYLES, /li>:first-child\{flex:1\}/)
   for (const rule of home.WIDGET_STYLES.split('\n'))
     assert.ok(rule.startsWith('.widget') || rule.startsWith('@media'), rule)
 

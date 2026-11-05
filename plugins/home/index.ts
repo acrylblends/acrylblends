@@ -80,7 +80,7 @@ export const WIDGET_STYLES = `.widget{--widget-bg:#fff;--widget-surface:#f7f7f9;
 .widget ul,.widget ol{list-style:none;margin:0 0 12px;padding:0}
 .widget li{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--widget-border);overflow-wrap:anywhere}
 .widget li:first-child{border-top:0}
-.widget li>:first-child{flex:1}
+.widget li>:last-child:is(button,form){margin-left:auto}
 .widget a{color:var(--widget-accent);text-decoration:none}
 .widget a:hover{text-decoration:underline}
 .widget form{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
@@ -89,7 +89,7 @@ export const WIDGET_STYLES = `.widget{--widget-bg:#fff;--widget-surface:#f7f7f9;
 .widget input:focus,.widget textarea:focus,.widget select:focus{outline:2px solid var(--widget-accent-dim);border-color:var(--widget-accent)}
 .widget button{padding:7px 14px;border:0;border-radius:8px;background:var(--widget-accent);color:#fff;font:inherit;font-weight:500;cursor:pointer}
 .widget button:hover{filter:brightness(1.1)}
-.widget li button{padding:3px 10px;border:1px solid var(--widget-border);background:transparent;color:var(--widget-dim);font-weight:400}
+.widget li button{flex:none;padding:3px 10px;border:1px solid var(--widget-border);background:transparent;color:var(--widget-dim);font-weight:400}
 .widget output{font-weight:600;font-variant-numeric:tabular-nums}
 .widget [role=alert]{color:#d9480f}`
 
