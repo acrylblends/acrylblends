@@ -28,6 +28,16 @@ describe('generationUrl', () => {
   it('does not add a second query', () => {
     expect(generationUrl('file:///app/src/a.ts?gen=2', scopes, 3)).toBe('file:///app/src/a.ts?gen=2')
   })
+
+  it('gives the app\'s own plugins the generation, and keeps the library copies single instances', () => {
+    const plugins = { scope: 'file:///app/plugins/', library: new Set(['acryl-router', 'home']) }
+    expect(generationUrl('file:///app/plugins/notes/index.ts', scopes, 2, plugins)).toBe('file:///app/plugins/notes/index.ts?gen=2')
+    expect(generationUrl('file:///app/plugins/notes/lib/store.ts', scopes, 2, plugins)).toBe('file:///app/plugins/notes/lib/store.ts?gen=2')
+    expect(generationUrl('file:///app/plugins/acryl-router/src/index.ts', scopes, 2, plugins)).toBe('file:///app/plugins/acryl-router/src/index.ts')
+    expect(generationUrl('file:///app/plugins/home/index.ts', scopes, 2, plugins)).toBe('file:///app/plugins/home/index.ts')
+    expect(generationUrl('file:///app/plugins/library.json', scopes, 2, plugins)).toBe('file:///app/plugins/library.json')
+    expect(generationUrl('file:///app/plugins/notes/index.ts', scopes, 0, plugins)).toBe('file:///app/plugins/notes/index.ts')
+  })
 })
 
 describe('the hook in a real process', () => {

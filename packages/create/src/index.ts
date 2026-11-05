@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import {
   copyFileSync,
   cpSync,
@@ -19,16 +19,20 @@ import { findSecrets } from '@webboxes/app-persistence'
 import { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST } from './names'
 import {
   DEFAULT_REGISTRY,
+  manifestName,
+  ownLock,
   ownManifest,
   pickEntry,
   REGISTRY_ID,
   type RegistryEntry,
   readRegistry,
+  renameApp,
 } from './registry'
 import {
   type Fetchers,
   fetchSource,
   LIFECYCLE,
+  parseRegistrySource,
   parseSource,
   readManifest,
   realFetchers,
@@ -313,6 +317,23 @@ function textFiles(root: string): { path: string; text: string }[] {
 }
 
 /**
+ * A new app is a git repository from the start, as `acrylblends init` makes it: the frame's versions, Files and Changes work on it, and its first
+ * version is the app as created. A folder that already is a repository, or a machine without git, is left alone.
+ */
+export function startRepository(directory: string): void {
+  if (existsSync(join(directory, '.git'))) return
+  const run = (args: string[]) =>
+    spawnSync('git', args, { cwd: directory, stdio: 'ignore', windowsHide: true }).status === 0
+  if (!run(['init', '-q'])) return
+  if (!run(['add', '-A'])) return
+  // A machine without a git identity still gets the first commit: this one is the scaffolder's, and later commits use the person's own identity.
+  const identity = run(['config', 'user.email'])
+    ? []
+    : ['-c', 'user.name=acrylblends', '-c', 'user.email=scaffold@acrylblends.invalid']
+  run([...identity, 'commit', '-q', '-m', 'Initial commit from acrylblends'])
+}
+
+/**
  * Create an app from a template source (`github:`, `@scope/name`, a packed tarball). The source is fetched and unpacked into a scratch folder, checked
  * (manifest, secrets), and only then copied to the target; nothing in it is installed or run unless `--install`, which lists the scripts first.
  */
@@ -333,7 +354,7 @@ async function createFromSource(
     let entry: RegistryEntry | undefined
     if (REGISTRY_ID.test(options.source!)) {
       // A registry id: read the registry's index, pick the entry (only an app for this runtime), and take its folder as the template.
-      const registrySource = parseSource(options.registry ?? DEFAULT_REGISTRY, io.cwd)
+      const registrySource = parseRegistrySource(options.registry ?? DEFAULT_REGISTRY, io.cwd)
       if (!registrySource)
         throw new UsageError(`unknown registry "${options.registry}" (${SOURCE_FORMS})`)
       await fetchSource(
@@ -342,7 +363,12 @@ async function createFromSource(
         join(scratch, 'download'),
         fetchers,
       )
-      const registry = readRegistry(join(scratch, 'registry'))
+      const registry = readRegistry(
+        join(scratch, 'registry'),
+        registrySource.kind === 'folder'
+          ? registrySource.path
+          : (options.registry ?? DEFAULT_REGISTRY),
+      )
       entry = pickEntry(registry.entries, options.source!)
       await fetchSource(
         { kind: 'folder', path: join(registry.root, entry.path) },
@@ -365,11 +391,19 @@ async function createFromSource(
       frameworkRange(),
       name,
     )
-    if (entry !== undefined && existsSync(join(staged, 'blend.yaml')))
-      writeFileSync(
-        join(staged, 'blend.yaml'),
-        ownManifest(readFileSync(join(staged, 'blend.yaml'), 'utf8'), name),
-      )
+    if (entry !== undefined && existsSync(join(staged, 'blend.yaml'))) {
+      const starterText = readFileSync(join(staged, 'blend.yaml'), 'utf8')
+      // The starter was an app with its own name in its page, its README and its agents' instructions: they now say this app's.
+      const starterName = manifestName(starterText)
+      if (starterName !== undefined) renameApp(staged, starterName, name)
+      const manifestText = ownManifest(starterText, name)
+      writeFileSync(join(staged, 'blend.yaml'), manifestText)
+      if (existsSync(join(staged, 'blend.lock.json')))
+        writeFileSync(
+          join(staged, 'blend.lock.json'),
+          ownLock(readFileSync(join(staged, 'blend.lock.json'), 'utf8'), manifestText, name),
+        )
+    }
     if (!existsSync(join(staged, 'AGENTS.md')))
       writeFileSync(
         join(staged, 'AGENTS.md'),
@@ -386,6 +420,7 @@ async function createFromSource(
     }
     copyDocs(staged)
     cpSync(staged, target, { recursive: true })
+    startRepository(target)
     io.stdout.write(
       `created ${name} from ${entry ? `${entry.id} ${entry.version}` : manifest.name} (${manifest.description}) in ${target}: ${files.length} files, ${CLASS} docs in docs/framework\n`,
     )

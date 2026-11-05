@@ -4,13 +4,14 @@
  * - The remote is the branch's own (`branch.<name>.remote`), else `origin`, else the only remote. Several remotes and none named `origin` is
  *   refused plainly rather than guessed.
  * - Push sends the branch to its upstream, and on the first push sets it (`--set-upstream`). It is never forced: a remote that has moved on is
- *   said so before git is even asked.
+ *   said so before git is even asked. It sends work under the person's name, so it is planned first (what, where, to which address) and sends
+ *   only the plan the person confirmed, read again just before; a plan that changed meanwhile sends nothing.
  * - Pull fetches, then fast-forwards only. A branch that has moved on both here and there is left exactly as it is, with a sentence that says so.
  * - Every failure carries git's own line (the runner's `detail`): no remote, a refused login, a network that is down.
  *
  * Push and pull run one at a time: a second click waits for the first to finish rather than racing it.
  */
-import type { GitRemoteState, GitSyncResult } from './contract.ts'
+import { samePushPlan, type GitRemoteState, type GitSyncResult, type PushPlan } from './contract.ts'
 
 /** The part of the confined git runner (`acryl-versions`) this module uses: an argument array, never a shell. */
 export interface SyncGit {
@@ -117,6 +118,23 @@ function bothMoved(ahead: number, behind: number): Error {
   return new Error(`This branch and the remote have both moved on (${plural(ahead, 'version')} here, ${plural(behind, 'version')} there). Nothing was changed: bring them together with git first.`)
 }
 
+/**
+ * The remote's address as a person reads it, never with a credential: `https://user:token@github.com/ana/notes.git` and
+ * `git@github.com:ana/notes.git` both read `github.com/ana/notes`; a folder stays its path.
+ */
+export function remoteAddress(url: string): string {
+  const scp = /^[\w.-]+@([\w.-]+):(.+?)(?:\.git)?\/?$/u.exec(url)
+  if (scp !== null && !url.includes('://')) return `${scp[1] ?? ''}/${scp[2] ?? ''}`
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol === 'file:') return decodeURIComponent(parsed.pathname)
+    return `${parsed.host}${parsed.pathname.replace(/\.git\/?$/u, '').replace(/\/$/u, '')}`
+  } catch {
+    // A plain folder path.
+    return url
+  }
+}
+
 export class GitSync {
   private queue: Promise<unknown> = Promise.resolve()
 
@@ -126,38 +144,60 @@ export class GitSync {
     return remoteState(this.git, this.root, options)
   }
 
-  /** Send the branch to its upstream, setting it on the first push. Never forced. @throws an Error whose message is the one line to show. */
-  push(): Promise<GitSyncResult> {
+  /** What a push would send and where, after asking the remote; nothing is sent. @throws the one line saying why there is nothing to push. */
+  planPush(): Promise<PushPlan> {
+    return this.serial(async () => (await this.plan()).plan)
+  }
+
+  /**
+   * Send exactly the confirmed plan: the branch to its upstream, setting it on the first push. Never forced. The plan is read again first, and a
+   * changed one (a new version, the remote moved, another address) sends nothing. @throws an Error whose message is the one line to show.
+   */
+  push(confirmed: PushPlan): Promise<GitSyncResult> {
     return this.serial(async () => {
       const { git, root } = this
-      const where = await locate(git, root)
-      const refused = nothingThere(where, 'push')
-      if (refused !== undefined || where.kind !== 'branch' || where.remote === undefined) throw refused ?? new Error('There is nothing to push.')
-      if (where.upstream === undefined || where.merge === undefined) {
-        try {
-          await git.run(['push', '--set-upstream', where.remote, `refs/heads/${where.branch}:refs/heads/${where.branch}`], root, undefined, REMOTE_TIMEOUT_MS)
-        } catch (cause) {
-          throw reason(cause, 'git could not push the branch')
-        }
-        return { message: `Pushed ${where.branch} to ${where.remote}; it now follows ${where.remote}/${where.branch}.`, remote: await this.state() }
-      }
-      // Ask the remote first, so a push it would refuse is said plainly here instead of as git's "rejected".
+      const { plan, merge } = await this.plan()
+      if (!samePushPlan(plan, confirmed)) throw new Error(`The push changed since you confirmed it (${plural(plan.versions, 'version')} to ${plan.target}); nothing was sent. Look at it again.`)
       try {
-        await fetchRemote(git, root, where.remote)
-      } catch (cause) {
-        throw reason(cause, 'the remote could not be reached')
-      }
-      const { ahead, behind } = await divergence(git, root)
-      if (behind > 0 && ahead > 0) throw bothMoved(ahead, behind)
-      if (behind > 0) throw new Error(`The remote has ${plural(behind, 'version')} this branch does not. Pull first, then push.`)
-      if (ahead === 0) return { message: `Nothing to push: ${where.upstream} already has every version.`, remote: await this.state() }
-      try {
-        await git.run(['push', where.remote, `refs/heads/${where.branch}:${where.merge}`], root, undefined, REMOTE_TIMEOUT_MS)
+        // The branch itself (so a first push can set the upstream); its head was just read again and is the confirmed one.
+        await git.run(['push', ...(plan.createsBranch ? ['--set-upstream'] : []), plan.remote, `refs/heads/${plan.branch}:${merge}`], root, undefined, REMOTE_TIMEOUT_MS)
       } catch (cause) {
         throw reason(cause, 'git could not push the branch')
       }
-      return { message: `Pushed ${plural(ahead, 'version')} to ${where.upstream}.`, remote: await this.state() }
+      return {
+        message: plan.createsBranch ? `Pushed ${plan.branch} to ${plan.remote}; it now follows ${plan.target}.` : `Pushed ${plural(plan.versions, 'version')} to ${plan.target}.`,
+        remote: await this.state(),
+      }
     })
+  }
+
+  /** The plan, and the upstream ref its versions land on (`refs/heads/main`). */
+  private async plan(): Promise<{ readonly plan: PushPlan; readonly merge: string }> {
+    const { git, root } = this
+    const where = await locate(git, root)
+    const refused = nothingThere(where, 'push')
+    if (refused !== undefined || where.kind !== 'branch' || where.remote === undefined) throw refused ?? new Error('There is nothing to push.')
+    const remote = where.remote
+    const url = await line(git, root, ['remote', 'get-url', remote])
+    const head = await line(git, root, ['rev-parse', '--verify', 'HEAD'])
+    if (url === undefined || head === undefined) throw new Error(`The remote ${remote} has no address, or the branch has no version yet.`)
+    const address = remoteAddress(url)
+    if (where.upstream === undefined || where.merge === undefined) {
+      // A first push sends every version the remote has on none of its branches.
+      const versions = Number(await line(git, root, ['rev-list', '--count', 'HEAD', '--not', `--remotes=${remote}`]) ?? '0')
+      return { plan: { branch: where.branch, remote, target: `${remote}/${where.branch}`, address, versions, createsBranch: true, head }, merge: `refs/heads/${where.branch}` }
+    }
+    // Ask the remote first, so a push it would refuse is said plainly here instead of as git's "rejected".
+    try {
+      await fetchRemote(git, root, remote)
+    } catch (cause) {
+      throw reason(cause, 'the remote could not be reached')
+    }
+    const { ahead, behind } = await divergence(git, root)
+    if (behind > 0 && ahead > 0) throw bothMoved(ahead, behind)
+    if (behind > 0) throw new Error(`The remote has ${plural(behind, 'version')} this branch does not. Pull first, then push.`)
+    if (ahead === 0) throw new Error(`Nothing to push: ${where.upstream} already has every version.`)
+    return { plan: { branch: where.branch, remote, target: where.upstream, address, versions: ahead, createsBranch: false, head }, merge: where.merge }
   }
 
   /** Bring the upstream's new versions in by fast-forward only; a branch that moved on both sides is left as it is. @throws the one line to show. */

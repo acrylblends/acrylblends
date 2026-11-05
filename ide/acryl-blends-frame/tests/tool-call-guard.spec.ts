@@ -59,6 +59,63 @@ describe('an agent stopping the Host', () => {
     expect(stopsHost({ name: 'read', arguments: { command: 'kill 96684' } }, host)).toBe(false)
   })
 
+  // A packaged Host: the app binary runs the generated script, and `node` appears in the loader argument. Its group is its own (the desktop spawns it detached).
+  const running = {
+    hostPid: 96684,
+    hostPort: 3730,
+    hostGroupId: 96684,
+    hostName: 'ACRYL Blends Blank',
+    hostCommand:
+      '/Applications/ACRYL Blends Blank.app/Contents/MacOS/ACRYL Blends Blank --import ./plugins/acryl-node-server/src/register.ts /Users/x/Documents/ACRYL Blends Blank/scripts/ide-host.mjs',
+  }
+
+  it('sees a broad kill of every node process', () => {
+    expect(stopsHost(bash('pkill node'), running)).toBe(true)
+    expect(stopsHost(bash('pkill -9 node'), running)).toBe(true)
+    expect(stopsHost(bash('killall node'), running)).toBe(true)
+    expect(stopsHost(bash('killall -9 node'), running)).toBe(true)
+    expect(stopsHost(bash('pkill -f node'), running)).toBe(true)
+  })
+
+  it('sees a -f pattern that matches the Host command line', () => {
+    expect(stopsHost(bash('pkill -f acryl-node-server'), running)).toBe(true)
+    expect(stopsHost(bash("pkill -f 'scripts/ide'"), running)).toBe(true)
+    expect(stopsHost(bash('pkill -f "ACRYL Blends Blank"'), running)).toBe(true)
+    expect(stopsHost(bash('pkill -f "ide-host.mjs"'), running)).toBe(true)
+  })
+
+  it('sees a kill of the Host process group', () => {
+    expect(stopsHost(bash('kill 0'), running)).toBe(true)
+    expect(stopsHost(bash('kill -9 -1'), running)).toBe(true)
+    expect(stopsHost(bash('kill -TERM -96684'), running)).toBe(true)
+    expect(stopsHost(bash('kill -- -96684'), running)).toBe(true)
+    expect(stopsHost(bash('pkill -g 96684 vitest'), running)).toBe(true)
+    expect(stopsHost(bash('pkill --pgroup 96684 vitest'), running)).toBe(true)
+  })
+
+  it('leaves the agent its own test servers, by id, pattern or name', () => {
+    expect(stopsHost(bash('kill 4321'), running)).toBe(false)
+    expect(stopsHost(bash('kill -9 4321; sleep 1'), running)).toBe(false)
+    expect(stopsHost(bash('pkill -f "vite --port 5199"'), running)).toBe(false)
+    expect(stopsHost(bash('killall vitest'), running)).toBe(false)
+    expect(stopsHost(bash('kill -TERM 12345'), running)).toBe(false)
+    expect(stopsHost(bash('pkill -g 12345 vitest'), running)).toBe(false)
+    expect(stopsHost(bash('echo killall node'), running)).toBe(false)
+    expect(stopsHost(bash('grep -rn "pkill node" docs'), running)).toBe(false)
+  })
+
+  it('sees taskkill and Stop-Process by a name that would reach the Host', () => {
+    expect(stopsHost(bash('taskkill /IM node.exe /F'), running)).toBe(true)
+    expect(stopsHost(bash('Stop-Process -Name node -Force'), running)).toBe(true)
+    expect(stopsHost(bash('taskkill /PID 4321 /F'), running)).toBe(false)
+    expect(stopsHost(bash('taskkill /IM notepad.exe /F'), running)).toBe(false)
+  })
+
+  it('tells the agent how to restart only its own process', () => {
+    expect(HOST_REFUSAL).toMatch(/kill <pid>/u)
+    expect(HOST_REFUSAL).toMatch(/never a group, a name like node, or a broad -f pattern/u)
+  })
+
   it('refuses it without asking the gates', async () => {
     const listeners = new Map<string, Listener>()
     const events = { on(name: string, listener: Listener) { listeners.set(name, listener); return () => {} } } as unknown as ToolCallEvents

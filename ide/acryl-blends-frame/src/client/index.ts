@@ -40,6 +40,7 @@ import { SwitchRequests } from './switch-request.ts'
 import { createFrameTools, installXtermStyles } from './tools.ts'
 import { createSharedVersionsApi } from './versions.ts'
 import { createGitSyncApi, type GitSyncPort } from './git-sync.ts'
+import { createSnapshotApi } from './snapshot.ts'
 import { FrameViewState, type ViewStorage } from './view-state.ts'
 
 // `sidebarRight` on the context: DSH's right sidebar controller, drawn in the right panel's Panel tab.
@@ -119,11 +120,13 @@ export function apply(ctx: ClientContext): void {
   const sharedVersionsApi = createSharedVersionsApi()
   const branchesApi = createBranchesApi()
   const gitSyncApi = createGitSyncApi()
+  const snapshot = createSnapshotApi()
   // A push moves the upstream (the left panel's shared marks), a pull the head and the app's files: the frame reads its state again, and the app page reloads when a pull brought versions in.
   const gitSync: GitSyncPort = {
     remote: fetchFirst => gitSyncApi.remote(fetchFirst),
-    push: async () => {
-      const result = await gitSyncApi.push()
+    planPush: () => gitSyncApi.planPush(),
+    push: async (confirmed) => {
+      const result = await gitSyncApi.push(confirmed)
       await frameState.refresh()
       return result
     },
@@ -252,9 +255,12 @@ export function apply(ctx: ClientContext): void {
     void frameState.refresh()
     const timer = window.setInterval(read, FRAME_STATE_INTERVAL_MS)
     document.addEventListener('visibilitychange', read)
+    // Back from another window (an editor, a terminal) the count is read at once, not at the next tick.
+    window.addEventListener('focus', read)
     return () => {
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', read)
+      window.removeEventListener('focus', read)
     }
   }, 'acryl-blends-frame: read the frame state')
 
@@ -314,7 +320,7 @@ export function apply(ctx: ClientContext): void {
           await appPlugins.switch(plugin.kind, plugin.name, on)
           canvas.reload()
         },
-        plugin.kind === 'made' ? options => appPlugins.share(plugin.name, options) : undefined,
+        plugin.kind === 'made' ? { plan: () => appPlugins.planShare(plugin.name), publish: confirmed => appPlugins.share(plugin.name, confirmed) } : undefined,
       )),
       ...view.frame.map(framePluginRow),
     ]
@@ -440,7 +446,12 @@ export function apply(ctx: ClientContext): void {
       chats,
       versions: {
         log: (path: string) => versionsApi.log(path),
-        save: (path: string, message: string) => versionsApi.save(path, message),
+        // Every version is a captured snapshot: a plugin folder without a row gets one, and the lock is written, before the commit. A capture
+        // that fails does not stop the save (the version is then the files as they are), but it says why in the console.
+        save: async (path: string, message: string) => {
+          await snapshot.capture().catch((cause: unknown) => { console.warn(`acryl-blends-frame: the version was saved without a capture: ${cause instanceof Error ? cause.message : String(cause)}`) })
+          return versionsApi.save(path, message)
+        },
         // The files go back, the frame shows the new head, then the app page reloads on them (restore, state, canvas - in that order).
         restore: async (path: string, hash: string, message: string) => {
           const restored = await versionsApi.restore(path, hash, message)

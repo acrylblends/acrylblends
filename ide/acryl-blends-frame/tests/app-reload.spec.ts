@@ -217,6 +217,23 @@ describe('watchFolder', () => {
     expect(calls).toBe(1)
   })
 
+  it('hears only the named files at the top of the folder when `only` is given (the app root\'s blend.yaml)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'watch-folder-'))
+    folders.push(dir)
+    mkdirSync(join(dir, 'node_modules'))
+    let calls = 0
+    const stop = watchFolder(dir, () => { calls += 1 }, { debounceMs: 50, only: ['blend.yaml'] })
+    await new Promise(resolve => setTimeout(resolve, 350))
+    writeFileSync(join(dir, 'README.md'), 'x')
+    writeFileSync(join(dir, 'node_modules', 'blend.yaml'), 'x')
+    await new Promise(resolve => setTimeout(resolve, 300))
+    expect(calls).toBe(0)
+    writeFileSync(join(dir, 'blend.yaml'), 'spec: {}\n')
+    await waitFor(() => calls > 0)
+    stop()
+    expect(calls).toBe(1)
+  })
+
   it('does not call back after it is stopped, and watches nothing for a folder that is not there', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'watch-folder-'))
     folders.push(dir)

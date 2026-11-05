@@ -9,6 +9,8 @@ import { backText, backToMessage, chatTime, saveBeforeBackMessage, shortTime, ve
 import { branchClick, saveBeforeSwitchMessage, type BranchesApi } from './branches.ts'
 import type { BranchChatsPort } from './branch-chats.ts'
 import type { SwitchRequests } from './switch-request.ts'
+import type { GitSyncPort } from './git-sync.ts'
+import { RemoteChips } from './RemoteSync.tsx'
 import { feedbackPlace, type FeedbackApi } from './feedback.ts'
 
 /** A chat on the branch, as the left panel lists it. */
@@ -82,6 +84,8 @@ interface SwitchAsk {
 
 export interface LeftPanelProps {
   readonly state: FrameState
+  /** Read the frame state now (the unsaved count may have changed since the last poll); undefined when the Host could not be read. */
+  readonly readState: () => Promise<FrameState | undefined>
   readonly chats: ChatsPort
   readonly versions: VersionsPort
   /** The right panel's tabs: the branch lists its open agents and terminals, and a click shows one. */
@@ -96,9 +100,11 @@ export interface LeftPanelProps {
   readonly showTab: (id: string) => void
   /** Told the newest version's label ("v7"), for the top bar. */
   readonly onVersionLabel: (label: string | undefined) => void
+  /** The branch's remote: the versions header's ↑/↓ chips send the versions there and bring its new ones in (the Git tab's Push and Pull). */
+  readonly gitSync: GitSyncPort
 }
 
-export function LeftPanel({ state, chats, versions, tabs, feedback, branches, branchChats, switchRequests, showTab, onVersionLabel }: LeftPanelProps) {
+export function LeftPanel({ state, readState, chats, versions, tabs, feedback, branches, branchChats, switchRequests, showTab, onVersionLabel, gitSync }: LeftPanelProps) {
   const subscribe = useCallback((listener: () => void) => chats.subscribe(listener), [chats])
   const chatRows = useSyncExternalStore(subscribe, () => chats.getSnapshot())
   const subscribeTabs = useCallback((listener: () => void) => tabs.subscribe(listener), [tabs])
@@ -224,7 +230,14 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
   const goBack = async (target: { readonly hash: string; readonly number: number; readonly subject: string }) => {
     setBackNote(undefined)
     try {
-      if (state.unsaved !== 0) {
+      // The question was answered on the count it showed; when files changed since, the question shows the new count and waits for a new answer.
+      const fresh = await readState()
+      if (fresh === undefined) {
+        setBackNote('The app\'s files could not be read just now, so nothing changed. Try again.')
+        return
+      }
+      if ((fresh.unsaved === 0) !== (state.unsaved === 0)) return
+      if (fresh.unsaved !== 0) {
         setBacking('saving')
         await versions.save(state.appRoot, saveBeforeBackMessage(target.number))
       }
@@ -242,8 +255,16 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
   // A save point when the person chose one, then the Host moves the folder; the frame state re-read marks the new current branch, and the
   // composition reloads the app page on its files (switch, state, canvas - in that order). Nothing here stashes or discards work.
   const switchTo = async (ask: SwitchAsk, saveFirst: boolean) => {
-    setBusySwitch({ branch: ask.branch, phase: saveFirst ? 'saving' : 'switching' })
     setSwitchNote(undefined)
+    // A switch without a save point only on a tree that is clean now: files changed since the click show the question with their count instead.
+    if (!saveFirst) {
+      const fresh = await readState()
+      if (fresh?.unsaved !== 0) {
+        setAskSwitch(ask)
+        return
+      }
+    }
+    setBusySwitch({ branch: ask.branch, phase: saveFirst ? 'saving' : 'switching' })
     try {
       if (saveFirst) {
         await versions.save(state.appRoot, saveBeforeSwitchMessage(ask.branch))
@@ -283,6 +304,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
     } else {
       setSwitchNote(undefined)
       setAskSwitch({ branch: branch.name })
+      void readState()
     }
   }
 
@@ -291,6 +313,7 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
     if (busySwitch !== undefined) return
     setSwitchNote(undefined)
     setAskSwitch(ask)
+    void readState()
   }
 
   /** Only a clean tree (zero unsaved files) and a clicked item switch without a save point; a branch row with unsaved files always saves first. */
@@ -456,10 +479,13 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
       </div>
       <div className="acrylBlendsSep" />
       <div className="acrylBlendsPaneHead">
-        <span className="acrylBlendsLabel">Versions of this branch</span>
-        <button type="button" className="acrylBlendsSmallButton" onClick={() => { setSaving(current => (current === undefined ? '' : undefined)) }}>
-          Save point
-        </button>
+        <span className="acrylBlendsLabel">Versions</span>
+        <span className="acrylBlendsPaneActions">
+          <RemoteChips sync={gitSync} root={state.appRoot} revision={`${state.head ?? ''}:${String(state.upstreamHead ?? '')}`} />
+          <button type="button" className="acrylBlendsSmallButton" onClick={() => { setSaving(current => (current === undefined ? '' : undefined)) }}>
+            Save point
+          </button>
+        </span>
       </div>
       {saving !== undefined && (
         <form className="acrylBlendsSaveForm" onSubmit={(event) => { event.preventDefault(); void save() }}>
@@ -489,8 +515,8 @@ export function LeftPanel({ state, chats, versions, tabs, feedback, branches, br
                 title={index === 0 ? `${entry.short} · ${entry.author}` : `Go back to v${String(number)} · ${entry.short} · ${entry.author}`}
                 role={index === 0 ? undefined : 'button'}
                 tabIndex={index === 0 ? undefined : 0}
-                onClick={index === 0 ? undefined : () => { if (backing === undefined) { setBackNote(undefined); setAskBack(asking ? undefined : target) } }}
-                onKeyDown={index === 0 ? undefined : (event) => { if (event.key === 'Enter' && backing === undefined) { setBackNote(undefined); setAskBack(asking ? undefined : target) } }}
+                onClick={index === 0 ? undefined : () => { if (backing === undefined) { setBackNote(undefined); setAskBack(asking ? undefined : target); void readState() } }}
+                onKeyDown={index === 0 ? undefined : (event) => { if (event.key === 'Enter' && backing === undefined) { setBackNote(undefined); setAskBack(asking ? undefined : target); void readState() } }}
               >
                 <span className="acrylBlendsVersionDot" />
                 <span className="acrylBlendsItemTitle">

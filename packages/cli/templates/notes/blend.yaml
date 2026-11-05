@@ -20,7 +20,8 @@ spec:
       name: acryl-db-sqlite
     - id: routes
       name: routes
-    # Plugins installed while the app runs (the door's `plugin add`): development only, src/app.ts leaves it out when NODE_ENV=production.
+    # Plugin folders without a row of their own (a live install with the door's `plugin add`); a folder with a row is the app's and starts by it.
+    # Read-only when NODE_ENV=production.
     - id: extensions
       name: extensions
     - id: server

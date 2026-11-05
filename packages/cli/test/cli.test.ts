@@ -601,7 +601,8 @@ describe('add agent-panel and driver-pty', () => {
     const dir = join(scratch, 'blank-panel')
     const refused = fakeIo()
     expect(await runCli(['add', 'agent-panel', '--dir', dir], refused.io)).toBe(1)
-    expect(refused.err()).toContain('needs the `agent` and `extensions` rows')
+    // A blank app has the extensions row (its own plugins start by their rows next to it); the agent row is the agent template's.
+    expect(refused.err()).toContain('needs the `agent` row in blend.yaml')
     expect(refused.err()).toContain('npm create acrylblends@latest my-app agent')
     expect(refused.err()).toContain('Nothing was changed')
     expect(existsSync(join(dir, 'plugins/agent-panel'))).toBe(false)

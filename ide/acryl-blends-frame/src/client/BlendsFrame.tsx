@@ -236,6 +236,7 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
           {state.status === 'ready' && (
             <LeftPanel
               state={state.state}
+              readState={() => frameState.current()}
               chats={chats}
               versions={versions}
               tabs={tabs}
@@ -248,6 +249,7 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
                 view.showRight()
               }}
               onVersionLabel={setVersionLabel}
+              gitSync={gitSync}
             />
           )}
           {state.status === 'error' && <p className="acrylBlendsNote" data-error>{state.message}</p>}

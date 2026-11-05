@@ -1,7 +1,8 @@
 /** The Plugins page of Settings: search, the groups as chips, and one row per plugin with who made it, its state and its switch. */
 
 import { useEffect, useMemo, useState } from 'react'
-import { filterPlugins, type NavigatorPlugin, type PluginGroup } from './plugins-navigator.ts'
+import type { SharePlan } from '../contract.ts'
+import { filterPlugins, shareQuestion, type NavigatorPlugin, type PluginGroup } from './plugins-navigator.ts'
 
 export interface PluginsSectionInjected {
   /** Every plugin of the app and the frame, read fresh. */
@@ -26,8 +27,9 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
   const [group, setGroup] = useState<PluginGroup | 'all'>('all')
   const [busy, setBusy] = useState<string | undefined>(undefined)
   const [failure, setFailure] = useState<string | undefined>(undefined)
-  // A share the hub refused because its version is released: the person is asked before the frame shares the next patch.
-  const [bump, setBump] = useState<{ readonly key: string; readonly version: string; readonly nextVersion: string } | undefined>(undefined)
+  // A share sends the plugin to GitHub under the person's name: it says what it will create and waits for their yes.
+  const [asking, setAsking] = useState<{ readonly key: string; readonly plan: SharePlan } | undefined>(undefined)
+  const [sharing, setSharing] = useState<'planning' | 'publishing' | undefined>(undefined)
 
   const [reads, setReads] = useState(0)
   useEffect(() => {
@@ -65,28 +67,38 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
     }
   }
 
-  const share = async (plugin: NavigatorPlugin, bumpVersion = false) => {
+  const askShare = async (plugin: NavigatorPlugin) => {
     if (plugin.share === undefined || busy !== undefined) return
     setBusy(plugin.key)
+    setSharing('planning')
     setFailure(undefined)
-    setBump(undefined)
+    setAsking(undefined)
     try {
-      const outcome = await plugin.share(bumpVersion ? { bump: true } : undefined)
-      if (outcome.status === 'released') {
-        // Ask first: the version is released once, so the next share is the next patch.
-        setBump({ key: plugin.key, version: outcome.version, nextVersion: outcome.nextVersion })
-        setBusy(undefined)
-        return
-      }
-      // The row shows where it went without waiting for the Host to read the whole list again.
-      setLoad(current => current.status === 'ready'
-        ? { status: 'ready', plugins: current.plugins.map(row => row.key === plugin.key ? { ...row, shared: { url: outcome.url, version: outcome.version } } : row) }
-        : current)
-      setBusy(undefined)
+      setAsking({ key: plugin.key, plan: await plugin.share.plan() })
     } catch (cause) {
       setFailure(`${plugin.name}: ${cause instanceof Error ? cause.message : String(cause)}`)
-      setBusy(undefined)
     }
+    setBusy(undefined)
+    setSharing(undefined)
+  }
+
+  const publish = async (plugin: NavigatorPlugin, plan: SharePlan) => {
+    if (plugin.share === undefined || busy !== undefined) return
+    setBusy(plugin.key)
+    setSharing('publishing')
+    setFailure(undefined)
+    setAsking(undefined)
+    try {
+      const shared = await plugin.share.publish(plan)
+      // The row shows where it went without waiting for the Host to read the whole list again.
+      setLoad(current => current.status === 'ready'
+        ? { status: 'ready', plugins: current.plugins.map(row => row.key === plugin.key ? { ...row, shared } : row) }
+        : current)
+    } catch (cause) {
+      setFailure(`${plugin.name}: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
+    setBusy(undefined)
+    setSharing(undefined)
   }
 
   return (
@@ -130,9 +142,17 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
               {plugin.shared !== undefined && (
                 <>
                   {' · '}
-                  <a className="acrylBlendsShared" href={plugin.shared.url} target="_blank" rel="noreferrer">
-                    {plugin.shared.url.replace(/^https:\/\//u, '')} · v{plugin.shared.version}
-                  </a>
+                  {plugin.shared.gone === true
+                    ? (
+                      <span className="acrylBlendsSharedGone" title="GitHub says this repository no longer exists; Share publishes it again">
+                        {plugin.shared.url.replace(/^https:\/\//u, '')} is gone
+                      </span>
+                    )
+                    : (
+                      <a className="acrylBlendsShared" href={plugin.shared.url} target="_blank" rel="noreferrer">
+                        {plugin.shared.url.replace(/^https:\/\//u, '')} · v{plugin.shared.version}
+                      </a>
+                    )}
                 </>
               )}
               {plugin.share !== undefined && (
@@ -142,21 +162,21 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
                     type="button"
                     className="acrylBlendsShareButton"
                     disabled={busy !== undefined}
-                    onClick={() => { void share(plugin) }}
+                    onClick={() => { void askShare(plugin) }}
                   >
-                    {busy === plugin.key ? 'Sharing…' : plugin.shared === undefined ? 'Share' : 'Share again'}
+                    {busy === plugin.key && sharing !== undefined ? (sharing === 'planning' ? 'Checking…' : 'Sharing…') : plugin.shared === undefined || plugin.shared.gone === true ? 'Share' : 'Share again'}
                   </button>
                 </>
               )}
-              {bump?.key === plugin.key && (
-                <>
-                  {' · '}
-                  <span className="acrylBlendsBumpAsk">
-                    v{bump.version} is released. Share v{bump.nextVersion}?
-                    <button type="button" className="acrylBlendsBumpShare" disabled={busy !== undefined} onClick={() => { void share(plugin, true) }}>Share v{bump.nextVersion}</button>
-                    <button type="button" className="acrylBlendsBumpCancel" onClick={() => { setBump(undefined) }}>Cancel</button>
-                  </span>
-                </>
+              {asking?.key === plugin.key && (
+                <span className="acrylBlendsShareAsk" role="group" aria-label={`Share ${plugin.name}`}>
+                  {shareQuestion(asking.plan)}
+                  {/* Cancel is the default: Enter or a stray click sends nothing. */}
+                  <button type="button" className="acrylBlendsShareCancel" autoFocus onClick={() => { setAsking(undefined) }}>Cancel</button>
+                  <button type="button" className="acrylBlendsShareConfirm" disabled={busy !== undefined} onClick={() => { void publish(plugin, asking.plan) }}>
+                    {asking.plan.createsRepository ? 'Create and publish' : `Publish v${asking.plan.version}`}
+                  </button>
+                </span>
               )}
             </small>
           </div>

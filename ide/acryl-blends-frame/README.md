@@ -16,10 +16,14 @@ The canvas page reads the frame's view (`src/client/frame-view.ts`): Build keeps
 agent-panel's button and the feedback button), and Preview shows what production shows without a reload. The page's plugins read the handle
 through `window.parent`; a page opened directly is unchanged.
 
-A feedback note shows its screenshot as a thumbnail, and handing it to the chat puts the page and selector text in the composer with the picture as a real attachment. Settings > Plugins shares a local plugin: the frame packages it (the builder's package shape, plus the Loader patch the plugin-hub needs),
-publishes it with `@webboxes/plugin-hub` through the user's own `gh` and `git` to its own GitHub repository and release, and the row then shows
-the repository and version. A second app installs it with `acrylblends add <the package folder>`; the plugin-hub refuses a package with secrets
-before anything is sent. `shareOwner` in the frame row's config names the GitHub account or organization (the signed-in account when absent). Sharing a version that is already released asks first and then releases the next patch.
+A feedback note shows its screenshot as a thumbnail, and handing it to the chat puts the page and selector text in the composer with the picture as a real attachment. Settings > Plugins shares a local plugin: the frame packages it under the app's home (`plugin-packages/<name>`; the builder's package shape,
+plus the Loader patch the plugin-hub needs) and first says what it will do, for example "Create repository ana/notes on GitHub and publish
+v0.1.0? It will be private.", with Cancel as the default. Only on the person's yes does it publish, with `@webboxes/plugin-hub` through the user's
+own `gh` and `git`, exactly that repository, version and visibility; when the plan changed meanwhile nothing is sent. The Host refuses a share
+that does not carry the confirmed plan. The row then shows the repository and version. A second app installs it with `acrylblends add <the
+package folder>`; the plugin-hub refuses a package with secrets before anything is sent. `shareOwner` in the frame row's config names the GitHub
+account or organization (the signed-in account when absent); a rehearsal sets a test organization there (`shareOwner: inboxxobni`). A version
+already released there is planned as the next patch, and the question says so.
 
 It owns the page's `root` slot, so it is mounted instead of the IDE's workbench (`acryl-workspace`), never beside it. The Host half serves one
 private route, `GET /api/acryl-blends-frame/state` (the app's name, folder, page and branches); `appPage` in the row's config says where the
@@ -41,6 +45,18 @@ The chat the frame mounts needs more of DSH than the frame draws: the agent pres
 the host rows it stands on, and the chat view's client rows. They are in `packages/cli/src/ide-profile.ts`. DSH's right sidebar (`ui-sidebar-right`) is
 drawn inside the right panel as its Panel tab: when DSH opens a page there (a plan, the review of a turn's changed files) the tab opens, and closing the
 tab collapses the sidebar.
+
+## Nothing leaves the machine without a yes
+
+Share (Settings > Plugins) and Push (the `↑N` chip on the versions header, and the Git tab's Push) send the person's work under their name, so each
+first says what it will send and where, read without sending anything: "Create repository ana/notes on GitHub and publish v0.1.0? It will be
+private.", "Push 2 versions to origin/main (github.com/ana/notes)?". Cancel is focused, so Enter or a stray click sends nothing. The Host's routes
+take only the plan the person confirmed (`/plugins/share` and `/git/push` answer 400 without one), read it again just before sending, and send
+nothing when it changed meanwhile (another account, a new version, the remote moved). The remote's address is shown without any credential.
+
+The agent is held to the same rule (`src/outward-guard.ts`): a shell call that pushes or publishes (`git push`, `gh repo create`, `gh release create`,
+a `gh api` write, `npm publish`, ...) and the app's `save_app` tool become DSH's approval prompt, naming the command, whatever the access mode; they
+run only when the person allows them once. It reads the command's words, so it is a seat belt for an honest agent, not a sandbox.
 
 ## Chats belong to a branch
 
@@ -73,12 +89,14 @@ after the call that told it has ended, asks once while that move is on its way, 
 
 The app's code runs in the dev host (`npm run dev`), and the host loads it once. So that a version the person goes back to, a file the chat wrote, a
 line typed in an editor or a `git switch` shows in the canvas without a restart (a restart would end the terminals and agents in the right panel),
-the Host loads the app's code again whenever a file under `src/` changes, whoever changed it (300 ms after the last change).
+the Host loads the app's code again whenever `blend.yaml` or a file under `src/` or `plugins/` changes, whoever changed it (300 ms after the last
+change).
 
 How it works: the launcher (`scripts/ide-host.mjs`) loads `acryl-blends-frame/app-generation` before anything of the app does. It installs a resolve
-hook that, once the Host raises the generation, gives every file of the app's `src/` (and the generated `frame/` rows) a `?gen=N` query, so a new import
-of them - and of everything they import - is a fresh copy. Nothing in `node_modules` or the framework's `plugins/` gets one, so their services stay
-single instances. The Host (`src/app-reload.ts`) then imports the app's rows (`app-plugins`, `app-routes`) under the new generation, and only if that
+hook that, once the Host raises the generation, gives every file of the app's `src/`, of its own plugins (the
+folders of `plugins/` that `plugins/library.json` does not list) and of the generated `frame/` rows a `?gen=N` query, so a new import of them - and
+of everything they import - is a fresh copy. Nothing in `node_modules` or the library copies in `plugins/` gets one, so their services stay single
+instances. The Host (`src/app-reload.ts`) then imports the app's rows (`app-plugins`, `app-routes`) under the new generation, and only if that
 succeeds stops them and starts them from the new code. The page follows a long poll on `GET /api/acryl-blends-frame/app?after=<seq>` and reloads the
 canvas when a new generation is up.
 
