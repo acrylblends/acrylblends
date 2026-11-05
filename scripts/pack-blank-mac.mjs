@@ -10,6 +10,7 @@
  * (plugins/desktop/product.ts, plugins/instance/storage.ts).
  */
 import { execFileSync, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   appendFileSync,
   cpSync,
@@ -18,6 +19,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -36,6 +38,105 @@ const out = resolve(option('--out', join(root, 'dist', 'blank-mac')))
 const work = join(root, 'dist', 'blank-mac-work')
 const app = join(work, 'app')
 const log = (line) => console.log(`pack-blank-mac: ${line}`)
+
+/**
+ * The git GitHub Desktop ships (desktop/dugite-native), pinned by version and checksum. Downloaded once into dist/git-download (kept between packs),
+ * checked, unpacked into the work folder, and made to run from wherever the app is installed.
+ */
+const GIT = {
+  version: '2.56.0',
+  release: 'v2.56.0-2',
+  build: 'a44aeca',
+  sha256: {
+    arm64: '1110de343de11cc6f469b782b60f36217b9199b5e06875dd65baa26dd60563c7',
+    x64: '52cc663281e1ec2f1d76ba781193ca4847e62dbbf767f6c99ec9ec5b978a7659',
+  },
+}
+
+async function download(url, file) {
+  if (existsSync(file)) return
+  const answer = await fetch(url)
+  if (!answer.ok) throw new Error(`${url}: ${String(answer.status)}`)
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(`${file}.part`, Buffer.from(await answer.arrayBuffer()))
+  renameSync(`${file}.part`, file)
+}
+
+async function productGit(cpu) {
+  const name = `dugite-native-v${GIT.version}-${GIT.build}-macOS-${cpu}.tar.gz`
+  const cache = join(root, 'dist', 'git-download')
+  const archive = join(cache, name)
+  await download(
+    `https://github.com/desktop/dugite-native/releases/download/${GIT.release}/${name}`,
+    archive,
+  )
+  const sum = createHash('sha256').update(readFileSync(archive)).digest('hex')
+  if (sum !== GIT.sha256[cpu]) {
+    rmSync(archive, { force: true })
+    throw new Error(`${name}: checksum ${sum}, expected ${String(GIT.sha256[cpu])}`)
+  }
+  const copying = join(cache, `git-v${GIT.version}-COPYING`)
+  await download(`https://raw.githubusercontent.com/git/git/v${GIT.version}/COPYING`, copying)
+
+  const dir = join(work, 'git')
+  rmSync(dir, { recursive: true, force: true })
+  mkdirSync(dir, { recursive: true })
+  execFileSync('tar', ['-xzf', archive, '-C', dir])
+  // Git Credential Manager (a .NET program with its own runtime and UI toolkit) is 115 of the 150 MB, so it is left out; git, its helpers and git-lfs
+  // stay. A push signs in through the helper the person's own git configuration names (`gh auth setup-git` writes one).
+  const core = join(dir, 'libexec', 'git-core')
+  for (const file of readdirSync(core))
+    if (
+      /\.(dll|dylib|json|pdb)$/u.test(file) ||
+      file.startsWith('git-credential-manager') ||
+      file === 'createdump' ||
+      file === 'NOTICE' ||
+      (statSync(join(core, file)).isDirectory() &&
+        /^(cs|de|es|fr|it|ja|ko|pl|pt-BR|ru|tr|zh-Hans|zh-Hant)$/u.test(file))
+    )
+      rmSync(join(core, file), { recursive: true, force: true })
+  rmSync(join(dir, 'bin', 'scalar'), { force: true })
+  // dugite-native's git finds its helpers and templates only through the environment. The wrapper sets them from where it lies, for git's own process
+  // tree only: a shell or an agent that runs `git` gets this one with nothing else changed.
+  writeFileSync(
+    join(dir, 'bin', 'git'),
+    [
+      '#!/bin/sh',
+      `# The git that ships with ACRYL Blends (Git ${GIT.version}, desktop/dugite-native ${GIT.release}, GPL-2.0: see COPYING.txt and SOURCE.txt beside bin/).`,
+      'here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)',
+      'GIT_EXEC_PATH="$here/libexec/git-core"',
+      'GIT_TEMPLATE_DIR="$here/share/git-core/templates"',
+      'export GIT_EXEC_PATH GIT_TEMPLATE_DIR',
+      'exec "$here/libexec/git-core/git" "$@"',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  )
+  cpSync(copying, join(dir, 'COPYING.txt'))
+  writeFileSync(join(dir, 'SOURCE.txt'), gitSourceOffer())
+  const size = Number(execFileSync('du', ['-sk', dir], { encoding: 'utf8' }).split('\t')[0]) * 1024
+  log(
+    `git ${GIT.version} for ${cpu}: ${String(Math.round(size / 1024 / 1024))} MB unpacked (Credential Manager left out)`,
+  )
+  return dir
+}
+
+function gitSourceOffer() {
+  return [
+    `Git ${GIT.version}, as included in ACRYL Blends`,
+    '',
+    'This app includes Git, which is free software under the GNU General Public License, version 2 (the full text is in COPYING.txt beside this',
+    'file). It is the build GitHub Desktop ships, unchanged apart from leaving out Git Credential Manager and the scalar command.',
+    '',
+    'The complete corresponding source code:',
+    `  Git:               https://github.com/git/git/tree/v${GIT.version}`,
+    `  The build scripts: https://github.com/desktop/dugite-native/tree/${GIT.release}`,
+    '',
+    'For at least three years from the day you received this app, the publisher of ACRYL Blends will also send a complete machine-readable copy of',
+    'that source code, for no more than the cost of making and sending it, to anyone who asks at https://github.com/acrylblends/acrylblends/issues.',
+    '',
+  ].join('\n')
+}
 
 if (
   !existsSync(join(root, 'ide', 'acryl-blends-frame', 'lib')) ||
@@ -201,6 +302,11 @@ manifest.build = {
   },
   dmg: { title: 'ACRYL Blends Blank' },
 }
+// 4a. The product's own git (app-storage.md, "Git on a clean machine"): a clean Mac has only the shim that asks to install the Command Line Tools, and
+// versions, export, the terminals and the agents all run `git`. It lies beside the app in Resources/git, and the desktop shell puts it first on the
+// frame host's PATH (plugins/desktop/git.ts).
+const gitDir = await productGit(arch)
+manifest.build.extraResources = [{ from: gitDir, to: 'git' }]
 writeFileSync(join(app, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 // The product's root in the OS per-user data folder is named after it; the first app the person gets is called Blank until they name it. The Program is
 // what stays in the bundle and is served from there (plugins/instance/bundle.ts): the packages, the generated host and its composition, and every
@@ -335,6 +441,6 @@ if (produced.length === 0) throw new Error('electron-builder wrote no .dmg')
 mkdirSync(out, { recursive: true })
 for (const file of readdirSync(out))
   if (file.endsWith('.dmg')) rmSync(join(out, file), { force: true })
-const target = join(out, 'ACRYL-Blends-Blank-arm64.dmg')
+const target = join(out, `ACRYL-Blends-Blank-${arch}.dmg`)
 cpSync(join(app, 'dist', produced[0]), target)
 log(`done: ${target} (${String(Math.round(statSync(target).size / 1024 / 1024))} MB)`)

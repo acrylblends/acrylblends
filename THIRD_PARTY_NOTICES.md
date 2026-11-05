@@ -10,4 +10,6 @@ Code that is copied into this repository (vendored), with its license next to it
 
 The files are unmodified copies from the npm tarballs. `plugins/driver-pty/client/vendor/VERSION` records the exact versions and how to update them.
 
+A desktop product built by `scripts/pack-blank-mac.mjs` carries [Git](https://git-scm.com) 2.56.0 (GPL-2.0), the build GitHub Desktop ships ([desktop/dugite-native](https://github.com/desktop/dugite-native) v2.56.0-2), without Git Credential Manager and `scalar`. It is not in this repository: the packer downloads it, checks it against a pinned SHA-256, and puts it in the app's `Resources/git` with Git's licence (`COPYING.txt`) and the offer of its source (`SOURCE.txt`); Settings > App opens both, and the macOS About panel names them. It runs as a separate program, never linked.
+
 `node-pty` (MIT, Microsoft) is not vendored: `driver-pty` lists it as a dependency and an app that adds the plugin installs it.
