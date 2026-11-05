@@ -2,7 +2,7 @@
 
 This is the procedure for one blueprint, from its design to its listing. `spec.md` says what a blueprint is, `cloud-brief.md` is the prompt a cloud session
 gets, `tasks.md` is the ledger, `design/` holds the owner's mockups and specs, and `design/repos.md` gives every blueprint's registry id and repository. The
-reference blueprint is **02 Productivity Hub** (`acrylblends/02-productivity-hub`, id `acrylblends.productivity-hub`); read its app before you build another, and copy its
+reference blueprint is **02 Productivity Hub** (`acrylblends/02-productivity-hub`, id `acrylblends.productivity-hub`, listed on https://acrylblends.github.io/blends; seven plugins: productivity-hub for the domain, hub-shell for pages and style, then my-day, inbox, tasks, notes and calendar); read its app before you build another, and copy its
 shape, not its job.
 
 ## What exists for each blueprint
