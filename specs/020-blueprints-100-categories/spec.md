@@ -4,6 +4,8 @@ Owner, 2026-11-04: "we need new specs milestone with defined tasks to build acry
 as we can go, eventually should be 100 or more total) to let our users choose from what starterkit to start (blueprint)". The first builders are
 Claude Code cloud agents, paid from a $100 bonus credit that expires on 2026-11-05.
 
+The step-by-step procedure for building one is `how-to-build-a-blueprint.md`.
+
 ## What a person gets
 
 On https://acrylblends.github.io/blends every one of the 100 categories (from `src/lib/content.ts` in the site repository) lists at least one

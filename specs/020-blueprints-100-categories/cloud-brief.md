@@ -7,6 +7,8 @@ branches.
 
 T000 in tasks.md proved the publish steps with `acrylblends.system-monitor` (T001) and corrected this brief to what ran: every command below was run as written. The finished blueprint is the worked example a builder reads first (branch `blueprints/batch-01` of the site repository, `registry/blends/acrylblends.system-monitor/`).
 
+The procedure behind this brief, with the composition rule and the done list, is `how-to-build-a-blueprint.md` in this folder.
+
 ---
 
 ```text
