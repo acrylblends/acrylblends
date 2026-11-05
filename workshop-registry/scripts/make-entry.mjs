@@ -40,7 +40,9 @@ if (!existsSync(join(app, 'blend.yaml')) || !existsSync(join(app, 'package.json'
 }
 const stale = staleSnapshot(app)
 if (stale) {
-  console.error(`${stale} changed since the last capture; run npm run snapshot capture (or Save point in the frame) and try again`)
+  console.error(
+    `${stale} changed since the last capture; run npm run snapshot capture (or Save point in the frame) and try again`,
+  )
   process.exit(1)
 }
 const target = join(root, 'blends', id)
@@ -95,7 +97,12 @@ writeFileSync(
 )
 if (existsSync(lockFile)) {
   const lock = JSON.parse(readFileSync(lockFile, 'utf8'))
-  if (lock !== null && typeof lock === 'object' && lock.origin !== null && typeof lock.origin === 'object') {
+  if (
+    lock !== null &&
+    typeof lock === 'object' &&
+    lock.origin !== null &&
+    typeof lock.origin === 'object'
+  ) {
     lock.origin = {
       ...lock.origin,
       id,
@@ -126,13 +133,23 @@ function staleSnapshot(appRoot) {
   } catch {
     return 'blend.lock.json'
   }
-  const manifest = createHash('sha256').update(readFileSync(join(appRoot, 'blend.yaml'))).digest('hex')
-  if (typeof lock?.origin?.digest === 'string' && lock.origin.digest !== manifest) return 'blend.yaml'
+  const manifest = createHash('sha256')
+    .update(readFileSync(join(appRoot, 'blend.yaml')))
+    .digest('hex')
+  if (typeof lock?.origin?.digest === 'string' && lock.origin.digest !== manifest)
+    return 'blend.yaml'
   for (const module of Array.isArray(lock?.modules) ? lock.modules : []) {
-    if (module?.origin !== 'local' || typeof module.source !== 'string' || typeof module.digest !== 'string') continue
-    if (!/^(plugins|src\/plugins|extensions)\/[a-z0-9][a-z0-9._-]*$/u.test(module.source)) return 'blend.lock.json'
+    if (
+      module?.origin !== 'local' ||
+      typeof module.source !== 'string' ||
+      typeof module.digest !== 'string'
+    )
+      continue
+    if (!/^(plugins|src\/plugins|extensions)\/[a-z0-9][a-z0-9._-]*$/u.test(module.source))
+      return 'blend.lock.json'
     const folder = join(appRoot, module.source)
-    if (!existsSync(folder) || `sha256:${digestFolder(folder)}` !== module.digest) return module.source
+    if (!existsSync(folder) || `sha256:${digestFolder(folder)}` !== module.digest)
+      return module.source
   }
   return undefined
 }
@@ -142,7 +159,11 @@ function digestFolder(dir) {
   const files = []
   const walk = (at, prefix) => {
     for (const entry of readdirSync(at, { withFileTypes: true })) {
-      if (['node_modules', '.git', 'acryl-source.json'].includes(entry.name) || entry.name.startsWith('acryl-v-')) continue
+      if (
+        ['node_modules', '.git', 'acryl-source.json'].includes(entry.name) ||
+        entry.name.startsWith('acryl-v-')
+      )
+        continue
       const path = join(at, entry.name)
       if (entry.isDirectory()) walk(path, `${prefix}${entry.name}/`)
       else files.push([`${prefix}${entry.name}`, path])
@@ -151,6 +172,7 @@ function digestFolder(dir) {
   walk(dir, '')
   files.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
   const hash = createHash('sha256')
-  for (const [relative, path] of files) hash.update(relative).update('\0').update(readFileSync(path)).update('\0')
+  for (const [relative, path] of files)
+    hash.update(relative).update('\0').update(readFileSync(path)).update('\0')
   return hash.digest('hex')
 }
