@@ -8,9 +8,9 @@ The order matters. `acrylblends` 1.2.0's `init --desktop` installs the frame's p
 
 ## 0. Decisions before anything is published
 
-- [ ] **OWNER** Confirm the names in `frame/packages.json`: the scope `@acrylblends`, and the two new short names `versions` (acryl-versions) and
+- [x] **OWNER** (confirmed 2026-11-05) Confirm the names in `frame/packages.json`: the scope `@acrylblends`, and the two new short names `versions` (acryl-versions) and
       `blends-frame` (acryl-blends-frame). A rename is one line there; re-run step 2 after it.
-- [ ] **OWNER** Approve the release itself (this checklist), as the coordinator relays it.
+- [x] **OWNER** (approved 2026-11-05) Approve the release itself (this checklist), as the coordinator relays it.
 
 ## 1. The npm org
 

@@ -41,8 +41,8 @@ pipeline fail when either drifts. A frame package's version bump is therefore a 
 | `acryl-versions` | `@acrylblends/versions` | Versions: the branch's commits as save points |
 | `acryl-blends-frame` | `@acrylblends/blends-frame` | the Blends frame, the page's root |
 
-The short names are proposals the owner confirms before the first publish: `brand-client` needed a decision (two brand packages), `versions` and
-`blends-frame` were added with the frame, and the rest drop the `acryl-` prefix. `acryl-brand` and `acryl-shortcuts` are not published: the frame mounts
+The owner confirmed these names on 2026-11-05 (`brand-client` because there are two brand packages, `versions` and `blends-frame` added with the
+frame, the rest dropping the `acryl-` prefix). After the first publish a rename is a new package on npm, not a one-line change. `acryl-brand` and `acryl-shortcuts` are not published: the frame mounts
 neither and no frame package depends on them.
 
 ## What the pipeline checks
