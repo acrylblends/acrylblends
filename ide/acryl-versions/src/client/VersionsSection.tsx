@@ -1,7 +1,7 @@
 /** The Versions section: the branch's commits as save points, with save, restore and share. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MAX_COMMIT_MESSAGE, type VersionsEntry, type VersionsLogView } from '../contract.ts'
+import { MAX_COMMIT_MESSAGE, shareQuestion, type VersionsEntry, type VersionsLogView, type VersionsSharePlan } from '../contract.ts'
 import { createVersionsApi, type VersionsApi } from './api.ts'
 
 export interface VersionsSectionProps {
@@ -61,6 +61,8 @@ export function VersionsSection({ path, api }: VersionsSectionProps) {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState<'save' | 'restore' | 'share' | null>(null)
   const [status, setStatus] = useState<string | null>(null)
+  // A share sends the branch out under the person's name: Share only plans, the question names what goes where, and only its Push sends that plan.
+  const [asking, setAsking] = useState<VersionsSharePlan | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const requestSeq = useRef(0)
 
@@ -119,18 +121,32 @@ export function VersionsSection({ path, api }: VersionsSectionProps) {
     }
   }
 
-  const share = async (): Promise<void> => {
+  const askShare = async (): Promise<void> => {
     if (path === '' || busy !== null) return
     setBusy('share')
     setActionError(null)
     setStatus(null)
     try {
-      const result = await client.share(path)
+      setAsking(await client.planShare(path))
+    } catch (cause) {
+      setActionError(messageOf(cause))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const share = async (confirmed: VersionsSharePlan): Promise<void> => {
+    if (path === '' || busy !== null) return
+    setBusy('share')
+    setActionError(null)
+    try {
+      const result = await client.share(path, confirmed)
       setStatus(`Pushed to ${result.upstream}.`)
       await refresh(true)
     } catch (cause) {
       setActionError(messageOf(cause))
     } finally {
+      setAsking(null)
       setBusy(null)
     }
   }
@@ -160,12 +176,23 @@ export function VersionsSection({ path, api }: VersionsSectionProps) {
         <button
           type="button"
           className="acrylVersionsButton"
-          disabled={busy !== null}
-          onClick={() => { void share() }}
+          disabled={busy !== null || asking !== null}
+          onClick={() => { void askShare() }}
         >
           Share
         </button>
       </div>
+      {asking !== null && (
+        <div className="acrylVersionsAsk" role="group" aria-label="Share the branch">
+          <p className="acrylVersionsNote">{shareQuestion(asking)}</p>
+          <button type="button" className="acrylVersionsButton" autoFocus disabled={busy !== null} onClick={() => { setAsking(null) }}>
+            Cancel
+          </button>
+          <button type="button" className="acrylVersionsButton" disabled={busy !== null} onClick={() => { void share(asking) }}>
+            {busy === 'share' ? 'Pushing...' : 'Push'}
+          </button>
+        </div>
+      )}
       {load.status === 'ready' && <LogMeta log={load.log} />}
       {status !== null && <p className="acrylVersionsNote" role="status">{status}</p>}
       {actionError !== null && <p className="acrylVersionsNote" data-error role="alert">{actionError}</p>}

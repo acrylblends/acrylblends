@@ -5,7 +5,8 @@
  * - Save stages everything (`git add -A`) and commits it.
  * - Restore brings a version's tree back with `git checkout <hash> -- .` and records it as a new commit
  *   ("Restore <short>"); history is never rewritten and a dirty worktree is refused.
- * - Share is an explicit, non-force `git push` to the branch's existing upstream.
+ * - Share is an explicit, non-force `git push` to the branch's existing upstream, and only of a plan the person confirmed: `planShare` says what
+ *   would be sent without sending anything, and `share` plans again and sends nothing when that changed.
  */
 
 import {
@@ -18,7 +19,10 @@ import {
   type VersionsLogView,
   type VersionsRestoreView,
   type VersionsSaveView,
+  type VersionsSharePlan,
   type VersionsShareView,
+  remoteAddress,
+  sameSharePlan,
 } from './contract.ts'
 import { VersionsGitError } from './git/errors.ts'
 import type { GitRunner } from './git/runner.ts'
@@ -140,11 +144,22 @@ export class Versions {
     return { restored: short, commit: commitView(entry) }
   }
 
-  /** Push the branch to its upstream; no upstream is a refusal, and a refusal keeps git's own reason. */
-  async share(path: string): Promise<VersionsShareView> {
+  /** What a share would send, read without sending anything; no upstream is a refusal. */
+  async planShare(path: string): Promise<VersionsSharePlan> {
+    return this.plan(await this.git.resolveDirectory(path))
+  }
+
+  /**
+   * Push the branch to its upstream, only as the person confirmed it: the plan is read again first, and a different one (a version made since, another
+   * upstream or address) sends nothing. No upstream is a refusal, and a refusal keeps git's own reason.
+   */
+  async share(path: string, confirmed: VersionsSharePlan): Promise<VersionsShareView> {
     const dir = await this.git.resolveDirectory(path)
-    const upstream = await this.upstreamOf(dir)
-    if (upstream === null) throw new VersionsGitError('the branch has no upstream: publish it first', 'conflict')
+    const now = await this.plan(dir)
+    if (!sameSharePlan(now, confirmed)) {
+      throw new VersionsGitError('the push changed since you confirmed it; nothing was sent. Look at it again.', 'conflict')
+    }
+    const upstream = now.upstream
     try {
       await this.git.run(['push'], dir, undefined, PUSH_TIMEOUT_MS)
     } catch (cause) {
@@ -157,6 +172,17 @@ export class Versions {
       throw cause
     }
     return { pushed: true, upstream }
+  }
+
+  private async plan(dir: string): Promise<VersionsSharePlan> {
+    const upstream = await this.upstreamOf(dir)
+    if (upstream === null) throw new VersionsGitError('the branch has no upstream: publish it first', 'conflict')
+    const branch = (await this.git.run(['rev-parse', '--abbrev-ref', 'HEAD'], dir)).stdout.trim()
+    const remote = (await this.git.run(['config', '--get', `branch.${branch}.remote`], dir)).stdout.trim()
+    const url = (await this.git.run(['remote', 'get-url', remote], dir)).stdout.trim()
+    const [ahead] = await this.divergence(dir)
+    const head = (await this.git.run(['rev-parse', 'HEAD'], dir)).stdout.trim()
+    return { upstream, address: remoteAddress(url), ahead, head }
   }
 
   private async upstreamOf(dir: string): Promise<string | null> {

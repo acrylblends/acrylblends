@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { remoteAddress } from '../src/contract.ts'
 import { VersionsGitError } from '../src/git/errors.ts'
 import { GitRunner } from '../src/git/runner.ts'
 import { Versions } from '../src/versions.ts'
@@ -229,7 +230,7 @@ describe('versions share', () => {
     writeFile(repo.dir, 'a.txt', 'one')
     commitAll(repo.dir, 'first')
 
-    const failure = await failureOf(versions().share(repo.dir))
+    const failure = await failureOf(versions().planShare(repo.dir))
     expect(failure.kind).toBe('conflict')
     expect(failure.message).toBe('the branch has no upstream: publish it first')
   })
@@ -244,10 +245,34 @@ describe('versions share', () => {
     writeFile(repo.dir, 'a.txt', 'two')
     const head = commitAll(repo.dir, 'second')
 
-    const shared = await versions().share(repo.dir)
+    const plan = await versions().planShare(repo.dir)
+    // Planning sends nothing.
+    expect(git(remote.dir, ['rev-parse', 'main'])).not.toBe(head)
+    expect(plan).toEqual({ upstream: 'origin/main', address: remote.dir, ahead: 1, head })
+
+    const shared = await versions().share(repo.dir, plan)
 
     expect(shared).toEqual({ pushed: true, upstream: 'origin/main' })
     expect(git(remote.dir, ['rev-parse', 'main'])).toBe(head)
+  })
+
+  it('sends nothing when a version was made after the person confirmed', async () => {
+    const repo = repository()
+    writeFile(repo.dir, 'a.txt', 'one')
+    const first = commitAll(repo.dir, 'first')
+    const remote = bareRemote()
+    git(repo.dir, ['remote', 'add', 'origin', remote.dir])
+    git(repo.dir, ['push', '-q', '-u', 'origin', 'main'])
+    writeFile(repo.dir, 'a.txt', 'two')
+    commitAll(repo.dir, 'second')
+    const plan = await versions().planShare(repo.dir)
+    writeFile(repo.dir, 'a.txt', 'three')
+    commitAll(repo.dir, 'third')
+
+    const failure = await failureOf(versions().share(repo.dir, plan))
+    expect(failure.kind).toBe('conflict')
+    expect(failure.message).toBe('the push changed since you confirmed it; nothing was sent. Look at it again.')
+    expect(git(remote.dir, ['rev-parse', 'main'])).toBe(first)
   })
 
   it('answers a refused push with a conflict that keeps git reason', async () => {
@@ -269,8 +294,18 @@ describe('versions share', () => {
     writeFile(repo.dir, 'a.txt', 'ours')
     commitAll(repo.dir, 'ours')
 
-    const failure = await failureOf(versions().share(repo.dir))
+    const failure = await failureOf(versions().planShare(repo.dir).then(plan => versions().share(repo.dir, plan)))
     expect(failure.kind).toBe('conflict')
     expect(failure.message).toContain('git could not push the branch')
+  })
+})
+
+describe('a remote as the person sees it', () => {
+  it('drops any credential and keeps the host and path', () => {
+    expect(remoteAddress('https://ana:ghp_secret@github.com/ana/notes.git')).toBe('github.com/ana/notes')
+    expect(remoteAddress('git@github.com:ana/notes.git')).toBe('github.com/ana/notes')
+    expect(remoteAddress('ssh://git@example.com/ana/notes')).toBe('example.com/ana/notes')
+    expect(remoteAddress('/srv/remotes/notes.git')).toBe('/srv/remotes/notes')
+    expect(remoteAddress('file:///srv/remotes/notes.git')).toBe('/srv/remotes/notes')
   })
 })
