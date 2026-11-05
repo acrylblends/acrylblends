@@ -14,10 +14,10 @@
  * folder or asks Electron for a path (scripts/lib/bulkhead.test.mjs). No file written here holds an absolute path: the root and the bundle can move.
  */
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, posix, win32 } from 'node:path'
-import { AppInstanceError } from './index.ts'
+import { type AppInstance, AppInstanceError, productInstance } from './index.ts'
 
 /** The layout this build writes and reads. A root with a lower one is migrated on open (a later slice); a higher one is refused. */
 export const LAYOUT_VERSION = 1
@@ -226,11 +226,18 @@ function checkedName(name: string): string {
   return trimmed
 }
 
-/** Make a new app: its id, its four folders, its registry entry. Returns the entry. */
+/**
+ * Make a new app: its id, its four folders, its registry entry. Returns the entry. `seed` fills the new, empty source folder (the product's starting
+ * app); the entry is written only after it succeeded, and a failed seed removes the folder it was given, so the registry never names a half-made app.
+ */
 export function createApp(
   root: string,
   name: string,
-  options: { now?: () => Date; random?: () => string } = {},
+  options: {
+    now?: () => Date
+    random?: () => string
+    seed?: (folders: ProductAppFolders) => void
+  } = {},
 ): RegisteredApp {
   const label = checkedName(name)
   const apps = listApps(root)
@@ -243,6 +250,15 @@ export function createApp(
   const folders = appFolders(root, id)
   for (const folder of [folders.source, folders.logs, folders.cache])
     mkdirSync(folder, { recursive: true })
+  if (options.seed !== undefined) {
+    try {
+      options.seed(folders)
+    } catch (cause) {
+      // The folder was made by this call a moment ago and holds nothing of the person's.
+      rmSync(join(root, APPS_DIR, id), { recursive: true, force: true })
+      throw cause
+    }
+  }
   const entry: RegisteredApp = {
     id,
     name: label,
@@ -274,4 +290,74 @@ export function touchApp(root: string, id: string, now: () => Date = () => new D
     root,
     apps.map((app) => (app.id === id ? { ...app, lastOpened: now().toISOString() } : app)),
   )
+}
+
+/**
+ * The port a desktop product keeps its apps through (app-storage.md: one port, the per-OS rule in one adapter at the edge). Callers name an app by its
+ * id and get an `AppInstance` back; they never join a path. Show, export, import and start over join it with the frame's Settings pages.
+ */
+export interface AppStorage {
+  /** Chromium's own user data for the product's windows (window state, its cache): one folder per product, beside the apps. */
+  readonly electron: string
+  /** The apps the product holds, in the order they were made. */
+  apps(): RegisteredApp[]
+  /** The app opened last, else the one made last, or undefined while the product holds none. */
+  last(): RegisteredApp | undefined
+  /** Make an app named `name`; `seed` fills its empty source folder (the product's starting app). */
+  create(name: string, seed: (source: string) => void): RegisteredApp
+  /** Open app `id`: it is recorded as opened now, and its instance is returned (source the project root, data its home and the engine's). */
+  open(id: string): AppInstance
+}
+
+/** A root written by a newer layout, which this build cannot read: the message names the version that wrote it. */
+export class NewerLayoutError extends AppInstanceError {
+  override name = 'NewerLayoutError'
+}
+
+/**
+ * The filesystem adapter of `AppStorage`: the product's root in the OS per-user data folder (`productRoot`), opened (created on the first start) and
+ * checked before anything is read. A root of a newer layout stops with a message, never a half-read start; the layout is 1, so an older one cannot exist
+ * yet (the migration runner comes with layout 2).
+ */
+export function openProductStorage(options: {
+  /** The product's name, its root folder's name (`ACRYL Blends Blank`). */
+  readonly product: string
+  /** The product version, written into a new root's layout.json. */
+  readonly writtenBy: string
+  readonly platform?: NodeJS.Platform
+  readonly env?: Readonly<Record<string, string | undefined>>
+  readonly home?: string
+}): AppStorage {
+  const platform = options.platform ?? process.platform
+  const env = options.env ?? process.env
+  const root = productRoot(
+    options.product,
+    platform,
+    env,
+    options.home ?? personHome(env, platform),
+  )
+  const state = openRoot(root, options.writtenBy)
+  if (state.kind !== 'current')
+    throw new NewerLayoutError(
+      state.kind === 'newer'
+        ? `${root} was written by ${options.product} ${state.writtenBy}, which is newer than this one (${options.writtenBy}): install that version or a later one to open it`
+        : `${root} has layout ${String(state.layout)}, which this version cannot migrate`,
+    )
+  const opened = (app: RegisteredApp): string => app.lastOpened ?? app.created
+  return {
+    electron: join(root, ELECTRON_DIR),
+    apps: () => listApps(root),
+    last: () =>
+      listApps(root).reduce<RegisteredApp | undefined>(
+        (latest, app) => (latest === undefined || opened(app) >= opened(latest) ? app : latest),
+        undefined,
+      ),
+    create: (name, seed) => createApp(root, name, { seed: (folders) => seed(folders.source) }),
+    open(id) {
+      const app = listApps(root).find((candidate) => candidate.id === id)
+      if (app === undefined) throw new AppInstanceError(`no app "${id}" in ${root}`)
+      touchApp(root, id)
+      return productInstance(appFolders(root, id, platform), app.name)
+    },
+  }
 }

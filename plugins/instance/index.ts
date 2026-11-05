@@ -179,6 +179,18 @@ export function selectInstance(options: {
   return instance
 }
 
+/**
+ * What a child process started for this instance (the frame host) needs in its environment so that its own `selectInstance` chooses the same home and
+ * the same start port. The parent decides once; the child never derives a second answer from the folder it runs in.
+ */
+export function instanceEnv(instance: AppInstance): Record<string, string> {
+  return {
+    [HOME_ENV]: instance.home,
+    [PORT_ENV]: String(instance.port.start),
+    ...(instance.host === undefined ? {} : { [HOST_ENV]: instance.host }),
+  }
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     appInstance: AppInstance

@@ -6,7 +6,8 @@
  *   node scripts/pack-blank-mac.mjs [--out <dir>] [--arch arm64|x64]
  *
  * The DMG carries the app itself: the frame and the Blank app it builds in, with Electron's own Node, so it needs no Node, npm or git. The bundle is
- * read-only; the packaged app copies it into the person's Documents on first start (plugins/desktop/product.ts).
+ * read-only; on the first start the packaged app makes the person's first app from it in the product's own folder of the OS per-user data folder
+ * (plugins/desktop/product.ts, plugins/instance/storage.ts).
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
@@ -199,13 +200,14 @@ manifest.build = {
   dmg: { title: 'ACRYL Blends Blank' },
 }
 writeFileSync(join(app, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+// The product's root in the OS per-user data folder is named after it; the first app the person gets is called Blank until they name it.
 writeFileSync(
   join(app, 'product.json'),
-  `${JSON.stringify({ appFolder: 'ACRYL Blends Blank' }, null, 2)}\n`,
+  `${JSON.stringify({ product: 'ACRYL Blends Blank', appName: 'Blank' }, null, 2)}\n`,
 )
 
 // 4b. The packager drops or rewrites files the app owns: `.git` and `.gitignore` never enter a bundle (electron-builder excludes those names), and the
-// manifest it ships is filtered (the scripts go). Each travels under a plain carrier name and the first start writes it back as itself
+// manifest it ships is filtered (the scripts go). Each travels under a plain carrier name and a new app's source gets it back as itself
 // (plugins/desktop/product.ts). The product's own build-time files stay out of the repository's status through its local exclude, never the app's tracked
 // .gitignore.
 cpSync(join(app, '.gitignore'), join(app, 'gitignore-product'))

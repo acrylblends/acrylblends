@@ -6,7 +6,7 @@
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { connect } from 'node:net'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 
 /** The launcher every frame app has; without it the app runs on its own server (made before the frame). */
 export const HOST_SCRIPT = join('scripts', 'ide-host.mjs')
@@ -21,14 +21,6 @@ export const HOST_STOP_GRACE_MS = 5_000
 
 export function isFrameApp(root: string, exists: (path: string) => boolean = existsSync): boolean {
   return exists(join(root, HOST_SCRIPT))
-}
-
-/** The app home the host uses: `ACRYLBLENDS_HOME` when set, else `<app>/.acrylblends` (the launcher's own rule). */
-export function frameHome(root: string, env: Record<string, string | undefined>): string {
-  const pinned = env.ACRYLBLENDS_HOME?.trim()
-  return pinned === undefined || pinned === ''
-    ? join(resolve(root), '.acrylblends')
-    : resolve(pinned)
 }
 
 /** The frame address in the host's output so far, or `undefined` while it has not printed it. */

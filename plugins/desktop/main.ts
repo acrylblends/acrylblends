@@ -11,10 +11,11 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, Menu, MenuItem, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, MenuItem, screen, shell } from 'electron'
 import type { App } from '../../src/app.ts'
 import '../acryl-node-server/src/register.ts'
-import { selectInstance } from '../instance/index.ts'
+import { type AppInstance, instanceEnv, selectInstance } from '../instance/index.ts'
+import { type AppStorage, openProductStorage } from '../instance/storage.ts'
 import { runningApp } from './attach.ts'
 import {
   type DesktopPort,
@@ -24,7 +25,6 @@ import {
 } from './door-shell.ts'
 import {
   type FrameHost,
-  frameHome,
   isFrameApp,
   navigation,
   openFrameSettings,
@@ -33,20 +33,36 @@ import {
   withoutToken,
 } from './frame.ts'
 import { hasSettings, settingsPlacement } from './menu.ts'
-import { firstRunRoot, readProduct } from './product.ts'
+import { openProductApp, readProduct } from './product.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { cascade, windowOptions, windowSize } from './window.ts'
 
 /** The app shipped inside the bundle (a packaged product) or checked out by the person (an app made with `acrylblends init`). */
 const bundledRoot = fileURLToPath(new URL('../..', import.meta.url))
-// A product build runs on the copy it made in the person's Documents the first time it started: the bundle is read-only, and the app folder is theirs.
-const documents = process.env.ACRYLBLENDS_DOCUMENTS?.trim() || app.getPath('documents')
-const projectRoot =
-  app.isPackaged && readProduct(bundledRoot) !== undefined
-    ? firstRunRoot(bundledRoot, documents)
-    : bundledRoot
-const chosen = selectInstance({ projectRoot, env: process.env })
+// A product build keeps its apps in its own root in the OS per-user data folder, one sealed folder each, and runs on the source of the one it opens: the
+// bundle is the read-only Program (plugins/instance/storage.ts). An app made with `acrylblends init` runs on its own folder.
+const product = app.isPackaged ? readProduct(bundledRoot) : undefined
+let storage: AppStorage | undefined
+let chosen: AppInstance
+try {
+  storage =
+    product === undefined
+      ? undefined
+      : openProductStorage({ product: product.product, writtenBy: app.getVersion() })
+  chosen =
+    storage === undefined || product === undefined
+      ? selectInstance({ projectRoot: bundledRoot, env: process.env })
+      : openProductApp(storage, product, bundledRoot)
+} catch (cause) {
+  // A root of a newer version, or one this version cannot read: said once, in a dialog, and nothing is started or written.
+  const message = cause instanceof Error ? cause.message : String(cause)
+  console.error(`desktop: ${message}`)
+  dialog.showErrorBox(`${product?.product ?? 'The app'} cannot open`, message)
+  app.exit(1)
+  throw cause
+}
+const projectRoot = chosen.root
 
 /** Where the window opens: `acrylblends.desktopPath` in package.json (the todo template sets `/todo`), else the root. */
 function startPath(): string {
@@ -56,8 +72,9 @@ function startPath(): string {
   return manifest.acrylblends?.desktopPath ?? '/'
 }
 
-/** Electron's user-data folder: an explicit DSH_DESKTOP_USER_DATA, else a folder inside the app's own home. */
-const userData = resolveDesktopUserDataOverride(process.env) ?? join(chosen.home, 'electron')
+/** Electron's user-data folder: an explicit DSH_DESKTOP_USER_DATA, else the product's own (beside its apps), else a folder inside the app's own home. */
+const userData =
+  resolveDesktopUserDataOverride(process.env) ?? storage?.electron ?? join(chosen.home, 'electron')
 mkdirSync(userData, { recursive: true, mode: 0o700 })
 app.setPath('userData', userData)
 app.setName(chosen.name)
@@ -105,7 +122,7 @@ if (!app.requestSingleInstanceLock()) {
     let url: string
     if (frame) {
       // The frame that already runs for this folder (`npm run dev`, or another window's host), else a host of this window's own.
-      const runningAddress = await runningFrame(frameHome(projectRoot, process.env))
+      const runningAddress = await runningFrame(chosen.home)
       if (runningAddress !== undefined) {
         console.log(
           `desktop: attached to the frame already running from this folder at ${new URL(runningAddress).origin} (it keeps running when the window closes)`,
@@ -114,7 +131,8 @@ if (!app.requestSingleInstanceLock()) {
       } else {
         host = startFrameHost(
           projectRoot,
-          process.env,
+          // The host chooses the same home and port as this window: decided here once, never again from the folder it runs in.
+          { ...process.env, ...instanceEnv(chosen) },
           (text) => {
             process.stdout.write(text)
           },

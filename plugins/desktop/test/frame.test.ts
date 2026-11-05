@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import {
-  frameHome,
   hostAddress,
   hostCommand,
   isFrameApp,
@@ -23,17 +22,6 @@ test('a frame app is one with the frame launcher', () => {
   assert.equal(
     isFrameApp('/app', () => false),
     false,
-  )
-})
-
-test('the frame home is ACRYLBLENDS_HOME when set, else the app folder', () => {
-  assert.equal(frameHome('/app', {}).replaceAll('\\', '/').endsWith('/app/.acrylblends'), true)
-  assert.equal(frameHome('/app', { ACRYLBLENDS_HOME: '  ' }).endsWith('.acrylblends'), true)
-  assert.equal(
-    frameHome('/app', { ACRYLBLENDS_HOME: '/elsewhere' })
-      .replaceAll('\\', '/')
-      .endsWith('/elsewhere'),
-    true,
   )
 })
 
