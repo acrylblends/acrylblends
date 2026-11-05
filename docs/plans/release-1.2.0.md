@@ -1,7 +1,7 @@
 # Release checklist: the ACRYL frame on npm, then acrylblends and create-acrylblends 1.2.0
 
-Nothing here has been done. Steps marked **OWNER** need the owner's own npm or GitHub account; an agent never does them. Run the rest from a checkout of
-the release branch (`129-create-1-2-0`) after `corepack pnpm install --frozen-lockfile && corepack pnpm run build`.
+Nothing here has been done. Steps marked **OWNER** need the owner's own npm or GitHub account; an agent never does them. Step 3 is one script,
+`docs/plans/release-1.2.0-publish-frame.sh` (a dry run unless given `--publish`). Run the rest from a checkout of the release branch (`129-create-1-2-0`) after `corepack pnpm install --frozen-lockfile && corepack pnpm run build`.
 
 The order matters. `acrylblends` 1.2.0's `init --desktop` installs the frame's packages from npm by default, so they must be on npm before 1.2.0 is.
 `main` keeps matching the published 1.1.0 until step 6 (the cloud brief tells builders that main is what the CLI is).
@@ -12,10 +12,10 @@ The order matters. `acrylblends` 1.2.0's `init --desktop` installs the frame's p
       `blends-frame` (acryl-blends-frame). A rename is one line there; re-run step 2 after it.
 - [x] **OWNER** (approved 2026-11-05) Approve the release itself (this checklist), as the coordinator relays it.
 
-## 1. The npm org
+## 1. The npm org (a check)
 
-- [ ] **OWNER** Signed in to npm as yourself: `npm org ls acrylblends`. It should list your account. If the org does not exist, create it at
-      <https://www.npmjs.com/org/create> (name `acrylblends`, free plan for public packages) and run the command again.
+- [ ] **OWNER** Signed in to npm as yourself (`npm whoami`: webboxescom), `npm org ls acrylblends` lists `webboxescom - owner`. The owner created the
+      org on 2026-11-05; the publish script checks both before it publishes anything.
 
 ## 2. Pack and prove the frame (no publish, no login)
 
@@ -23,11 +23,13 @@ The order matters. `acrylblends` 1.2.0's `init --desktop` installs the frame's p
       It runs each package's own tests, checks provenance, packs the 16 tarballs, scaffolds an app with `init --desktop` (which writes the published
       names), installs the tarballs and the packed acrylblends 1.2.0, checks for one Cordis and one acrylblends in the tree, boots the frame, and checks
       `/` and `/app`. The last lines name the kept folder; the tarballs are `<kept>/stage/<short>/acrylblends-<short>-<version>.tgz`.
+- [ ] Copy the 16 into one folder with their checksums: `mkdir frame && cp <kept>/stage/*/*.tgz frame/ && (cd frame && shasum -a 256 *.tgz > SHA256SUMS)`.
 
 ## 3. Publish the 16 frame packages, dependencies first
 
-- [ ] **OWNER** From the kept folder, one `npm publish <tarball> --access public` per package, in this order (each one's frame dependencies are
-      published before it):
+- [ ] **OWNER** `bash docs/plans/release-1.2.0-publish-frame.sh <folder>` (a dry run), then the same with `--publish`. It checks the checksums,
+      `npm whoami`, the org and each tarball's name and version, then runs `npm publish <tarball> --access public` in this order (each one's frame
+      dependencies are published before it), stops at the first failure, and skips a version already on npm, so running it again resumes:
 
 | # | Package | Version | Depends on (frame) |
 | --- | --- | --- | --- |

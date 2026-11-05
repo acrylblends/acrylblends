@@ -6,9 +6,8 @@
 proves them, and the one file the owner's naming decision moves. The release order is `docs/plans/release-1.2.0.md`.
 
 **Dry run only.** The pipeline runs `npm pack` and stops: it never publishes, never logs in, and never writes outside its scratch folder. `npm publish` is
-the owner's step. Before that step the npm org **`acrylblends`** must exist and the owner's account must be a member of it; `@acrylblends/*` cannot be
-published without it. Create the org at <https://www.npmjs.com/org/create> (the name has to be free), then the publish is one
-`npm publish <tarball> --access public` per tarball.
+the owner's step: `@acrylblends/*` publishes into the npm org **`acrylblends`**, which the owner created on 2026-11-05 (webboxescom is its owner).
+The publish is one `npm publish <tarball> --access public` per tarball, in dependency order, which `docs/plans/release-1.2.0-publish-frame.sh` runs.
 
 ## The one file
 
