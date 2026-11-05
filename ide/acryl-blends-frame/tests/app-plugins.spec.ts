@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  bumpPackageVersion, commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, packageAppPlugin, parseBlendRows, planAppPluginShare,
+  bumpPackageVersion, checkedShares, commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, packageAppPlugin, parseBlendRows, planAppPluginShare,
   pluginPackageManifest, pluginPackagesOf, readAppPlugins, readSharedRecords, recordShare, setMadeOn, setRowOn, shareAppPlugin, switchAppPlugin,
   type SharePorts,
 } from '../src/app-plugins.ts'
@@ -304,6 +304,22 @@ describe('sharing a local plugin', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('marks a share gone only on GitHub\'s word that the repository does not exist', async () => {
+    const records = {
+      gone: { url: 'https://github.com/ana/gone', version: '0.1.0' },
+      here: { url: 'https://github.com/ana/here', version: '0.2.0' },
+      offline: { url: 'https://github.com/ana/offline', version: '0.3.0' },
+    }
+    const answers: Record<string, boolean | undefined> = { 'https://github.com/ana/gone': false, 'https://github.com/ana/here': true }
+    expect(await checkedShares(records, async url => answers[url])).toEqual({
+      gone: { url: 'https://github.com/ana/gone', version: '0.1.0', gone: true },
+      here: records.here,
+      offline: records.offline,
+    })
+    const view = parseAppPluginsView({ plugins: [{ name: 'gone', kind: 'made', description: 'd', on: true, shared: { ...records.gone, gone: true } }], frame: [] })
+    expect(view.plugins[0]?.shared).toEqual({ ...records.gone, gone: true })
   })
 
   it('keeps the share record in the plugin list the page reads', () => {

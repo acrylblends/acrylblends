@@ -21,7 +21,7 @@ import { GitRunner, Versions } from 'acryl-versions'
 import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
-import { githubSharePorts, planAppPluginShare, readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
+import { ghRepositoryCheck, githubSharePorts, planAppPluginShare, readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
@@ -794,7 +794,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     }
     const plugins: PluginsPort = {
       read: async () => {
-        const [app, frame] = await Promise.all([readAppPlugins(root, git, join(ctx.appInstance.home, 'shared-plugins.json')), readFramePlugins(root, frameRows())])
+        const [app, frame] = await Promise.all([readAppPlugins(root, git, join(ctx.appInstance.home, 'shared-plugins.json'), ghRepositoryCheck), readFramePlugins(root, frameRows())])
         return { plugins: app, frame }
       },
       switch: async (kind, name, on) => {

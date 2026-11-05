@@ -5,10 +5,12 @@
  * switch when its Loader row (`app-plugins`) loads again, which the client asks for.
  */
 
+import { execFile } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
+import { promisify } from 'node:util'
 import { dirname } from 'node:path'
 import { bumpVersion, gitCli, githubCli, parseVersion, PluginStore, sharePlugin, storeRootOf, type PublishGitPort, type RepositoryHostPort } from '@webboxes/plugin-hub'
 import { samePlan, type AppPluginView, type FramePluginState, type FramePluginView, type SharedPluginView, type SharePlan } from './contract.ts'
@@ -211,11 +213,40 @@ async function libraryVersions(root: string): Promise<Map<string, string>> {
  * Every plugin of the app: first the app's own plugins (the folders of `plugins/` that are not library copies), each mounted by its `blend.yaml` row
  * or, without one, started by the `extensions` row; then the library rows of `blend.yaml` in their order.
  */
-export async function readAppPlugins(root: string, git: GitPort, sharedFile?: string): Promise<AppPluginView[]> {
+/**
+ * Whether a shared plugin's repository is still there: false when GitHub answers that it does not exist (deleted or renamed), undefined when it could
+ * not be asked (offline, gh signed out), so a row is marked gone only on GitHub's own word.
+ */
+export type RepositoryCheck = (url: string) => Promise<boolean | undefined>
+
+const execFileAsync = promisify(execFile)
+
+/** The check through the user's own `gh`, without blocking the Host. */
+export const ghRepositoryCheck: RepositoryCheck = async (url) => {
+  const where = /^https:\/\/github\.com\/([^/]+)\/([^/#?]+)/u.exec(url)
+  if (where === null) return undefined
+  try {
+    await execFileAsync('gh', ['repo', 'view', `${where[1] ?? ''}/${where[2] ?? ''}`, '--json', 'url'], { timeout: 15_000 })
+    return true
+  } catch (cause) {
+    const stderr = String((cause as { stderr?: unknown }).stderr ?? '')
+    return /could not resolve to a repository|not found/iu.test(stderr) ? false : undefined
+  }
+}
+
+/** The share records, each checked once: a repository GitHub says is gone is marked so, and the row offers a new share. */
+export async function checkedShares(records: Readonly<Record<string, SharedPluginView>>, check: RepositoryCheck): Promise<Record<string, SharedPluginView>> {
+  const entries = await Promise.all(Object.entries(records).map(async ([name, shared]): Promise<[string, SharedPluginView]> =>
+    [name, (await check(shared.url)) === false ? { url: shared.url, version: shared.version, gone: true } : shared]))
+  return Object.fromEntries(entries)
+}
+
+export async function readAppPlugins(root: string, git: GitPort, sharedFile?: string, check?: RepositoryCheck): Promise<AppPluginView[]> {
   const text = await readFile(join(root, 'blend.yaml'), 'utf8')
   const off = new Set(extensionsOff(text))
   const versions = await libraryVersions(root)
-  const shareRecords = await readSharedRecords(sharedFile)
+  const recorded = await readSharedRecords(sharedFile)
+  const shareRecords = check === undefined ? recorded : await checkedShares(recorded, check)
   const blendRows = parseBlendRows(text)
   const own = await madePlugins(root)
   const made = await Promise.all(own.map(async (name): Promise<AppPluginView> => {

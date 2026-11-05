@@ -259,6 +259,8 @@ export const FRAME_PLUGINS_SHARE_PATH = `${FRAME_API_PREFIX}/plugins/share`
 export interface SharedPluginView {
   readonly url: string
   readonly version: string
+  /** GitHub says the repository no longer exists (deleted or renamed): the row shows it gone and offers a new share. */
+  readonly gone?: boolean
 }
 
 export type ShareVisibility = 'private' | 'public'
@@ -354,7 +356,7 @@ export function parseAppPluginsView(value: unknown): AppPluginsView {
         ...(entry.unsaved === true ? { unsaved: true } : {}),
         ...(typeof entry.version === 'string' ? { version: entry.version } : {}),
         ...(isRecord(entry.shared) && typeof entry.shared.url === 'string' && typeof entry.shared.version === 'string'
-          ? { shared: { url: entry.shared.url, version: entry.shared.version } }
+          ? { shared: { url: entry.shared.url, version: entry.shared.version, ...(entry.shared.gone === true ? { gone: true } : {}) } }
           : {}),
         description: entry.description,
         on: entry.on,

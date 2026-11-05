@@ -142,9 +142,17 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
               {plugin.shared !== undefined && (
                 <>
                   {' · '}
-                  <a className="acrylBlendsShared" href={plugin.shared.url} target="_blank" rel="noreferrer">
-                    {plugin.shared.url.replace(/^https:\/\//u, '')} · v{plugin.shared.version}
-                  </a>
+                  {plugin.shared.gone === true
+                    ? (
+                      <span className="acrylBlendsSharedGone" title="GitHub says this repository no longer exists; Share publishes it again">
+                        {plugin.shared.url.replace(/^https:\/\//u, '')} is gone
+                      </span>
+                    )
+                    : (
+                      <a className="acrylBlendsShared" href={plugin.shared.url} target="_blank" rel="noreferrer">
+                        {plugin.shared.url.replace(/^https:\/\//u, '')} · v{plugin.shared.version}
+                      </a>
+                    )}
                 </>
               )}
               {plugin.share !== undefined && (
@@ -156,7 +164,7 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
                     disabled={busy !== undefined}
                     onClick={() => { void askShare(plugin) }}
                   >
-                    {busy === plugin.key && sharing !== undefined ? (sharing === 'planning' ? 'Checking…' : 'Sharing…') : plugin.shared === undefined ? 'Share' : 'Share again'}
+                    {busy === plugin.key && sharing !== undefined ? (sharing === 'planning' ? 'Checking…' : 'Sharing…') : plugin.shared === undefined || plugin.shared.gone === true ? 'Share' : 'Share again'}
                   </button>
                 </>
               )}
