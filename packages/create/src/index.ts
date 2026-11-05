@@ -19,7 +19,6 @@ import { findSecrets } from '@webboxes/app-persistence'
 import { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST } from './names'
 import {
   DEFAULT_REGISTRY,
-  manifestName,
   ownLock,
   ownManifest,
   pickEntry,
@@ -27,6 +26,7 @@ import {
   type RegistryEntry,
   readRegistry,
   renameApp,
+  starterName,
 } from './registry'
 import {
   type Fetchers,
@@ -393,9 +393,14 @@ async function createFromSource(
     )
     if (entry !== undefined && existsSync(join(staged, 'blend.yaml'))) {
       const starterText = readFileSync(join(staged, 'blend.yaml'), 'utf8')
-      // The starter was an app with its own name in its page, its README and its agents' instructions: they now say this app's.
-      const starterName = manifestName(starterText)
-      if (starterName !== undefined) renameApp(staged, starterName, name)
+      // The starter was an app with its own name in its page, its README and its agents' instructions: they now say this app's. The staged package.json
+      // already carries the new name, so the starter's is read from the source.
+      const sourcePackage = join(scratch, 'source', 'package.json')
+      const starter = starterName(
+        starterText,
+        existsSync(sourcePackage) ? readFileSync(sourcePackage, 'utf8') : undefined,
+      )
+      if (starter !== undefined) renameApp(staged, starter, name)
       const manifestText = ownManifest(starterText, name)
       writeFileSync(join(staged, 'blend.yaml'), manifestText)
       if (existsSync(join(staged, 'blend.lock.json')))

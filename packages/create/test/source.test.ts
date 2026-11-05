@@ -342,6 +342,63 @@ describe('starters from a registry', () => {
     expect(execFileSync('git', ['status', '--porcelain'], { cwd: made, encoding: 'utf8' })).toBe('')
   })
 
+  it('renames a curated starter, whose manifest carries a display name, from its package name', async () => {
+    // A curated blueprint is titled "Productivity Hub" in its manifest; the scaffold wrote its package name where an app names itself.
+    const starter: Record<string, string> = {
+      ...app(),
+      'package.json': JSON.stringify({
+        name: 'productivity-hub',
+        scripts: { test: 'node --test' },
+      }),
+      'blend.yaml':
+        'metadata:\n  id: acrylblends.productivity-hub\n  name: Productivity Hub\n  version: 0.1.0\nspec:\n  runtime: cordis\n',
+      'README.md': '# Productivity Hub\n\nA calm personal workbench.\n',
+      'src/routes.ts': "export const APP_NAME = 'productivity-hub'\n",
+      'scripts/ide-host.mjs': "const profileName = 'acrylblends-productivity-hub'\n",
+      'package-lock.json': `${JSON.stringify({ name: 'productivity-hub', lockfileVersion: 3, packages: { '': { name: 'productivity-hub' } } }, null, 2)}\n`,
+    }
+    const root = join(scratch, `registry-${counter++}`)
+    for (const [path, text] of Object.entries(starter)) {
+      mkdirSync(join(root, 'blends', 'acrylblends.productivity-hub', path, '..'), {
+        recursive: true,
+      })
+      writeFileSync(join(root, 'blends', 'acrylblends.productivity-hub', path), text)
+    }
+    writeFileSync(
+      join(root, 'index.json'),
+      JSON.stringify({
+        formatVersion: 1,
+        entries: [
+          {
+            id: 'acrylblends.productivity-hub',
+            name: 'Productivity Hub',
+            version: '0.1.0',
+            path: 'blends/acrylblends.productivity-hub',
+            runtime: 'acrylblends',
+          },
+        ],
+      }),
+    )
+    const s = fakeIo()
+    expect(
+      await runCreate(
+        ['my-hub', '--from', 'acrylblends.productivity-hub', '--registry', root, '-y'],
+        s.io,
+      ),
+      s.err(),
+    ).toBe(0)
+    const made = join(scratch, 'my-hub')
+    const read = (file: string) => readFileSync(join(made, file), 'utf8')
+    expect(read('README.md')).toBe('# Productivity Hub\n\nA calm personal workbench.\n')
+    expect(read('src/routes.ts')).toBe("export const APP_NAME = 'my-hub'\n")
+    expect(read('scripts/ide-host.mjs')).toBe("const profileName = 'acrylblends-my-hub'\n")
+    expect(JSON.parse(read('package-lock.json'))).toEqual({
+      name: 'my-hub',
+      lockfileVersion: 3,
+      packages: { '': { name: 'my-hub' } },
+    })
+  })
+
   it('takes a registry folder written as a bare path, and says in one line, naming the folder, when it has no index.json', async () => {
     const bare = fakeIo()
     const name = registry().slice(scratch.length + 1)

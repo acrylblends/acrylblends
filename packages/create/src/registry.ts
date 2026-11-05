@@ -149,6 +149,25 @@ export function profileNameFor(appName: string): string {
   return `acrylblends-${slug === '' ? 'app' : slug}`
 }
 
+/**
+ * The name the scaffold wrote into a starter where an app names itself: its manifest's one-word `metadata.name`, or else its `package.json` name, which
+ * `init` set to the same name. A curated starter's manifest carries a display name ("Productivity Hub"), which the scaffold never wrote.
+ */
+export function starterName(
+  manifestText: string,
+  packageText: string | undefined,
+): string | undefined {
+  const fromManifest = manifestName(manifestText)
+  if (fromManifest !== undefined || packageText === undefined) return fromManifest
+  let name: unknown
+  try {
+    name = (JSON.parse(packageText) as { name?: unknown }).name
+  } catch {
+    return undefined
+  }
+  return typeof name === 'string' && name !== '' ? name : undefined
+}
+
 /** The app's name as a starter's `blend.yaml` gives it (`metadata.name`), or undefined. */
 export function manifestName(text: string): string | undefined {
   const lines = text.split('\n')

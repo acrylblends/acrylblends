@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { manifestName, ownLock, ownManifest, profileNameFor } from '../src/registry'
+import { manifestName, ownLock, ownManifest, profileNameFor, starterName } from '../src/registry'
 
 const STARTER = [
   'apiVersion: blends.acryl.dev/v1alpha1',
@@ -59,6 +59,15 @@ describe("a starter's own name", () => {
     expect(manifestName('metadata:\n  id: x.y\n  name: my-app # mine\n')).toBe('my-app')
     expect(manifestName('metadata:\n  name: Notes with a desktop window\n')).toBeUndefined()
     expect(manifestName('spec:\n  name: notes\n')).toBeUndefined()
+  })
+
+  it('falls back to its package name when the manifest carries a display name', () => {
+    const titled = 'metadata:\n  name: Productivity Hub\n'
+    expect(starterName(titled, '{ "name": "productivity-hub" }')).toBe('productivity-hub')
+    expect(starterName(STARTER, '{ "name": "x" }')).toBe('notes')
+    expect(starterName(titled, undefined)).toBeUndefined()
+    expect(starterName(titled, 'not json')).toBeUndefined()
+    expect(starterName(titled, '{ "name": "" }')).toBeUndefined()
   })
 
   it("names the app's DSH profile the way the scaffold does", () => {
