@@ -67,7 +67,7 @@ For each of your ten tasks:
 
 Do not create repositories (the session cannot). After review the coordinator merges your branch so the entry shows on https://acrylblends.github.io/blends and
 https://acryl.dev/blends, and gives every blueprint its own repository in the acrylblends organization, named
-<NN>-<category>-<name> like 01-system-system-monitor (workshop-registry/scripts/publish-repo.mjs), and the site and acryl.dev/blends list it from the registry.
+<NN>-<name> like 01-system-monitor (workshop-registry/scripts/publish-repo.mjs), and the site and acryl.dev/blends list it from the registry.
 
 Commit each blueprint as its own commit in SITE (the entry folder, registry/index.json and the registry-placement.ts line), on branch blueprints/batch-<NN>, and push that
 branch. Do not open a pull request, merge, or push to main. In ACR, on blueprints/batch-<NN>-tasks, tick your tasks in tasks.md and add anything you ran into under

@@ -30,8 +30,8 @@ The app opens in the ACRYL frame and already does the category's job. From there
 - Published as `registry/blends/acrylblends.<name>/` in the site repository with the registry's own entry script (`make-entry.mjs --out <site>/registry --category <slug>`, see
   `cloud-brief.md`), with `category` in its `blend.yaml` set to the category's slug. The subcategory is not a field of `blend.yaml`: it is the entry's line in `src/lib/registry-placement.ts` of the site repository, which is also what makes the site list the entry.
 
-- Its own repository in the organization, https://github.com/acrylblends/<NN>-<category>-<name> (NN is the category's place in the site's
-  taxonomy, System = 01), like 02-application-gtd-planner and 03-business-accounting. The coordinator creates it from the reviewed registry entry
+- Its own repository in the organization, https://github.com/acrylblends/<NN>-<name> (NN is the category's place in the site's
+  taxonomy, System = 01), like 01-system-monitor. The coordinator creates it from the reviewed registry entry
   with `workshop-registry/scripts/publish-repo.mjs <site checkout> <entry id>`; a cloud session cannot create repositories. acryl.dev/blends mirrors
   the registry live, so an entry on https://acrylblends.github.io/blends is on acryl.dev too.
 

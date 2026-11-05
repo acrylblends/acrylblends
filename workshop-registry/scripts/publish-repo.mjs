@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Give a registry entry its own repository in the acrylblends organization:   node scripts/publish-repo.mjs <site checkout> <entry id> [--org acrylblends] [--dry-run]
-// The repository is named <NN>-<category>-<name>, as 02-application-gtd-planner and 03-business-accounting are: NN is the category's place in the site's taxonomy
-// (src/lib/content.ts of the site checkout, System = 01), <category> its slug, <name> the entry id without its login. Its content is the entry folder as it is in
+// The repository is named <NN>-<name>, as 01-system-monitor is: NN is the category's place in the site's taxonomy
+// (src/lib/content.ts of the site checkout, System = 01), <name> the entry id without its login. Its content is the entry folder as it is in
 // registry/blends/<entry id>/, with the registry's `gitignore` restored as `.gitignore`, in one first commit. Needs `gh`, signed in with an account that may create
 // repositories in the organization; the push goes over HTTPS as that account. A repository that already has commits is left alone; an empty one is filled.
 import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs'
@@ -40,7 +40,7 @@ if (index < 0) {
   console.error(`blend.yaml category "${category}" is not a category of the site (${categorySlugs.length} known)`)
   process.exit(1)
 }
-const repo = `${String(index + 1).padStart(2, '0')}-${category}-${id.slice(id.indexOf('.') + 1)}`
+const repo = `${String(index + 1).padStart(2, '0')}-${id.slice(id.indexOf('.') + 1)}`
 const full = `${values.org}/${repo}`
 
 const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
