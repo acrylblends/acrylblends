@@ -1,32 +1,34 @@
 # Publishing the frame's packages (slice 1's last item)
 
-The ported frame packages are unpublished, so today a scaffolded app installs them through the `ACRYLBLENDS_FRAME_PACKAGES` bridge (a `file:` spec per package
-from the checkout). This page is the pipeline that turns them into npm tarballs and proves them, and the one config value the owner's naming decision moves.
+`acrylblends init --desktop` installs the frame's packages from npm by the names and versions in `frame/packages.json`, which the CLI bundles at build.
+`ACRYLBLENDS_FRAME_PACKAGES` overrides them: a JSON set of `file:` specs for a checkout's unpublished build (what the frame gates use,
+`scripts/lib/ide-specs.mjs`), or `none` for a desktop app on the framework alone. This page is the pipeline that turns the packages into npm tarballs and
+proves them, and the one file the owner's naming decision moves. The release order is `docs/plans/release-1.2.0.md`.
 
 **Dry run only.** The pipeline runs `npm pack` and stops: it never publishes, never logs in, and never writes outside its scratch folder. `npm publish` is
 the owner's step. Before that step the npm org **`acrylblends`** must exist and the owner's account must be a member of it; `@acrylblends/*` cannot be
-published without it. Create the org at <https://www.npmjs.com/org/create> (the name has to be free), then the publish is one `npm publish` per tarball.
+published without it. Create the org at <https://www.npmjs.com/org/create> (the name has to be free), then the publish is one
+`npm publish <tarball> --access public` per tarball.
 
-## The one value
+## The one file
 
-`frame/packages.json` holds the scope and each package folder's short name:
+`frame/packages.json` holds the scope, the DSH release the packages are built against, and each package folder's short name and version:
 
 ```json
-{ "scope": "@acrylblends", "packages": { "acryl-ui": "ui", "acryl-app-shell": "app-shell", ... } }
+{ "scope": "@acrylblends", "dshVersion": "0.2.0-rc.2", "packages": { "acryl-ui": { "name": "ui", "version": "0.3.0" }, ... } }
 ```
 
-A published name is `<scope>/<short>`. Changing the owner's mind about the name is a one-line change to `scope`; every overlay row, dependency, tarball and
-gate reads the file.
+A published name is `<scope>/<name>`. The set is exactly the closure of the frame's rows (`FRAME_PACKAGES` in `packages/cli/src/ide-profile.ts` and
+their workspace dependencies), and each version is its folder's `package.json` version; the CLI tests (`packages/cli/test/init-frame.test.ts`) and the
+pipeline fail when either drifts. A frame package's version bump is therefore a line here too.
 
 | Folder | Published as | What it is |
 | --- | --- | --- |
 | `acryl-ui` | `@acrylblends/ui` | the design: themed components, semantic colour roles |
-| `acryl-brand` | `@acrylblends/brand` | brand config: the mark, the accents |
 | `dsh-client-ui-brand-acryl` | `@acrylblends/brand-client` | the DSH client brand plugin that paints the mark |
 | `acryl-app-shell` | `@acrylblends/app-shell` | the frame: three columns, collapsible and resizable panels, layout state, theme |
 | `acryl-workspace` | `@acrylblends/workspace` | Projects, sessions, terminal tabs, the right panel's files and changes |
 | `acryl-settings` | `@acrylblends/settings` | the Settings surface and its sections |
-| `acryl-shortcuts` | `@acrylblends/shortcuts` | the shortcut map and its UI |
 | `acryl-sign-in` | `@acrylblends/sign-in` | connect a provider by account |
 | `acryl-control` | `@acrylblends/control` | the host control surface the frame talks to |
 | `acryl-diagnostics` | `@acrylblends/diagnostics` | diagnostics and support bundles |
@@ -34,9 +36,14 @@ gate reads the file.
 | `acryl-support` | `@acrylblends/support` | support routes and the diagnostics download |
 | `acryl-loopback-http` | `@acrylblends/loopback-http` | the loopback HTTP helper the host uses |
 | `acryl-web` | `@acrylblends/web` | the web host surface the frame mounts on |
+| `acryl-system-prompt` | `@acrylblends/system-prompt` | the agent's prompt, as ACRYL IDE's agent has it |
+| `acryl-app-context` | `@acrylblends/app-context` | the app builder's docs and verified example plugins |
+| `acryl-versions` | `@acrylblends/versions` | Versions: the branch's commits as save points |
+| `acryl-blends-frame` | `@acrylblends/blends-frame` | the Blends frame, the page's root |
 
-The short names are proposals: `brand-client` is the one that needed a decision (two brand packages), and the rest drop the `acryl-` prefix. Rename any of
-them by editing its line; nothing else names a package.
+The short names are proposals the owner confirms before the first publish: `brand-client` needed a decision (two brand packages), `versions` and
+`blends-frame` were added with the frame, and the rest drop the `acryl-` prefix. `acryl-brand` and `acryl-shortcuts` are not published: the frame mounts
+neither and no frame package depends on them.
 
 ## What the pipeline checks
 
@@ -51,8 +58,10 @@ to keep the scratch folder). For every package:
 5. **Peers**: `acrylblends`, `@deepseek-ai/cordis` and the `@deepseek-ai/dsh-*` services are peers, never dependencies, so one copy is shared with the host.
    Libraries such as `@deepseek-ai/schemastery` stay ordinary dependencies. Frame packages depend on each other (they ship together).
 
-Then the whole set is installed into a fresh app: the blank template is scaffolded, the layer is generated with the published names (the overlay's rows, the
-`@acrylblends` dependencies as tarball specs), and the app is booted through the host launcher of [the host inversion](ide-host-inversion.md)
+Then the whole set is installed into a fresh app made the way a person makes one: the built CLI's `init --desktop` with no `ACRYLBLENDS_FRAME_PACKAGES`,
+checked to ask for every row by its published name at `^<version>`, the framework at `^<this release>` and DSH at `dshVersion`. Each of those specs is
+then pointed at its tarball, and `acrylblends` at this checkout's packed `packages/cli`, so the install is the release itself. The tree must hold one
+`@deepseek-ai/cordis` and one `acrylblends`. The app is booted through the host launcher of [the host inversion](ide-host-inversion.md)
 (`npm run dev` -> `scripts/ide-host.mjs` on the framework's node server, no DSH profile) on a free port from `ACRYLBLENDS_PORT`: the frame page answers 200
 and the app answers at `/app`. Every server is stopped with its process group, its port is checked free, and the gate fails if a process survives.
 
@@ -64,15 +73,24 @@ The source keeps ACRYL's package names (the port rule); the published artifact c
 - the built JavaScript and declarations: import and export specifiers of a frame package are rewritten (a package built against `acryl-loopback-http` imports
   `@acrylblends/loopback-http` in the tarball), so source maps point at the original source lines.
 - `cordis.patch.yml`: the row's `name:` is the published name, quoted because a scoped name starts with `@` (YAML reserves it).
-- Loader row ids cannot contain `@` or `/` (DSH refuses to parse the overlay), and they must not collide with DSH's own driver rows (`workspace` is one),
-  so a scoped package's row id in a generated app overlay is its scope and name joined by a dash (`@acrylblends/workspace` -> `acrylblends-workspace`).
+- Loader row ids stay the source package names (`- id: acryl-web` with `name: '@acrylblends/web'`). A row id cannot contain `@` or `/` (DSH refuses to
+  parse the overlay), and keeping the source name means a checkout app and a published app have the same rows, so an upgrade between them renames nothing
+  and the rows that key on an id (the Blends frame's `appPage`) keep working. The launcher's development hook imports the Blends frame by the name it is
+  installed as (`@acrylblends/blends-frame/app-generation`).
 
 Three packages listed `LICENSE` in `files` without carrying the file (`acryl-workspace`, `acryl-plugin-admin`, `acryl-support`); they now carry the source's MIT
 notice (WebBoxes s.r.o.), like the other ports.
 
-The install in the publish check pins one Cordis (`overrides: {"@deepseek-ai/cordis": "4.0.4"}`) because the framework's `cordis-plugin-include` asks for
-`~4.0.5` while DSH 0.2.0-rc.2 asks for `~4.0.4`: a coherence question between the framework and the DSH pin to settle before the owner publishes, not something
-the pipeline should hide. The check app composes the frame through the DSH profile (as a host does), so no package is mounted twice.
+### One Cordis (settled 2026-11-05)
+
+The framework's `cordis-plugin-include` asks for `~4.0.5`, DSH 0.2.0-rc.2's rows for `~4.0.4`, the frame packages for `^4.0.4`. 4.0.5 satisfies all of
+them, and the tree has one copy at runtime: the publish check counts every installed `@deepseek-ai/cordis` (and `acrylblends`) in the fresh app and fails
+on more than one. Measured on the tarball install: with the app's generated pin (`4.0.5`, from `ideProfilePlan`) one copy, 4.0.5; without any pin, also
+one copy, 4.0.5. Pinning `4.0.4` is not a silent second copy but a refused install (npm ERESOLVE: DSH's own `cordis-plugin-group` 1.0.5 asks `~4.0.5`).
+The exact pin stays so that a later 4.0.x on npm is a decision, not an install-time surprise.
+
+Packages written in this repository rather than ported (`acryl-versions`, `acryl-blends-frame`) carry `provenance.json` as
+`{original: {repository, commit}, written}`; the pipeline accepts that shape beside the ported ones.
 
 ## After the host inversion
 

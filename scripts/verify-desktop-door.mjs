@@ -49,7 +49,9 @@ if (
   process.exit(0)
 }
 const scratch = mkdtempSync(join(tmpdir(), 'desktop-door-'))
-const env = { ...process.env, npm_config_loglevel: 'error' }
+// The first app is the desktop shell on the framework alone (`none`: init --desktop would otherwise install the published frame); the frame part below
+// sets this checkout's frame packages instead.
+const env = { ...process.env, npm_config_loglevel: 'error', ACRYLBLENDS_FRAME_PACKAGES: 'none' }
 delete env.ACRYL_DOOR
 // npm is a .cmd file on Windows: it needs the shell.
 const isWindows = process.platform === 'win32'

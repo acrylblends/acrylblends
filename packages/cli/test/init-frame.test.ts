@@ -1,7 +1,7 @@
 /**
  * Slice 6 of the IDE port: a template with a frame row (`src/frame.ts`) is scaffolded with the app's own DSH profile and overlay, so `npm run dev`
- * opens the app inside the ACRYL frame with its page at /app. The frame's client packages are unpublished, so the specs come from
- * ACRYLBLENDS_FRAME_PACKAGES; without it the app stays on the framework only and the CLI says why instead of writing a profile that cannot install.
+ * opens the app inside the ACRYL frame with its page at /app. A desktop app installs the frame's published packages (frame/packages.json);
+ * ACRYLBLENDS_FRAME_PACKAGES overrides them (a checkout's build, or `none`), and an app with neither stays on the framework only and says why.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -9,9 +9,11 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
-import { FRAME_PAGE_PREFIX } from '../src/ide-profile.ts'
+import { FRAME_DSH_VERSION, FRAME_RELEASE, FRAME_SCOPE } from '../src/frame-release.ts'
+import { FRAME_PACKAGES, FRAME_PAGE_PREFIX } from '../src/ide-profile.ts'
 import { type Io, init } from '../src/index'
 import { TEMPLATES, templatesRoot } from '../src/templates.ts'
+import { VERSION } from '../src/version.ts'
 
 const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-init-frame-'))
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
@@ -151,8 +153,101 @@ describe('scaffolding a template into the frame', () => {
     expect(code).toBe(0)
     const root = join(scratch, 'plain')
     expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
-    expect(out.join('')).toMatch(/the ACRYL frame is not published yet/u)
+    expect(out.join('')).toMatch(/framework alone; init --desktop puts it inside the ACRYL frame/u)
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
     expect(manifest.scripts.dev).not.toBe('node scripts/ide-host.mjs')
+  })
+
+  it('init --desktop installs the published frame: every row by its npm name and version, its row id kept, the framework at this release', async () => {
+    const { io } = fakeIo(scratch)
+    const code = await init(
+      {
+        directory: 'published',
+        template: 'blank',
+        yes: true,
+        name: 'published',
+        install: false,
+        desktop: true,
+        quietNext: true,
+      },
+      io,
+    )
+    expect(code).toBe(0)
+    const root = join(scratch, 'published')
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+    const overlay = readFileSync(join(root, 'cordis.patch.yml'), 'utf8')
+    const published = new Map(FRAME_RELEASE.map((entry) => [entry.source, entry]))
+    for (const row of FRAME_PACKAGES) {
+      if (row.installed === true) continue
+      const entry = published.get(row.name)
+      expect(entry, row.name).toBeDefined()
+      expect(manifest.dependencies[String(entry?.name)]).toBe(`^${String(entry?.version)}`)
+      expect(manifest.dependencies[row.name], row.name).toBeUndefined()
+      expect(overlay).toContain(
+        `- id: ${row.row ?? row.name}\n      name: '${String(entry?.name)}'`,
+      )
+    }
+    expect(manifest.dependencies.acrylblends).toBe(`^${VERSION}`)
+    expect(manifest.dependencies['@deepseek-ai/dsh-base']).toBe(FRAME_DSH_VERSION)
+    // The launcher's development hook is the Blends frame's, by the name it installs as.
+    expect(readFileSync(join(root, 'scripts', 'ide-host.mjs'), 'utf8')).toContain(
+      `import('${FRAME_SCOPE}/blends-frame/app-generation')`,
+    )
+  })
+
+  it('ACRYLBLENDS_FRAME_PACKAGES=none leaves a desktop app on the framework alone and says so', async () => {
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = 'none'
+    const { io, out } = fakeIo(scratch)
+    const code = await init(
+      {
+        directory: 'desktop-alone',
+        template: 'blank',
+        yes: true,
+        name: 'desktop-alone',
+        install: false,
+        desktop: true,
+        quietNext: true,
+      },
+      io,
+    )
+    expect(code).toBe(0)
+    expect(existsSync(join(scratch, 'desktop-alone', 'cordis.patch.yml'))).toBe(false)
+    expect(out.join('')).toMatch(/framework alone; ACRYLBLENDS_FRAME_PACKAGES is none/u)
+  })
+})
+
+describe('frame/packages.json, the release the CLI installs', () => {
+  const ide = join(templatesRoot(), '..', '..', '..', 'ide')
+  const manifestOf = (folder: string) =>
+    JSON.parse(readFileSync(join(ide, folder, 'package.json'), 'utf8')) as {
+      name: string
+      version: string
+      dependencies?: Record<string, string>
+      peerDependencies?: Record<string, string>
+    }
+
+  it("names each package at its folder's version", () => {
+    for (const entry of FRAME_RELEASE)
+      expect(manifestOf(entry.source).version, entry.source).toBe(entry.version)
+  })
+
+  it('is exactly the closure of the frame rows, so nothing is published that the frame does not install and nothing it installs is missing', () => {
+    const folderOf = new Map(
+      readdirSync(ide)
+        .filter((folder) => existsSync(join(ide, folder, 'package.json')))
+        .map((folder) => [manifestOf(folder).name, folder]),
+    )
+    const closure = new Set<string>()
+    const need = (name: string) => {
+      const folder = folderOf.get(name)
+      if (folder === undefined || closure.has(folder)) return
+      closure.add(folder)
+      const manifest = manifestOf(folder)
+      for (const field of [manifest.dependencies, manifest.peerDependencies])
+        for (const [dependency, range] of Object.entries(field ?? {}))
+          if (range.startsWith('workspace:')) need(dependency)
+    }
+    for (const row of FRAME_PACKAGES) if (row.installed !== true) need(row.name)
+    expect(new Set(FRAME_RELEASE.map((entry) => entry.source))).toEqual(closure)
   })
 })
