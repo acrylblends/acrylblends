@@ -16,7 +16,7 @@ Format: `T<nnn> [B<batch>] <category> (subcategories) - acrylblends.<name>: <the
 ## Batch 1 (categories 1-10)
 
 - [x] T001 [B01] System (`system`: Operating systems, Kernels, Device drivers, Firmware, Boot software, System utilities) - `acrylblends.system-monitor`: System Monitor: this machine's processes, memory and disk, refreshed live, with a kill-list of the heaviest
-- [ ] T002 [B01] Application (`application`: Productivity, Personal information management, Communication, Collaboration) - `acrylblends.productivity-hub`: Productivity Hub: notes, tasks and a week calendar on one page
+- [x] T002 [B01] Application (`application`: Productivity, Personal information management, Communication, Collaboration) - `acrylblends.productivity-hub`: Productivity Hub: notes, tasks and a week calendar on one page
 - [ ] T003 [B01] Business (`business`: ERP, CRM, Finance, Payments, HR, Project management, Procurement, Operations) - `acrylblends.small-crm`: Small CRM: contacts, companies and a drag-and-drop deals pipeline
 - [ ] T004 [B01] Developer (`developer`: Code editors, IDEs, Version control, Build tools, Language tooling, Dependency management, Testing, API development, Developer collaboration) - `acrylblends.snippets`: Snippet Manager: code snippets with tags, syntax highlighting and search
 - [ ] T005 [B01] AI (`ai`: AI assistants, AI agents, Agent infrastructure, Machine learning software, Generative AI, AI infrastructure, AI safety) - `acrylblends.prompt-lab`: Prompt Lab: a prompt library with variables, run on the configured model, results kept side by side

@@ -40,12 +40,10 @@ For each of your ten tasks:
      cd WORK && npm create acrylblends@latest <name> -- --template blank --yes
    (npm needs the --. Use --template agent only where the task says agent template.) It is a Cordis app: src/main.ts, src/app.ts, blend.yaml, plugins/.
 2. Composition rule (owner): a blueprint is composed from Cordis plugins and nothing else. Every feature is its own plugin in its own folder
-   plugins/<feature>/ (index.ts exporting name, inject and apply; its domain code beside it), registered in the `registry` of src/app.ts and listed as its own row in
-   blend.yaml. No feature code in src/app.ts, src/main.ts or a shared routes file; an app with several domains (say tasks and calendar) has several plugins, one row each.
+   plugins/<feature>/ (index.ts exporting name, inject and apply; its domain code beside it), listed as its own row in blend.yaml (the template loads the folder by the row's name; do not import it in src/app.ts). No feature code in src/app.ts, src/main.ts or a shared routes file; an app with several domains (say tasks and calendar) has several plugins, one row each.
    blend.yaml is the app's composition: reading its rows must tell what the app is made of.
    Build the app's job. The pattern, as in the example (which keeps its plugin in src/; yours go in plugins/<feature>/): a plugin file (export name, inject = ['router'], apply(ctx, config) that builds one Acryl app and
-   mounts it with ctx.router.route('/', app)), its domain code in src/<feature>/, registered in the `registry` of src/app.ts and as a row in blend.yaml before the
-   acryl-node-server row. Replace the template's src/routes.ts and src/about.tsx and their test; test/app.test.ts counts the manifest's rows, update it. Put the first
+   mounts it with ctx.router.route('/', app)), its domain code in src/<feature>/, listed as a row in blend.yaml before the acryl-node-server row (the blank template loads an app's own plugin folders by their row name, so nothing is imported or registered in src/app.ts). Replace the template's src/routes.ts and src/about.tsx and their test; test/app.test.ts counts the manifest's rows, update it. Put the first
    page at `/` with seed data (or the real machine's data) so it shows something at once. Keep the parts that touch the outside world (the clock, the disk, the network,
    a process) behind a small object the plugin takes as config, so the tests hand in a fake (createApp takes `overrides: { <row id>: { ... } }` in the example).
    Tests (node:test) cover the domain logic and every route. No outside service, API key or paid API; only framework parts and small, well-known npm packages.
