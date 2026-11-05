@@ -3,7 +3,10 @@
  * "fast semantic routing" beside filesystem inspection): which docs and verified examples answer a topic, with paths the agent can read. Pure: no
  * filesystem access. The docs stay the authority; this only routes.
  */
-import { join } from 'node:path'
+// The paths go to the agent as text: forward slashes on every system (Windows reads them too), as the root the caller passes is written.
+import { posix } from 'node:path'
+
+const { join } = posix
 
 /** The tool that runs it in the frame's chat: ACRYL's name, so an agent that knows one knows the other. */
 export const LOOKUP_TOOL_NAME = 'acryl_plugin_lookup'
