@@ -219,11 +219,22 @@ describe('make-entry', () => {
     return app
   }
   const make = (args) =>
-    spawnSync(process.execPath, [join(repo, 'scripts', 'make-entry.mjs'), ...args], { encoding: 'utf8' })
+    spawnSync(process.execPath, [join(repo, 'scripts', 'make-entry.mjs'), ...args], {
+      encoding: 'utf8',
+    })
 
   test('--out puts the entry in that registry, --category names it, and nothing lands in this one', () => {
     const out = mkdtempSync(join(scratch, 'out-'))
-    const result = make([appFolder(), 'acrylblends.hello', '--description', 'Says hello.', '--category', 'system', '--out', out])
+    const result = make([
+      appFolder(),
+      'acrylblends.hello',
+      '--description',
+      'Says hello.',
+      '--category',
+      'system',
+      '--out',
+      out,
+    ])
     assert.equal(result.status, 0, result.stderr)
     const entry = join(out, 'blends', 'acrylblends.hello')
     const manifest = readFileSync(join(entry, 'blend.yaml'), 'utf8')
@@ -231,7 +242,11 @@ describe('make-entry', () => {
     assert.match(manifest, /name: "Hello App"/)
     assert.match(manifest, /category: system/)
     assert.match(manifest, /visibility: public/)
-    assert.deepEqual(JSON.parse(readFileSync(join(entry, 'acryl.template.json'), 'utf8')), { name: 'Hello App', description: 'Says hello.', plugins: [] })
+    assert.deepEqual(JSON.parse(readFileSync(join(entry, 'acryl.template.json'), 'utf8')), {
+      name: 'Hello App',
+      description: 'Says hello.',
+      plugins: [],
+    })
     assert.equal(existsSync(join(entry, 'node_modules')), false)
     assert.equal(existsSync(join(repo, 'blends', 'acrylblends.hello')), false)
   })

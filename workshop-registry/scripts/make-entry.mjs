@@ -25,10 +25,18 @@ import { parseArgs } from 'node:util'
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { description: { type: 'string' }, license: { type: 'string' }, category: { type: 'string' }, out: { type: 'string' } },
+  options: {
+    description: { type: 'string' },
+    license: { type: 'string' },
+    category: { type: 'string' },
+    out: { type: 'string' },
+  },
 })
 const [source, id] = positionals
-const root = values.out === undefined ? resolve(dirname(fileURLToPath(import.meta.url)), '..') : resolve(values.out)
+const root =
+  values.out === undefined
+    ? resolve(dirname(fileURLToPath(import.meta.url)), '..')
+    : resolve(values.out)
 if (!source || !id || !/^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/u.test(id)) {
   console.error(
     'usage: node scripts/make-entry.mjs <your app folder> <login>.<name> [--description "..."] [--license MIT] [--category <slug>] [--out <registry folder>]   (lower case; <login> is your GitHub login)',
