@@ -7,6 +7,7 @@
  * Host half, since the frame, not the workbench, owns the page.
  */
 
+import { execFileSync } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
@@ -678,10 +679,27 @@ interface SessionEvents {
   on(name: 'session/event', listener: (session: { readonly id: string }, event: SessionEventLike) => void): () => void
 }
 
+/** The Host's process group, as `ps` reports it; undefined where the platform has no `ps`, and the guard then refuses group kills outright. */
+function processGroupId(pid: number): number | undefined {
+  try {
+    const value = Number(execFileSync('ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8' }).trim())
+    return Number.isInteger(value) && value > 0 ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** This Host as a shell command would name it; the instance's port is not part of the service type the frame shares. */
 function hostIdentity(instance: unknown): HostIdentity {
   const port = (instance as { readonly port?: { readonly start?: unknown } }).port?.start
-  return { hostPid: process.pid, ...(typeof port === 'number' ? { hostPort: port } : {}) }
+  const groupId = processGroupId(process.pid)
+  return {
+    hostPid: process.pid,
+    ...(typeof port === 'number' ? { hostPort: port } : {}),
+    ...(groupId === undefined ? {} : { hostGroupId: groupId }),
+    hostCommand: process.argv.join(' '),
+    hostName: basename(process.execPath),
+  }
 }
 
 export function apply(ctx: Context, config: FrameConfig = {}): void {

@@ -90,18 +90,161 @@ export function stalledResult(toolName: string, why: 'stuck' | 'stopped', limitM
 export interface HostIdentity {
   readonly hostPid: number
   readonly hostPort?: number
+  /** The Host's process group: `kill 0`, `kill -- -<id>` or `pkill -g <id>` ends it too. */
+  readonly hostGroupId?: number
+  /** The Host's own command line (`process.execPath` and its arguments), for `pkill -f` patterns. */
+  readonly hostCommand?: string
+  /** The Host's process name, for `pkill`/`killall` without `-f`. */
+  readonly hostName?: string
+}
+
+const KILL_VERBS: ReadonlySet<string> = new Set(['kill', 'pkill', 'killall', 'taskkill', 'stop-process'])
+
+/** Words a kill may stand behind in a segment (`lsof ... | xargs kill`); an `echo killall node` is not an invocation. */
+const KILL_LEADERS = /^(?:xargs|sudo|doas|env|time|timeout|nohup|command|nice|ionice|watch|exec)$/u
+
+/** A command's words, quoted runs kept whole, so a `pkill -f "two words"` pattern survives as one word. */
+function wordsOf(segment: string): string[] {
+  const result: string[] = []
+  const pattern = /"([^"]*)"|'([^']*)'|([^\s]+)/gu
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(segment)) !== null) result.push(match[1] ?? match[2] ?? match[3] ?? '')
+  return result
+}
+
+interface KillInvocation {
+  readonly verb: string
+  readonly args: readonly string[]
+}
+
+/** Every kill-like invocation in a shell command, one per `;`/`&&`/`|` segment (a pipe's `xargs kill` included). */
+function killInvocations(command: string): KillInvocation[] {
+  const found: KillInvocation[] = []
+  for (const segment of command.split(/[;&|\n]+/u)) {
+    const parts = wordsOf(segment)
+    const at = parts.findIndex((part) => KILL_VERBS.has(part.toLowerCase()))
+    if (at === -1) continue
+    const before = parts.slice(0, at)
+    if (!before.every((part) => KILL_LEADERS.test(part) || part.startsWith('-') || /^\d+[smhd]?$/u.test(part))) continue
+    found.push({ verb: parts[at]?.toLowerCase() ?? '', args: parts.slice(at + 1) })
+  }
+  return found
+}
+
+/** The names whose killing would reach the Host: its own, and the runtimes a Host runs under. */
+function hostNames(host: HostIdentity): readonly string[] {
+  return [host.hostName, 'node', 'npm', 'pnpm', 'npx', 'electron', 'Electron'].filter(
+    (name): name is string => typeof name === 'string' && name !== '',
+  )
+}
+
+/** Whether a `pkill`/`killall` name pattern matches the Host's process name (both are regular expressions to pkill). */
+function matchesHostName(pattern: string, host: HostIdentity): boolean {
+  return hostNames(host).some((name) => {
+    if (pattern === name) return true
+    try {
+      return new RegExp(pattern, 'u').test(name)
+    } catch {
+      return name.includes(pattern)
+    }
+  })
+}
+
+/** Whether a `pkill -f` pattern matches the Host's command line. */
+function matchesHostCommand(pattern: string, host: HostIdentity): boolean {
+  if (host.hostCommand === undefined) return false
+  if (host.hostCommand.includes(pattern)) return true
+  try {
+    return new RegExp(pattern, 'u').test(host.hostCommand)
+  } catch {
+    return false
+  }
+}
+
+/** `kill`'s process-group target: `0` is the caller's group, `-1` every process, and the Host's own group holds the Host. */
+function killGroup(word: string, host: HostIdentity): boolean {
+  if (word === '0') return true
+  const match = /^-(\d+)$/u.exec(word)
+  if (match === null) return false
+  const group = Number(match[1])
+  // An unknown group id is not worth guessing about: a group kill can always be a kill by id instead.
+  return group === 1 || host.hostGroupId === undefined || group === host.hostGroupId
+}
+
+/** `pkill -g`'s group (a positive id): `0` is the caller's group, and the Host's group holds the Host. */
+function pgroup(word: string, host: HostIdentity): boolean {
+  const group = Number(word)
+  if (!Number.isInteger(group) || group < 0) return false
+  return group === 0 || host.hostGroupId === undefined || group === host.hostGroupId
+}
+
+/** `kill`: its targets, after the signal (the first bare `-N`) and after `--`. */
+function killTargets(args: readonly string[], host: HostIdentity): boolean {
+  let signalRead = false
+  let literal = false
+  for (const [index, word] of args.entries()) {
+    if (word === '--') { literal = true; continue }
+    if (!literal && /^-[A-Za-z]/u.test(word)) continue
+    if (!literal && /^-\d+$/u.test(word) && !signalRead && index === 0) { signalRead = true; continue }
+    if (killGroup(word, host)) return true
+  }
+  return false
+}
+
+/** `pkill`: `-f` patterns against the Host's command line, names against its process name, and `-g` groups. */
+function pkillTargets(args: readonly string[], host: HostIdentity): boolean {
+  let full = false
+  let pattern: string | undefined
+  for (let index = 0; index < args.length; index += 1) {
+    const word = args[index]
+    if (word === undefined) break
+    if (word === '-f' || word === '--full') { full = true; continue }
+    if (word === '-g' || word === '--pgroup') {
+      const value = args[index + 1]
+      if (value !== undefined && pgroup(value, host)) return true
+      index += 1
+      continue
+    }
+    if (word.startsWith('--pgroup=')) { if (pgroup(word.slice(9), host)) return true; continue }
+    if (/^-g\d+$/u.test(word)) { if (pgroup(word.slice(2), host)) return true; continue }
+    if (word.startsWith('-')) continue
+    if (pattern === undefined) pattern = word
+  }
+  if (pattern === undefined) return false
+  return full ? matchesHostCommand(pattern, host) : matchesHostName(pattern, host)
+}
+
+/** `killall`: its names, which are process names. */
+function killallTargets(args: readonly string[], host: HostIdentity): boolean {
+  return args.filter((word) => !word.startsWith('-')).some((name) => matchesHostName(name, host))
+}
+
+/** `taskkill`/`Stop-Process`: a name that would reach the Host (its id is covered by the named check). */
+function taskkillName(command: string, host: HostIdentity): boolean {
+  if (!/\b(?:taskkill|stop-process)\b/iu.test(command)) return false
+  return hostNames(host).some((name) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+    return new RegExp(`\\b${escaped}(?:\\.exe)?\\b`, 'iu').test(command)
+  })
 }
 
 /** Whether a shell call would stop the Host. A kill alone is fine: agents stop their own test servers. */
 export function stopsHost(exec: Pick<GuardedExecution, 'name' | 'arguments'>, host: HostIdentity): boolean {
   if (!SHELL_TOOLS.has(exec.name)) return false
   const { command } = parsed(exec.arguments)
-  if (typeof command !== 'string' || !/\b(?:kill|pkill|killall|Stop-Process|taskkill)\b/u.test(command)) return false
+  if (typeof command !== 'string' || !/\b(?:kill|pkill|killall|Stop-Process|taskkill)\b/iu.test(command)) return false
+  // What the command names outright: the Host's id, its port, or its script (the input of a pipe may name the port, as `lsof -ti :3730 | xargs kill`).
   const named = host.hostPort === undefined ? String(host.hostPid) : `${String(host.hostPid)}|${String(host.hostPort)}`
-  return new RegExp(`\\b(?:${named})\\b|ide-host`, 'u').test(command)
+  if (new RegExp(`\\b(?:${named})\\b|ide-host|acryl-node-server`, 'iu').test(command)) return true
+  for (const invocation of killInvocations(command)) {
+    if (invocation.verb === 'kill' && killTargets(invocation.args, host)) return true
+    if (invocation.verb === 'pkill' && pkillTargets(invocation.args, host)) return true
+    if (invocation.verb === 'killall' && killallTargets(invocation.args, host)) return true
+  }
+  return taskkillName(command, host)
 }
 
-export const HOST_REFUSAL = 'that command would stop the app\'s Host, the process running this chat and the page beside it, and end them both. It was not run. A saved change in src/ or plugins/ reloads the app by itself; if a change does not show, the reload failed, so read the error and fix it.'
+export const HOST_REFUSAL = 'that command could stop the app\'s Host, the process running this chat and the page beside it: it names the Host, its process group, all node processes, or a pattern that matches it. It was not run. To restart only a process you started, stop that process by its own id (kill <pid>) and start it again; never a group, a name like node, or a broad -f pattern. A saved change in src/ or plugins/ reloads the app by itself; if a change does not show, the reload failed, so read the error and fix it.'
 
 /**
  * Put the guard on the tool calls of every chat.
