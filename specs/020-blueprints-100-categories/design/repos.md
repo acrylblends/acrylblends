@@ -95,3 +95,13 @@ This list wins over an id written in a spec or in tasks.md.
 | 88 | Indexia | `acrylblends.indexia` | https://github.com/acrylblends/88-indexia |
 | 89 | Daymark | `acrylblends.daymark` | https://github.com/acrylblends/89-daymark |
 | 90 | HearthOS | `acrylblends.hearthos` | https://github.com/acrylblends/90-hearthos |
+| 91 | PocketTools | `acrylblends.pockettools` | https://github.com/acrylblends/91-pockettools |
+| 92 | CompatLab | `acrylblends.compatlab` | https://github.com/acrylblends/92-compatlab |
+| 93 | Bridgeworks | `acrylblends.bridgeworks` | https://github.com/acrylblends/93-bridgeworks |
+| 94 | ReleaseDock | `acrylblends.releasedock` | https://github.com/acrylblends/94-releasedock |
+| 95 | OpenShelf | `acrylblends.openshelf` | https://github.com/acrylblends/95-openshelf |
+| 96 | Extensio | `acrylblends.extensio` | https://github.com/acrylblends/96-extensio |
+| 97 | ForgeFlow | `acrylblends.forgeflow` | https://github.com/acrylblends/97-forgeflow |
+| 98 | MorphOS Studio | `acrylblends.morphos-studio` | https://github.com/acrylblends/98-morphos-studio |
+| 99 | Autonomy Fleet | `acrylblends.autonomy-fleet` | https://github.com/acrylblends/99-autonomy-fleet |
+| 100 | MetaForge | `acrylblends.metaforge` | https://github.com/acrylblends/100-metaforge |
