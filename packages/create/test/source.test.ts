@@ -292,6 +292,7 @@ describe('starters from a registry', () => {
       '.claude/skills/acryl-app/SKILL.md':
         '---\nname: acryl-app\ndescription: How the notes app is put together\n---\n# Working in notes\n\nAdd notes to notes.\n',
       'scripts/ide-host.mjs': "const profileName = 'acrylblends-notes'\n",
+      'package-lock.json': `${JSON.stringify({ name: 'notes', lockfileVersion: 3, packages: { '': { name: 'notes' }, 'node_modules/notes': { version: '1.0.0' } } }, null, 2)}\n`,
     }
     const root = join(scratch, `registry-${counter++}`)
     for (const [path, text] of Object.entries(starter)) {
@@ -330,6 +331,11 @@ describe('starters from a registry', () => {
     )
     expect(read('scripts/ide-host.mjs')).toBe("const profileName = 'acrylblends-my-notes'\n")
     expect(read('blend.yaml')).toMatch(/^ {2}name: my-notes$/m)
+    expect(JSON.parse(read('package-lock.json'))).toEqual({
+      name: 'my-notes',
+      lockfileVersion: 3,
+      packages: { '': { name: 'my-notes' }, 'node_modules/notes': { version: '1.0.0' } },
+    })
     expect(execFileSync('git', ['log', '--format=%s'], { cwd: made, encoding: 'utf8' })).toBe(
       'Initial commit from acrylblends\n',
     )

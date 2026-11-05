@@ -208,6 +208,22 @@ export function renameApp(dir: string, from: string, to: string): string[] {
     )
   const constant = new RegExp(`(\\bAPP_NAME = )(['"])${escaped}\\2`, 'g')
   for (const file of CODE_FILES) rewrite(file, (text) => text.replace(constant, `$1$2${to}$2`))
+  // npm's lock names the root package twice (top level and `packages[""]`); a lock it cannot read is left as it is.
+  rewrite('package-lock.json', (text) => {
+    try {
+      const lock = JSON.parse(text) as {
+        name?: unknown
+        packages?: Record<string, { name?: unknown }>
+      }
+      const root = lock.packages?.['']
+      if (lock.name !== from && root?.name !== from) return text
+      if (lock.name === from) lock.name = to
+      if (root !== undefined && root.name === from) root.name = to
+      return `${JSON.stringify(lock, null, 2)}\n`
+    } catch {
+      return text
+    }
+  })
   const profile = profileNameFor(from)
   rewrite('scripts/ide-host.mjs', (text) =>
     text.replaceAll(`'${profile}'`, `'${profileNameFor(to)}'`),
