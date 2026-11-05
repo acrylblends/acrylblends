@@ -56,13 +56,23 @@ export function parseVersionsEntries(stdout: string): VersionsEntry[] {
   return entries
 }
 
+/**
+ * Every call's result once all of them have finished, or the first failure then: unlike `Promise.all`, a request never answers while one of its git
+ * processes still runs in the folder (Windows cannot remove a folder a process runs in, and the caller may remove it right after the answer).
+ */
+async function allFinished<T extends readonly unknown[] | []>(calls: T): Promise<{ -readonly [P in keyof T]: Awaited<T[P]> }> {
+  const settled = await Promise.allSettled(calls)
+  for (const result of settled) if (result.status === 'rejected') throw result.reason
+  return settled.map(result => (result as PromiseFulfilledResult<unknown>).value) as { -readonly [P in keyof T]: Awaited<T[P]> }
+}
+
 export class Versions {
   constructor(private readonly git: GitRunner) {}
 
   /** The branch's versions, newest first, with its upstream and how far the two have diverged. */
   async log(path: string, limit: number = DEFAULT_LOG_LIMIT): Promise<VersionsLogView> {
     const dir = await this.git.resolveDirectory(path)
-    const [branchResult, upstream, logResult] = await Promise.all([
+    const [branchResult, upstream, logResult] = await allFinished([
       // On an unborn branch `rev-parse HEAD` fails; the branch name still exists, named by HEAD's symref.
       this.git.run(['rev-parse', '--abbrev-ref', 'HEAD'], dir, 128),
       this.upstreamOf(dir),
