@@ -27,6 +27,7 @@ import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
 import { AppReloader, watchFolder, watchFolders, type AppRow } from './app-reload.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
+import { guardOutwardCommands, type OutwardEvents } from './outward-guard.ts'
 import { guardToolCalls, type HostIdentity, type ToolCallEvents } from './tool-call-guard.ts'
 import { installSelectionContext, parseSelectionContext, SelectionInbox, sessionOf } from './selection-context.ts'
 import { branchChatsFile, createBranchChatsStore, type BranchChatsRecord } from './branch-chats.ts'
@@ -828,6 +829,8 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     const stopListening = (ctx as unknown as SessionEvents).on('session/event', (session, event) => { autoSave.observe(session.id, event) })
     // No tool call may hold a chat forever (./tool-call-guard.ts).
     const stopGuard = guardToolCalls(ctx as unknown as ToolCallEvents, line => { ctx.logger.warn(line) }, hostIdentity(ctx.appInstance))
+    // Nothing the agent runs sends the person's work out (git push, gh repo create, npm publish) without their yes (./outward-guard.ts).
+    const stopOutwardGuard = guardOutwardCommands(ctx as unknown as OutwardEvents, line => { ctx.logger.info(line) })
     const realChatList = new RealChats({
       list: async () => (await sessionQueryOf(ctx.get('sessionQuery'))?.listSessions() ?? []).map(record => record.header.id),
       look: async id => lookAtLog((await sessionQueryOf(ctx.get('sessionQuery'))?.readSession(id))?.events ?? []),
@@ -919,6 +922,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       void stopSnapshot()
       stopListening()
       stopGuard()
+      stopOutwardGuard()
       stopWatching()
       void autoSave.settled().then(() => git.dispose())
     }

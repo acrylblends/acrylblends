@@ -54,6 +54,10 @@ private.", "Push 2 versions to origin/main (github.com/ana/notes)?". Cancel is f
 take only the plan the person confirmed (`/plugins/share` and `/git/push` answer 400 without one), read it again just before sending, and send
 nothing when it changed meanwhile (another account, a new version, the remote moved). The remote's address is shown without any credential.
 
+The agent is held to the same rule (`src/outward-guard.ts`): a shell call that pushes or publishes (`git push`, `gh repo create`, `gh release create`,
+a `gh api` write, `npm publish`, ...) and the app's `save_app` tool become DSH's approval prompt, naming the command, whatever the access mode; they
+run only when the person allows them once. It reads the command's words, so it is a seat belt for an honest agent, not a sandbox.
+
 ## Chats belong to a branch
 
 A chat belongs to the branch it was made on. The Host records that once per chat in `branch-chats.json` in the app's data home (`/api/acryl-blends-frame/branches/chats`): a chat made by the frame is recorded as it is made, a chat DSH made (or one from before this file) is recorded
