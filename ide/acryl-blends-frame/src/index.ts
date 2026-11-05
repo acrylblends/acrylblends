@@ -45,6 +45,7 @@ import {
   FRAME_FEEDBACK_SHOT_PATH,
   FRAME_GIT_PULL_PATH,
   FRAME_GIT_PUSH_PATH,
+  FRAME_GIT_PUSH_PLAN_PATH,
   FRAME_GIT_REMOTE_PATH,
   FRAME_SNAPSHOT_CAPTURE_PATH,
   FRAME_PLUGINS_PATH,
@@ -59,7 +60,9 @@ import {
   type ChatSavesView,
   type FeedbackView,
   parseFeedbackNotes,
+  parsePushPlan,
   parseSharePlan,
+  type PushPlan,
   type SharePlan,
   type FrameBranch,
   type FrameState,
@@ -294,7 +297,10 @@ export interface BranchesPort {
 /** The Git tab's push and pull for the checked-out branch (./git-sync.ts). Each rejects with the one line to show. */
 export interface GitSyncPort {
   state(options: { readonly fetch?: boolean }): Promise<GitRemoteState>
-  push(): Promise<GitSyncResult>
+  /** What a push would send and where; nothing is sent. */
+  planPush(): Promise<PushPlan>
+  /** Sends only the plan the person confirmed. */
+  push(confirmed: PushPlan): Promise<GitSyncResult>
   pull(): Promise<GitSyncResult>
 }
 
@@ -376,9 +382,24 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(error(failed(cause, 'the remote state could not be read')), 409)
       }
     })
-    app.post(FRAME_GIT_PUSH_PATH, ownPage, jsonBody(), async (c) => {
+    app.post(FRAME_GIT_PUSH_PLAN_PATH, ownPage, jsonBody(), async (c) => {
       try {
-        return c.json(await gitSync.push())
+        return c.json(await gitSync.planPush())
+      } catch (cause) {
+        return c.json(error(failed(cause, 'the push could not be planned')), 409)
+      }
+    })
+    // A push sends the person's versions under their name: only a plan they confirmed, never on a bare request.
+    app.post(FRAME_GIT_PUSH_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      let confirmed: PushPlan
+      try {
+        confirmed = parsePushPlan(body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : (body as { confirm?: unknown }).confirm)
+      } catch {
+        return c.json(error('a push is sent only after the person confirms its plan'), 400)
+      }
+      try {
+        return c.json(await gitSync.push(confirmed))
       } catch (cause) {
         return c.json(error(failed(cause, 'the branch could not be pushed')), 409)
       }

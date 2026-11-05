@@ -12,7 +12,12 @@ export const FRAME_BRANCH_CHATS_PATH = `${FRAME_API_PREFIX}/branches/chats`
 export const FRAME_VERSIONS_SHARED_PATH = `${FRAME_API_PREFIX}/versions/shared`
 /** GET (`?fetch=1` asks the remote first): the checked-out branch against its remote, a {@link GitRemoteState}. */
 export const FRAME_GIT_REMOTE_PATH = `${FRAME_API_PREFIX}/git/remote`
-/** POST: send the checked-out branch to its upstream, setting the upstream on the first push. Never forced. Answers a {@link GitSyncResult}. */
+/** POST: what a push would send and where (a {@link PushPlan}), after asking the remote; nothing is sent. */
+export const FRAME_GIT_PUSH_PLAN_PATH = `${FRAME_API_PREFIX}/git/push-plan`
+/**
+ * POST `{ confirm }`: send the checked-out branch to its upstream, setting the upstream on the first push, only when `confirm` is the plan the
+ * person said yes to and it still holds. Never forced. Answers a {@link GitSyncResult}.
+ */
 export const FRAME_GIT_PUSH_PATH = `${FRAME_API_PREFIX}/git/push`
 /** POST: bring the upstream's new versions in, by fast-forward only; a branch that has moved on both sides is left as it is. Answers a {@link GitSyncResult}. */
 export const FRAME_GIT_PULL_PATH = `${FRAME_API_PREFIX}/git/pull`
@@ -71,6 +76,40 @@ export type GitRemoteState =
     readonly behind: number
     readonly fetchError?: string
   }
+
+/**
+ * What a push will do, shown to the person before anything is sent: the versions it sends, the branch they land on and the remote's address
+ * (without any credential), and whether the branch is created there. A push sends exactly this, or nothing.
+ */
+export interface PushPlan {
+  readonly branch: string
+  readonly remote: string
+  /** Where the versions land, as git names it (`origin/main`). */
+  readonly target: string
+  /** The remote as a person reads it: `github.com/ana/notes`, or a folder's path. */
+  readonly address: string
+  /** Versions here and not there. */
+  readonly versions: number
+  /** The branch is not on the remote yet: the push creates it. */
+  readonly createsBranch: boolean
+  /** The commit sent; a version made after the yes changes the plan, so nothing is sent. */
+  readonly head: string
+}
+
+/** @throws when the value is not a push plan. */
+export function parsePushPlan(value: unknown): PushPlan {
+  if (!isRecord(value)) throw new Error('push plan: not a plan')
+  const { branch, remote, target, address, versions, createsBranch, head } = value
+  if (!isName(branch) || !isName(remote) || !isName(target) || !isName(address)) throw new Error('push plan: names')
+  if (!isCount(versions) || typeof createsBranch !== 'boolean' || typeof head !== 'string' || !/^[0-9a-f]{40,64}$/u.test(head)) throw new Error('push plan: versions')
+  return { branch, remote, target, address, versions, createsBranch, head }
+}
+
+/** The same push: what the person confirmed is what would be sent now. */
+export function samePushPlan(a: PushPlan, b: PushPlan): boolean {
+  return a.branch === b.branch && a.remote === b.remote && a.target === b.target && a.address === b.address && a.versions === b.versions
+    && a.createsBranch === b.createsBranch && a.head === b.head
+}
 
 /** What a push or pull did, in one line, and the remote state after it. */
 export interface GitSyncResult {

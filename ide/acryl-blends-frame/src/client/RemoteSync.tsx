@@ -1,12 +1,14 @@
 /**
  * The branch against its remote, with Pull and Push and the line the last one said. Two faces on one hook: the Git tab's remote row, and the
  * compact chips on the left panel's versions header (`↑2` / `↓1` / `✓`, with the line as a brief toast). Read again whenever `revision` changes;
- * the first read asks the remote (a fetch), later ones read the local refs, and each push or pull asks it anyway.
+ * the first read asks the remote (a fetch), later ones read the local refs, and each push or pull asks it anyway. A push sends the person's
+ * versions under their name, so Push first asks what it will send and where ("Push 2 versions to origin/main (github.com/ana/notes)?"), with
+ * Cancel as the default, and sends only that.
  */
 
 import { useEffect, useRef, useState } from 'react'
-import type { GitRemoteState } from '../contract.ts'
-import { remoteChips, remoteLabel, syncActions, type GitSyncPort } from './git-sync.ts'
+import type { GitRemoteState, GitSyncResult, PushPlan } from '../contract.ts'
+import { pushQuestion, remoteChips, remoteLabel, syncActions, type GitSyncPort } from './git-sync.ts'
 
 type Remote =
   | { readonly status: 'loading' }
@@ -35,23 +37,50 @@ function useRemoteSync(sync: GitSyncPort, root: string, revision: string) {
     return () => { live = false }
   }, [sync, root, revision])
 
+  const [asking, setAsking] = useState<PushPlan | undefined>(undefined)
+
+  const failed = (kind: 'push' | 'pull', cause: unknown): void => {
+    setOutcome({ message: messageOf(cause, `The ${kind} did not go through.`), failed: true })
+    // A refused push or pull still fetched: read the counts again.
+    sync.remote(false).then(state => setRemote({ status: 'ready', state }), () => {})
+  }
+  const done = (result: GitSyncResult): void => {
+    setRemote({ status: 'ready', state: result.remote })
+    setOutcome({ message: result.message, failed: false })
+  }
+
   const act = (kind: 'push' | 'pull'): void => {
     setBusy(kind)
     setOutcome(undefined)
-    ;(kind === 'push' ? sync.push() : sync.pull()).then(
-      (result) => {
-        setRemote({ status: 'ready', state: result.remote })
-        setOutcome({ message: result.message, failed: false })
-      },
-      (cause: unknown) => {
-        setOutcome({ message: messageOf(cause, `The ${kind} did not go through.`), failed: true })
-        // A refused push or pull still fetched: read the counts again.
-        sync.remote(false).then(state => setRemote({ status: 'ready', state }), () => {})
-      },
-    ).finally(() => setBusy(undefined))
+    setAsking(undefined)
+    if (kind === 'pull') {
+      sync.pull().then(done, cause => { failed('pull', cause) }).finally(() => setBusy(undefined))
+      return
+    }
+    // Push asks first: nothing is sent until the person says yes to this plan.
+    sync.planPush().then(setAsking, cause => { failed('push', cause) }).finally(() => setBusy(undefined))
   }
+  const confirmPush = (plan: PushPlan): void => {
+    setAsking(undefined)
+    setBusy('push')
+    sync.push(plan).then(done, cause => { failed('push', cause) }).finally(() => setBusy(undefined))
+  }
+  const cancelPush = (): void => { setAsking(undefined) }
   const stateText = remote.status === 'loading' ? 'Asking the remote…' : remote.status === 'error' ? 'unknown' : remoteLabel(remote.state)
-  return { remote, busy, outcome, setOutcome, act, stateText }
+  return { remote, busy, outcome, setOutcome, act, stateText, asking, confirmPush, cancelPush }
+}
+
+/** The push's question, Cancel first and focused: Enter or a stray click sends nothing. */
+function PushAsk({ plan, className, onPush, onCancel }: { readonly plan: PushPlan; readonly className: string; readonly onPush: () => void; readonly onCancel: () => void }) {
+  return (
+    <div className={className} role="group" aria-label="Push" data-testid="push-ask">
+      <span>{pushQuestion(plan)}</span>
+      <span className="acrylBlendsPushAskButtons">
+        <button type="button" className="acrylBlendsSmallButton" autoFocus onClick={onCancel}>Cancel</button>
+        <button type="button" className="acrylBlendsSmallButton acrylBlendsPushConfirm" onClick={onPush}>Push</button>
+      </span>
+    </div>
+  )
 }
 
 export interface RemoteSyncProps {
@@ -62,7 +91,7 @@ export interface RemoteSyncProps {
 
 /** The Git tab's row. */
 export function RemoteSync({ sync, root, revision }: RemoteSyncProps) {
-  const { remote, busy, outcome, act, stateText } = useRemoteSync(sync, root, revision)
+  const { remote, busy, outcome, act, stateText, asking, confirmPush, cancelPush } = useRemoteSync(sync, root, revision)
   const actions = remote.status === 'ready' ? syncActions(remote.state) : { push: false, pull: false }
   return (
     <>
@@ -72,10 +101,11 @@ export function RemoteSync({ sync, root, revision }: RemoteSyncProps) {
         <button type="button" className="acrylBlendsSmallButton" disabled={busy !== undefined || !actions.pull} onClick={() => act('pull')}>
           {busy === 'pull' ? 'Pulling…' : 'Pull'}
         </button>
-        <button type="button" className="acrylBlendsSmallButton" disabled={busy !== undefined || !actions.push} onClick={() => act('push')}>
+        <button type="button" className="acrylBlendsSmallButton" disabled={busy !== undefined || asking !== undefined || !actions.push} onClick={() => act('push')}>
           {busy === 'push' ? 'Pushing…' : 'Push'}
         </button>
       </div>
+      {asking !== undefined && <PushAsk plan={asking} className="acrylBlendsPushAsk" onPush={() => { confirmPush(asking) }} onCancel={cancelPush} />}
       {remote.status === 'error' && <p className="acrylBlendsNote" data-error>{remote.message}</p>}
       {/* A push or pull says what git said; the fetch's own line would only repeat it. */}
       {outcome === undefined && remote.status === 'ready' && remote.state.kind === 'tracking' && remote.state.fetchError !== undefined && (
@@ -94,7 +124,7 @@ const TOAST_FAILED_MS = 9000
 
 /** The versions header's chips; nothing when the branch has no remote. */
 export function RemoteChips({ sync, root, revision }: RemoteSyncProps) {
-  const { remote, busy, outcome, setOutcome, act, stateText } = useRemoteSync(sync, root, revision)
+  const { remote, busy, outcome, setOutcome, act, stateText, asking, confirmPush, cancelPush } = useRemoteSync(sync, root, revision)
   useEffect(() => {
     if (outcome === undefined) return
     const timer = setTimeout(() => { setOutcome(undefined) }, outcome.failed ? TOAST_FAILED_MS : TOAST_MS)
@@ -114,12 +144,13 @@ export function RemoteChips({ sync, root, revision }: RemoteSyncProps) {
             </button>
           )}
           {chips.push !== undefined && (
-            <button type="button" className="acrylBlendsRemoteChip" title={`${title} · Push`} aria-label={`Push: ${title}`} disabled={busy !== undefined} onClick={() => act('push')}>
+            <button type="button" className="acrylBlendsRemoteChip" title={`${title} · Push`} aria-label={`Push: ${title}`} disabled={busy !== undefined || asking !== undefined} onClick={() => act('push')}>
               {busy === 'push' ? '…' : chips.push}
             </button>
           )}
         </span>
       )}
+      {asking !== undefined && <PushAsk plan={asking} className="acrylBlendsToast acrylBlendsPushAskFloat" onPush={() => { confirmPush(asking) }} onCancel={cancelPush} />}
       {outcome !== undefined && (
         <button
           type="button"

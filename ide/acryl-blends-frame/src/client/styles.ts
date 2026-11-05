@@ -62,6 +62,10 @@ body[data-dsh-desktop-platform="darwin"] .acrylBlendsBar { padding-left: 78px; }
 .acrylBlendsRemoteChip[data-synced] { cursor: default; color: var(--bf-ok); border-color: transparent; background: transparent; padding: 1px 2px; }
 .acrylBlendsToast { position: fixed; left: 12px; bottom: 44px; z-index: 30; max-width: 224px; text-align: left; font: inherit; font-size: 12px; color: var(--bf-text); background: var(--bf-surface-2); border: 1px solid #34343a; border-radius: 8px; padding: 8px 10px; box-shadow: 0 6px 20px rgba(0,0,0,.4); cursor: pointer; overflow-wrap: anywhere; }
 .acrylBlendsToast[data-error] { border-color: #6b3a3a; color: #f1b4b4; }
+.acrylBlendsPushAsk { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0; font-size: 12px; color: #e0a43a; overflow-wrap: anywhere; }
+.acrylBlendsPushAskFloat { display: flex; flex-direction: column; gap: 8px; cursor: default; color: #e0a43a; border-color: #5a4a2a; }
+.acrylBlendsPushAskButtons { display: flex; gap: 6px; justify-content: flex-end; }
+.acrylBlendsPushConfirm { border-color: var(--bf-accent); color: #fff; background: var(--bf-accent-dim); }
 .acrylBlendsLabel { color: var(--bf-dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .acrylBlendsList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; padding: 0 6px; }
 .acrylBlendsSmallButton { font-size: 11px; color: #c8c8d0; background: var(--bf-surface-2); border: 1px solid #2f2f35; border-radius: 6px; padding: 2px 8px; cursor: pointer; }

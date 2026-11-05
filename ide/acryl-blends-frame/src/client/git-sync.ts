@@ -5,18 +5,23 @@
 import {
   FRAME_GIT_PULL_PATH,
   FRAME_GIT_PUSH_PATH,
+  FRAME_GIT_PUSH_PLAN_PATH,
   FRAME_GIT_REMOTE_PATH,
   parseGitRemoteState,
   parseGitSyncResult,
+  parsePushPlan,
   type GitRemoteState,
   type GitSyncResult,
+  type PushPlan,
 } from '../contract.ts'
 
 export interface GitSyncPort {
   /** The checked-out branch against its remote; `fetch` asks the remote first. @throws the Host's one line. */
   remote(fetch: boolean): Promise<GitRemoteState>
-  /** @throws git's one line (no remote, a refused login, the network) or the reason nothing was sent. */
-  push(): Promise<GitSyncResult>
+  /** What a push would send and where, after asking the remote; nothing is sent. @throws the line saying why there is nothing to push. */
+  planPush(): Promise<PushPlan>
+  /** Sends only the confirmed plan. @throws git's one line (a refused login, the network) or the reason nothing was sent. */
+  push(confirmed: PushPlan): Promise<GitSyncResult>
   /** Fast-forward only. @throws git's one line, or the sentence saying the branch moved on both sides and nothing changed. */
   pull(): Promise<GitSyncResult>
 }
@@ -29,15 +34,15 @@ async function failure(response: Response, fallback: string): Promise<Error> {
 }
 
 export function createGitSyncApi(fetcher: FetchLike = (input, init) => fetch(input, init)): GitSyncPort {
-  const post = async (path: string, fallback: string): Promise<GitSyncResult> => {
+  const post = async (path: string, fallback: string, body: unknown = {}): Promise<unknown> => {
     const response = await fetcher(path, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: '{}',
+      body: JSON.stringify(body),
     })
     if (!response.ok) throw await failure(response, fallback)
-    return parseGitSyncResult(await response.json())
+    return response.json()
   }
   return {
     async remote(fetchFirst) {
@@ -48,9 +53,18 @@ export function createGitSyncApi(fetcher: FetchLike = (input, init) => fetch(inp
       if (!response.ok) throw await failure(response, 'The remote state could not be read')
       return parseGitRemoteState(await response.json())
     },
-    push: () => post(FRAME_GIT_PUSH_PATH, 'The branch could not be pushed'),
-    pull: () => post(FRAME_GIT_PULL_PATH, 'The branch could not be pulled'),
+    planPush: async () => parsePushPlan(await post(FRAME_GIT_PUSH_PLAN_PATH, 'The push could not be planned')),
+    push: async confirmed => parseGitSyncResult(await post(FRAME_GIT_PUSH_PATH, 'The branch could not be pushed', { confirm: confirmed })),
+    pull: async () => parseGitSyncResult(await post(FRAME_GIT_PULL_PATH, 'The branch could not be pulled')),
   }
+}
+
+/** The question a push asks before anything is sent: how many versions, where they land and the remote's address. */
+export function pushQuestion(plan: PushPlan): string {
+  const versions = `${String(plan.versions)} version${plan.versions === 1 ? '' : 's'}`
+  return plan.createsBranch
+    ? `Push ${plan.branch} (${versions}) to ${plan.address}? It creates ${plan.target} there.`
+    : `Push ${versions} to ${plan.target} (${plan.address})?`
 }
 
 /** The remote state as the Git tab writes it: "origin/main · ahead 2 · behind 1", "up to date with origin/main", "no remote", ... */

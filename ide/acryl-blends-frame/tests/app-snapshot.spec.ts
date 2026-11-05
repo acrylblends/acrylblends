@@ -24,8 +24,6 @@ const temp = (): string => {
 
 const remote: VersionRemote = {
   state: async () => ({ kind: 'no-remote' }),
-  push: () => Promise.reject(new Error('This app has no remote to push to.')),
-  pull: () => Promise.reject(new Error('This app has no remote to pull from.')),
 }
 
 describe('the app snapshot service', () => {
@@ -81,7 +79,7 @@ describe('the app snapshot service', () => {
     await Promise.all(pending)
     expect(order).toEqual(['apply', 'capture', 'verify /snapshots/one'])
     expect(loads).toBe(1)
-    await expect(snapshot.pushVersion()).rejects.toThrow('no remote to push to')
+    expect(await snapshot.remote()).toEqual({ kind: 'no-remote' })
   })
 
   it('tries the app\'s verbs again after a failed load', async () => {

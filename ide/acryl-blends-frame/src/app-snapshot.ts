@@ -1,14 +1,14 @@
 /**
  * The app's snapshot verbs as the frame's service `appSnapshot`: every version the frame saves (Save point, the auto-save) is captured first, so
  * a version is always a snapshot whose `blend.yaml` names every plugin folder and whose lock matches; the agent's snapshot tools
- * (acryl-app-context) and the left panel's Push and Pull run on it too, the same code as `npm run snapshot`. The verbs are the app's own (`plugins/manifest/snapshot.ts`, part of the app's
- * folder), so the frame runs the version the app was made with; an app made before them says so instead of guessing. Push and pull are the Git
- * tab's (./git-sync.ts): a version goes to the branch's remote and comes back from it, never forced.
+ * (acryl-app-context) run on it too, the same code as `npm run snapshot`. The verbs are the app's own (`plugins/manifest/snapshot.ts`, part of the app's
+ * folder), so the frame runs the version the app was made with; an app made before them says so instead of guessing. Pushing and pulling are
+ * not here: they are the person's (the Git tab and the versions header, ./git-sync.ts), and a push sends only a plan they confirmed.
  */
 import { existsSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { GitRemoteState, GitSyncResult, SnapshotApply, SnapshotCapture, SnapshotVerify } from './contract.ts'
+import type { GitRemoteState, SnapshotApply, SnapshotCapture, SnapshotVerify } from './contract.ts'
 
 /** Where the verbs are in an app folder. */
 export const SNAPSHOT_MODULE = 'plugins/manifest/snapshot.ts'
@@ -23,11 +23,9 @@ export interface SnapshotVerbs {
   applySnapshot(from: string, appRoot: string): SnapshotApply
 }
 
-/** The branch's remote as the Git tab reaches it. */
+/** The branch's remote as the Git tab reads it. */
 export interface VersionRemote {
   state(options?: { readonly fetch?: boolean }): Promise<GitRemoteState>
-  push(): Promise<GitSyncResult>
-  pull(): Promise<GitSyncResult>
 }
 
 export interface AppSnapshotService {
@@ -44,10 +42,6 @@ export interface AppSnapshotService {
   apply(dir: string): Promise<SnapshotApply>
   /** The checked-out branch against its remote; `fetch` asks the remote first. */
   remote(fetch?: boolean): Promise<GitRemoteState>
-  /** Sends the branch's versions to its remote (the first push sets the upstream). Never forced. */
-  pushVersion(): Promise<GitSyncResult>
-  /** Brings the remote's new versions in by fast-forward only. */
-  pullVersion(): Promise<GitSyncResult>
 }
 
 const isVerbs = (value: unknown): value is SnapshotVerbs => {
@@ -97,7 +91,5 @@ export function createAppSnapshot(root: string, remote: VersionRemote, load: () 
       return verbs.applySnapshot(from, root)
     }),
     remote: fetch => remote.state({ fetch: fetch === true }),
-    pushVersion: () => remote.push(),
-    pullVersion: () => remote.pull(),
   }
 }

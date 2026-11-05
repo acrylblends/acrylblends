@@ -124,8 +124,9 @@ export function apply(ctx: ClientContext): void {
   // A push moves the upstream (the left panel's shared marks), a pull the head and the app's files: the frame reads its state again, and the app page reloads when a pull brought versions in.
   const gitSync: GitSyncPort = {
     remote: fetchFirst => gitSyncApi.remote(fetchFirst),
-    push: async () => {
-      const result = await gitSyncApi.push()
+    planPush: () => gitSyncApi.planPush(),
+    push: async (confirmed) => {
+      const result = await gitSyncApi.push(confirmed)
       await frameState.refresh()
       return result
     },

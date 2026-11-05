@@ -46,6 +46,14 @@ the host rows it stands on, and the chat view's client rows. They are in `packag
 drawn inside the right panel as its Panel tab: when DSH opens a page there (a plan, the review of a turn's changed files) the tab opens, and closing the
 tab collapses the sidebar.
 
+## Nothing leaves the machine without a yes
+
+Share (Settings > Plugins) and Push (the `↑N` chip on the versions header, and the Git tab's Push) send the person's work under their name, so each
+first says what it will send and where, read without sending anything: "Create repository ana/notes on GitHub and publish v0.1.0? It will be
+private.", "Push 2 versions to origin/main (github.com/ana/notes)?". Cancel is focused, so Enter or a stray click sends nothing. The Host's routes
+take only the plan the person confirmed (`/plugins/share` and `/git/push` answer 400 without one), read it again just before sending, and send
+nothing when it changed meanwhile (another account, a new version, the remote moved). The remote's address is shown without any credential.
+
 ## Chats belong to a branch
 
 A chat belongs to the branch it was made on. The Host records that once per chat in `branch-chats.json` in the app's data home (`/api/acryl-blends-frame/branches/chats`): a chat made by the frame is recorded as it is made, a chat DSH made (or one from before this file) is recorded
