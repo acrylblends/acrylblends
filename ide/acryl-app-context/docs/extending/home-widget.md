@@ -41,6 +41,9 @@ export function apply(ctx: Context): void {
 - The page is server-rendered: after a change the script either updates the elements it owns or calls `location.reload()`.
 - The section the page draws is `<section class="widget" data-widget="<id>">`: a test asserts the widget by that attribute, and
   `.acryl/bin/acryl look` shows its heading and content.
+- The page styles that section as a card in the frame's look, light or dark with the system, and the plain HTML inside it: a list, a form,
+  inputs, buttons, links and an `<output>`. Write plain elements without classes or a `<style>` and the widget looks finished; add a `<style>`
+  only for what is special to the widget, with selectors under `[data-widget="<id>"]` so no other widget changes.
 
 Examples: `../example-plugins/packages/home-widget-basic/` (a widget with its own route) and `../example-plugins/packages/state-json-file/`
 (a widget over data kept in a file, with a form).

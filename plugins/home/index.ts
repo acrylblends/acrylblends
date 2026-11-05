@@ -68,8 +68,34 @@ const escapeHtml = (text: string): string =>
     .replaceAll('"', '&quot;')
 
 /**
- * The widgets as one block of the page: a `<section data-widget="<id>">` with the heading and the widget's HTML for each. A widget whose render
- * throws shows one line saying so, and the page still renders.
+ * The widgets' look, the ACRYL frame's plain one: each widget a card, and the plain HTML a widget writes (a list, a form, inputs, buttons, an output)
+ * styled inside it, light or dark with the person's system. Every selector is under `.widget`, so the page around the widgets keeps its own styles,
+ * and a widget's own `<style>` still wins (it comes later on the page).
+ */
+export const WIDGET_STYLES = `.widget{--widget-bg:#fff;--widget-surface:#f7f7f9;--widget-border:#e2e2e8;--widget-text:#18181b;--widget-dim:#6b6b75;--widget-accent:#5468ff;--widget-accent-dim:rgba(84,104,255,.18);color-scheme:light;margin:16px 0;padding:16px 18px;border:1px solid var(--widget-border);border-radius:12px;background:var(--widget-surface);color:var(--widget-text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+@media (prefers-color-scheme:dark){.widget{--widget-bg:#0b0b0d;--widget-surface:#18181b;--widget-border:#2a2a2f;--widget-text:#e8e8ea;--widget-dim:#8b8b93;color-scheme:dark}}
+.widget h2{margin:0 0 12px;font-size:15px;font-weight:600}
+.widget p{margin:0 0 10px}
+.widget p:last-child,.widget ul:last-child,.widget ol:last-child,.widget form:last-child{margin-bottom:0}
+.widget ul,.widget ol{list-style:none;margin:0 0 12px;padding:0}
+.widget li{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--widget-border);overflow-wrap:anywhere}
+.widget li:first-child{border-top:0}
+.widget li>:first-child{flex:1}
+.widget a{color:var(--widget-accent);text-decoration:none}
+.widget a:hover{text-decoration:underline}
+.widget form{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.widget input,.widget textarea,.widget select{flex:1 1 140px;min-width:0;padding:7px 10px;border:1px solid var(--widget-border);border-radius:8px;background:var(--widget-bg);color:inherit;font:inherit}
+.widget input::placeholder,.widget textarea::placeholder{color:var(--widget-dim)}
+.widget input:focus,.widget textarea:focus,.widget select:focus{outline:2px solid var(--widget-accent-dim);border-color:var(--widget-accent)}
+.widget button{padding:7px 14px;border:0;border-radius:8px;background:var(--widget-accent);color:#fff;font:inherit;font-weight:500;cursor:pointer}
+.widget button:hover{filter:brightness(1.1)}
+.widget li button{padding:3px 10px;border:1px solid var(--widget-border);background:transparent;color:var(--widget-dim);font-weight:400}
+.widget output{font-weight:600;font-variant-numeric:tabular-nums}
+.widget [role=alert]{color:#d9480f}`
+
+/**
+ * The widgets as one block of the page: their styles ({@link WIDGET_STYLES}), then a `<section data-widget="<id>">` with the heading and the
+ * widget's HTML for each; nothing at all when there is no widget. A widget whose render throws shows one line saying so, and the page still renders.
  */
 export async function renderWidgets(home: Home): Promise<string> {
   const sections = await Promise.all(
@@ -83,7 +109,9 @@ export async function renderWidgets(home: Home): Promise<string> {
       return `<section class="widget" data-widget="${escapeHtml(widget.id)}">\n<h2>${escapeHtml(widget.title)}</h2>\n${body}\n</section>`
     }),
   )
-  return sections.join('\n')
+  return sections.length === 0
+    ? ''
+    : [`<style data-home-widgets>${WIDGET_STYLES}</style>`, ...sections].join('\n')
 }
 
 /** Provides `ctx.home`. Mount it before the routes that render the home page and before the plugins that put widgets on it. */

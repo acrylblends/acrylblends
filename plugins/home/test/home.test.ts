@@ -24,6 +24,11 @@ test('a widget is on the page while its plugin runs and leaves with it', async (
   assert.match(page, /<section class="widget" data-widget="notes">/)
   assert.match(page, /<h2>Notes &lt;1&gt;<\/h2>/)
   assert.match(page, /<div id="notes"><\/div>/)
+  // The widgets come with the frame's card look, once, before them.
+  assert.ok(page.startsWith(`<style data-home-widgets>${home.WIDGET_STYLES}</style>`))
+  assert.match(home.WIDGET_STYLES, /^\.widget\{/)
+  for (const rule of home.WIDGET_STYLES.split('\n'))
+    assert.ok(rule.startsWith('.widget') || rule.startsWith('@media'), rule)
 
   await notes.dispose()
   assert.equal(await home.renderWidgets(root.home), '')

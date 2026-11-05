@@ -34,6 +34,7 @@ const homePage = (name: string, widgets: string): string => `<!doctype html>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${escapeHtml(name)}</title>
+    <style>:root{color-scheme:light dark}body{margin:2rem auto;max-width:44rem;padding:0 1rem;font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}h1{font-size:1.6rem;margin:0 0 .5rem}a{color:#5468ff}code{font:.9em ui-monospace,"SF Mono",Menlo,monospace}</style>
   </head>
   <body>
     <main>
