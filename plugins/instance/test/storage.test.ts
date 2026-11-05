@@ -202,6 +202,9 @@ test('the registry: create makes the folders and an entry with no path in it; re
 
   const renamed = renameApp(root, made.id, 'Shop')
   assert.equal(renamed.id, 'my-notes-3f2a')
+  // The product's default name is not the person's until they give one: the first start asks for it while `named` is absent.
+  assert.equal(made.named, undefined)
+  assert.equal(renamed.named, true)
   assert.equal(listApps(root)[0]?.name, 'Shop')
   assert.ok(existsSync(folders.source), 'renaming never moves the folder')
 
