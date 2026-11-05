@@ -9,7 +9,7 @@ export const APP_NAME = '__APP_NAME__'
 /**
  * The only place the app's mount prefix is named. On its own server (production, `npm start`) the app mounts at the root and
  * its public URLs are `/`, `/about`, `/health`; when the ACRYL frame hosts it (`npm run dev`) the routes mount here, and the
- * frame opens its tile at `/app/`. Every page link and asset URL this template writes is derived from the prefix it is
+ * frame opens its tile at `/app` (`/app/` answers too). Every page link and asset URL this template writes is derived from the prefix it is
  * mounted at, so the same source serves both.
  */
 export const FRAME_MOUNT_PREFIX = '/app'

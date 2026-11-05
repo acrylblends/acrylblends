@@ -744,6 +744,10 @@ function overlayOf(
     // The app's page, which the frame shows in its centre.
     if ((entry.row ?? entry.name) === 'acryl-blends-frame')
       lines.push('      config:', `        appPage: ${FRAME_PAGE_PREFIX}`)
+    // The app is mounted under the canvas prefix, and a person (or a link) writes its root as `/app/` as often as `/app`: the frame's router reads a
+    // trailing slash as the same path, so both answer the app's root and a relative link on it stays in the app.
+    if ((entry.row ?? entry.name) === 'acryl-router')
+      lines.push('      config:', '        trailingSlash: ignore')
   }
   // The chat driver's connection registers node routes on the framework's webServer port; it needs no DSH web runtime, so the row's
   // webRuntime inject and its expression are replaced by the one fact it needs here: which hosts the remote may trust.
