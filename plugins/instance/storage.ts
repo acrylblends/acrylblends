@@ -14,9 +14,19 @@
  * folder or asks Electron for a path (scripts/lib/bulkhead.test.mjs). No file written here holds an absolute path: the root and the bundle can move.
  */
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  type Dirent,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { lstat, readdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, posix, win32 } from 'node:path'
+import { archiveName, exportArchive, importArchive } from './archive.ts'
 import { type AppInstance, AppInstanceError, productInstance } from './index.ts'
 
 /** The layout this build writes and reads. A root with a lower one is migrated on open (a later slice); a higher one is refused. */
@@ -155,6 +165,8 @@ export interface RegisteredApp {
   readonly name: string
   readonly created: string
   readonly lastOpened?: string
+  /** The person chose the name (named it on the first start, renamed it, or imported it under a file name); absent while it is the product's default. */
+  readonly named?: true
 }
 
 /** What `openRoot` found: a root this build writes, or one written by a newer build (refused by the caller with the version it names). */
@@ -214,6 +226,13 @@ export function listApps(root: string): RegisteredApp[] {
   )
 }
 
+/** One app's registry entry, or a message naming the root. */
+function findApp(root: string, id: string): RegisteredApp {
+  const found = listApps(root).find((app) => app.id === id)
+  if (found === undefined) throw new AppInstanceError(`no app "${id}" in ${root}`)
+  return found
+}
+
 function saveApps(root: string, apps: readonly RegisteredApp[]): void {
   writeJson(join(root, REGISTRY_FILE), { apps })
 }
@@ -237,6 +256,8 @@ export function createApp(
     now?: () => Date
     random?: () => string
     seed?: (folders: ProductAppFolders) => void
+    /** The person chose this name (an import, a fresh start of a named app). */
+    named?: boolean
   } = {},
 ): RegisteredApp {
   const label = checkedName(name)
@@ -263,18 +284,18 @@ export function createApp(
     id,
     name: label,
     created: (options.now?.() ?? new Date()).toISOString(),
+    ...(options.named === true ? { named: true as const } : {}),
   }
   saveApps(root, [...apps, entry])
   return entry
 }
 
-/** Give an app a new name. The folder keeps its id. */
+/** Give an app a new name; from then on it is the person's name for it. The folder keeps its id. */
 export function renameApp(root: string, id: string, name: string): RegisteredApp {
   const label = checkedName(name)
   const apps = listApps(root)
-  const found = apps.find((app) => app.id === id)
-  if (found === undefined) throw new AppInstanceError(`no app "${id}" in ${root}`)
-  const renamed: RegisteredApp = { ...found, name: label }
+  const found = findApp(root, id)
+  const renamed: RegisteredApp = { ...found, name: label, named: true }
   saveApps(
     root,
     apps.map((app) => (app.id === id ? renamed : app)),
@@ -292,9 +313,78 @@ export function touchApp(root: string, id: string, now: () => Date = () => new D
   )
 }
 
+/** What an app's folder holds: its bytes (the files' own sizes, links not followed) and its files. */
+export interface AppSize {
+  readonly bytes: number
+  readonly files: number
+}
+
+/** The size of everything under `folder`, read without blocking: an app with packages of its own has many files. */
+export async function folderSize(folder: string): Promise<AppSize> {
+  let bytes = 0
+  let files = 0
+  const walk = async (dir: string): Promise<void> => {
+    let entries: Dirent[]
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) await walk(path)
+      else {
+        try {
+          bytes += (await lstat(path)).size
+          files += 1
+        } catch {
+          // Gone while it was read (a log rotated): not counted.
+        }
+      }
+    }
+  }
+  await walk(folder)
+  return { bytes, files }
+}
+
+/** A trash folder's name for app `id` moved at `now`: the id and the time, so the same app started over twice keeps both. */
+function trashName(id: string, now: Date): string {
+  return `${id}-${now.toISOString().replace(/[:.]/gu, '-')}`
+}
+
+/**
+ * Start app `id` over: a fresh app with the same name is made first (seeded as the first start is), then the old one leaves the registry and its folder
+ * moves to `trash/` with a note of its name, never deleted. In that order a crash never loses the person's work: at worst an extra app, or an old
+ * folder left in `apps/` that no entry names. The caller stops everything that runs on the old app's folders first.
+ */
+export function resetApp(
+  root: string,
+  id: string,
+  seed: (folders: ProductAppFolders) => void,
+  now: () => Date = () => new Date(),
+): RegisteredApp {
+  const old = findApp(root, id)
+  const fresh = createApp(root, old.name, { seed, now, named: old.named === true })
+  saveApps(
+    root,
+    listApps(root).filter((app) => app.id !== id),
+  )
+  const at = now()
+  const trash = join(root, TRASH_DIR, trashName(id, at))
+  mkdirSync(join(root, TRASH_DIR), { recursive: true })
+  renameSync(join(root, APPS_DIR, id), trash)
+  writeJson(join(trash, 'trashed.json'), {
+    id,
+    name: old.name,
+    created: old.created,
+    trashed: at.toISOString(),
+  })
+  return fresh
+}
+
 /**
  * The port a desktop product keeps its apps through (app-storage.md: one port, the per-OS rule in one adapter at the edge). Callers name an app by its
- * id and get an `AppInstance` back; they never join a path. Show, export, import and start over join it with the frame's Settings pages.
+ * id and get an `AppInstance` back; they never join a path. The frame's Settings > App page reaches it through the desktop shell.
  */
 export interface AppStorage {
   /** Chromium's own user data for the product's windows (window state, its cache): one folder per product, beside the apps. */
@@ -307,6 +397,20 @@ export interface AppStorage {
   create(name: string, seed: (source: string) => void): RegisteredApp
   /** Open app `id`: it is recorded as opened now, and its instance is returned (source the project root, data its home and the engine's). */
   open(id: string): AppInstance
+  /** One app's entry. */
+  app(id: string): RegisteredApp
+  /** Give app `id` the person's name for it. */
+  rename(id: string, name: string): RegisteredApp
+  /** What app `id`'s folder holds. */
+  size(id: string): Promise<AppSize>
+  /** Show app `id`'s folder in the OS file manager (Finder, Explorer, Files). */
+  reveal(id: string): void
+  /** Write app `id` to `file` as one `.acrylblend`: its source with every version, and its data when `data` is set (never its keys or logs). */
+  export(id: string, file: string, options: { readonly data: boolean }): void
+  /** Make a new app from an `.acrylblend`, named after the file. Nothing is written when the file is not an archive. */
+  import(file: string): RegisteredApp
+  /** Start app `id` over: a fresh app of the same name, seeded by `seed`, and the old one moved to `trash/`. Stop what runs on it first. */
+  reset(id: string, seed: (source: string) => void): RegisteredApp
 }
 
 /** A root written by a newer layout, which this build cannot read: the message names the version that wrote it. */
@@ -327,6 +431,10 @@ export function openProductStorage(options: {
   readonly platform?: NodeJS.Platform
   readonly env?: Readonly<Record<string, string | undefined>>
   readonly home?: string
+  /** The git executable exports and imports run: the product's own, else `git` on the PATH. */
+  readonly git?: string
+  /** The OS file manager, showing one folder (Electron's `shell.showItemInFolder` in the product). */
+  readonly reveal?: (path: string) => void
 }): AppStorage {
   const platform = options.platform ?? process.platform
   const env = options.env ?? process.env
@@ -336,6 +444,7 @@ export function openProductStorage(options: {
     env,
     options.home ?? personHome(env, platform),
   )
+  const git = options.git ?? 'git'
   const state = openRoot(root, options.writtenBy)
   if (state.kind !== 'current')
     throw new NewerLayoutError(
@@ -354,10 +463,41 @@ export function openProductStorage(options: {
       ),
     create: (name, seed) => createApp(root, name, { seed: (folders) => seed(folders.source) }),
     open(id) {
-      const app = listApps(root).find((candidate) => candidate.id === id)
-      if (app === undefined) throw new AppInstanceError(`no app "${id}" in ${root}`)
+      const app = findApp(root, id)
       touchApp(root, id)
       return productInstance(appFolders(root, id, platform), app.name)
     },
+    app: (id) => findApp(root, id),
+    rename: (id, name) => renameApp(root, id, name),
+    size: (id) => folderSize(join(root, APPS_DIR, findApp(root, id).id)),
+    reveal(id) {
+      if (options.reveal === undefined)
+        throw new AppInstanceError('this product cannot show a folder')
+      options.reveal(join(root, APPS_DIR, findApp(root, id).id))
+    },
+    export(id, file, { data }) {
+      const folders = appFolders(root, findApp(root, id).id, platform)
+      exportArchive({
+        git,
+        source: folders.source,
+        ...(data ? { data: folders.data } : {}),
+        cache: folders.cache,
+        file,
+      })
+    },
+    import: (file) =>
+      createApp(root, archiveName(file) || 'Imported app', {
+        named: true,
+        seed: (folders) => {
+          importArchive({
+            git,
+            file,
+            source: folders.source,
+            data: folders.data,
+            cache: folders.cache,
+          })
+        },
+      }),
+    reset: (id, seed) => resetApp(root, id, (folders) => seed(folders.source)),
   }
 }

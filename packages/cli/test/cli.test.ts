@@ -155,7 +155,10 @@ describe('a coding agent in a generated app', () => {
             '',
           ),
         ).not.toMatch(/src\/plugins|extensions\//u)
-      expect(readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')).toContain('.acryl/')
+      const ignored = readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')
+      expect(ignored).toContain('.acryl/')
+      // The engine reads a key from a .env in the app's folder: never committed, so never pushed or shared.
+      expect(ignored).toEqual(expect.arrayContaining(['.env', '.env.*']))
       for (const page of [
         'README.md',
         'api/routing.md',
