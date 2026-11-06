@@ -28,16 +28,16 @@ Format: `T<nnn> [B<batch>] <category> (subcategories) - acrylblends.<name>: <the
 
 ## Batch 2 (categories 11-20)
 
-- [ ] T011 [B02] Cybersecurity (`cybersecurity`: Endpoint security, Network security, Identity security, Application security, Cloud security, Security operations, Privacy) - `acrylblends.vuln-tracker`: Vulnerability Tracker: assets, CVEs per asset, severity and fix status
-- [ ] T012 [B02] Internet (`internet`: Browsers, Search, Web servers, Internet publishing) - `acrylblends.link-shortener`: Link Shortener: short links with click counts per day and referrer
-- [ ] T013 [B02] Media (`media`: Graphics, Video, Audio, Music, Plugins) - `acrylblends.photo-gallery`: Photo Gallery: albums, uploads, thumbnails and a lightbox
-- [ ] T014 [B02] 3D / CAD / Design (`3d-cad-design`: CAD, 3D, BIM, CAM, CAE) - `acrylblends.moodboard`: Moodboard: a canvas of images, colours and notes for a design project
-- [ ] T015 [B02] Scientific & Engineering (`scientific-engineering`: Mathematics, Statistics, Science, Engineering) - `acrylblends.lab-notebook`: Lab Notebook: experiments with entries, measurements and a unit converter
-- [ ] T016 [B02] Industrial (`industrial`: Manufacturing, Industrial control, Digital twins) - `acrylblends.maintenance-log`: Maintenance Log: machines, scheduled maintenance, breakdowns and downtime totals
-- [ ] T017 [B02] Robotics (`robotics`: Robot operating systems, Motion planning, Navigation, SLAM, Computer vision) - `acrylblends.robot-missions`: Robot Missions: a grid map, waypoints per robot and a simulated run
-- [ ] T018 [B02] Embedded / IoT (`embedded-iot`: IoT platforms, Smart devices) - `acrylblends.sensor-dashboard`: Sensor Dashboard: devices post readings over HTTP, live charts and thresholds
-- [ ] T019 [B02] Automotive (`automotive`: Infotainment, Navigation, ADAS, Autonomous driving, Vehicle operating systems) - `acrylblends.vehicle-log`: Vehicle Log: service history, fuel, costs per km and reminders
-- [ ] T020 [B02] Aerospace / Aviation (`aerospace-aviation`: Flight control, Avionics, Navigation, Air traffic control, Mission control) - `acrylblends.flight-logbook`: Flight Logbook: flights, aircraft, hours per type and currency checks
+- [x] T011 [B02] Cybersecurity (`cybersecurity`: Endpoint security, Network security, Identity security, Application security, Cloud security, Security operations, Privacy) - `acrylblends.vuln-tracker`: Vulnerability Tracker: assets, CVEs per asset, severity and fix status
+- [x] T012 [B02] Internet (`internet`: Browsers, Search, Web servers, Internet publishing) - `acrylblends.link-shortener`: Link Shortener: short links with click counts per day and referrer
+- [x] T013 [B02] Media (`media`: Graphics, Video, Audio, Music, Plugins) - `acrylblends.photo-gallery`: Photo Gallery: albums, uploads, thumbnails and a lightbox
+- [x] T014 [B02] 3D / CAD / Design (`3d-cad-design`: CAD, 3D, BIM, CAM, CAE) - `acrylblends.moodboard`: Moodboard: a canvas of images, colours and notes for a design project
+- [x] T015 [B02] Scientific & Engineering (`scientific-engineering`: Mathematics, Statistics, Science, Engineering) - `acrylblends.lab-notebook`: Lab Notebook: experiments with entries, measurements and a unit converter
+- [x] T016 [B02] Industrial (`industrial`: Manufacturing, Industrial control, Digital twins) - `acrylblends.maintenance-log`: Maintenance Log: machines, scheduled maintenance, breakdowns and downtime totals
+- [x] T017 [B02] Robotics (`robotics`: Robot operating systems, Motion planning, Navigation, SLAM, Computer vision) - `acrylblends.robot-missions`: Robot Missions: a grid map, waypoints per robot and a simulated run
+- [x] T018 [B02] Embedded / IoT (`embedded-iot`: IoT platforms, Smart devices) - `acrylblends.sensor-dashboard`: Sensor Dashboard: devices post readings over HTTP, live charts and thresholds
+- [x] T019 [B02] Automotive (`automotive`: Infotainment, Navigation, ADAS, Autonomous driving, Vehicle operating systems) - `acrylblends.vehicle-log`: Vehicle Log: service history, fuel, costs per km and reminders
+- [x] T020 [B02] Aerospace / Aviation (`aerospace-aviation`: Flight control, Avionics, Navigation, Air traffic control, Mission control) - `acrylblends.flight-logbook`: Flight Logbook: flights, aircraft, hours per type and currency checks
 
 ## Batch 3 (categories 21-30)
 
@@ -153,3 +153,12 @@ Things a builder ran into that the CLI, the framework or the registry should fix
 - T001: `npm run dev` in a blank-template app is `node --watch` (the app alone). "Serves the app inside the frame" in spec.md's "Done for one blueprint" (3) is therefore not something a cloud agent can check; the brief leaves the frame to the coordinator. The system-monitor was not opened in the frame in T000.
 - T001: the made app starts with `package-lock.json` after `npm install`; `make-entry.mjs` carries it into the entry (kept: it makes the entry's install repeatable).
 - T001: `npm create acrylblends@latest` printed "Next: see the template's README" for an app made from a registry entry; harmless, not changed.
+- T011-T020: `npm create acrylblends@latest` still scaffolds the 1.1.0 template; batch 2 used `npx --yes acrylblends@1.2.0 init <dir> --template blank --yes`, the shape of 02/03 (home, extensions, acryl-door, app plugin folders).
+- T011-T020: the full registry is past the CLI's one-template file limit, so each entry was proved from a one-entry scratch registry (copy the entry into `R/blends`, run the site's `registry-index.ts R`, then `npm create ... --registry R`). All ten installed, passed their tests and served their first page.
+- T011-T020: every suite pins `process.env.TZ = 'UTC'` in `test/support.ts` and also passes under America/Los_Angeles and Asia/Tokyo.
+- T011-T020: `make-entry.mjs` carries `docs/screenshot.png`; each listing was checked on a built site at `/blends/<category>/<subcategory-slug>` and `/blends/b/<id>`.
+- T011-T020: `plugin.json` is still not written by the CLI template or `make-entry`; each feature plugin got one by hand, and each app has the switch-off test.
+- T011: the spec names the id `acrylblends.vuln-tracker`, but `design/repos.md` gives `acrylblends.vulnerability-tracker` and repository `11-vulnerability-tracker`; repos.md wins, so the entry, folder and site line use the longer id.
+- T013/T014: the mockups load Unsplash images; the apps use offline gradient previews instead, so the tests, the 1440x900 screenshot and the site card need no network.
+- T016/T017/T018: the industrial, robotics and IoT apps are record/simulation surfaces only. No PLC, robot controller or sensor is contacted; the sensor app ingests through a local HTTP endpoint with unit validation.
+- T015: the unit converter treats pressure in MPa (1 bar = 0.1 MPa, 1 psi = 0.00689476 MPa); 58.4 MPa is 8,470.2 psi, where the mockup prints 8,469.8.
