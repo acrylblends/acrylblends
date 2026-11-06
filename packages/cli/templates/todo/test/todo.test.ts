@@ -217,8 +217,12 @@ test('the frame mounts the same app at /app; the app on its own server keeps /to
   ))
 
 test('the manifest decides what is mounted', () => {
+  // The template's rows, in their order; a feature's row (plugins/<name>/) may sit between them.
+  const library = ['router', 'state', 'todo', 'server', 'acryl-door']
   assert.deepEqual(
-    readManifest().plugins.map((row) => row.id),
-    ['router', 'state', 'todo', 'server', 'acryl-door'],
+    readManifest()
+      .plugins.map((row) => row.id)
+      .filter((id) => library.includes(id)),
+    library,
   )
 })

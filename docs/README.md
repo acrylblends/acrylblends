@@ -72,6 +72,8 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 1.0.9](release-notes/1.0.9.md) - a message typed as the page loads is no longer dropped; a look after a navigate waits for the page; window places
 - [Release notes 1.0.10](release-notes/1.0.10.md) - a production install no longer carries vitest (the optional peer for the conformance suites is gone)
 - [Release notes 1.1.0](release-notes/1.1.0.md) - a page follows its state over one WebSocket (`watch` of `/api/state/client.js`), so windows no longer use up the browser's six connections
+- [Release notes 1.2.0](release-notes/1.2.0.md) - a new app is a repository of plugin folders with snapshots; `create --from` makes a blueprint your own (name, lock, first commit); `init --desktop` installs the ACRYL frame from npm, one framework copy
+- [The 1.2.0 release checklist](plans/release-1.2.0.md) - the frame's 16 packages, then acrylblends and create-acrylblends 1.2.0, the tags and the npm-release approval, with the owner's steps marked
 - [Release notes 1.0.4](release-notes/1.0.4.md) - act reload and navigate, the page script on every page, runs that outlive the page
 - [Release notes 1.0.3](release-notes/1.0.3.md) - Node 26, relative paths in manifest rows, a pasted GitHub address as a source
 - [Release notes 1.0.2](release-notes/1.0.2.md) - the chat template closed in production, create-acrylblends --from, the newcomer-path fixes

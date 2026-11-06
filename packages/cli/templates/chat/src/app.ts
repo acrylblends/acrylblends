@@ -8,8 +8,10 @@ import * as router from '../plugins/acryl-router/src/index.ts'
 import { extensions } from '../plugins/extensions/index.ts'
 import { type AppInstance, instance } from '../plugins/instance/index.ts'
 import {
+  appPluginNames,
   blueprintsIn,
   compose,
+  loadAppPlugins,
   loadManifest,
   type ParameterValue,
 } from '../plugins/manifest/index.ts'
@@ -30,11 +32,13 @@ const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 /** The manifest next to this app's source. */
 export const MANIFEST = join(projectRoot, 'blend.yaml')
+/** The app's plugins: the library copies `registry` imports, and the app's own plugins (a feature each), which `blend.yaml` mounts by their folder name. */
+const PLUGINS_DIR = join(projectRoot, 'plugins')
 
 /** The manifest, resolved. `createApp` and the tests read it the same way. */
 export function readManifest(values?: Readonly<Record<string, ParameterValue>>) {
   return loadManifest(MANIFEST, {
-    known: Object.keys(registry),
+    known: [...Object.keys(registry), ...appPluginNames(PLUGINS_DIR)],
     getBlueprint: blueprintsIn(join(projectRoot, 'blueprints')),
     ...(values ? { values } : {}),
   })
@@ -98,25 +102,43 @@ export async function composeInto(
   // The frame host mounts the app under its own prefix; the app's own server keeps the root.
   const prefix = options.prefix ?? (options.host === true ? FRAME_MOUNT_PREFIX : undefined)
   // Rows left out: the server (and the door, which needs it) when the app is reached in process or inside the frame host; the door when it is switched
-  // off; live plugin installs in production.
+  // off.
   const leaveOut = new Set<string>(options.host === true ? HOST_ROWS : [])
   if (!own) leaveOut.add('acryl-node-server').add('acryl-door')
   if (!doorEnabled()) leaveOut.add('acryl-door')
-  if (process.env.NODE_ENV === 'production') leaveOut.add('extensions')
   const manifest = without(read, ...leaveOut)
+  // The rows that name one of the app's own plugin folders (a feature: plugins/<name>/ and its row) rather than a registry import. Each one that runs
+  // is imported here; all of them, off or on, belong to their row, so the extensions row never starts them a second time.
+  const ownRows = [
+    ...new Set(read.plugins.map((row) => row.use).filter((use) => !Object.hasOwn(registry, use))),
+  ]
+  const ownPlugins = await loadAppPlugins(
+    PLUGINS_DIR,
+    ownRows.filter((use) => manifest.plugins.some((row) => row.use === use && !row.disabled)),
+  )
   const file = options.database ?? 'data/chat.sqlite'
-  return compose(ctx, manifest, registry, {
-    db: {
-      path: isAbsolute(file) ? file : resolve(projectRoot, file),
-      migrations: join(projectRoot, 'migrations'),
+  return compose(
+    ctx,
+    manifest,
+    { ...registry, ...ownPlugins },
+    {
+      db: {
+        path: isAbsolute(file) ? file : resolve(projectRoot, file),
+        migrations: join(projectRoot, 'migrations'),
+      },
+      // The routes row mounts the app (and its client modules) at the prefix the frame host chose.
+      routes: { ...(prefix === undefined ? {} : { prefix }) },
+      // The app's own plugins live in plugins/, next to the plugins copied from the library (plugins/library.json lists those, so they are not installed twice).
+      // In production they start read-only from where they are deployed: the app keeps its features, and nothing can be installed while it runs.
+      extensions: {
+        ...(process.env.NODE_ENV === 'production' ? { readOnly: true } : {}),
+        sources: [{ dir: PLUGINS_DIR, trust: 'install' }],
+        rows: ownRows,
+      },
+      // Only the app's own server listens; the frame host owns the server and its port.
+      ...(own ? { server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 } } : {}),
     },
-    // The routes row mounts the app (and its client modules) at the prefix the frame host chose.
-    routes: { ...(prefix === undefined ? {} : { prefix }) },
-    // What is installed while the app runs lives in plugins/, next to the plugins copied from the library (plugins/library.json lists those, so they are not installed twice).
-    extensions: { sources: [{ dir: join(projectRoot, 'plugins'), trust: 'install' }] },
-    // Only the app's own server listens; the frame host owns the server and its port.
-    ...(own ? { server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 } } : {}),
-  })
+  )
 }
 
 /** The app: `instance` first (where it lives, chosen at run time), then the manifest's rows in order. */

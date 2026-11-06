@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: the launcher's source is written out as lines of text, and its template literals are meant
 /**
  * The host an app runs on inside the ACRYL frame: the app's own node server and loader composition, with DSH riding as the chat/session driver
  * (`docs/plans/ide-host-inversion.md`). The overlay (`cordis.patch.yml`) is the app's own layer: the frame's rows, the app's rows and the switches.
@@ -50,10 +51,17 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
   { name: 'acrylblends/cordis/router-http', spec: '', row: 'acryl-router-http', installed: true },
   { name: 'acryl-web', spec: '' },
   { name: 'acryl-settings', spec: '' },
-  { name: 'acryl-shortcuts', spec: '' },
+  // No `acryl-shortcuts`: its Settings > Shortcuts and the command palette's key are the IDE's; the frame lists the shortcuts in General.
   { name: 'acryl-app-shell', spec: '' },
-  { name: 'acryl-workspace', spec: '' },
+  { name: 'acryl-versions', spec: '' },
+  // The page's root: the Blends frame (docs/design/blends-frame-mockup.html), never the IDE's workbench (`acryl-workspace`).
+  { name: 'acryl-blends-frame', spec: '' },
   { name: 'acryl-plugin-admin', spec: '' },
+  // The agent's prompt as ACRYL IDE's agent has it: the identity line first, every section a tagged block (pi.dev's shape), empties dropped.
+  { name: 'acryl-system-prompt', spec: '' },
+  // The app builder's docs, the way ACRYL IDE's agent has its plugin docs: a routed index, verified example plugins and the prompt line that sends
+  // the agent to them before it writes a plugin.
+  { name: 'acryl-app-context', spec: '' },
   { name: 'acryl-support', spec: '' },
   { name: 'acryl-sign-in', spec: '' },
   {
@@ -65,8 +73,8 @@ export const FRAME_PACKAGES: readonly IdeProfilePackage[] = [
 ]
 
 /**
- * Where every template's frame row mounts the app (`FRAME_MOUNT_PREFIX` in the template's own source, `/app`). The overlay tells the workspace row, so
- * the frame opens the app's page in a browser tile on first run; `init-frame` asserts the templates still agree with this constant.
+ * Where every template's frame row mounts the app (`FRAME_MOUNT_PREFIX` in the template's own source, `/app`). The overlay tells the frame's row, so
+ * the frame shows the app's page in its centre; `init-frame` asserts the templates still agree with this constant.
  */
 export const FRAME_PAGE_PREFIX = '/app'
 
@@ -149,10 +157,121 @@ export const DRIVER_ROWS: readonly string[] = [
   'workspace-controller',
   'tools',
   'system-prompt',
+  // The skills registry the preset's `skill-filesystem` fills from the app's `.agents/skills/` and its `tool-skill` reads (DSH keeps it on the host plane).
+  'skill',
   'file-upload',
   'fs-sandbox',
   'sandbox-policy',
   'commands',
+  // What the agent's tools stand on: the file observation rule, the sandbox and approval policy, the shell and its environment, and background jobs. The
+  // tools themselves are the frame's own agent preset below, not host rows.
+  'fs-observation-policy',
+  'sandbox',
+  'bash-sandbox',
+  'pwsh-sandbox',
+  'approval',
+  'permission',
+  'shell-env',
+  'jobs',
+  // The chat's auto-save: `workspace-changes` diffs the working tree around every turn and says which files the agent changed (and announces a turn that
+  // changed none by saying nothing); it runs git through `subprocess`. The frame's Host saves a version from that, and DSH's changed-files card
+  // (`ui-deliverables`) shows the same event under the answer.
+  'subprocess',
+  'workspace-changes',
+  // What ACRYL IDE's chat stands on beyond the conversation itself, from DSH's own web composition (the desktop app composes the same): the turn and
+  // step stats under the composer (`session-stats`, `session-turn-outline`), Like and Dislike on an answer (`message-feedback`), the background jobs
+  // roster (`job-controller`), the session header's "Open in" button (`open-in-app`), `/export` (`session-log-download`), session references in `@`
+  // (`session-reference`) and the workspace file reads the changed-files card uses (`workspace-files`).
+  'message-feedback',
+  'session-stats',
+  'session-turn-outline',
+  'job-controller',
+  'workspace-files',
+  'open-in-app',
+  'session-log-download',
+  'session-reference',
+  // The footer's tokens, cache hit and context % (`ui-chat`'s stats read the `tokenUsage` projection this meter keeps, on the host plane as DSH's web
+  // bundle keeps it), and the questions a plan or a tool asks the person (`tool-ask-user` and `ui-user-questions` both stand on this service).
+  'token-meter',
+  'user-questions',
+]
+
+/**
+ * The chat's agent preset. DSH's web bundle gives every session a preset (`standard`: every tool DSH has, subagents, workflows, skills and plan mode, each
+ * needing host rows of its own), and a session without a loadable preset cannot start. The frame offers the agent what builds an app, and nothing more:
+ * the shell, the file tools (read, write, edit, search) and background jobs, with the persona and the app folder's instructions. It is the registry's
+ * default, so every chat in the frame uses it. A tool added here needs the host rows it stands on in `DRIVER_ROWS`.
+ */
+export const AGENT_PRESET_ID = 'acryl-blends'
+
+/**
+ * The plugins the frame's preset takes from DSH's own `standard` preset, as DSH declares them (config and prompt included), so they follow every DSH
+ * bump instead of being restated here: the app's skills (`skill-filesystem` finds `.agents/skills/` in the app folder, the skills `acrylblends` writes
+ * there with every app, and `tool-skill` lets the agent load one), plan mode and its `/plan` (`planning`, which ui-plan's plan card and Plan tab show),
+ * the To-dos list the composer's dock shows (`tool-todo`), the questions the agent can ask (`tool-ask-user`), and context compaction (`compaction`),
+ * whose meter is the footer's context %.
+ */
+export const DSH_STANDARD_PLUGINS: readonly string[] = [
+  'skill-filesystem',
+  'tool-skill',
+  'planning',
+  'compaction',
+  'tool-ask-user',
+  'tool-todo',
+]
+
+export const AGENT_PRESET_ROWS: readonly {
+  readonly id: string
+  readonly name: string
+  readonly config: Readonly<Record<string, unknown>>
+}[] = [
+  {
+    id: 'agent-preset-registry',
+    name: '@deepseek-ai/dsh-agent-preset-registry',
+    config: { default: AGENT_PRESET_ID },
+  },
+  {
+    id: `preset-${AGENT_PRESET_ID}`,
+    name: '@deepseek-ai/dsh-agent-preset',
+    config: {
+      id: AGENT_PRESET_ID,
+      order: 1,
+      plugins: [
+        {
+          id: 'persona',
+          name: '@deepseek-ai/dsh-persona',
+          config: {
+            prefix: 'You are a coding agent powered by the {{model}} model.',
+            suffix: 'Your working directory is {{cwd}}.',
+          },
+        },
+        {
+          id: 'agent-instructions',
+          name: '@deepseek-ai/dsh-agent-instructions',
+          config: { maxBytes: 65536 },
+        },
+        // The loader evaluates `__jsExpr` (the `!!js` tag) when it composes the row.
+        {
+          id: 'tool-bash',
+          name: '@deepseek-ai/dsh-tool-bash',
+          disabled: { __jsExpr: "process.platform === 'win32'" },
+        },
+        {
+          id: 'tool-pwsh',
+          name: '@deepseek-ai/dsh-tool-pwsh',
+          disabled: { __jsExpr: "process.platform !== 'win32'" },
+        },
+        { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
+        {
+          id: 'tool-fs-search',
+          name: '@deepseek-ai/dsh-tool-fs-search',
+          config: { sampleOverCapGlobResults: false },
+        },
+        { id: 'tool-jobs', name: '@deepseek-ai/dsh-tool-jobs' },
+        // DSH_STANDARD_PLUGINS are appended here at boot, read from DSH's own `standard` preset (see the host script).
+      ],
+    },
+  },
 ]
 
 /**
@@ -162,35 +281,122 @@ export const DRIVER_ROWS: readonly string[] = [
  * the failure the old overlay avoided by disabling the row); the only layout client row mounted is `acryl-app-shell`, so the document renders
  * the ACRYL frame.
  */
-export const CLIENT_ROWS: readonly { readonly id: string; readonly name: string }[] = [
+/** One DSH client row of the frame's profile: a package, its Loader id, and the config it mounts with. */
+export interface ClientRow {
+  readonly id: string
+  readonly name: string
+  readonly config?: Readonly<Record<string, unknown>>
+}
+
+export const CLIENT_ROWS: readonly ClientRow[] = [
   { id: 'client-modules', name: '@deepseek-ai/dsh-client-modules' },
   { id: 'client-locale', name: '@deepseek-ai/dsh-client-locale' },
   { id: 'client-shortcuts', name: '@deepseek-ai/dsh-client-shortcuts' },
   { id: 'ui-renderer', name: '@deepseek-ai/dsh-client-ui-renderer' },
-  { id: 'ui-theme', name: '@deepseek-ai/dsh-client-ui-theme' },
+  // Dark by default, as the Blends frame is drawn (docs/design/blends-frame-mockup.html); a Settings Appearance change still wins over it.
+  { id: 'ui-theme', name: '@deepseek-ai/dsh-client-ui-theme', config: { preference: 'dark' } },
   { id: 'ui-settings', name: '@deepseek-ai/dsh-client-ui-settings' },
   // The settings surface itself (the dialog, its sections list and the trigger). Without this row the page has no Settings trigger or dialog at all:
   // ui-settings and ui-settings-models only contribute pages into it.
   { id: 'ui-settings-general', name: '@deepseek-ai/dsh-client-ui-settings-general' },
-  // The Settings Plugins section (the plugin list and the inventory page): a settings section of its own, so it mounts with the surface.
-  { id: 'ui-settings-plugins', name: '@deepseek-ai/dsh-client-ui-settings-plugins' },
+  // No `ui-settings-plugins` (DSH's "Built-in plugins"): the frame's Settings > Plugins lists everything the app is made of.
   { id: 'ui-settings-models', name: '@deepseek-ai/dsh-client-ui-settings-models' },
   { id: 'ui-session', name: '@deepseek-ai/dsh-client-ui-session' },
-  { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
+  // No `ui-sidebar`: the Blends frame draws the left panel itself (branches and versions), and DSH's left sidebar also claims the
+  // `sidebar.settings` seat the frame's top bar renders DSH's Settings in. DSH's right sidebar is mounted as it is (`ui-sidebar-right`, the docking
+  // surface the Plan, the changed-files review and a file an answer links to open in); the frame shows it as one of its right panel's tabs.
   { id: 'ui-sidebar-right', name: '@deepseek-ai/dsh-client-ui-sidebar-right' },
+  // The right sidebar's document tab: a file an answer names opens in it (Markdown, code, HTML, PDF, plain text).
+  { id: 'ui-sidebar-documentpreview', name: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview' },
   { id: 'ui-commands', name: '@deepseek-ai/dsh-client-ui-commands' },
   { id: 'ui-workspace', name: '@deepseek-ai/dsh-client-ui-workspace' },
   { id: 'ui-conversation', name: '@deepseek-ai/dsh-client-ui-conversation' },
+  // What the chat view draws: the transcript (`ui-chat`, which opens an answer's links through the `sidebarRight` the frame stands in for), the tool calls
+  // inside it, the approval card of a tool that asks, and the files attached to a message. Without them a conversation shows the person's message and no answer.
+  { id: 'ui-chat', name: '@deepseek-ai/dsh-client-ui-chat' },
+  { id: 'ui-tool', name: '@deepseek-ai/dsh-client-ui-tool' },
+  { id: 'ui-approval', name: '@deepseek-ai/dsh-client-ui-approval' },
+  { id: 'ui-attachment', name: '@deepseek-ai/dsh-client-ui-attachment' },
+  // The rest of ACRYL IDE's chat, the same DSH packages in the order DSH's web composition mounts them: the shortcuts surface, workflow runs, `/` skills,
+  // subagents, `@` references, the jobs roster, the goal bar, Like and Dislike, the model and effort selector, the permission picker (Read Only, Workspace
+  // Write, Full access), the agent-preset setting, the session log setting, user questions, the Trajectory tab, and the session header's "Open in".
+  // The changed-files card under an answer and its review tab (`ui-deliverables`), and plan mode's composer control, plan card and Plan tab (`ui-plan`).
+  { id: 'ui-shortcuts', name: '@deepseek-ai/dsh-client-ui-shortcuts' },
+  { id: 'ui-workflow-run', name: '@deepseek-ai/dsh-client-ui-workflow-run' },
+  { id: 'ui-skill', name: '@deepseek-ai/dsh-client-ui-skill' },
+  { id: 'ui-subagent', name: '@deepseek-ai/dsh-client-ui-subagent' },
+  { id: 'ui-reference', name: '@deepseek-ai/dsh-client-ui-reference' },
+  { id: 'ui-jobs', name: '@deepseek-ai/dsh-client-ui-jobs' },
+  { id: 'ui-goal', name: '@deepseek-ai/dsh-client-ui-goal' },
+  { id: 'ui-message-feedback', name: '@deepseek-ai/dsh-client-ui-message-feedback' },
+  { id: 'ui-model-selection', name: '@deepseek-ai/dsh-client-ui-model-selection' },
+  { id: 'ui-permission', name: '@deepseek-ai/dsh-client-ui-permission-presets' },
+  { id: 'ui-agent-preset', name: '@deepseek-ai/dsh-client-ui-agent-preset' },
+  { id: 'ui-settings-session-log', name: '@deepseek-ai/dsh-client-ui-settings-session-log' },
+  { id: 'ui-user-questions', name: '@deepseek-ai/dsh-client-ui-user-questions' },
+  { id: 'ui-trajectory', name: '@deepseek-ai/dsh-client-ui-trajectory' },
+  { id: 'ui-deliverables', name: '@deepseek-ai/dsh-client-ui-deliverables' },
+  { id: 'ui-plan', name: '@deepseek-ai/dsh-client-ui-plan' },
+  { id: 'ui-open-in-app', name: '@deepseek-ai/dsh-client-ui-open-in-app' },
   { id: 'client-resources', name: '@deepseek-ai/dsh-client-resources' },
   { id: 'ui-input-trigger', name: '@deepseek-ai/dsh-client-ui-input-trigger' },
 ]
+
+/** The array literal a host script writes for its rows (`const clientRows = [...];`, JSON at two spaces). */
+const CLIENT_ROWS_BLOCK = /const clientRows = (\[[\s\S]*?\n\])/u
+
+/** The client rows a host script names, or undefined when its array cannot be read. */
+export function parseHostClientRows(hostText: string): ClientRow[] | undefined {
+  const match = CLIENT_ROWS_BLOCK.exec(hostText)
+  if (match?.[1] === undefined) return undefined
+  try {
+    const parsed: unknown = JSON.parse(match[1])
+    if (!Array.isArray(parsed)) return undefined
+    return parsed.filter(
+      (row): row is ClientRow =>
+        row !== null &&
+        typeof row === 'object' &&
+        typeof (row as { id?: unknown }).id === 'string' &&
+        typeof (row as { name?: unknown }).name === 'string',
+    )
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Add the client rows the current host script names and the app's host script does not, keeping every row the app has exactly as it is: a person's
+ * own row, or one whose config they changed. The app's rows keep their order; the missing current rows follow; the rest of the host script is the
+ * current one. An app without a host script (a new app) or with an unreadable array gets the current script as it is.
+ * @param currentHost - the host script the CLI generates now.
+ * @param appHost - the app's existing host script, when it has one.
+ * @returns the text to write and the row names it added.
+ */
+export function mergeHostClientRows(
+  currentHost: string,
+  appHost: string | undefined,
+): { readonly text: string; readonly added: readonly string[] } {
+  if (appHost === undefined) return { text: currentHost, added: [] }
+  const current = parseHostClientRows(currentHost)
+  const app = parseHostClientRows(appHost)
+  if (current === undefined || app === undefined) return { text: currentHost, added: [] }
+  const names = new Set(app.map((row) => row.name))
+  const missing = current.filter((row) => !names.has(row.name))
+  const block = CLIENT_ROWS_BLOCK.exec(currentHost)
+  if (block === null) return { text: currentHost, added: [] }
+  const merged = [...app, ...missing]
+  return {
+    text: currentHost.replace(block[0], `const clientRows = ${JSON.stringify(merged, null, 2)}`),
+    added: missing.map((row) => row.name),
+  }
+}
 
 /**
  * `scripts/ide-host.mjs`: the app's launcher. It boots the framework's node server and the webServer port the driver rows register on, then the frame
  * layer, and mounts DSH's driver rows from the base and web bundles (only the ids in `DRIVER_ROWS`) as ordinary rows of this composition. `--check`
  * audits the composition (every row active) and disposes it, for the gate.
  */
-function hostScriptOf(profile: string): string {
+function hostScriptOf(profile: string, frameModule: string): string {
   return [
     "// Generated by acrylblends: boots this app inside the ACRYL frame on the app's own node server. Regenerate instead of editing.",
     "import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'",
@@ -198,16 +404,25 @@ function hostScriptOf(profile: string): string {
     "import { spawnSync } from 'node:child_process'",
     "import { randomBytes, timingSafeEqual } from 'node:crypto'",
     "import { createRequire } from 'node:module'",
-    "import { dirname, join } from 'node:path'",
+    "import { dirname, isAbsolute, join, resolve } from 'node:path'",
     "import { fileURLToPath, pathToFileURL } from 'node:url'",
     "import { DEFAULT_SCHEMA, dump as dumpYaml, Type, load as parseYaml } from 'js-yaml'",
     "import { Acryl } from 'acrylblends'",
     '',
     "const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..')",
-    "const profileName = '" + profile + "'",
+    `const profileName = '${profile}'`,
     "const home = process.env.ACRYLBLENDS_HOME ?? join(appRoot, '.acrylblends')",
     "// DSH's rows keep their files in this app's own home: set before any driver row is imported.",
     'process.env.DSH_HOME = home',
+    "// Development only: the app's code can be loaded again in this host (a version gone back to, a file written by the chat, an agent or an editor). Every file",
+    "// of the app's src/ then resolves under a generation the frame's Host raises, so nothing but the app's own rows restarts. Before anything of the app loads;",
+    '// a frame package that predates the hook leaves the code as it started.',
+    'try {',
+    `  const { installAppGeneration } = await import('${frameModule}/app-generation')`,
+    '  installAppGeneration({ appRoot })',
+    '} catch (error) {',
+    "  if (error?.code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED' && error?.code !== 'ERR_MODULE_NOT_FOUND') throw error",
+    '}',
     '// Before any DSH module is imported: its home resolution reads the environment at import time.',
     "const { boot } = await import('@deepseek-ai/dsh-app-boot')",
     "// The frame listens where the app's own server would: the folder's stable port (or the home's, when ACRYLBLENDS_HOME pins one). A restart then",
@@ -224,16 +439,30 @@ function hostScriptOf(profile: string): string {
     '})',
     'const load = (text) => parseYaml(text, { schema: DEFAULT_SCHEMA.extend([JsExpr]) })',
     '',
-    '/** The driver rows above are selected from the bundles by id; nothing else of DSH is mounted. */',
-    'const DRIVER_ROWS = ' + JSON.stringify(DRIVER_ROWS, null, 2).replaceAll('\n', '\n'),
+    '/** An insert names its module beside the patch file that named it (the loader rule, and the rule DSH applies when it reads a profile again). The',
+    ' * composition is read as the profile bundle, from its own directory, so a row written relative would turn into a bundle-relative path the first time',
+    ' * DSH reconciles the profile (any Settings write) and the app rows would stop loading. Anchoring each layer at the directory it was written for',
+    ' * keeps one row meaning one file: boot, a Settings write and the frame reload then import the same absolute URL. */',
+    'function anchorRows(patches, baseDir) {',
+    '  const visit = (row) => {',
+    "    if (typeof row.name === 'string' && (isAbsolute(row.name) || row.name.startsWith('./') || row.name.startsWith('../')))",
+    '      row.name = pathToFileURL(resolve(baseDir, row.name)).href',
+    '    if (row.group && Array.isArray(row.config)) row.config.forEach(visit)',
+    '  }',
+    '  for (const patch of patches) patch.insert?.forEach(visit)',
+    '  return patches',
+    '}',
     '',
-    "/** A bundle's patch files, in application order, as the package declares them. */",
+    '/** The driver rows above are selected from the bundles by id; nothing else of DSH is mounted. */',
+    `const DRIVER_ROWS = ${JSON.stringify(DRIVER_ROWS, null, 2).replaceAll('\n', '\n')}`,
+    '',
+    "/** A bundle's patch files, in application order, as the package declares them, anchored beside that package (a relative name in a bundle is its own file). */",
     'function bundlePatches(packageName) {',
     "  const dir = dirname(require.resolve(packageName + '/package.json'))",
     "  const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))",
     '  const files = manifest.dsh?.bundle?.patch',
     "  const list = typeof files === 'string' ? [files] : Array.isArray(files) ? files : []",
-    "  return list.flatMap((file) => load(readFileSync(join(dir, file), 'utf8')) ?? [])",
+    "  return anchorRows(list.flatMap((file) => load(readFileSync(join(dir, file), 'utf8')) ?? []), dir)",
     '}',
     '',
     '/** Keep only the driver rows: insert lists filtered entry by entry, id-targeted patches only when they hit a driver row. */',
@@ -248,17 +477,31 @@ function hostScriptOf(profile: string): string {
     '  return kept',
     '}',
     '',
-    "const frameLayer = load(readFileSync(join(appRoot, 'cordis.patch.yml'), 'utf8')) ?? []",
+    "const frameLayer = anchorRows(load(readFileSync(join(appRoot, 'cordis.patch.yml'), 'utf8')) ?? [], appRoot)",
     "/** Our host rows first: the framework's node server, then the webServer port the driver rows register on (they are the app's, not DSH's). */",
-    'const clientRows = ' + JSON.stringify(CLIENT_ROWS, null, 2).replaceAll('\\n', '\\n'),
-    'const hostLayer = [{',
+    `const clientRows = ${JSON.stringify(CLIENT_ROWS, null, 2).replaceAll('\\n', '\\n')}`,
+    `const agentRows = ${JSON.stringify(AGENT_PRESET_ROWS, null, 2)}`,
+    `const DSH_STANDARD_PLUGINS = ${JSON.stringify(DSH_STANDARD_PLUGINS)}`,
+    "/** One plugin row of DSH's `standard` preset, exactly as DSH's web bundle declares it; a missing one fails the boot loudly. */",
+    'function dshStandardPlugin(id) {',
+    "  for (const patch of bundlePatches('@deepseek-ai/dsh-web-app'))",
+    '    for (const entry of patch.insert ?? [])',
+    "      if (entry.config?.id === 'standard') {",
+    '        const found = entry.config.plugins?.find((plugin) => plugin.id === id)',
+    '        if (found !== undefined) return found',
+    '      }',
+    "  throw new Error(`DSH's standard preset has no ${id} row`)",
+    '}',
+    `agentRows.find((row) => row.id === 'preset-${AGENT_PRESET_ID}').config.plugins.push(...DSH_STANDARD_PLUGINS.map(dshStandardPlugin))`,
+    'const hostLayer = anchorRows([{',
     '  insert: [',
     "    { id: 'node-server', name: './plugins/acryl-node-server/src/index.ts', config: { hostname: '127.0.0.1', port: Number(port), scan: Number(port) === 0 ? 0 : 20 } },",
     "    { id: 'web-server', name: './plugins/acryl-web-server/src/index.ts' },",
     "    { id: 'page', name: './plugins/acryl-page/src/index.ts' },",
     '    ...clientRows,',
+    '    ...agentRows,',
     '  ],',
-    '}]',
+    '}], appRoot)',
     "// The composition: the driver rows selected from the bundles, the host rows and the app's frame layer, in the order they mount.",
     'const composition = [',
     "  ...onlyDriverRows(bundlePatches('@deepseek-ai/dsh-base')),",
@@ -289,7 +532,7 @@ function hostScriptOf(profile: string): string {
     '// Boot reads the same list readProfilePatches will: the composition bundle first, then the settings document, which is also the order DSH uses for',
     '// bundles and the profile patch, so the first reconcile is a no-op recomposition and every later one differs only by the edited patch.',
     "const compositionLayer = load(readFileSync(join(bundleDir, 'cordis.patch.yml'), 'utf8')) ?? []",
-    "const settingsLayer = load(readFileSync(settingsPath, 'utf8')) ?? []",
+    "const settingsLayer = anchorRows(load(readFileSync(settingsPath, 'utf8')) ?? [], home)",
     "/** The profile context DSH's settings row, config editor and plugin manager read. */",
     'const profileContext = {',
     "  name: 'web',",
@@ -447,6 +690,16 @@ function hostScriptOf(profile: string): string {
   ].join('\n')
 }
 
+/** The row that roots the page (the Blends frame) and the module it is installed as: its source name in a checkout, its published name from npm. */
+export const BLENDS_FRAME_ROW = 'acryl-blends-frame'
+
+function frameModuleOf(packages: readonly IdeProfilePackage[]): string {
+  return (
+    packages.find((entry) => (entry.row ?? entry.name) === BLENDS_FRAME_ROW)?.name ??
+    BLENDS_FRAME_ROW
+  )
+}
+
 /** `acrylblends-<app>`, safe for a DSH profile name: lowercase, dashes, nothing else. */
 export function profileNameFor(appName: string): string {
   const slug = appName
@@ -476,7 +729,17 @@ function overlayOf(
     '- insert:',
     '    - id: app-instance',
     '      name: ./app/runtime.mjs',
-    ...(door ? ['    - id: acryl-door', '      name: ./plugins/acryl-door/src/index.ts'] : []),
+    // The frame's index is not the app: the door drives the app's page in the canvas, never the frame around it (an agent's navigate would leave the frame).
+    // The canvas prefix goes with it: `act navigate --path /board` reaches the app's /board at the canvas prefix, the same path it has on its own server.
+    ...(door
+      ? [
+          '    - id: acryl-door',
+          '      name: ./plugins/acryl-door/src/index.ts',
+          '      config:',
+          '        hostIndex: false',
+          `        appBase: ${FRAME_PAGE_PREFIX}`,
+        ]
+      : []),
     ...appRows.flatMap((row) => [
       `    - id: ${row.id}`,
       `      name: ${row.name}`,
@@ -485,8 +748,8 @@ function overlayOf(
   ]
   for (const entry of rows) {
     lines.push(`    - id: ${entry.row ?? entry.name}`, `      name: ${yamlName(entry.name)}`)
-    // The app's page, so the frame opens it in a browser tile on first run instead of an empty canvas.
-    if ((entry.row ?? entry.name) === 'acryl-workspace')
+    // The app's page, which the frame shows in its centre.
+    if ((entry.row ?? entry.name) === BLENDS_FRAME_ROW)
       lines.push('      config:', `        appPage: ${FRAME_PAGE_PREFIX}`)
   }
   // The chat driver's connection registers node routes on the framework's webServer port; it needs no DSH web runtime, so the row's
@@ -501,7 +764,7 @@ function overlayOf(
     "    documentsDirectory: !!js process.env.ACRYLBLENDS_HOME ?? process.cwd() + '/.acrylblends'",
   )
   for (const id of [...disabled].sort()) {
-    lines.push('- id: ' + id, '  disabled: true')
+    lines.push(`- id: ${id}`, '  disabled: true')
   }
   return `${lines.join('\n')}\n`
 }
@@ -539,7 +802,7 @@ export function ideProfilePlan(input: IdeProfileInput, existing?: string): IdePr
     overlay: overlayOf(packages, input.door === true, input.rows ?? []),
     packageJson: `${JSON.stringify(mergeManifest(manifest, dependencies), null, 2)}\n`,
     rootConfig: '[]\n',
-    hostScript: hostScriptOf(profile),
+    hostScript: hostScriptOf(profile, frameModuleOf(packages)),
   }
 }
 
@@ -600,6 +863,8 @@ export interface IdeProfileWritePlan {
   readonly files: readonly IdeProfileFileWrite[]
   /** Whether `package.json` changes once merged (a merge, never a conflict: the app owns that file). */
   readonly manifestChanged: boolean
+  /** Client rows the app's host script did not name yet, which the write adds. */
+  readonly clientRowsAdded: readonly string[]
 }
 
 /** The door is app source, not a registry package: the row exists when the app carries it, and nothing fails when it does not. */
@@ -615,8 +880,17 @@ export function planIdeProfileWrite(root: string, input: IdeProfileInput): IdePr
   const manifestFile = join(root, 'package.json')
   const existing = existsSync(manifestFile) ? readFileSync(manifestFile, 'utf8') : undefined
   const plan = ideProfilePlan(withDoor(root, input), existing)
+  const hostPath = join(root, 'scripts/ide-host.mjs')
+  const appHost = existsSync(hostPath) ? readFileSync(hostPath, 'utf8') : undefined
+  let clientRowsAdded: readonly string[] = []
   const files = GENERATED_FILES.map(({ file, of }) => {
-    const text = of(plan)
+    let text = of(plan)
+    if (file === 'scripts/ide-host.mjs') {
+      // The launcher updates as a whole; its rows are a merge, so a person's own row or a row they changed survives and only missing rows are added.
+      const merged = mergeHostClientRows(text, appHost)
+      text = merged.text
+      clientRowsAdded = merged.added
+    }
     const path = join(root, file)
     if (!existsSync(path)) return { file, text, state: 'add' as const }
     const before = readFileSync(path, 'utf8')
@@ -628,7 +902,7 @@ export function planIdeProfileWrite(root: string, input: IdeProfileInput): IdePr
       state: GENERATED_MARKER.test(firstLine) ? ('update' as const) : ('conflict' as const),
     }
   })
-  return { plan, files, manifestChanged: existing !== plan.packageJson }
+  return { plan, files, manifestChanged: existing !== plan.packageJson, clientRowsAdded }
 }
 
 /** Write a plan made by {@link planIdeProfileWrite}: only the files whose bytes differ, and `package.json` only when the merge changes it. */
@@ -650,61 +924,6 @@ export function writeIdeProfilePlan(root: string, planned: IdeProfileWritePlan):
     written.push('package.json')
   } else unchanged.push('package.json')
   return { written, unchanged }
-}
-
-/** The frame packages' specs while the ide packages are unpublished (`ACRYLBLENDS_FRAME_PACKAGES`; see `init`). Unset or malformed: undefined. */
-export interface FrameProfileSpecs {
-  readonly dshVersion: string
-  readonly frameworkVersion: string
-  readonly packages: Readonly<Record<string, string>>
-}
-
-export function frameProfileFromEnv(): FrameProfileSpecs | undefined {
-  const raw = process.env.ACRYLBLENDS_FRAME_PACKAGES
-  if (raw === undefined || raw.trim() === '') return undefined
-  try {
-    const parsed = JSON.parse(raw) as {
-      dshVersion?: unknown
-      frameworkVersion?: unknown
-      packages?: unknown
-    }
-    if (typeof parsed.dshVersion !== 'string' || typeof parsed.frameworkVersion !== 'string')
-      return undefined
-    const packages: Record<string, string> = {}
-    for (const [key, value] of Object.entries((parsed.packages ?? {}) as Record<string, unknown>))
-      if (typeof value === 'string') packages[key] = value
-    return { dshVersion: parsed.dshVersion, frameworkVersion: parsed.frameworkVersion, packages }
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * The specs for an app that may or may not be framed already: the environment variable first (a pre-frame app has no pins of its own), then the app's own
- * `package.json` (a framed app carries the DSH pin, the framework and the frame packages, so an upgrade regenerates from what that app installed).
- * Undefined when neither says: the caller then leaves the app on the framework alone and says why.
- */
-export function frameProfileForApp(root: string): FrameProfileSpecs | undefined {
-  const fromEnv = frameProfileFromEnv()
-  if (fromEnv !== undefined) return fromEnv
-  const manifestFile = join(root, 'package.json')
-  if (!existsSync(manifestFile)) return undefined
-  let manifest: { dependencies?: Record<string, unknown> }
-  try {
-    manifest = JSON.parse(readFileSync(manifestFile, 'utf8')) as typeof manifest
-  } catch {
-    return undefined
-  }
-  const dependencies = manifest.dependencies ?? {}
-  const dshVersion = dependencies['@deepseek-ai/dsh-base']
-  const frameworkVersion = dependencies.acrylblends
-  if (typeof dshVersion !== 'string' || typeof frameworkVersion !== 'string') return undefined
-  const packages: Record<string, string> = {}
-  for (const entry of FRAME_PACKAGES)
-    if (typeof dependencies[entry.name] === 'string')
-      packages[entry.name] = dependencies[entry.name] as string
-  if (Object.keys(packages).length === 0) return undefined
-  return { dshVersion, frameworkVersion, packages }
 }
 
 /**

@@ -1,13 +1,19 @@
 // The panel in the page: a button at the corner opens a side panel (a shadow root, so the app's CSS cannot touch it and it cannot touch the app's). It asks the app's
 // agent through POST <prefix>/ask, shows the answer as it arrives, and reloads the page after a run that installed or removed a plugin. `panel.js` calls
 // `start` with the prefix the app is served under (the root of its own server, or `/app` when the ACRYL frame hosts it).
-import { describeTool } from './describe.ts'
+import { describePageStep, describeTool } from './describe.ts'
 import { createPickGeneration } from './driver-pick.ts'
+import { FRAME_MODE_EVENT, frameViewOf, panelVariant, panelVisible } from './frame.ts'
 import { renderMarkdown } from './markdown.ts'
 
 let PREFIX = '/api/agent-panel'
 /** Where the composer's draft is kept across a page reload or a remount. */
 const DRAFT_KEY = 'agent-panel-draft'
+/** Set when a visitor closed the Assistant, so it stays closed on the next page. */
+const ASSISTANT_CLOSED_KEY = 'agent-panel-assistant-closed'
+/** What the Assistant tells a visitor first: what it can do, and that it cannot change the app. */
+export const ASSISTANT_NOTE =
+  'The assistant can use the app for you: open pages, filter, fill in forms. It cannot change the app.'
 
 /**
  * Why a submit does not send: nothing typed, or a run still going. The panel says it in its log instead of returning silently - a Send that does nothing and
@@ -48,6 +54,10 @@ function reloadPage(reason: string): void {
 
 interface Session {
   token: string
+  /** The production Assistant: the app's own agent drives the page for a visitor. */
+  assistant?: boolean
+  /** The app's production environment names the Assistant (ACRYL_ASSISTANT=on); the frame's Preview shows it even though the frame host runs in development. */
+  assistantInProduction?: boolean
   drivers: Array<{
     name: string
     kind: 'chat' | 'terminal'
@@ -206,6 +216,31 @@ textarea { width: 100%; min-height: 64px; resize: vertical; padding: 8px; border
 .row button, header button { padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer }
 .row button.send { background: #1f2937; color: #fff; border-color: #1f2937 }
 .row button:disabled { opacity: 0.45; cursor: not-allowed }
+.notice, .steps, .tab { display: none }
+/* The Assistant (production): docked on the right in the app's dark surface, one tab, a note, the conversation and one line to ask. */
+:host([data-assistant]) section { width: min(330px, 100vw); background: #18181b; color: #e4e4e7; border-left: 1px solid #27272a; box-shadow: none }
+:host([data-assistant]) header { padding: 0 12px; border-bottom: 1px solid #27272a; min-height: 38px }
+:host([data-assistant]) header select, :host([data-assistant]) header strong { display: none }
+:host([data-assistant]) .tab { display: block; flex: 1; align-self: stretch }
+:host([data-assistant]) .tab span { display: inline-block; height: 100%; padding: 10px 6px 8px; font-size: 12.5px; font-weight: 600; color: #fafafa; border-bottom: 2px solid #5468ff }
+:host([data-assistant]) header button.close { border: 0; background: none; color: #a1a1aa; font-size: 18px; padding: 2px 6px }
+:host([data-assistant]) .notice { display: block; margin: 8px 10px 0; padding: 7px 9px; border-radius: 6px; background: #15291e; color: #a7f3c0; font-size: 12px; line-height: 1.5 }
+:host([data-assistant]) #log { padding: 10px; gap: 10px }
+:host([data-assistant]) .msg { background: #232326; color: #e4e4e7; border-radius: 8px; padding: 9px 11px; line-height: 1.45; max-width: 92% }
+:host([data-assistant]) .me { background: #23264f; color: #eef0ff; align-self: flex-end }
+:host([data-assistant]) .err { background: #3b1d1d; color: #fecaca }
+:host([data-assistant]) .tool, :host([data-assistant]) .working { background: none; color: #a1a1aa; padding: 0 2px }
+:host([data-assistant]) .steps { display: block; margin-top: 6px; font: 11.5px ui-monospace, monospace; color: #a1a1aa; white-space: normal }
+:host([data-assistant]) .steps:empty { display: none }
+:host([data-assistant]) .md code { background: #2e2e33; color: #e4e4e7 }
+:host([data-assistant]) form { border-top: 0; padding: 10px }
+:host([data-assistant]) textarea { min-height: 0; height: 38px; resize: none; background: #18181b; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 8px; padding: 9px 11px; font-size: 13px }
+:host([data-assistant]) textarea:focus { outline: none; border-color: #5468ff }
+:host([data-assistant]) .row { display: none }
+:host([data-assistant][data-following]) .row { display: flex; justify-content: flex-end }
+:host([data-assistant]) .row .send { display: none }
+:host([data-assistant]) .row button { background: none; color: #e4e4e7; border-color: #3f3f46 }
+:host([data-assistant]) button.open { background: #18181b; color: #fafafa; border: 1px solid #3f3f46 }
 `
 
 /** Start the panel against the app served at `prefix` (`/api/agent-panel` at the root, `/app/api/agent-panel` in the frame). */
@@ -221,20 +256,26 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   if (!reply.ok) return
   let session = (await reply.json()) as Session
 
+  // The frame's Build is the builder's screen, and its Preview shows the app as production would: the panel takes the Assistant's variant only where
+  // production has it, and it is hidden everywhere the canvas should be the app alone. A direct page (no frame) is unchanged.
+  const frame = frameViewOf()
+  const assistant = panelVariant(session, frame)
   const host = document.createElement('div')
   host.id = 'agent-panel'
+  if (assistant) host.dataset.assistant = ''
   const shadow = host.attachShadow({ mode: 'open' })
   shadow.innerHTML = `<style>${css}</style>
-    <button class="open" type="button">Ask the agent</button>
-    <section aria-label="Agent panel">
-      <header><strong>Agent</strong><select aria-label="Agent">${session.drivers
+    <button class="open" type="button">${assistant ? 'Assistant' : 'Ask the agent'}</button>
+    <section aria-label="${assistant ? 'Assistant' : 'Agent panel'}">
+      <header><strong>Agent</strong><div class="tab"><span>Assistant</span></div><select aria-label="Agent">${session.drivers
         .map((d) => `<option>${d.name}</option>`)
         .join(
           '',
         )}</select><button class="termstop" type="button" hidden>Stop terminal</button><button class="close" type="button" aria-label="Close">×</button></header>
+      <p class="notice">${ASSISTANT_NOTE}</p>
       <div id="log" role="log"></div>
       <div id="term" hidden></div>
-      <form><textarea aria-label="Message" placeholder="What should the app do?"></textarea>
+      <form><textarea aria-label="Message" placeholder="${assistant ? 'Ask the assistant…' : 'What should the app do?'}"${assistant ? ' rows="1"' : ''}></textarea>
         <div class="row"><button class="send" type="submit">Send</button><button class="stop" type="button" disabled>Stop</button></div></form>
     </section>`
   const $ = <T extends Element>(selector: string): T => shadow.querySelector<T>(selector)!
@@ -263,6 +304,11 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   termStop.addEventListener('click', () => void terminal?.stop())
   const form = $<HTMLFormElement>('form')
   document.body.append(host)
+  const applyFrame = (): void => {
+    host.style.display = panelVisible(frame, assistant) ? '' : 'none'
+  }
+  window.addEventListener(FRAME_MODE_EVENT, applyFrame)
+  applyFrame()
   const kindOf = (name: string): 'chat' | 'terminal' =>
     session.drivers.find((d) => d.name === name)?.kind ?? 'chat'
   let terminal: { detach(): void; stop(): Promise<void> } | undefined
@@ -338,9 +384,10 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
           root.style.getPropertyValue(property),
           root.style.getPropertyPriority(property),
         ])
+      // The panel's own width (the Assistant's is narrower than the builder's), so the page meets its edge with no gap.
       root.style.setProperty(
         'margin-right',
-        `${String(Math.min(380, Math.floor(window.innerWidth * 0.9)))}px`,
+        `${String(Math.ceil(panel.getBoundingClientRect().width))}px`,
         'important',
       )
     } else {
@@ -352,14 +399,39 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
       saved.clear()
     }
   }
-  const show = (open: boolean): void => {
+  const show = (open: boolean, focus = true): void => {
     const was = panel.classList.contains('shown')
     panel.classList.toggle('shown', open)
+    $<HTMLButtonElement>('button.open').hidden = open && assistant
     if (open !== was) dock(open)
-    if (open) input.focus()
+    if (open && focus) input.focus()
+    // Other corner buttons of the page (the feedback button) stand clear of the panel.
+    window.dispatchEvent(new Event('agent-panel:layout'))
   }
-  $('button.open').addEventListener('click', () => show(true))
-  $('button.close').addEventListener('click', () => show(false))
+  const remember = (closed: boolean): void => {
+    try {
+      if (closed) sessionStorage.setItem(ASSISTANT_CLOSED_KEY, '1')
+      else sessionStorage.removeItem(ASSISTANT_CLOSED_KEY)
+    } catch {
+      // No storage: the Assistant opens again on the next page.
+    }
+  }
+  $('button.open').addEventListener('click', () => {
+    show(true)
+    if (assistant) remember(false)
+  })
+  $('button.close').addEventListener('click', () => {
+    show(false)
+    if (assistant) remember(true)
+  })
+  // Enter asks (Shift+Enter is a new line): the Assistant has one line to ask in and no Send button.
+  if (assistant)
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        event.preventDefault()
+        form.requestSubmit()
+      }
+    })
   const line = (text: string, kind = ''): HTMLElement => {
     const el = document.createElement('div')
     el.className = `msg ${kind}`
@@ -455,6 +527,10 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
     let changed = false
     let answer: HTMLElement | undefined
     let answered = ''
+    // The Assistant's steps on the page, shown under its answer in one line, as the person reads what it did.
+    const steps: string[] = []
+    const stepsLine = document.createElement('div')
+    stepsLine.className = 'steps'
     // A coding agent started headless says little until it is done, so the panel says it is working, and for how long (from when the run began, not from when this page loaded).
     let started = Date.now()
     let working: HTMLElement | undefined
@@ -499,8 +575,17 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
           answer ??= line('', 'md')
           answered += String(data.text ?? '')
           answer.replaceChildren(renderMarkdown(answered, document))
+          if (assistant) {
+            stepsLine.textContent = steps.join(' · ')
+            answer.append(stepsLine)
+          }
           log.scrollTop = log.scrollHeight
         } else if (event === 'tool') {
+          if (assistant) {
+            const step = describePageStep(data)
+            if (step !== undefined) steps.push(step)
+            continue
+          }
           const described = describeTool(data)
           if (described !== undefined) line(described, 'tool')
         } else if (event === 'change') {
@@ -575,6 +660,16 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
       line(`The request failed: ${error instanceof Error ? error.message : String(error)}`, 'err')
     }
   })
+  // The Assistant is open beside the page unless the visitor closed it.
+  if (assistant) {
+    let closed = false
+    try {
+      closed = sessionStorage.getItem(ASSISTANT_CLOSED_KEY) === '1'
+    } catch {
+      // No storage: open.
+    }
+    show(!closed, false)
+  }
   // The form is wired: a script (the frame gate included) waits for this instead of guessing that the panel can be submitted, and a panel that never got
   // this far says so by the mark's absence - together with the visible guards above, no submit can vanish without a trace.
   host.dataset.ready = '1'

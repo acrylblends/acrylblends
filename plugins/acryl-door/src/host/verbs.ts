@@ -6,6 +6,9 @@
 import { MAX_SNAPSHOT_NODES, MAX_WAIT_MS } from '../page/protocol.ts'
 
 /** Every verb, in the order `brief` lists them. */
+/** The verbs that only use the page: what a page-only door (a production assistant) offers. */
+export const PAGE_VERBS = ['look', 'act'] as const satisfies readonly Verb[]
+
 export const VERBS = ['brief', 'look', 'act', 'plugin-list', 'plugin-add', 'plugin-remove', 'plugin-reload', 'tool-list', 'tool-call', 'window-list', 'window-open', 'window-focus', 'window-close', 'window-resize', 'menu-list', 'menu-click'] as const
 export type Verb = (typeof VERBS)[number]
 

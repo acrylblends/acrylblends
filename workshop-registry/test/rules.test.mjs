@@ -2,6 +2,7 @@
 // blends-core: set BLENDS_CORE to its src folder, or those tests are skipped and say so).
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   cpSync,
   existsSync,
@@ -218,11 +219,22 @@ describe('make-entry', () => {
     return app
   }
   const make = (args) =>
-    spawnSync(process.execPath, [join(repo, 'scripts', 'make-entry.mjs'), ...args], { encoding: 'utf8' })
+    spawnSync(process.execPath, [join(repo, 'scripts', 'make-entry.mjs'), ...args], {
+      encoding: 'utf8',
+    })
 
   test('--out puts the entry in that registry, --category names it, and nothing lands in this one', () => {
     const out = mkdtempSync(join(scratch, 'out-'))
-    const result = make([appFolder(), 'acrylblends.hello', '--description', 'Says hello.', '--category', 'system', '--out', out])
+    const result = make([
+      appFolder(),
+      'acrylblends.hello',
+      '--description',
+      'Says hello.',
+      '--category',
+      'system',
+      '--out',
+      out,
+    ])
     assert.equal(result.status, 0, result.stderr)
     const entry = join(out, 'blends', 'acrylblends.hello')
     const manifest = readFileSync(join(entry, 'blend.yaml'), 'utf8')
@@ -230,7 +242,11 @@ describe('make-entry', () => {
     assert.match(manifest, /name: "Hello App"/)
     assert.match(manifest, /category: system/)
     assert.match(manifest, /visibility: public/)
-    assert.deepEqual(JSON.parse(readFileSync(join(entry, 'acryl.template.json'), 'utf8')), { name: 'Hello App', description: 'Says hello.', plugins: [] })
+    assert.deepEqual(JSON.parse(readFileSync(join(entry, 'acryl.template.json'), 'utf8')), {
+      name: 'Hello App',
+      description: 'Says hello.',
+      plugins: [],
+    })
     assert.equal(existsSync(join(entry, 'node_modules')), false)
     assert.equal(existsSync(join(repo, 'blends', 'acrylblends.hello')), false)
   })
@@ -241,5 +257,81 @@ describe('make-entry', () => {
     assert.equal(make([app, 'acrylblends.hello', '--out', out]).status, 0)
     assert.equal(make([app, 'acrylblends.hello', '--out', out]).status, 1)
     assert.equal(make([app, 'Not An Id', '--out', out]).status, 2)
+  })
+
+  // The lock is written by the template's own capture (plugins/manifest/snapshot.ts), so these tests also hold make-entry's digests to blends-core's.
+  const fork = () => {
+    const registry = mkdtempSync(join(scratch, 'fork-'))
+    mkdirSync(join(registry, 'scripts'))
+    cpSync(join(repo, 'scripts', 'make-entry.mjs'), join(registry, 'scripts', 'make-entry.mjs'))
+    return registry
+  }
+  const capturedApp = async () => {
+    const app = mkdtempSync(join(scratch, 'app-'))
+    writeFileSync(join(app, 'package.json'), '{ "name": "board" }\n')
+    writeFileSync(
+      join(app, 'blend.yaml'),
+      'apiVersion: blends.acryl.dev/v1alpha1\nkind: Blueprint\nmetadata:\n  id: acrylblends.board\n  name: board\n  version: 0.3.0\nspec:\n  runtime: cordis\n  rows:\n    - id: extensions\n      name: extensions\n',
+    )
+    mkdirSync(join(app, 'plugins', 'notes2', 'lib'), { recursive: true })
+    writeFileSync(
+      join(app, 'plugins', 'notes2', 'index.ts'),
+      "export const name = 'notes2'\nexport function apply() {}\n",
+    )
+    writeFileSync(join(app, 'plugins', 'notes2', 'lib', 'store.ts'), 'export const notes = []\n')
+    const { captureApp } = await import(join(repo, '..', 'plugins', 'manifest', 'snapshot.ts'))
+    captureApp(app)
+    return app
+  }
+  const makeIn = (registry, app, id) =>
+    spawnSync(process.execPath, [join(registry, 'scripts', 'make-entry.mjs'), app, id], {
+      encoding: 'utf8',
+    })
+
+  test("keeps the app's lock true to the entry: the origin takes the new id, version and blend.yaml digest", async () => {
+    const registry = fork()
+    const app = await capturedApp()
+    const before = JSON.parse(readFileSync(join(app, 'blend.lock.json'), 'utf8'))
+    const made = makeIn(registry, app, 'octo.board')
+    assert.equal(made.status, 0, made.stderr)
+    const entry = join(registry, 'blends', 'octo.board')
+    const lock = JSON.parse(readFileSync(join(entry, 'blend.lock.json'), 'utf8'))
+    assert.deepEqual(lock.origin, {
+      ...before.origin,
+      id: 'octo.board',
+      version: '0.1.0',
+      digest: createHash('sha256')
+        .update(readFileSync(join(entry, 'blend.yaml')))
+        .digest('hex'),
+    })
+    assert.deepEqual(lock.modules, before.modules)
+  })
+
+  test('refuses a snapshot changed since the last capture, in one line, and copies nothing', async () => {
+    const registry = fork()
+    const app = await capturedApp()
+    writeFileSync(
+      join(app, 'plugins', 'notes2', 'lib', 'store.ts'),
+      'export const notes = ["edited"]\n',
+    )
+    const plugin = makeIn(registry, app, 'octo.board')
+    assert.equal(plugin.status, 1)
+    assert.equal(
+      plugin.stderr.trim(),
+      'plugins/notes2 changed since the last capture; run npm run snapshot capture (or Save point in the frame) and try again',
+    )
+    assert.equal(existsSync(join(registry, 'blends')), false)
+    const { captureApp } = await import(join(repo, '..', 'plugins', 'manifest', 'snapshot.ts'))
+    captureApp(app)
+    writeFileSync(
+      join(app, 'blend.yaml'),
+      `${readFileSync(join(app, 'blend.yaml'), 'utf8')}# edited\n`,
+    )
+    assert.match(
+      makeIn(registry, app, 'octo.board').stderr,
+      /^blend\.yaml changed since the last capture/,
+    )
+    captureApp(app)
+    assert.equal(makeIn(registry, app, 'octo.board').status, 0)
   })
 })

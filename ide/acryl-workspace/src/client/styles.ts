@@ -28,9 +28,7 @@ const WORKSPACE_STYLES = `
 @media (prefers-reduced-motion: reduce) { .dshWorkspaceTabActivity[data-state="live"], .dshWorkspaceTabActivity[data-state="waiting"], .dshWorkspaceDot[data-dot="attention"] { animation: none; } }
 .dshWorkspaceTabMenu { width: 220px; }
 .dshWorkspaceTabMenu .dshWorkspaceMenuItem:disabled { opacity: 0.4; cursor: default; }
-.dshWorkspaceAgentMark { display: inline-grid; place-items: center; width: 18px; height: 18px; flex: none; color: var(--dsw-alias-label-primary); }
 .dshWorkspaceWorktreeAgents .dshWorkspaceAgentMark { width: 14px; height: 14px; }
-.dshWorkspaceAgentIcon { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; border: 1px solid currentColor; border-radius: 5px; font: 700 9.5px/1 ui-sans-serif, system-ui, sans-serif; }
 .dshWorkspaceMenuItem[data-muted] { color: var(--dsw-alias-label-secondary); }
 .dshWorkspaceMenuGrow { flex: 1; }
 .dshWorkspaceMenuCheck { width: 14px; text-align: right; color: #4d6bfe; }

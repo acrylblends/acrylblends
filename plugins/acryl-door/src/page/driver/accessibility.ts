@@ -147,6 +147,17 @@ export function valueOf(el: Element, role: string): string | undefined {
   return value === undefined || value === '' ? undefined : clip(value, 100)
 }
 
+/** Choices of a select listed at most; a longer list ends with how many more there are. */
+const MAX_OPTIONS = 20
+
+/** The choices of a native select (what `act select` takes), or undefined when it is not one or is sensitive. */
+export function optionsOf(el: Element): string[] | undefined {
+  if (!(el instanceof HTMLSelectElement) || isSensitive(el)) return undefined
+  const labels = [...el.options].filter(option => !option.hidden).map(option => clip((option.textContent ?? '').trim(), 60)).filter(label => label !== '')
+  if (labels.length <= MAX_OPTIONS) return labels
+  return [...labels.slice(0, MAX_OPTIONS), `(${String(labels.length - MAX_OPTIONS)} more)`]
+}
+
 /** Heading level, when the element is a heading. */
 export function levelOf(el: Element): number | undefined {
   const explicit = Number(el.getAttribute('aria-level'))

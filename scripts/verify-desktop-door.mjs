@@ -8,7 +8,7 @@
 //   and the same windows are still driven; closing the last window with force ends the desktop app and leaves the dev server running.
 // Then the same without a dev server: `npm run desktop` starts the app itself, and closing the last window with force stops that server too.
 // Then a frame app (`init --template blank --desktop` with this checkout's frame packages): `npm run desktop` starts the frame host and its window shows the
-// whole frame (the left panel, the right panel, Settings and the app's page in the tile, through the window's DevTools port); closing it frees the host's port.
+// whole frame (the left panel, the right panel, Settings and the app's page in the canvas, through the window's DevTools port); closing it frees the host's port.
 // With `npm run dev` running, the window attaches to that frame instead and closing it leaves the host running. DESKTOP_FRAME_SHOTS=<dir> keeps screenshots.
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -49,7 +49,9 @@ if (
   process.exit(0)
 }
 const scratch = mkdtempSync(join(tmpdir(), 'desktop-door-'))
-const env = { ...process.env, npm_config_loglevel: 'error' }
+// The first app is the desktop shell on the framework alone (`none`: init --desktop would otherwise install the published frame); the frame part below
+// sets this checkout's frame packages instead.
+const env = { ...process.env, npm_config_loglevel: 'error', ACRYLBLENDS_FRAME_PACKAGES: 'none' }
 delete env.ACRYL_DOOR
 // npm is a .cmd file on Windows: it needs the shell.
 const isWindows = process.platform === 'win32'
@@ -483,14 +485,10 @@ try {
 
   async function frameDesktop() {
     const frameApp = join(scratch, 'frame-app')
-    const cliVersion = JSON.parse(
-      readFileSync(join(root, 'packages', 'cli', 'package.json'), 'utf8'),
-    ).version
     const frameEnv = {
       ...env,
       ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, {
         dshVersion: process.env.IDE_PROFILE_DSH_VERSION ?? '0.2.0-rc.2',
-        frameworkVersion: `^${cliVersion}`,
       }),
     }
     const init = spawnSync(
@@ -542,7 +540,7 @@ try {
       try {
         const found = await assertFrame(evaluator(session), { appText, timeoutMs: 60_000 })
         log(
-          `${name}: the window shows the frame: the left panel (${String(found.rows)} rows), the right panel (Files, Changes, Review), Settings (${found.sections.join(', ')}), and the app's page in the tile (${found.tile})`,
+          `${name}: the window shows the frame: the left panel (${String(found.rows)} branches, ${String(found.versions)} versions), the right panel (${found.tabs.join(', ')}; + offers Terminal, Files, Git), Settings (${found.sections.join(', ')}), and the app's page in the canvas (${found.tile})`,
         )
         const evaluate = evaluator(session)
         const pressEscape = async () => {

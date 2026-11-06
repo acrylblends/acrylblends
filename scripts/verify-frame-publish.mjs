@@ -20,7 +20,7 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyIdeProfile, FRAME_PACKAGES } from '../packages/cli/src/ide-profile.ts'
+import { FRAME_PACKAGES } from '../packages/cli/src/ide-profile.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const config = JSON.parse(readFileSync(join(root, 'frame', 'packages.json'), 'utf8'))
@@ -29,7 +29,9 @@ if (typeof scope !== 'string' || !scope.startsWith('@'))
   fail(
     `frame/packages.json: scope must be an npm scope like "@acrylblends" (got ${JSON.stringify(scope)})`,
   )
-const shortOf = config.packages
+const shortOf = Object.fromEntries(
+  Object.entries(config.packages).map(([folder, entry]) => [folder, entry.name]),
+)
 const folders = Object.keys(shortOf)
 const published = new Map(folders.map((folder) => [folder, `${scope}/${shortOf[folder]}`]))
 const byPublished = new Map([...published].map(([folder, name]) => [name, folder]))
@@ -45,7 +47,13 @@ const sourceToPublished = new Map(
 const versionOf = new Map(
   folders.map((folder) => {
     const manifest = JSON.parse(readFileSync(join(root, 'ide', folder, 'package.json'), 'utf8'))
-    return [published.get(folder), String(manifest.version ?? '0.0.0')]
+    const version = String(manifest.version ?? '0.0.0')
+    // The CLI installs the version the file names, so the file and the folder must agree on what is published.
+    if (config.packages[folder].version !== version)
+      fail(
+        `frame/packages.json names ${folder} at ${String(config.packages[folder].version)}, its package.json is ${version}`,
+      )
+    return [published.get(folder), version]
   }),
 )
 
@@ -338,15 +346,21 @@ try {
     if (!existsSync(join(path, 'lib'))) fail(`${folder}: lib/ is missing; run pnpm run build first`)
     const provenanceFile = join(path, 'provenance.json')
     if (!existsSync(provenanceFile)) fail(`${folder}: no provenance.json; every port carries one`)
-    // Two shapes exist: the slices' {source: {repository, commit}, ported, unchanged} and the spike's {"ported from": {repository, "main at the
-    // time", ...}, modified}. Both name where the code came from and at which commit, which is the check.
+    // Three shapes exist: the slices' {source: {repository, commit}, ported, unchanged}, the spike's {"ported from": {repository, "main at the
+    // time", ...}, modified}, and a package written here rather than ported, {original: {repository, commit}, written}. Each names where the code
+    // came from and at which commit, which is the check.
     const provenance = JSON.parse(readFileSync(provenanceFile, 'utf8'))
-    const sourceOf = provenance.source ?? provenance['ported from']
+    const sourceOf = provenance.source ?? provenance['ported from'] ?? provenance.original
     const commitOf =
       sourceOf?.commit ?? sourceOf?.['main at the time'] ?? sourceOf?.['last commit of the path']
     if (typeof sourceOf?.repository !== 'string' || typeof commitOf !== 'string')
       fail(`${folder}: provenance.json does not name the source repository and commit`)
-    const notes = [provenance.ported, provenance.modified, provenance['changes here']]
+    const notes = [
+      provenance.ported,
+      provenance.modified,
+      provenance['changes here'],
+      provenance.written,
+    ]
     if (notes.every((note) => typeof note !== 'string'))
       fail(`${folder}: provenance.json does not say what changed in the port`)
     const tested = skipTests ? 'tests skipped (--skip-tests)' : test(path)
@@ -365,61 +379,71 @@ try {
     process.exit(0)
   }
 
-  // A fresh app from the tarballs: a scaffolded blank app (its plugins, its src/frame.ts row), the frame rows named by frame/packages.json, and the
-  // host launcher of docs/plans/ide-host-inversion.md (`npm run dev` boots our node server and the frame; no DSH profile).
+  // A fresh app the way a person makes one: the CLI's own `init --desktop` with no ACRYLBLENDS_FRAME_PACKAGES, so it writes the frame's published names
+  // and versions (frame/packages.json). Every spec it wrote is then pointed at the tarball of that name, and the framework at this checkout's packed
+  // acrylblends, so the install is exactly the release: the frame packages and the framework they peer on, nothing from the checkout.
   const app = join(scratch, 'app')
   const home = join(scratch, 'home')
   mkdirSync(home, { recursive: true })
   const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
   if (!existsSync(cli)) fail('packages/cli/bin/acrylblends.js is missing; run pnpm run build first')
-  const frameEnv = { HOME: home, npm_config_cache: join(scratch, 'npm-cache') }
+  const frameEnv = {
+    HOME: home,
+    npm_config_cache: join(scratch, 'npm-cache'),
+    ELECTRON_SKIP_BINARY_DOWNLOAD: '1',
+  }
+  const initEnv = { ...process.env, ...frameEnv }
+  delete initEnv.ACRYLBLENDS_FRAME_PACKAGES
   const scaffold = run(
     process.execPath,
-    [cli, 'init', app, '--name', 'publish-check', '--template', 'blank', '--yes'],
-    root,
-    frameEnv,
+    [cli, 'init', app, '--name', 'publish-check', '--template', 'blank', '--desktop', '--yes'],
+    { cwd: root, env: initEnv },
   )
   if (scaffold.status !== 0) fail(`the blank app did not scaffold:\n${scaffold.out.slice(-4000)}`)
-  if (!existsSync(join(app, 'src', 'frame.ts'))) fail('the scaffolded app has no src/frame.ts')
-  const specs = Object.fromEntries(
-    packed.map((entry) => [published.get(entry.folder), `file:${entry.tarball}`]),
-  )
-  // Each frame row names a source package; published, that package is named by frame/packages.json.
-  const sourceNameOf = (folder) =>
-    JSON.parse(readFileSync(join(root, 'ide', folder, 'package.json'), 'utf8')).name
-  const publishedOfSource = new Map(
-    folders.map((folder) => [sourceNameOf(folder), published.get(folder)]),
-  )
-  const packages = FRAME_PACKAGES.map((entry) => {
-    if (entry.installed === true) return entry
-    const name = publishedOfSource.get(entry.name)
-    if (name === undefined) fail(`no ide package answers to the frame row ${entry.name}`)
-    // A Loader row id is a plain identifier (DSH rejects "@" and "/" in one), and it must not collide with a DSH driver row (`workspace` is one), so a
-    // scoped package's row is its scope and name joined by a dash: `@acrylblends/workspace` -> `acrylblends-workspace`.
-    return { ...entry, name, row: name.replace(/^@/u, '').replaceAll('/', '-'), spec: specs[name] }
-  })
-  for (const entry of packages)
-    if (entry.installed !== true && (entry.spec === undefined || entry.spec === ''))
-      fail(`the frame row ${entry.name} has no tarball spec: it was not packed`)
-  // One Cordis for the whole tree: the framework's cordis-plugin-include asks for ~4.0.5 and DSH 0.2.0-rc.2 for ~4.0.4, so the app pins the version
-  // the frame is built against. (Recorded in docs/plans/frame-publish.md as a coherence question between the framework and DSH, not hidden here.)
-  // One Cordis for the whole tree. A scaffolded app already pins it (the framework's plugins depend on it); when it does not, the check pins the version
-  // the frame is built against, so the framework's cordis-plugin-include and DSH 0.2.0-rc.2 agree on one copy.
+  if (!existsSync(join(app, 'scripts', 'ide-host.mjs')))
+    fail(`init --desktop wrote no frame host:\n${scaffold.out.slice(-2000)}`)
   const manifestFile = join(app, 'package.json')
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'))
-  if (manifest.dependencies?.['@deepseek-ai/cordis'] === undefined) {
-    manifest.dependencies = { ...(manifest.dependencies ?? {}), '@deepseek-ai/cordis': '4.0.4' }
+  const cliVersion = JSON.parse(
+    readFileSync(join(root, 'packages', 'cli', 'package.json'), 'utf8'),
+  ).version
+  if (manifest.dependencies?.acrylblends !== `^${cliVersion}`)
+    fail(
+      `init --desktop asks for acrylblends ${String(manifest.dependencies?.acrylblends)}, not ^${cliVersion}`,
+    )
+  if (manifest.dependencies?.['@deepseek-ai/dsh-base'] !== config.dshVersion)
+    fail(
+      `init --desktop pins DSH ${String(manifest.dependencies?.['@deepseek-ai/dsh-base'])}, not ${String(config.dshVersion)}`,
+    )
+  const rowNames = FRAME_PACKAGES.filter((entry) => entry.installed !== true).map(
+    (entry) => entry.name,
+  )
+  for (const source of rowNames) {
+    const folder = folders.find((candidate) => candidate === source)
+    if (folder === undefined) fail(`frame/packages.json does not name the frame row ${source}`)
+    const name = published.get(folder)
+    if (manifest.dependencies?.[name] !== `^${versionOf.get(name)}`)
+      fail(
+        `init --desktop asks for ${name} ${String(manifest.dependencies?.[name])}, not ^${versionOf.get(name)}`,
+      )
+    if (manifest.dependencies?.[source] !== undefined)
+      fail(`init --desktop installs ${source} by its source name; a published app installs ${name}`)
   }
-  writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
-  const wrote = applyIdeProfile(app, {
-    appName: 'publish-check',
-    dshVersion: '0.2.0-rc.2',
-    frameworkVersion: '^1.0.10',
-    packages,
-    rows: [{ id: 'app-routes', name: './src/frame.ts' }],
-    dependencies: { ...specs, ...frameworksOf(), typescript: '6.0.3' },
+  log(
+    `init --desktop writes the published frame: ${String(rowNames.length)} rows by their ${scope} names, acrylblends ^${cliVersion}, DSH ${String(config.dshVersion)}`,
+  )
+  const cliPack = run('pnpm', ['pack', '--pack-destination', join(scratch, 'cli')], {
+    cwd: join(root, 'packages', 'cli'),
   })
-  log(`the app's host layer is generated from the tarballs (wrote ${wrote.written.join(', ')})`)
+  if (cliPack.status !== 0) fail(`packing acrylblends failed:\n${cliPack.out.slice(-4000)}`)
+  const cliTarball = join(scratch, 'cli', `acrylblends-${cliVersion}.tgz`)
+  if (!existsSync(cliTarball))
+    fail(`pnpm pack wrote no ${cliTarball}:\n${cliPack.out.slice(-2000)}`)
+  // Every frame package as a direct tarball dependency: npm resolves a frame package's own @acrylblends dependencies to these, as it will to the registry's.
+  for (const entry of packed)
+    manifest.dependencies[published.get(entry.folder)] = `file:${entry.tarball}`
+  manifest.dependencies.acrylblends = `file:${cliTarball}`
+  writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
   const installed = run(npm, ['install', '--no-audit', '--no-fund'], {
     cwd: app,
     env: frameEnv,
@@ -430,6 +454,13 @@ try {
     const folder = join(app, 'node_modules', ...published.get(entry.folder).split('/'))
     if (!existsSync(join(folder, 'package.json')))
       fail(`${published.get(entry.folder)} did not install into the app's node_modules`)
+  }
+  // One Cordis and one framework for the whole tree: two copies of either split a service registry or a router's private match result in two.
+  for (const shared of ['@deepseek-ai/cordis', 'acrylblends']) {
+    const copies = copiesOf(join(app, 'node_modules'), shared)
+    if (copies.length !== 1)
+      fail(`${shared} is installed ${String(copies.length)} times:\n${copies.join('\n')}`)
+    log(`one ${shared} in the tree: ${copies[0]}`)
   }
   log('every tarball installs into a fresh app')
   const devScript = JSON.parse(readFileSync(manifestFile, 'utf8')).scripts?.dev
@@ -514,9 +545,29 @@ try {
   else rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 }
 
-/** The framework and DSH pins a fresh app needs beside the frame packages. */
-function frameworksOf() {
-  return { '@deepseek-ai/dsh': '0.2.0-rc.2', acrylblends: '^1.0.10' }
+/** Every installed copy of `name` under `modules` (nested node_modules included), as `<version> <path>`. */
+function copiesOf(modules, name) {
+  const found = []
+  const walk = (dir) => {
+    if (!existsSync(dir)) return
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === '.bin') continue
+      if (entry.name.startsWith('@')) {
+        for (const scoped of readdirSync(join(dir, entry.name), { withFileTypes: true }))
+          if (scoped.isDirectory())
+            visit(join(dir, entry.name, scoped.name), `${entry.name}/${scoped.name}`)
+      } else visit(join(dir, entry.name), entry.name)
+    }
+  }
+  const visit = (folder, packageName) => {
+    if (packageName === name && existsSync(join(folder, 'package.json')))
+      found.push(
+        `${JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')).version} ${folder}`,
+      )
+    walk(join(folder, 'node_modules'))
+  }
+  walk(modules)
+  return found
 }
 
 /** A free port on loopback, never 3080 (the owner's app). */

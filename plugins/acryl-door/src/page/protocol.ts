@@ -60,6 +60,8 @@ export interface UiNode {
   readonly value?: string
   /** Heading level, when it is a heading. */
   readonly level?: number
+  /** The choices of a select, as `act select` takes them, when it is not sensitive. */
+  readonly options?: readonly string[]
 }
 
 export interface UiSnapshot {
@@ -88,6 +90,8 @@ export interface UiActionResult {
   readonly ok: true
   readonly target?: { readonly role: string; readonly name: string }
   readonly detail?: string
+  /** The act started a navigation (a link, a form that submits): this page is going away, and the Host waits for the next one. */
+  readonly leaving?: true
 }
 
 export type UiResult = UiSnapshot | UiActionResult

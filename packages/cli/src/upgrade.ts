@@ -10,10 +10,16 @@ import {
 } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
+import {
+  type ChangedLine,
+  ownerChangeLines,
+  stripRegistrations,
+  withRegistrations,
+} from './app-registration.ts'
 import { diffStat, unifiedDiff } from './diff'
+import { frameProfileForApp, frameProfileInput } from './frame-release'
 import { APP_PLUGINS_FILE, appFrameRows } from './frame-rows'
 import {
-  frameProfileForApp,
   GENERATED_MARKER,
   type IdeProfileInput,
   type IdeProfileWritePlan,
@@ -127,6 +133,15 @@ interface FrameFileWrite {
   readonly state: 'add' | 'same' | 'update' | 'conflict'
 }
 
+/**
+ * Scaffold files the app owns from its first edit: the release's copy is only the starting point, so an edited (or removed) one is never written, refused
+ * over or backed up. A copy the app never edited is still the release's and is updated like any other scaffold file.
+ */
+export const KEPT_BY_THE_APP = new Set(['src/routes.ts'])
+
+/** What the frame row of every template imports from `src/routes.ts`: an app-owned copy without it cannot be shown in the frame. */
+const FRAME_PREFIX_EXPORT = /\bexport const FRAME_MOUNT_PREFIX\b/u
+
 /** What `upgrade` does about the frame for one app: nothing (and why), or a plan computed before anything is written. */
 export type FrameStep =
   | { readonly kind: 'unidentified' }
@@ -141,12 +156,16 @@ export type FrameStep =
       readonly profile: IdeProfileWritePlan
       /** The app's scaffold, its frame row and the generated composition row. */
       readonly files: readonly FrameFileWrite[]
+      /** App-owned scaffold files left exactly as the app has them (edited or removed), each with whether the frame can mount it. */
+      readonly kept: readonly { readonly file: string; readonly mountable: boolean }[]
       /** Frame plugins the app does not carry yet. */
       readonly hostPlugins: readonly string[]
       /** The DSH-profile script of the older layout, removed when it is acrylblends' own. */
       readonly removeProfileScript: boolean
       /** Paths the app edited; refused without `--force`. */
       readonly conflicts: readonly string[]
+      /** For a scaffold file with the owner's own lines: the lines, so the refusal names them. */
+      readonly conflictLines?: Readonly<Record<string, readonly ChangedLine[]>>
       readonly changed: boolean
     }
 
@@ -179,11 +198,45 @@ export function planFrameStep(
   const specs = frameProfileForApp(appDir)
   if (specs === undefined) return { kind: 'unavailable', template }
   const released = readLegacy(appDir, template, name)
-  const files: FrameFileWrite[] = released.files.map((file) => ({
-    file: file.file,
-    text: file.text,
-    state: file.state,
-  }))
+  // src/routes.ts is the app's own from its first edit: an edited or removed one is never taken as the template's, never refused over, and never
+  // overwritten with --force (the backup list takes its files from this list too). An untouched released copy is updated: the frame row needs the new one.
+  const ownedByTheApp = (file: { file: string; state: FrameFileWrite['state'] }) =>
+    KEPT_BY_THE_APP.has(file.file) && (file.state === 'conflict' || file.state === 'add')
+  const kept = released.files.filter(ownedByTheApp).map((file) => {
+    const path = join(appDir, file.file)
+    return {
+      file: file.file,
+      mountable: existsSync(path) && FRAME_PREFIX_EXPORT.test(readText(path)),
+    }
+  })
+  const files: FrameFileWrite[] = released.files
+    .filter((file) => !ownedByTheApp(file))
+    .map((file) => ({
+      file: file.file,
+      text: file.text,
+      state: file.state,
+    }))
+  // The framework's own `add` registration lines are not the owner's edits: keep them on the app.ts the upgrade writes, and report only the rest.
+  const appIndex = files.findIndex((file) => file.file === 'src/app.ts')
+  const appFile = appIndex < 0 ? undefined : files[appIndex]
+  let conflictLines: Record<string, readonly ChangedLine[]> | undefined
+  if (appFile !== undefined && appFile.state === 'conflict') {
+    const appTsPath = join(appDir, 'src', 'app.ts')
+    const current = existsSync(appTsPath) ? readText(appTsPath) : undefined
+    if (current !== undefined) {
+      const stripped = stripRegistrations(current, undefined, appFile.text)
+      const target = withRegistrations(appFile.text, stripped.edits)
+      if (stripped.text === appFile.text) {
+        files[appIndex] = {
+          file: 'src/app.ts',
+          text: target,
+          state: target === current ? 'same' : 'update',
+        }
+      } else {
+        conflictLines = { 'src/app.ts': ownerChangeLines(current, target) }
+      }
+    }
+  }
   // The composition root as it will be once the scaffold is written: the plan may be about to replace it.
   const plannedAppTs = files.find((file) => file.file === 'src/app.ts')?.text
   const appTs =
@@ -206,14 +259,7 @@ export function planFrameStep(
   const oldScript = join(appDir, OLD_PROFILE_SCRIPT)
   const removeProfileScript =
     existsSync(oldScript) && GENERATED_MARKER.test(readText(oldScript).split('\n', 1)[0] ?? '')
-  const input: IdeProfileInput = {
-    appName: name,
-    dshVersion: specs.dshVersion,
-    frameworkVersion: specs.frameworkVersion,
-    spec: (packageName) => specs.packages[packageName],
-    dependencies: specs.packages,
-    rows: rows.rows,
-  }
+  const input: IdeProfileInput = frameProfileInput(specs, name, rows.rows)
   const profile = planIdeProfileWrite(appDir, input)
   const conflicts = [
     ...files.filter((file) => file.state === 'conflict').map((file) => file.file),
@@ -231,9 +277,11 @@ export function planFrameStep(
     input,
     profile,
     files,
+    kept,
     hostPlugins,
     removeProfileScript,
     conflicts,
+    ...(conflictLines === undefined ? {} : { conflictLines }),
     changed,
   }
 }
@@ -247,7 +295,7 @@ export function frameReport(frame: FrameStep): string {
   if (frame.kind === 'no-frame-template')
     return `the ${frame.template} template has no src/frame.ts yet: left standalone`
   if (frame.kind === 'unavailable')
-    return 'no frame packages to install: set ACRYLBLENDS_FRAME_PACKAGES while they are unpublished'
+    return 'left on the framework alone: not a desktop app (`acrylblends add desktop` makes it one), or ACRYLBLENDS_FRAME_PACKAGES is none'
   const parts: string[] = []
   for (const file of frame.files)
     if (file.state !== 'same')
@@ -255,10 +303,19 @@ export function frameReport(frame: FrameStep): string {
   for (const file of frame.profile.files)
     if (file.state !== 'same')
       parts.push(`${file.file} ${file.state === 'update' ? 'updated' : 'added'}`)
+  if (frame.profile.clientRowsAdded.length > 0)
+    parts.push(
+      `scripts/ide-host.mjs client rows added (${frame.profile.clientRowsAdded.join(', ')})`,
+    )
   for (const plugin of frame.hostPlugins) parts.push(`plugins/${plugin} added`)
   if (frame.removeProfileScript) parts.push(`${OLD_PROFILE_SCRIPT} removed`)
   if (frame.profile.manifestChanged)
     parts.push('package.json merged (dev runs scripts/ide-host.mjs)')
+  for (const { file, mountable } of frame.kept)
+    if (!mountable)
+      parts.push(
+        `${file} kept as the app's (edited): it does not export FRAME_MOUNT_PREFIX, so the frame cannot show the app until it does (a fresh app's ${file} shows how)`,
+      )
   return parts.length === 0 ? 'up to date' : parts.join(', ')
 }
 
@@ -298,8 +355,13 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
   // The frame half of the upgrade, planned before anything is written so a refusal leaves the folder exactly as it was.
   const frame = planFrameStep(appDir, library)
   if (frame.kind === 'planned' && frame.conflicts.length > 0 && !options.force) {
+    const own = frame.conflictLines?.['src/app.ts'] ?? []
+    const detail =
+      own.length === 0
+        ? ''
+        : `\n  src/app.ts keeps the framework's plugin registrations; the app's own lines are ${own.map((line) => `line ${String(line.line)} (${JSON.stringify(line.text)})`).join(', ')}`
     io.stderr.write(
-      `error: ${frame.conflicts.join(', ')} in ${appDir} ${frame.conflicts.length === 1 ? 'is' : 'are'} not the previous release's scaffold and acrylblends did not write ${frame.conflicts.length === 1 ? 'it' : 'them'}; nothing was changed. Move the app's version aside (or merge it into the template's) and run again, or run again with --force (the app's versions are saved under .acrylblends/upgrade-backup/ first)\n`,
+      `error: ${frame.conflicts.join(', ')} in ${appDir} ${frame.conflicts.length === 1 ? 'is' : 'are'} not the previous release's scaffold and acrylblends did not write ${frame.conflicts.length === 1 ? 'it' : 'them'}; nothing was changed.${detail} Move the app's version aside (or merge it into the template's) and run again, or run again with --force (the app's versions are saved under .acrylblends/upgrade-backup/ first)\n`,
     )
     return 1
   }
