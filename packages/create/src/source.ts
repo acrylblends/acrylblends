@@ -22,6 +22,9 @@ export type Source =
   | { kind: 'tarball'; path: string }
   | { kind: 'folder'; path: string }
 
+/** Where a registry can be read from: any source, or a static host that serves its `index.json` and each entry's archive under `base` (which ends in `/`). */
+export type RegistrySource = Source | { kind: 'hosted'; base: string }
+
 /** What a template says about itself in `acryl.template.json`. */
 export interface Manifest {
   name: string
@@ -83,12 +86,13 @@ export function parseSource(text: string, cwd: string): Source | undefined {
 }
 
 /**
- * A registry, as `--registry` names it: a source, or a folder written as a bare path (`my-registry`, `run/registry`). A registry is never a template name, so a
- * path that is an existing folder is taken as one without the `./` a template source needs.
+ * A registry, as `--registry` names it: a source, an https address, or a folder written as a bare path (`my-registry`, `run/registry`). A registry is never a template
+ * name, so a path that is an existing folder is taken as one without the `./` a template source needs.
  */
-export function parseRegistrySource(text: string, cwd: string): Source | undefined {
+export function parseRegistrySource(text: string, cwd: string): RegistrySource | undefined {
   const source = parseSource(text, cwd)
   if (source !== undefined) return source
+  if (text.startsWith('https://')) return { kind: 'hosted', base: text.replace(/\/*$/, '/') }
   const path = resolve(cwd, text)
   return existsSync(path) && lstatSync(path).isDirectory() ? { kind: 'folder', path } : undefined
 }
@@ -103,7 +107,11 @@ export interface Fetchers {
 
 export const realFetchers: Fetchers = {
   async download(url) {
-    const response = await fetch(url, { redirect: 'follow' })
+    const response = await fetch(url, { redirect: 'follow' }).catch((cause: unknown) => {
+      throw new SourceError(
+        `could not reach ${url}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+    })
     if (!response.ok) throw new SourceError(`${url} answered ${response.status}`)
     return new Uint8Array(await response.arrayBuffer())
   },

@@ -18,19 +18,19 @@ import { parseArgs } from 'node:util'
 import { findSecrets } from '@webboxes/app-persistence'
 import { CLASS, CREATE, PACKAGE, TEMPLATE_MANIFEST } from './names'
 import {
-  DEFAULT_REGISTRY,
+  openPublicRegistry,
+  openRegistry,
   ownLock,
   ownManifest,
   pickEntry,
   REGISTRY_ID,
   type RegistryEntry,
-  readRegistry,
+  type RegistryReading,
   renameApp,
   starterName,
 } from './registry'
 import {
   type Fetchers,
-  fetchRegistry,
   fetchTemplate,
   LIFECYCLE,
   parseRegistrySource,
@@ -88,7 +88,7 @@ A template is a folder with an ${TEMPLATE_MANIFEST} (name, description, plugins)
 A starter from the registry is pulled by its id (npm needs the -- before the options):
   npm create ${PACKAGE}@latest my-app -- --from acrylblends.notes-desktop
   --from <id | source>   a registry id such as acrylblends.notes-desktop, or any of the sources above
-  --registry <source>    read the starters from this registry instead of the public one (github:owner/repo, or a folder)
+  --registry <source>    read the starters from this registry instead of the public one (github:owner/repo, an https:// address, or a folder)
 Only starters made for ${CLASS} (runtime: ${PACKAGE}) are apps this command can make; an ACRYL app starter is refused with a line saying so.
 
 Options:
@@ -334,6 +334,13 @@ export function startRepository(directory: string): void {
   run([...identity, 'commit', '-q', '-m', 'Initial commit from acrylblends'])
 }
 
+/** The registry `--registry` names. */
+function openNamedRegistry(name: string, cwd: string, reading: RegistryReading) {
+  const source = parseRegistrySource(name, cwd)
+  if (!source) throw new UsageError(`unknown registry "${name}" (${SOURCE_FORMS})`)
+  return openRegistry(source, name, reading)
+}
+
 /**
  * Create an app from a template source (`github:`, `@scope/name`, a packed tarball). The source is fetched and unpacked into a scratch folder, checked
  * (manifest, secrets), and only then copied to the target; nothing in it is installed or run unless `--install`, which lists the scripts first.
@@ -355,28 +362,13 @@ async function createFromSource(
     let entry: RegistryEntry | undefined
     if (REGISTRY_ID.test(options.source!)) {
       // A registry id: read the registry's index, pick the entry (only an app for this runtime), and take its folder as the template.
-      const registrySource = parseRegistrySource(options.registry ?? DEFAULT_REGISTRY, io.cwd)
-      if (!registrySource)
-        throw new UsageError(`unknown registry "${options.registry}" (${SOURCE_FORMS})`)
-      await fetchRegistry(
-        registrySource,
-        join(scratch, 'registry'),
-        join(scratch, 'download'),
-        fetchers,
-      )
-      const registry = readRegistry(
-        join(scratch, 'registry'),
-        registrySource.kind === 'folder'
-          ? registrySource.path
-          : (options.registry ?? DEFAULT_REGISTRY),
-      )
+      const reading = { scratch, fetchers }
+      const registry =
+        options.registry === undefined
+          ? await openPublicRegistry(reading)
+          : await openNamedRegistry(options.registry, io.cwd, reading)
       entry = pickEntry(registry.entries, options.source!)
-      await fetchTemplate(
-        { kind: 'folder', path: join(registry.root, entry.path) },
-        join(scratch, 'source'),
-        join(scratch, 'download'),
-        fetchers,
-      )
+      await registry.takeEntry(entry, join(scratch, 'source'))
     } else {
       const source = parseSource(options.source!, io.cwd)
       if (!source)
