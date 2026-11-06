@@ -251,6 +251,8 @@ export function readManifest(dir: string): Manifest {
 }
 
 const SKIP = new Set(['.git', 'node_modules', TEMPLATE_MANIFEST])
+const GIT_ATTRIBUTES =
+  '# Every checkout has the same line endings, on every OS.\n* text=auto eol=lf\n'
 /** Lifecycle scripts npm runs on `npm install` in the app's own folder. */
 export const LIFECYCLE = [
   'preinstall',
@@ -291,6 +293,12 @@ export function writeTemplate(
     }
   }
   walk(from, target, '')
+  // An app's plugins are identified by every byte, so a CRLF checkout would make them different plugins. An entry made before make-entry wrote this file
+  // has none; one that has its own keeps it.
+  if (!existsSync(join(target, '.gitattributes'))) {
+    writeFileSync(join(target, '.gitattributes'), GIT_ATTRIBUTES)
+    files.push('.gitattributes')
+  }
   const lifecycle: Record<string, string> = {}
   const pkgFile = join(target, 'package.json')
   if (existsSync(pkgFile)) {

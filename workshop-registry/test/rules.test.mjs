@@ -251,6 +251,35 @@ describe('make-entry', () => {
     assert.equal(existsSync(join(repo, 'blends', 'acrylblends.hello')), false)
   })
 
+  test('an entry carries the .gitattributes that keeps its line endings LF, and keeps its own', () => {
+    const out = mkdtempSync(join(scratch, 'out-'))
+    assert.equal(make([appFolder(), 'acrylblends.hello', '--out', out]).status, 0)
+    assert.match(
+      readFileSync(join(out, 'blends', 'acrylblends.hello', '.gitattributes'), 'utf8'),
+      /^\* text=auto eol=lf$/mu,
+    )
+    const own = appFolder()
+    writeFileSync(join(own, '.gitattributes'), '* text=auto eol=lf\n*.png binary\n')
+    assert.equal(make([own, 'acrylblends.own', '--out', out]).status, 0)
+    assert.equal(
+      readFileSync(join(out, 'blends', 'acrylblends.own', '.gitattributes'), 'utf8'),
+      '* text=auto eol=lf\n*.png binary\n',
+    )
+  })
+
+  test('refuses an app that would not work on every OS, says why, and leaves nothing behind', () => {
+    const out = mkdtempSync(join(scratch, 'out-'))
+    const app = appFolder()
+    writeFileSync(join(app, 'src', 'crlf.ts'), 'export {}\r\n')
+    writeFileSync(join(app, 'src', 'aux.ts'), 'export {}\n')
+    const made = make([app, 'acrylblends.hello', '--out', out])
+    assert.equal(made.status, 1)
+    assert.match(made.stderr, /src\/crlf\.ts: it has a carriage return/u)
+    assert.match(made.stderr, /src\/aux\.ts: "aux\.ts" is a device name reserved by Windows/u)
+    assert.match(made.stderr, /git add --renormalize/u)
+    assert.equal(existsSync(join(out, 'blends', 'acrylblends.hello')), false)
+  })
+
   test('refuses an entry that exists, and a bad id', () => {
     const out = mkdtempSync(join(scratch, 'out-'))
     const app = appFolder()
@@ -264,6 +293,10 @@ describe('make-entry', () => {
     const registry = mkdtempSync(join(scratch, 'fork-'))
     mkdirSync(join(registry, 'scripts'))
     cpSync(join(repo, 'scripts', 'make-entry.mjs'), join(registry, 'scripts', 'make-entry.mjs'))
+    cpSync(
+      join(repo, 'scripts', 'plugin-portability.mjs'),
+      join(registry, 'scripts', 'plugin-portability.mjs'),
+    )
     return registry
   }
   const capturedApp = async () => {
@@ -334,4 +367,65 @@ describe('make-entry', () => {
     captureApp(app)
     assert.equal(makeIn(registry, app, 'octo.board').status, 0)
   })
+})
+
+// make-entry runs with no install, so it carries a copy of the rules. The rules themselves are blends-core's: this holds the copy to them, case by case.
+const policy = await import('@webboxes/blends-core').catch(() => ({}))
+const copy = await import('../scripts/plugin-portability.mjs')
+describe('plugin-portability.mjs is the same policy as blends-core', () => {
+  const skip =
+    typeof policy.portabilityIssues === 'function' ? false : 'needs @webboxes/blends-core 0.5.0'
+  const file = (path, text = 'x\n') => ({ path, bytes: Buffer.from(text), kind: 'file' })
+  const cases = {
+    'an ordinary plugin': [file('package.json'), file('src/index.js'), file('.gitattributes')],
+    'reserved names': [
+      'con',
+      'CON',
+      'nul.txt',
+      'com1',
+      'LPT9.a.b',
+      'aux/a.js',
+      'aux/b.js',
+      'console.js',
+      'com0',
+      'com10',
+      'my.con',
+    ].map((path) => file(path)),
+    'trailing dots and spaces': ['name.', 'name ', 'folder./a.js', 'folder /a.js'].map((path) =>
+      file(path),
+    ),
+    'forbidden characters': ['a<b', 'a>b', 'a:b', 'a"b', 'a|b', 'a?b', 'a*b', 'a\\b', 'a\tb'].map(
+      (path) => file(path),
+    ),
+    'case and Unicode form': [
+      'README.md',
+      'readme.md',
+      'Src/a.js',
+      'src/b.js',
+      'caf\u00e9.js',
+      'cafe\u0301.js',
+    ].map((path) => file(path)),
+    'path length': [file(`${'a'.repeat(200)}`), file(`${'a'.repeat(201)}`)],
+    'a symbolic link': [{ path: 'link.js', bytes: Buffer.from('x\n'), kind: 'symlink' }],
+    'carriage returns and binaries': [
+      file('crlf.js', 'x\r\n'),
+      file('cr.js', 'x\ry'),
+      { path: 'logo.png', bytes: Buffer.from([0x89, 0x0d, 0x0a, 0x00]), kind: 'file' },
+      {
+        path: 'late.bin',
+        bytes: Buffer.concat([Buffer.from('\r'), Buffer.alloc(8000, 'x'), Buffer.from([0])]),
+        kind: 'file',
+      },
+    ],
+    'what is never the plugin': [
+      file('node_modules/con/a.js', 'x\r\n'),
+      file('.git/CON'),
+      file('acryl-v-1/nul'),
+      file('acryl-source.json', '\r'),
+    ],
+  }
+  for (const [name, files] of Object.entries(cases))
+    test(name, { skip }, () =>
+      assert.deepEqual(copy.portabilityIssues(files), policy.portabilityIssues(files)),
+    )
 })

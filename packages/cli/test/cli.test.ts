@@ -371,6 +371,7 @@ describe('init', () => {
     expect(existsSync(join(dir, 'plugins/acryl-router/package.json'))).toBe(false)
     expect(existsSync(join(dir, 'plugins/acryl-router/src/index.ts'))).toBe(true)
     expect(existsSync(join(dir, '.gitignore'))).toBe(true)
+    expect(readFileSync(join(dir, '.gitattributes'), 'utf8')).toMatch(/^\* text=auto eol=lf$/mu)
     expect(existsSync(join(dir, 'template.json'))).toBe(false)
     expect(manifest(dir).dependencies).toEqual({
       '@deepseek-ai/cordis': '4.0.4',

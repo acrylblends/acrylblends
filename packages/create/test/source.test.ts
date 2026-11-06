@@ -97,6 +97,14 @@ describe('template sources', () => {
     expect(() => parseSource('./missing.tgz', scratch)).toThrow(/does not exist/)
   })
 
+  it("keeps an entry's own .gitattributes rather than writing the default over it", async () => {
+    const own = '* text=auto eol=lf\n*.png binary\n'
+    const tgz = pack({ ...app(), '.gitattributes': own })
+    const s = fakeIo()
+    expect(await runCreate(['own-attributes', tgz], s.io)).toBe(0)
+    expect(readFileSync(join(scratch, 'own-attributes', '.gitattributes'), 'utf8')).toBe(own)
+  })
+
   it('creates an app from a packed tarball: files, placeholders, name, framework range, docs; no manifest copied', async () => {
     const tgz = pack(app())
     const s = fakeIo()
@@ -110,6 +118,7 @@ describe('template sources', () => {
     expect(pkg.dependencies.acrylblends).toMatch(/^\^\d+\.\d+\.\d+/)
     expect(pkg.dependencies.acrylblends).not.toBe('^0.0.1')
     expect(existsSync(join(dir, '.gitignore'))).toBe(true)
+    expect(readFileSync(join(dir, '.gitattributes'), 'utf8')).toMatch(/^\* text=auto eol=lf$/mu)
     expect(existsSync(join(dir, TEMPLATE_MANIFEST))).toBe(false)
     expect(existsSync(join(dir, 'docs/framework/README.md'))).toBe(true)
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('a hello app')

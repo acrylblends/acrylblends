@@ -7,6 +7,8 @@
 // An app's blend.lock.json (every version the frame saves has one) must match the app: a stale snapshot is refused in one line before anything is copied. In
 // the entry the lock is kept true: its origin takes the new id, version and blend.yaml digest, so the entry verifies against its own lock and another app can
 // apply it (npm run snapshot apply <entry>).
+// An entry works the same on every OS or it is not made: a name Windows refuses, a case collision or a carriage return is refused (plugin-portability.mjs), and the
+// entry carries a .gitattributes that keeps its line endings LF in every checkout.
 import { createHash } from 'node:crypto'
 import {
   cpSync,
@@ -22,6 +24,8 @@ import {
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+
+import { folderFiles, portabilityIssues } from './plugin-portability.mjs'
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -60,6 +64,9 @@ if (existsSync(target)) {
   console.error(`${target} exists already; change that entry by editing it, or choose another name`)
   process.exit(1)
 }
+const MAX_ISSUES_SHOWN = 20
+const GIT_ATTRIBUTES =
+  '# Every checkout has the same line endings, on every OS.\n* text=auto eol=lf\n'
 const SKIP =
   /(^|[\\/])(node_modules|dist|data|\.git|\.acrylblends|\.acryl|docs[\\/]framework)([\\/]|$)/u
 mkdirSync(dirname(target), { recursive: true })
@@ -75,6 +82,24 @@ cpSync(app, target, {
     return true
   },
 })
+const issues = portabilityIssues(folderFiles(target))
+if (issues.length > 0) {
+  rmSync(target, { recursive: true, force: true })
+  console.error(
+    `${issues.length} thing(s) in this app would not work on every OS, so no entry was made:`,
+  )
+  for (const { path, reason } of issues.slice(0, MAX_ISSUES_SHOWN))
+    console.error(`  ${path}: ${reason}`)
+  if (issues.length > MAX_ISSUES_SHOWN)
+    console.error(`  and ${issues.length - MAX_ISSUES_SHOWN} more`)
+  if (issues.some(({ rule }) => rule === 'carriage-return'))
+    console.error(
+      'For the line endings: add the line "* text=auto eol=lf" to .gitattributes, then run git add --renormalize . and commit.',
+    )
+  process.exit(1)
+}
+if (!existsSync(join(target, '.gitattributes')))
+  writeFileSync(join(target, '.gitattributes'), GIT_ATTRIBUTES)
 if (existsSync(join(target, '.gitignore')))
   renameSync(join(target, '.gitignore'), join(target, 'gitignore'))
 const manifestFile = join(target, 'blend.yaml')
