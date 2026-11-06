@@ -525,6 +525,8 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
   const watch = async (source: RunSource, own: boolean): Promise<void> => {
     let live = true
     let changed = false
+    // Every run the server finishes ends with `done` or `error`; a stream that stops without either lost its server, and the run with it.
+    let finished = false
     let answer: HTMLElement | undefined
     let answered = ''
     // The Assistant's steps on the page, shown under its answer in one line, as the person reads what it did.
@@ -592,11 +594,18 @@ export async function start(prefix: string = '/api/agent-panel'): Promise<void> 
           changed = true
           line(`plugin ${String(data.extension)}: ${String(data.action)}`, 'tool')
         } else if (event === 'error') {
+          finished = true
           line(String(data.message ?? 'The run failed.'), 'err')
         } else if (event === 'done') {
+          finished = true
           changed = changed || data.changed === true
         }
       }
+      if (live && working !== undefined && !finished)
+        line(
+          'The app stopped while the agent was working, and the run ended with it (`npm run dev` restarts the app when a file it runs changes). Ask again to go on.',
+          'err',
+        )
     } catch (error) {
       line(`The request failed: ${error instanceof Error ? error.message : String(error)}`, 'err')
     } finally {
