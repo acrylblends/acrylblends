@@ -37,7 +37,21 @@ export class SourceError extends Error {
 
 export const SOURCE_FORMS = `github:owner/repo[#ref] (or the https://github.com/owner/repo address), @scope/name[@version], a packed .tgz file, or a folder (./path)`
 
-const LIMITS = { files: 5000, bytes: 50 * 1024 * 1024 }
+/** How much a source may hold, and what its refusal calls it. */
+interface Limits {
+  readonly what: string
+  readonly files: number
+  readonly bytes: number
+}
+
+/** A template is copied whole into the person's new app, so it is held to the size of an app's source. */
+const TEMPLATE_LIMITS: Limits = { what: 'template', files: 5000, bytes: 50 * 1024 * 1024 }
+
+/**
+ * A registry is read for its index and one entry, and grows with every entry it publishes (100 blueprints are about 33,000 files and 200 MB), so its bound
+ * only stops a runaway download; the entry taken from it is a template and is held to the template's limits.
+ */
+const REGISTRY_LIMITS: Limits = { what: 'registry', files: 200_000, bytes: 2 * 1024 * 1024 * 1024 }
 
 /** Recognise a source argument, or return `undefined` when it is not one (so the caller can report a usage error). */
 export function parseSource(text: string, cwd: string): Source | undefined {
@@ -113,16 +127,16 @@ export const realFetchers: Fetchers = {
   },
 }
 
-/** Unpack a tarball into `dir`, dropping its single top folder; refuses links, paths that leave the folder, and archives that are too big. */
-function extract(tarball: string, dir: string): void {
+/** Unpack a tarball into `dir`, dropping its single top folder; refuses links, paths that leave the folder, and archives over `limits`. */
+function extract(tarball: string, dir: string, limits: Limits): void {
   const list = spawnSync('tar', ['-tzf', tarball], {
     encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
+    maxBuffer: 256 * 1024 * 1024,
   })
   if (list.status !== 0) throw new SourceError(`${tarball} is not a readable tar.gz archive`)
   const entries = list.stdout.split('\n').filter(Boolean)
-  if (entries.length > LIMITS.files)
-    throw new SourceError(`the template has more than ${LIMITS.files} files`)
+  if (entries.length > limits.files)
+    throw new SourceError(`the ${limits.what} has more than ${limits.files} files`)
   for (const entry of entries)
     if (entry.startsWith('/') || entry.split('/').includes('..'))
       throw new SourceError(`the archive holds a path that leaves its folder: ${entry}`)
@@ -131,11 +145,11 @@ function extract(tarball: string, dir: string): void {
     encoding: 'utf8',
   })
   if (run.status !== 0) throw new SourceError(`could not unpack ${tarball}: ${run.stderr.trim()}`)
-  checkTree(dir)
+  checkTree(dir, limits)
 }
 
-/** Refuse a tree that holds a link, or is larger than the limits; the same check for an unpacked archive and a copied folder. */
-export function checkTree(dir: string): void {
+/** Refuse a tree that holds a link, or is larger than `limits`; the same check for an unpacked archive and a copied folder. */
+function checkTree(dir: string, limits: Limits): void {
   let bytes = 0
   let count = 0
   const walk = (folder: string) => {
@@ -144,7 +158,7 @@ export function checkTree(dir: string): void {
       const info = lstatSync(path)
       if (info.isSymbolicLink())
         throw new SourceError(
-          `the template holds a symbolic link (${path.slice(dir.length + 1)}); links are not allowed`,
+          `the ${limits.what} holds a symbolic link (${path.slice(dir.length + 1)}); links are not allowed`,
         )
       if (info.isDirectory()) walk(path)
       else {
@@ -154,18 +168,26 @@ export function checkTree(dir: string): void {
     }
   }
   walk(dir)
-  if (count > LIMITS.files)
-    throw new SourceError(`the template has more than ${LIMITS.files} files`)
-  if (bytes > LIMITS.bytes)
-    throw new SourceError(`the template is larger than ${LIMITS.bytes / 1024 / 1024} MB`)
+  if (count > limits.files)
+    throw new SourceError(`the ${limits.what} has more than ${limits.files} files`)
+  if (bytes > limits.bytes)
+    throw new SourceError(`the ${limits.what} is larger than ${limits.bytes / 1024 / 1024} MB`)
 }
 
-/** Download or pack a source and unpack it into `dir` (which must not exist yet). Nothing in it is run. */
-export async function fetchSource(
+/** Download or pack a template and unpack it into `dir` (which must not exist yet). Nothing in it is run. */
+export const fetchTemplate = (source: Source, dir: string, scratch: string, fetchers: Fetchers) =>
+  fetchSource(source, dir, scratch, fetchers, TEMPLATE_LIMITS)
+
+/** Download or copy a registry into `dir` (which must not exist yet), to read its index and take one entry from it. Nothing in it is run. */
+export const fetchRegistry = (source: Source, dir: string, scratch: string, fetchers: Fetchers) =>
+  fetchSource(source, dir, scratch, fetchers, REGISTRY_LIMITS)
+
+async function fetchSource(
   source: Source,
   dir: string,
   scratch: string,
   fetchers: Fetchers,
+  limits: Limits,
 ): Promise<void> {
   mkdirSync(scratch, { recursive: true })
   if (source.kind === 'folder') {
@@ -173,7 +195,7 @@ export async function fetchSource(
       recursive: true,
       filter: (path) => !/[\\/](\.git|node_modules)([\\/]|$)/.test(path.slice(source.path.length)),
     })
-    checkTree(dir)
+    checkTree(dir, limits)
     return
   }
   let tarball: string
@@ -188,7 +210,7 @@ export async function fetchSource(
       ),
     )
   }
-  extract(tarball, dir)
+  extract(tarball, dir, limits)
 }
 
 /** Read and check `acryl.template.json`; a source without it is not a template. */

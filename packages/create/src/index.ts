@@ -30,7 +30,8 @@ import {
 } from './registry'
 import {
   type Fetchers,
-  fetchSource,
+  fetchRegistry,
+  fetchTemplate,
   LIFECYCLE,
   parseRegistrySource,
   parseSource,
@@ -357,7 +358,7 @@ async function createFromSource(
       const registrySource = parseRegistrySource(options.registry ?? DEFAULT_REGISTRY, io.cwd)
       if (!registrySource)
         throw new UsageError(`unknown registry "${options.registry}" (${SOURCE_FORMS})`)
-      await fetchSource(
+      await fetchRegistry(
         registrySource,
         join(scratch, 'registry'),
         join(scratch, 'download'),
@@ -370,7 +371,7 @@ async function createFromSource(
           : (options.registry ?? DEFAULT_REGISTRY),
       )
       entry = pickEntry(registry.entries, options.source!)
-      await fetchSource(
+      await fetchTemplate(
         { kind: 'folder', path: join(registry.root, entry.path) },
         join(scratch, 'source'),
         join(scratch, 'download'),
@@ -380,7 +381,7 @@ async function createFromSource(
       const source = parseSource(options.source!, io.cwd)
       if (!source)
         throw new UsageError(`unknown template source "${options.source}" (${SOURCE_FORMS})`)
-      await fetchSource(source, join(scratch, 'source'), join(scratch, 'download'), fetchers)
+      await fetchTemplate(source, join(scratch, 'source'), join(scratch, 'download'), fetchers)
     }
     const manifest = readManifest(join(scratch, 'source'))
     const staged = join(scratch, 'app')

@@ -477,6 +477,54 @@ describe('starters from a registry', () => {
     expect(bad.err()).toContain('--registry goes with a registry id')
   })
 
+  /** Grow a registry past the template limits (5000 files, 50 MB) beside its entries, as every published entry grows the public one. */
+  function grow(root: string): string {
+    const growth = join(root, 'registry', 'blends', 'acrylblends.other')
+    mkdirSync(growth, { recursive: true })
+    for (let i = 0; i <= 5000; i += 1) writeFileSync(join(growth, `f${i}.txt`), `${i}\n`)
+    writeFileSync(join(growth, 'big.bin'), Buffer.alloc(51 * 1024 * 1024))
+    return root
+  }
+
+  it('reads a registry larger than a template may be, from a folder and from GitHub, and still makes the small starter', async () => {
+    const big = grow(registry('site'))
+    const folder = fakeIo()
+    expect(
+      await runCreate(
+        ['grown', '--from', 'acrylblends.notes-desktop', '--registry', big, '-y'],
+        folder.io,
+      ),
+      folder.err(),
+    ).toBe(0)
+    expect(existsSync(join(scratch, 'grown', 'src', 'app.ts'))).toBe(true)
+    expect(existsSync(join(scratch, 'grown', 'f0.txt'))).toBe(false)
+
+    const tgz = join(scratch, `grown-${counter++}.tgz`)
+    execFileSync('tar', ['-czf', tgz, '-C', scratch, big.slice(scratch.length + 1)])
+    const github = fakeIo({ download: async () => readFileSync(tgz) })
+    expect(
+      await runCreate(['grown-gh', '--from', 'acrylblends.notes-desktop', '-y'], github.io),
+      github.err(),
+    ).toBe(0)
+    expect(existsSync(join(scratch, 'grown-gh', 'src', 'app.ts'))).toBe(true)
+    // Writing, copying and packing a registry over 50 MB takes seconds, not the default five.
+  }, 120_000)
+
+  it('still refuses a starter that is itself larger than a template may be; nothing is created', async () => {
+    const root = registry('site')
+    const entry = join(root, 'registry', 'blends', 'acrylblends.notes-desktop')
+    for (let i = 0; i <= 5000; i += 1) writeFileSync(join(entry, `f${i}.txt`), `${i}\n`)
+    const s = fakeIo()
+    expect(
+      await runCreate(
+        ['too-big', '--from', 'acrylblends.notes-desktop', '--registry', root, '-y'],
+        s.io,
+      ),
+    ).toBe(1)
+    expect(s.err()).toContain('the template has more than 5000 files')
+    expect(existsSync(join(scratch, 'too-big'))).toBe(false)
+  })
+
   it('takes a template folder as a source, and refuses a folder that holds a link', async () => {
     const folder = join(scratch, `folder-${counter++}`)
     mkdirSync(folder, { recursive: true })
