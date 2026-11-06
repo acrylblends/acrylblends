@@ -35,6 +35,9 @@ export function evaluator(session) {
  * Assert the frame. `appText` is text the app's own page shows in the canvas. Returns what it found, for the gate's log; throws with what the page held when
  * a surface is missing.
  */
+/** How long a press of the Settings gear is given to open the dialog before it is pressed again. */
+const GEAR_PRESS_INTERVAL_MS = 5_000
+
 export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
   const click = (label) =>
     evaluate(`(() => {
@@ -131,18 +134,27 @@ export async function assertFrame(evaluate, { appText, timeoutMs = 30_000 }) {
     if (!tools.some((text) => text.startsWith(tool)))
       throw new Error(`the right panel's + menu offers no ${tool}: ${tools.join(', ')}`)
 
-  // Settings the way a person opens it (the bar's gear), pressed only while no Settings dialog is up; only a visible dialog whose nav has a real section counts.
-  const opened = await until(
-    () =>
-      evaluate(`(() => {
+  // Settings the way a person opens it (the bar's gear); only a visible dialog whose nav has a real section counts. A press is given time to work before the next:
+  // on a slow machine a second press while the dialog is still opening closes it again, and the wait below then looks at nothing.
+  const isSettingsOpen = `(() => {
         const isSection = (button) => ['Models', '模型'].includes((button.getAttribute('aria-label') ?? '').trim() || (button.textContent ?? '').replace(/\\s+/g, ' ').trim())
         const open = [...document.querySelectorAll('[role=dialog]')].some((dialog) =>
           dialog.getClientRects().length > 0 && [...dialog.querySelectorAll('nav button')].some(isSection))
-        if (open) return true
+        return open
+      })()`
+  let pressedAt = 0
+  const opened = await until(
+    async () => {
+      if (await evaluate(isSettingsOpen)) return true
+      if (Date.now() - pressedAt < GEAR_PRESS_INTERVAL_MS) return false
+      pressedAt = Date.now()
+      await evaluate(`(() => {
         const gear = [...document.querySelectorAll('button[aria-label="Settings"]')].find((button) => button.getClientRects().length > 0)
         gear?.click()
-        return false
-      })()`),
+        return true
+      })()`)
+      return false
+    },
     timeoutMs,
     500,
   )
