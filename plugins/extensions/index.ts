@@ -31,8 +31,8 @@ import { type Context, type Fiber, Service } from '@deepseek-ai/cordis'
 import type {} from '../instance/index.ts'
 import type { Sandbox } from '../sandbox/index.ts'
 import { appendLedger, type LedgerEntry, readLedger } from './ledger.ts'
-import { resolveFromApp, routerAliases } from './resolve.ts'
-import { discard, hashFolder, prune, stage } from './stage.ts'
+import { type PluginStore, pluginVersion } from './plugin-store.ts'
+import { folderPluginStore } from './stage.ts'
 
 /** A fiber's lifecycle state, by name (Cordis's own enum is a `const enum`, which does not exist at run time). */
 export type ExtensionState = 'pending' | 'loading' | 'active' | 'failed' | 'disposed' | 'unloading'
@@ -224,7 +224,6 @@ interface StateService {
 
 export class Extensions extends Service {
   readonly sources: readonly ExtensionSource[]
-  readonly stageRoot: string
   readonly stateFile: string
   readonly ledgerFile: string
   /** Settles when the startup pass is done. */
@@ -245,10 +244,12 @@ export class Extensions extends Service {
    * service's own fiber, so a plugin mounted from it would read `ctx.router` from the installer's fiber and fail. Extensions mount from this one.
    */
   private readonly owner: Context
+  private readonly store: PluginStore
 
-  constructor(ctx: Context, config: ExtensionsConfig = {}) {
+  constructor(ctx: Context, config: ExtensionsConfig, store: PluginStore) {
     super(ctx, 'extensions')
     this.owner = ctx
+    this.store = store
     this.readOnly = config.readOnly === true
     this.off = new Set(config.off ?? [])
     this.rows = new Set(config.rows ?? [])
@@ -260,14 +261,13 @@ export class Extensions extends Service {
         trust: config.approval === true && source.trust === 'install' ? 'ask' : source.trust,
       }),
     )
-    this.stageRoot = join(home, 'extensions-staged')
     this.stateFile = join(home, 'extensions.json')
     this.ledgerFile = join(home, 'extensions-ledger.jsonl')
     // Effects run their disposers newest first: settle pending operations, then dispose every mounted extension, then drop the hook.
     // Staged copies live in the app's home, outside the app: their bare imports are resolved from the app. A read-only start imports the folders where they are (inside the app).
     if (!this.readOnly)
       ctx.effect(
-        () => resolveFromApp(this.stageRoot, root, routerAliases()),
+        () => this.store.resolveImportsFrom(root),
         'extensions: resolve staged imports from the app',
       )
     ctx.effect(
@@ -317,7 +317,7 @@ export class Extensions extends Service {
           this.stale.add(entry.name)
           continue
         }
-        if (hashFolder(entry.source) !== entry.version)
+        if (pluginVersion(entry.source) !== entry.version)
           results.push(await this.installNow(entry.source))
       }
       for (const found of this.discover()) {
@@ -365,7 +365,7 @@ export class Extensions extends Service {
         }
       }
       this.requests.delete(name)
-      if (!existsSync(request.dir) || hashFolder(request.dir) !== request.version) {
+      if (!existsSync(request.dir) || pluginVersion(request.dir) !== request.version) {
         return {
           ok: false,
           stage: 'approval',
@@ -617,7 +617,7 @@ export class Extensions extends Service {
     const { name, dir, errors } = this.check(source)
     if (errors.length > 0) return { ok: false, stage: 'check', name, errors, next: NOTHING }
     const previous = this.installed.get(name)
-    const version = hashFolder(dir)
+    const version = pluginVersion(dir)
     const running =
       previous && previous.version === version && STATES[previous.fiber.state] !== 'failed'
     // A source that asks: this exact version must have been approved. Anything else waits, and the ledger says so.
@@ -648,12 +648,12 @@ export class Extensions extends Service {
     }
 
     // Import the new version while the old one keeps running: a syntax error or a missing export changes nothing.
-    const staged = stage(dir, this.stageRoot, name)
+    const staged = this.store.put(name, dir)
     let module: PluginModule
     try {
       module = await this.load(staged.dir, name)
     } catch (error) {
-      discard(staged.dir)
+      this.store.discard(staged)
       this.record({ kind: 'refused', name, version: staged.version, error: message(error) })
       return {
         ok: false,
@@ -680,7 +680,7 @@ export class Extensions extends Service {
           : undefined
     if (failure) {
       await mounted.fiber.dispose().catch(() => undefined)
-      discard(staged.dir)
+      this.store.discard(staged)
       const error = failure.error
       this.record({ kind: 'refused', name, version: staged.version, error })
       let restored = false
@@ -717,7 +717,7 @@ export class Extensions extends Service {
     })
     this.stale.delete(name)
     this.saveState()
-    prune(this.stageRoot, name, [staged.dir])
+    this.store.keepOnly(name, staged)
     this.record({ kind: action, name, version: staged.version })
     this.ctx.emit('extensions/changed', name, action)
     return {
@@ -737,7 +737,7 @@ export class Extensions extends Service {
     this.installed.delete(name)
     this.stale.delete(name)
     this.saveState()
-    prune(this.stageRoot, name, [])
+    this.store.keepOnly(name)
     this.record({ kind: 'removed', name, version: entry.version })
     this.ctx.emit('extensions/changed', name, 'removed')
     return { ok: true, name }
@@ -762,7 +762,7 @@ export class Extensions extends Service {
         this.installed.set(folder.name, {
           name: folder.name,
           source: folder.dir,
-          version: hashFolder(folder.dir),
+          version: pluginVersion(folder.dir),
           dir: folder.dir,
           module,
           fiber: mounted.fiber,
@@ -825,7 +825,7 @@ export class Extensions extends Service {
         // The source is gone: the last installed version still runs, and is reported as stale.
         summary.stale.push(name)
         this.stale.add(name)
-        if (!existsSync(record.dir)) {
+        if (!this.store.holds(record)) {
           summary.failed.push({ name, error: 'neither the source nor the staged copy exists' })
           continue
         }
@@ -869,7 +869,11 @@ export const extensions = {
   name: 'extensions',
   inject: ['appInstance'],
   async apply(ctx: Context, config: ExtensionsConfig) {
-    const service = new Extensions(ctx, config ?? {})
+    const service = new Extensions(
+      ctx,
+      config ?? {},
+      folderPluginStore(join(ctx.appInstance.home, 'extensions-staged')),
+    )
     await service.ready
   },
 }
