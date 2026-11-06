@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: acryldev/acryl
-          ref: ada904ae45d1e1e7526a46ef8f9fa9cedaaf4138
+          ref: f5e3b76409b06bc43f2ae5a8f462e6ed78711c10
           path: .acryl
           sparse-checkout: runtime/blends-core
           persist-credentials: false

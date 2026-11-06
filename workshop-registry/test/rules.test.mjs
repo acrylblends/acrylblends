@@ -138,6 +138,16 @@ describe('is the entry a sound starter', { skip }, () => {
     })
   }
 
+  test('an entry that would not work on every OS is refused with the reason', () => {
+    const { dir } = entryTree('alice.hello')
+    writeFileSync(join(dir, 'src', 'crlf.ts'), 'export {}\r\n')
+    writeFileSync(join(dir, 'src', 'nul.ts'), 'export {}\n')
+    const result = only('alice.hello', dir)
+    assert.equal(result.status, 1)
+    assert.match(result.stdout, /src\/crlf\.ts: it has a carriage return/u)
+    assert.match(result.stdout, /src\/nul\.ts: "nul\.ts" is a device name reserved by Windows/u)
+  })
+
   test('a small, public, licensed app passes', () => {
     const { dir } = entryTree('alice.hello')
     const result = only('alice.hello', dir)
