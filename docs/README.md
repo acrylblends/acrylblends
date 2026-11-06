@@ -73,6 +73,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 1.0.10](release-notes/1.0.10.md) - a production install no longer carries vitest (the optional peer for the conformance suites is gone)
 - [Release notes 1.1.0](release-notes/1.1.0.md) - a page follows its state over one WebSocket (`watch` of `/api/state/client.js`), so windows no longer use up the browser's six connections
 - [Release notes 1.2.0](release-notes/1.2.0.md) - a new app is a repository of plugin folders with snapshots; `create --from` makes a blueprint your own (name, lock, first commit); `init --desktop` installs the ACRYL frame from npm, one framework copy
+- [Release notes 1.2.1](release-notes/1.2.1.md) - `create --from` works on a registry larger than one template (it failed past 5000 files)
 - [The 1.2.0 release checklist](plans/release-1.2.0.md) - the frame's 16 packages, then acrylblends and create-acrylblends 1.2.0, the tags and the npm-release approval, with the owner's steps marked
 - [Release notes 1.0.4](release-notes/1.0.4.md) - act reload and navigate, the page script on every page, runs that outlive the page
 - [Release notes 1.0.3](release-notes/1.0.3.md) - Node 26, relative paths in manifest rows, a pasted GitHub address as a source
