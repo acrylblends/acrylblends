@@ -150,7 +150,8 @@ describe('acryl-router-http against a real webServer', () => {
       expect(await gone.text()).toBe('')
     }
     expect(ctx.router.size).toBe(0)
-  })
+    // Fifty cycles of two requests and two timers: a loaded Windows runner, whose timers fire about every 15 ms, took over the 5 s default without anything hanging.
+  }, 60_000)
 
   it('stays PENDING while webServer is missing and activates when it appears', async () => {
     const ctx = new Context()
