@@ -377,7 +377,7 @@ describe('init', () => {
       '@deepseek-ai/cordis': '4.0.4',
       '@deepseek-ai/schemastery': '3.18.4',
       '@webboxes/app-persistence': '0.1.1',
-      '@webboxes/blends-core': '0.4.0',
+      '@webboxes/blends-core': '0.5.0',
       typescript: '6.0.3',
       yaml: '2.9.0',
     })

@@ -188,8 +188,8 @@ importers:
         specifier: 0.1.1
         version: 0.1.1
       '@webboxes/blends-core':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 0.5.0
+        version: 0.5.0
       '@whatwg-node/fetch':
         specifier: 0.9.23
         version: 0.9.23
@@ -3105,8 +3105,8 @@ packages:
     engines: {node: ^22.19.0 || >=24.0.0}
     hasBin: true
 
-  '@webboxes/blends-core@0.4.0':
-    resolution: {integrity: sha512-gL6PnxafWh/siXyo2e1bq7U7/eKBkuqJ9nd4B5KKFMd9gyvr63cAO96VtS/DSn9+8vrUidGkVbSLPZXJ7GkwMw==}
+  '@webboxes/blends-core@0.5.0':
+    resolution: {integrity: sha512-wPmmBmhEUdRQ8ydh14KN/7BfaSgng4YBN3q2FLtghwUXsbjrWx938U/WPjxLvpXhgGDY5Wm8AwduUf5DTbn/8g==}
     engines: {node: ^22.19.0 || >=24.0.0}
     hasBin: true
 
@@ -6211,7 +6211,7 @@ snapshots:
     dependencies:
       yaml: 2.9.0
 
-  '@webboxes/blends-core@0.4.0':
+  '@webboxes/blends-core@0.5.0':
     dependencies:
       ajv: 8.20.0
       yaml: 2.9.0
