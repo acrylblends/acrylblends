@@ -55,6 +55,18 @@ License: MIT by default, in the same line as the account, repository and version
 
 Real Cordis activation in `plugins/plugin-share/test/`: a pull from a local release fixture, with its route answering without a restart; each refusal changes nothing on disk or in the running app; pulling twice; the service leaving with its fiber. The hub's sha512 and tar parsing keep their own tests.
 
+## Every template that installs live (T020)
+
+Spec 049 T020: a framed blank, notes, chat or nodejs app refuses the pull, and the Blank DMG is a framed blank app. plugin-share becomes a row of every template that has an extensions row.
+
+- **The blocker is one import.** plugin-share imports `packagePlugin` from `builder/package.ts`, so its `plugin.json` requires builder, and builder requires agent and sandbox. `package.ts` imports only `@webboxes/blends-core` and `@webboxes/plugin-hub`, nothing of builder. It moves to `plugins/plugin-share/package.ts`. Builder's `package_plugin` tool imports it from there and requires plugin-share. The dependency then points from the agent's tool to the sharing capability, never back.
+- **`requires` after the move:** plugin-share requires `instance`, `extensions` and `manifest`. It imports `extensions`' name rule and `manifest`'s lock writer, and it injects `extensions` and `appInstance`. Every one of the four templates carries all three.
+- **The rows.** Blank, notes, chat and nodejs gain the row after `extensions` in `blend.yaml`, the registry entry and `'plugin-share': { dir }` in `src/app.ts`, and the name in `template.json`. In production the row is left out, as the agent template does, because a pull runs a stranger's code.
+- **The frame.** Nothing changes. `frame-rows.ts` already keeps `pluginShare` out of the isolate list, so the door reaches it in every framed template.
+- **todo has no extensions row**, so it has nothing to install into. It keeps the refusal, and the refusal names that.
+- **The DMG** is built from 127-blank-dmg by `init --template blank --desktop`. It gets the row when that branch takes main.
+- **Verification:** the framed pull step of `verify-ide-template` runs for blank too, which `check` already runs, so the gate covers the DMG's template. The packed gate checks every template's `npm run check`.
+
 ## The rule each book decided
 
 - **Clean Architecture:** the checks are pure policy over plain files, and the door depends on a port it declares, not on this plugin.
