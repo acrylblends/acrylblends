@@ -179,6 +179,8 @@ try {
       'typescript',
       '@webboxes/app-persistence',
       '@webboxes/blends-core',
+      // The builder packs a plugin and plugin-share pulls and publishes one; both are development rows, and the app's lists are one list.
+      '@webboxes/plugin-hub',
       // The state plugin follows keys in a page over a WebSocket (1.1.0); a production app has it.
       'ws',
       'yaml',
