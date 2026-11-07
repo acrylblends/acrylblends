@@ -87,6 +87,8 @@ npm install
 npm run dev
 ```
 
+npm may warn that 5 packages have install scripts not covered by allowScripts; that is a notice, not an error - nothing to do.
+
 `npm install` is bigger than a framework-only app: it brings the frame and the chat engine (about 500 MB together, much less on a warm package
 cache). `npm run dev` starts the app inside the frame and prints one line:
 
