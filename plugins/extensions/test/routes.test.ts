@@ -134,6 +134,7 @@ test('an update keeps its own route, and a removed plugin frees it', async () =>
   const updated = await root.extensions.install(dir)
   assert.equal(updated.ok && updated.action, 'updated')
   await root.extensions.remove('ana-notes')
+  assert.equal((await root.router.request('/notes')).status, 404)
   assert.equal((await root.extensions.install(plugin('fay-notes', '/notes'))).ok, true)
   assert.equal((await answer('/notes')).from, 'fay-notes')
 })

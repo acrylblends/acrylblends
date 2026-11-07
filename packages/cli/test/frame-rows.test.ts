@@ -4,7 +4,10 @@
  * app-route prefix fix).
  */
 
+import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
+import * as router from '../../../plugins/acryl-router/src/index.ts'
+import { Acryl } from '../../../plugins/acryl-router/src/index.ts'
 import { appPluginsRow } from '../src/frame-rows'
 
 const row = appPluginsRow('/app')
@@ -39,7 +42,6 @@ describe('the generated app-plugins row', () => {
 
   it('runs the app rows under a router whose mounts land under the frame prefix', () => {
     expect(row).toContain("import { composeInto } from '../src/app.ts'")
-    expect(row).toContain('const appScope = ctx.extend({ router: appRouter(ctx.router, prefix) })')
     expect(row).toContain(
       'const fibers = await composeInto(appScope, ctx.appInstance, { host: true })',
     )
@@ -57,5 +59,39 @@ describe('the generated app-plugins row', () => {
     // No prefix (a host without the canvas): the app's paths stay as they are.
     expect(prefixedAppRoute('', '/board')).toBe('/board')
     expect(prefixedAppRoute('/', '/board')).toBe('/board')
+  })
+
+  it("a plugin's route is the plugin's own: it answers under the prefix, and stops answering when that plugin alone is removed", async () => {
+    // The row as generated, with the app's composeInto handed in: it mounts one plugin of the app, as the extensions row mounts a pulled one.
+    const apply = new Function(
+      'composeInto',
+      `${row.replace(/^import .*$/mu, '').replaceAll('export ', '')}\nreturn apply`,
+    )((scope: Context) => {
+      const fiber = scope.plugin({
+        name: 'timer',
+        inject: ['router'],
+        apply: (plugin: Context) => {
+          plugin.router.route(
+            '/',
+            new Acryl().get('/timer', (c) => c.json({ from: 'timer' })),
+          )
+        },
+      })
+      mounted.push(fiber)
+      return Promise.resolve([fiber])
+    }) as (ctx: Context, config: object) => Promise<void>
+    const mounted: Array<{ await(): Promise<void>; dispose(): Promise<unknown> }> = []
+    const host = new Context()
+    await host.plugin(router).await()
+    host.provide('appInstance', {})
+    await host
+      .plugin({ name: 'app-plugins', inject: ['router'], apply: (ctx: Context) => apply(ctx, {}) })
+      .await()
+    const [timer] = mounted
+    if (timer === undefined) throw new Error('the row mounted no plugin')
+    await timer.await()
+    expect(await (await host.router.request('/app/timer')).json()).toEqual({ from: 'timer' })
+    await timer.dispose()
+    expect((await host.router.request('/app/timer')).status).toBe(404)
   })
 })
