@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The door's operator client: what `<app>/.acryl/bin/acryl` runs. It finds the app from the folder it is started in (the nearest
+ * The door's operator client: what `npm run acryl -- <verb>` and `<app>/.acryl/bin/acryl` run. It finds the app from the folder it is started in (the nearest
  * `.acryl/door.json` upward, or `--dir`), never through PATH or a machine-wide registry, so it reaches only the app running from that
  * folder. The secret is read from that file and sent as a `Bearer` header; it is never printed.
  *
@@ -227,7 +227,7 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
   const app = findApp(io.cwd, invocation.dir)
   const file = app === undefined ? undefined : readDoorFile(app)
   if (app === undefined || file === undefined) {
-    io.err(`no running app${app === undefined ? ` in ${io.cwd} or above it` : ` in ${app}`}: start it (npm run dev) in its folder, then try again\n`)
+    io.err(`no running app${app === undefined ? ` in ${io.cwd} or above it` : ` in ${app}`}: these commands reach the running app, so start it (npm run dev) in its folder in another terminal, then run the same line again\n`)
     return 3
   }
   const request = io.fetch ?? fetch
@@ -238,7 +238,7 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
       ? await request(`${file.url}/api/acryl-door/verbs`, { headers })
       : await request(`${file.url}/api/acryl-door/call`, { method: 'POST', headers, body: JSON.stringify({ verb: invocation.verb, args: invocation.args }) })
   } catch {
-    io.err(`no running app in ${app}: ${file.url} does not answer (it stopped without removing .acryl/door.json?); start it again\n`)
+    io.err(`no running app in ${app}: ${file.url} does not answer (it stopped without removing .acryl/door.json?); start it (npm run dev), then run the same line again\n`)
     return 3
   }
   if (response.status === 403) {

@@ -15,7 +15,7 @@ import type { UiChannel } from './channel.ts'
 import { NO_DESKTOP, type ShellChannel } from './shell.ts'
 import { VERB_SPECS, VERBS } from './verbs.ts'
 
-export type DoorErrorCode = 'invalid' | 'unknown-verb' | 'unavailable' | 'not-exposed' | 'outside-app' | 'failed' | ShellErrorCode
+export type DoorErrorCode = 'invalid' | 'unknown-verb' | 'unavailable' | 'not-exposed' | 'outside-app' | 'failed' | 'refused' | ShellErrorCode
 
 export class DoorError extends Error {
   readonly code: DoorErrorCode
@@ -37,7 +37,7 @@ export interface ExtensionsPort {
 
 /** The slice of acrylblends' `pluginShare` service the pull verb uses. */
 export interface PluginSharePort {
-  pull(source: string): Promise<{ readonly ok: boolean; readonly action?: string }>
+  pull(source: string): Promise<{ readonly ok: boolean; readonly action?: string; readonly reason?: string; readonly next?: string }>
   planPublish(name: string, options?: PublishOptionsView): Promise<PublishPlanView | { readonly ok: false; readonly reason: string; readonly next: string }>
   publish(name: string, confirmed: PublishPlanView, options?: PublishOptionsView): Promise<{ readonly ok: boolean; readonly reason?: string }>
 }
@@ -361,7 +361,7 @@ export class Door {
       ...(typeof owner === 'string' && owner !== '' ? { owner } : {}),
       ...(typeof license === 'string' && license !== '' ? { license } : {}),
     })
-    if ('ok' in value) return { value, text: `Refused: ${value.reason}. ${value.next}.` }
+    if ('ok' in value) throw new DoorError('refused', `${value.reason}. ${value.next}.`)
     return { value, text: `${renderPublishPlan(value)}\nNothing was sent. Only a person can say yes: they run \`npm run acryl -- plugin publish ${name}\` in their own terminal, or press Share in the frame. \`--license <id>\` changes the license before the yes.` }
   }
 
@@ -375,8 +375,10 @@ export class Door {
   private async pull(source: unknown): Promise<VerbAnswer> {
     if (typeof source !== 'string' || source === '') throw new DoorError('invalid', 'plugin pull needs a source, e.g. plugin pull github:someone/pomodoro@0.1.0')
     const value = await this.share().pull(source)
-    // A refusal changed nothing, and neither did pulling what is already there: the open pages stay.
-    if (value.ok && value.action !== 'unchanged' && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
+    // A refusal is a failed command, so a script does not read it as done; it changed nothing, and the open pages stay.
+    if (!value.ok) throw new DoorError('refused', `${value.reason ?? 'the pull was refused'}. ${value.next ?? 'nothing changed'}.`)
+    // Neither did pulling what is already there change anything.
+    if (value.action !== 'unchanged' && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
     return { value, text: JSON.stringify(value, null, 2) }
   }
 

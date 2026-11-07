@@ -183,14 +183,16 @@ describe('act navigate says what the app answered at the path', () => {
   })
 
   it('after a pull that changed the app, not after a refusal or a pull of what is already there, and the verb needs a source and the row', async () => {
-    const pulling = (answer: { ok: boolean; action?: string }): PluginSharePort => ({
+    const pulling = (answer: { ok: boolean; action?: string; reason?: string; next?: string }): PluginSharePort => ({
       pull: async () => answer,
       planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
       publish: async () => ({ ok: false }),
     })
     const channel = new UiChannel()
     const page = browser(channel, { backAfterMs: 20 })
-    await door(channel, { pluginShare: pulling({ ok: false }) }).run('plugin-pull', { source: 'github:a/b' }, never)
+    await expect(
+      door(channel, { pluginShare: pulling({ ok: false, reason: 'these are different bytes', next: 'ask who gave you the digest' }) }).run('plugin-pull', { source: 'github:a/b' }, never),
+    ).rejects.toMatchObject({ code: 'refused', message: 'these are different bytes. ask who gave you the digest.' })
     await door(channel, { pluginShare: pulling({ ok: true, action: 'unchanged' }) }).run('plugin-pull', { source: 'github:a/b' }, never)
     expect(page.calls).toEqual([])
     const answer = await door(channel, { pluginShare: pulling({ ok: true, action: 'installed' }) }).run('plugin-pull', { source: 'github:a/b' }, never)

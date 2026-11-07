@@ -147,7 +147,7 @@ export async function packagePlugin(
     if (!existsSync(join(target, 'README.md'))) {
       writeFileSync(
         join(target, 'README.md'),
-        `# ${name}\n\n${description}\n\nA Cordis plugin. Once it is released, pull it into an ACRYLBLENDS app: \`npm run acryl -- plugin pull github:<owner>/<repo>\`.\n`,
+        `# ${name}\n\n${description}\n\nA Cordis plugin. Once it is released, pull it into an ACRYLBLENDS app while that app runs (\`npm run dev\`): \`npm run acryl -- plugin pull github:<owner>/<repo>\`.\n`,
       )
     }
     withLineFeeds(target)

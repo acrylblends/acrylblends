@@ -4,7 +4,7 @@
 // repository's own command line; this one runs the installed one, so a file the package leaves out, or an import that is only right inside the repository, fails here.
 //
 //   node scripts/verify-packed.mjs
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -20,6 +20,19 @@ import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const log = (message) => console.log(`verify-packed: ${message}`)
+/** The line a person copies from a plugin's page, in an app that is not running: it must reach the app's door command and say to start the app. */
+const assertAcrylLine = (app) => {
+  const answered = spawnSync('npm run acryl -- plugin pull github:someone/some-plugin@0.1.0', {
+    cwd: app,
+    encoding: 'utf8',
+    shell: true,
+  })
+  if (answered.status !== 3 || !answered.stderr.includes('start it (npm run dev)'))
+    throw new Error(
+      `npm run acryl in ${app} did not say to start the app (exit ${answered.status}):\n${answered.stdout}${answered.stderr}`,
+    )
+}
+
 const run = (command, args, cwd, env = {}) =>
   execFileSync(command, args, {
     cwd,
@@ -123,6 +136,7 @@ console.log('ws-check: ok')
   run(bin('acrylblends'), ['add', 'driver-pty'], agentApp)
   run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], agentApp)
   run('npm', ['run', 'check'], agentApp)
+  assertAcrylLine(agentApp)
   log(
     'agent: agent-panel and driver-pty added by the installed command, installed and type-checked',
   )
@@ -282,6 +296,7 @@ console.log('ws-check: ok')
       throw new Error(`upgrade of the ${old} app did nothing:\n${upgraded}`)
     run('npm', ['install', '--no-audit', '--no-fund'], oldApp)
     run('npm', ['run', 'check'], oldApp)
+    assertAcrylLine(oldApp)
     run('npm', ['test'], oldApp, { ACRYL_DOOR: 'off' })
     if (
       !run(bin('acrylblends'), ['upgrade', '--dry-run'], oldApp).includes(
