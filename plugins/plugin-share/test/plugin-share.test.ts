@@ -696,9 +696,11 @@ test('a different copy of the same name is refused, naming where the copy in the
   assert.match(result.ok ? '' : result.next, /plugin remove hello/)
 })
 
-test('the running service knows the digest of every pull it installed, a local file\'s too, and forgets a refused or removed one', async () => {
+test("the running service knows the digest of every pull it installed, a local file's too, and forgets a refused or removed one", async () => {
   const release = pack({ 'index.ts': ROUTE })
-  const broken = pack({ 'index.ts': `export const name = 'broken'\nexport function apply() { throw new Error('refuses to start') }\n` })
+  const broken = pack({
+    'index.ts': `export const name = 'broken'\nexport function apply() { throw new Error('refuses to start') }\n`,
+  })
   const root = appFolder()
   const { share } = await boot({ root })
   writeFileSync(join(root, 'hello-1.0.0.tgz'), release.tarball)
