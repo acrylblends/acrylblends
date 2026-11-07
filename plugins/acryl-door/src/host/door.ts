@@ -38,8 +38,14 @@ export interface ExtensionsPort {
 /** The slice of acrylblends' `pluginShare` service the pull verb uses. */
 export interface PluginSharePort {
   pull(source: string): Promise<{ readonly ok: boolean; readonly action?: string }>
-  planPublish(name: string, options?: { readonly owner?: string }): Promise<PublishPlanView | { readonly ok: false; readonly reason: string; readonly next: string }>
-  publish(name: string, confirmed: PublishPlanView, options?: { readonly owner?: string }): Promise<{ readonly ok: boolean; readonly reason?: string }>
+  planPublish(name: string, options?: PublishOptionsView): Promise<PublishPlanView | { readonly ok: false; readonly reason: string; readonly next: string }>
+  publish(name: string, confirmed: PublishPlanView, options?: PublishOptionsView): Promise<{ readonly ok: boolean; readonly reason?: string }>
+}
+
+/** Who a plan publishes as, and under which license; the service's defaults when absent. */
+export interface PublishOptionsView {
+  readonly owner?: string
+  readonly license?: string
 }
 
 /** A plan as the door shows it. The service owns it; the door passes it back unchanged. */
@@ -349,16 +355,19 @@ export class Door {
 
   /** Only a plan: no argument of any verb can publish, so an agent never says yes for a person. */
   private async planPublish(input: Record<string, unknown>): Promise<VerbAnswer> {
-    const { name, owner } = input
+    const { name, owner, license } = input
     if (typeof name !== 'string' || name === '') throw new DoorError('invalid', 'plugin publish needs a plugin name, e.g. plugin publish pomodoro')
-    const value = await this.share().planPublish(name, typeof owner === 'string' && owner !== '' ? { owner } : {})
+    const value = await this.share().planPublish(name, {
+      ...(typeof owner === 'string' && owner !== '' ? { owner } : {}),
+      ...(typeof license === 'string' && license !== '' ? { license } : {}),
+    })
     if ('ok' in value) return { value, text: `Refused: ${value.reason}. ${value.next}.` }
-    return { value, text: `${renderPublishPlan(value)}\nNothing was sent. Only a person can say yes: they run \`npm run acryl -- plugin publish ${name}\` in their own terminal, or press Share in the frame.` }
+    return { value, text: `${renderPublishPlan(value)}\nNothing was sent. Only a person can say yes: they run \`npm run acryl -- plugin publish ${name}\` in their own terminal, or press Share in the frame. \`--license <id>\` changes the license before the yes.` }
   }
 
   /** The person's yes, from their own terminal. Not a verb: MCP and the chat do not have it. */
-  async publishConfirmed(name: string, confirmed: PublishPlanView, owner: string | undefined): Promise<unknown> {
-    const value = await this.share().publish(name, confirmed, owner === undefined ? {} : { owner })
+  async publishConfirmed(name: string, confirmed: PublishPlanView, options: PublishOptionsView): Promise<unknown> {
+    const value = await this.share().publish(name, confirmed, options)
     this.deps.audit.record({ at: new Date().toISOString(), tool: 'plugin-publish', target: { role: 'plugin', name: `${confirmed.owner}/${confirmed.repo}@${confirmed.version}` }, outcome: value.ok ? 'ok' : 'refused', approval: 'token' })
     return value
   }

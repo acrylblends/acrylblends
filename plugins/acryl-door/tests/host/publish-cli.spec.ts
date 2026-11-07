@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { main } from '../../src/cli/acryl.ts'
 
-const plan = { owner: 'inboxxobni', repo: 'hello', version: '0.1.0' }
+const plan = { owner: 'inboxxobni', repo: 'hello', version: '0.1.0', license: 'Apache-2.0' }
 const folders: string[] = []
 afterEach(() => {
   for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true })
@@ -28,7 +28,7 @@ async function run(ask?: (question: string) => Promise<boolean>, answer: unknown
     return Response.json({ ok: true, value: answer, text: 'the plan' })
   }) as unknown as typeof fetch
   let out = ''
-  const code = await main(['plugin', 'publish', 'hello', '--owner', 'inboxxobni'], {
+  const code = await main(['plugin', 'publish', 'hello', '--owner', 'inboxxobni', '--license', 'Apache-2.0'], {
     cwd,
     out: (text) => { out += text },
     err: (text) => { out += text },
@@ -55,8 +55,8 @@ describe('plugin publish at a terminal', () => {
     let asked = ''
     const { code, out, confirmed } = await run(async (question) => { asked = question; return true })
     expect(code).toBe(0)
-    expect(asked).toContain('inboxxobni/hello v0.1.0')
-    expect(confirmed.map((call) => call.body)).toEqual([{ name: 'hello', owner: 'inboxxobni', confirm: plan }])
+    expect(asked).toContain('inboxxobni/hello v0.1.0 under Apache-2.0')
+    expect(confirmed.map((call) => call.body)).toEqual([{ name: 'hello', owner: 'inboxxobni', license: 'Apache-2.0', confirm: plan }])
     expect(out).toContain('the pull line')
   })
 

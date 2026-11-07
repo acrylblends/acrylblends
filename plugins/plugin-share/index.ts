@@ -102,6 +102,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** The license a new public plugin is offered under; the plan shows it before the person says yes. */
 const DEFAULT_LICENSE = 'MIT'
+const LICENSE_ID = /^[A-Za-z0-9][A-Za-z0-9.+-]*$/u
 
 const publishRefused = (reason: string, next: string): PublishRefused => ({
   ok: false,
@@ -288,7 +289,13 @@ export class PluginShare extends Service {
       const owner = options.owner ?? host.login()
       const repo = name
       const description = `The ${name} Cordis plugin.`
-      const release = { owner, repo, license: DEFAULT_LICENSE }
+      const license = options.license ?? DEFAULT_LICENSE
+      if (!LICENSE_ID.test(license))
+        return publishRefused(
+          `"${license}" is not a license id`,
+          'write one such as MIT or Apache-2.0',
+        )
+      const release = { owner, repo, license }
       const existing = host.repository(owner, repo)
       let packaged = await packagePlugin(source, this.packages, name, description, { release })
       const released =
@@ -317,7 +324,7 @@ export class PluginShare extends Service {
         repo,
         version: packaged.version,
         visibility: 'public',
-        license: DEFAULT_LICENSE,
+        license,
         createsRepository: existing === undefined,
         ...(released === undefined ? {} : { released }),
         files: packaged.files,

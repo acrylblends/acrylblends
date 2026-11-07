@@ -24,7 +24,7 @@ Row id `plugin-share`, equal to the package name; mounted after `extensions`. Co
 
 ## 5. Events and durability
 
-No event of its own: extensions emits `extensions/changed`. The folder under `plugins/` is the durable fact. T015 adds the source and digests to `blend.yaml` and the lock.
+No event of its own. It listens to the event extensions emits on every change: a removal takes the plugin's record out. A pull's durable fact is its record in the `plugin-share` row's `config.pulled` of `blend.yaml`: source, sha512 and digest. A row's config is resolved into `blend.lock.json`, so the lock records it with no new format. At a start, a recorded plugin whose folder is gone is fetched again by its digest and sha512; other bytes are refused and the record stays. A local `.tgz` names nothing another machine could fetch, so it is not recorded and the answer says so.
 
 ## 6. The order of a pull
 
@@ -41,7 +41,15 @@ Service names are read from the source with `hostInjectFromSource`, never with `
 
 Known limit: an object-form `inject` lists every key as needed, so a plugin marking a service optional there is refused when the service is absent, and the reason names the service.
 
-An agent can call the verb, as it can already write and install a plugin. Pull gives it no new power. Publish does, which is why T011 waits for a person.
+An agent can call the verb, as it can already write and install a plugin. Pull gives it no new power. Publish does, so it waits for a person.
+
+## Publishing
+
+`planPublish(name)` packages the plugin and answers the account, repository, version, license, files, sha512, digest and the pull line, sending nothing. The package already names its repository and license, so the bytes planned are the bytes released. `publish(name, confirmed)` makes the plan again and sends nothing if it differs.
+
+The verb `plugin-publish` answers only the plan. A yes comes from a prompt in the person's own terminal, or from Share in the frame. Its route is not a verb, so MCP and the chat do not have it. It takes this run's door secret, so this keeps honest agents from publishing by accident; it is not a wall against code on this machine.
+
+License: MIT by default, in the same line as the account, repository and version, and `--license <id>` changes it before the yes.
 
 ## Verification
 

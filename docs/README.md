@@ -58,6 +58,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [IDE port, slice 3: chat, models and sessions](plans/ide-slice3-chat.md) - the connect-a-model card, where the key goes, the gate that proves the chat uses it and that a session survives a restart, and the frame numbers
 - [IDE port, slice 4: files, the editor, Changes and Review](plans/ide-slice4-panels.md) - the four new comparison views, the committed git fixture both surfaces open, and the numbers
 - [IDE port, slice 5: account sign-in](plans/ide-slice5-signin.md) - acryl-sign-in ported and mounted in Settings > Models, the account join that keeps the API-key card away, the token boundary and its test, and the comparison
+- [Sharing a plugin between people](plans/plugin-share.md) - the plugin-share mini-design: the order of a pull and why no refusal has anything to undo, the plan a person says yes to, and what the app remembers
 - [Workshop outline v2](plans/workshop-outline-v2.md) - the refocused workshop: a visual app built and driven by the agent inside it, with the capability each block depends on
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock

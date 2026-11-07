@@ -390,6 +390,23 @@ test('a plan names the account, repository and version and sends nothing', async
   assert.deepEqual(hub.sent, [])
 })
 
+test('the person can choose the license before the yes, and it is what is released', async () => {
+  const hub = fakeHost()
+  const { share } = await bootWithPlugin(hub)
+  refusedPublish(await share.planPublish('hello', { license: 'not a license' }), /not a license id/)
+  const plan = planned(await share.planPublish('hello', { license: 'Apache-2.0' }))
+  assert.equal(plan.license, 'Apache-2.0')
+  const result = await share.publish('hello', plan, { license: 'Apache-2.0' })
+  assert.ok(result.ok, JSON.stringify(result))
+  const bytes = hub.releases.get('someone/hello@v0.1.0')
+  assert.ok(bytes)
+  const manifest = readTarball(bytes).find((file) => file.path === 'package.json')
+  assert.equal(
+    JSON.parse(Buffer.from(manifest?.content ?? []).toString('utf8')).license,
+    'Apache-2.0',
+  )
+})
+
 test('publishing exactly the confirmed plan releases those bytes, and the pull line carries their digest', async () => {
   const hub = fakeHost()
   const { share } = await bootWithPlugin(hub)

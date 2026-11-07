@@ -215,7 +215,7 @@ describe('act navigate says what the app answered at the path', () => {
     expect(answer.text).toContain('Only a person can say yes')
     expect(answer.text).toContain(plan.pullLine)
     expect(published).toEqual([])
-    await d.publishConfirmed('hello', plan, 'inboxxobni')
+    await d.publishConfirmed('hello', plan, { owner: 'inboxxobni' })
     expect(published).toEqual([['hello', plan, { owner: 'inboxxobni' }]])
   })
 })

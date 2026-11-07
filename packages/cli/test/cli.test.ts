@@ -211,6 +211,7 @@ describe('library', () => {
       '@deepseek-ai/schemastery',
       '@webboxes/app-persistence',
       '@webboxes/blends-core',
+      '@webboxes/plugin-hub',
       'node-pty',
       'ws',
       'yaml',

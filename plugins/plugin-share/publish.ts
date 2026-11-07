@@ -44,6 +44,8 @@ export type PublishResult =
 export interface PublishOptions {
   /** The account or organization; the signed-in one when absent. */
   readonly owner?: string
+  /** The license the plugin is offered under, as an SPDX id; MIT when absent. The plan shows it before the person says yes. */
+  readonly license?: string
 }
 
 /** Where a publish goes through: the person's own `gh` and `git`. A test passes stand-ins, so no test publishes. */
