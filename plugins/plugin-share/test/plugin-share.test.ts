@@ -112,6 +112,7 @@ async function boot({
       pluginShare: {
         pull(source: string): Promise<PullResult>
         list(): SharedPluginInfo[]
+        pulledDigest(name: string): string | undefined
         remove(name: string): Promise<SharedRemoveResult>
         planPublish(name: string, options?: PublishOptions): Promise<PublishPlan | PublishRefused>
         publish(
@@ -693,4 +694,20 @@ test('a different copy of the same name is refused, naming where the copy in the
     /^plugins\/hello holds a different copy of this plugin, pulled from github:ana\/hello@1\.0\.0$/,
   )
   assert.match(result.ok ? '' : result.next, /plugin remove hello/)
+})
+
+test('the running service knows the digest of every pull it installed, a local file\'s too, and forgets a refused or removed one', async () => {
+  const release = pack({ 'index.ts': ROUTE })
+  const broken = pack({ 'index.ts': `export const name = 'broken'\nexport function apply() { throw new Error('refuses to start') }\n` })
+  const root = appFolder()
+  const { share } = await boot({ root })
+  writeFileSync(join(root, 'hello-1.0.0.tgz'), release.tarball)
+  writeFileSync(join(root, 'broken-1.0.0.tgz'), broken.tarball)
+  assert.ok((await share.pull('hello-1.0.0.tgz')).ok)
+  assert.equal(share.pulledDigest('hello'), release.digest)
+  assert.equal((await share.pull('broken-1.0.0.tgz')).ok, false)
+  assert.equal(share.pulledDigest('broken'), undefined)
+  assert.deepEqual(await share.remove('hello'), { ok: true, name: 'hello', folder: 'deleted' })
+  assert.equal(share.pulledDigest('hello'), undefined)
+  assert.equal(existsSync(join(root, 'plugins', 'hello')), false)
 })

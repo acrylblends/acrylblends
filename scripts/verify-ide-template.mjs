@@ -652,7 +652,7 @@ ${composition.stdout}`)
     return await startServer()
   }
   await checkTileInBrowser(url, origin, jar, page, output, mock, restartSamePort)
-  if (template !== 'todo') await checkFramedPull(app, origin)
+  if (template !== 'todo') await checkFramedPull(app, origin, jar)
   // The frame's stable launch token end to end (119): verify-frame-token boots this app twice on its own port and asserts the same address after the
   // restart, that the address admits the page (303 and the cookie) and that the cookie admits the frame's WebSocket.
   await stopServer()
@@ -756,11 +756,10 @@ function setInputValue(selector, value) {
  * The pull line a person copies, in the app as the frame runs it: the door row is the host's and the app's rows are in their own realm, so the line reaches
  * plugin-share only if the overlay lets it, and the plugin's own check finds its route only under the canvas prefix. A wrong digest fails and installs nothing.
  */
-async function checkFramedPull(app, origin) {
+async function checkFramedPull(app, origin, jar) {
   const name = 'gate-pull'
   const tarball = releaseServing(app, name, '/gate-pull')
   const npm = npmSpawn()
-  // No retry: a pull is installed live and the frame does not load the app again for it (spec 049 T022), so the next pull right after it is answered.
   const door = (...args) =>
     spawnSync(npm.command, ['run', '--silent', 'acryl', '--', 'plugin', ...args], {
       cwd: app,
@@ -768,38 +767,76 @@ async function checkFramedPull(app, origin) {
       ...npm.options,
     })
   const line = (input) => door('pull', input)
+  const answers = async (path) => (await fetch(`${origin}/app${path}`)).text()
+  // The frame's reload view: its seq moves on each time the frame loads the app's code again (spec 049 T022). Read as the page reads it.
+  const reloadSeq = () => {
+    const read = spawnSync(
+      'curl',
+      [
+        '-s',
+        '-b',
+        jar,
+        '-H',
+        'Sec-Fetch-Site: same-origin',
+        `${origin}/api/acryl-blends-frame/app`,
+      ],
+      { encoding: 'utf8' },
+    )
+    const view = JSON.parse(read.stdout || '{}')
+    if (!Number.isInteger(view.seq)) fail(`the frame's reload view is not readable: ${read.stdout}`)
+    return view.seq
+  }
+  const before = reloadSeq()
+
+  // A pull that fails: a wrong digest is refused and leaves nothing.
   const refused = line(`${tarball}@sha256:${'0'.repeat(64)}`)
   if (refused.status !== 1 || !refused.stderr.includes('different bytes'))
     fail(`a wrong digest was not refused in the frame:\n${refused.stdout}${refused.stderr}`)
   if (existsSync(join(app, 'plugins', name))) fail('a refused pull left its folder in the app')
+  // Pulls in a row, no retry: from a local file (which blend.yaml does not remember), from GitHub, and a local one again.
   const pulled = line(tarball)
   if (pulled.status !== 0)
     fail(`the pull line failed in the frame:\n${pulled.stdout}${pulled.stderr}`)
-  // Installed live: it answers now, and a second release pulled straight after it is installed beside it, with no restart between.
-  const answer = await (await fetch(`${origin}/app/${name}`)).text()
-  if (!answer.includes('gate-pull'))
-    fail(`the pulled plugin does not answer at /app/${name}: ${answer}`)
+  if (!(await answers('/gate-pull')).includes('gate-pull'))
+    fail('the pulled plugin does not answer at /app/gate-pull')
+  // A release on GitHub, pulled by its https address: remembered in blend.yaml, as a github: pull is. The address, not github:, keeps the gate off
+  // api.github.com's anonymous rate limit on shared CI runners; github: sources are covered by plugin-share's tests.
+  const POMODORO =
+    'https://github.com/inboxxobni/acrylblends-pomodoro/releases/download/v0.1.0/acrylblends-pomodoro-0.1.0.tgz'
+  const fromGitHub = line(POMODORO)
+  if (fromGitHub.status !== 0)
+    fail(`a pull from GitHub failed in the frame:\n${fromGitHub.stdout}${fromGitHub.stderr}`)
+  if (!(await answers('/pomodoro')).includes('minutes'))
+    fail('the plugin pulled from GitHub does not answer at /app/pomodoro')
   const second = line(releaseServing(app, 'gate-two', '/gate-two'))
   if (second.status !== 0)
     fail(`a pull right after another failed in the frame:\n${second.stdout}${second.stderr}`)
-  const both = [
-    await (await fetch(`${origin}/app/${name}`)).text(),
-    await (await fetch(`${origin}/app/gate-two`)).text(),
-  ]
-  if (!both[0].includes('gate-pull') || !both[1].includes('gate-two'))
-    fail(`after two pulls in a row the app answers ${both.join(' and ')}`)
+  if (
+    !(await answers('/gate-pull')).includes('gate-pull') ||
+    !(await answers('/gate-two')).includes('gate-two')
+  )
+    fail('after pulls in a row the pulled plugins do not all answer')
   // The door lists and removes plugins in the frame too, through plugin-share (spec 049 T021): the frame's host reaches no extensions of its own.
   const listed = door('list', '--json')
-  const names = listed.status === 0 ? JSON.parse(listed.stdout).map((plugin) => plugin.name) : []
-  if (!names.includes(name) || !names.includes('gate-two'))
-    fail(`plugin list in the frame does not name both pulls:\n${listed.stdout}${listed.stderr}`)
+  const plugins = listed.status === 0 ? JSON.parse(listed.stdout) : []
+  const names = plugins.map((plugin) => plugin.name)
+  if (
+    !names.includes(name) ||
+    !names.includes('gate-two') ||
+    !names.includes('acrylblends-pomodoro')
+  )
+    fail(`plugin list in the frame does not name the pulls:\n${listed.stdout}${listed.stderr}`)
+  const pomodoro = plugins.find((plugin) => plugin.name === 'acrylblends-pomodoro')
+  if (pomodoro?.pulledFrom !== POMODORO || pomodoro.author !== 'inboxxobni')
+    fail(`plugin list does not say where the GitHub pull came from: ${JSON.stringify(pomodoro)}`)
   const removed = door('remove', 'gate-two')
   if (removed.status !== 0)
     fail(`plugin remove failed in the frame:\n${removed.stdout}${removed.stderr}`)
-  const gone = await (await fetch(`${origin}/app/gate-two`)).text()
-  if (gone.includes('"from":"gate-two"'))
+  if ((await answers('/gate-two')).includes('"from":"gate-two"'))
     fail('after plugin remove /app/gate-two still answers the removed plugin')
-  // A second person's plugin on the same route: refused with the first one's name, and the route still answers the first (spec 049 T025).
+  if (existsSync(join(app, 'plugins', 'gate-two')))
+    fail('plugin remove left the folder of an untouched pull')
+  // A second person's plugin on the same route, another pull that fails: refused with the first one's name, and the route still answers the first (T025).
   const clash = line(releaseServing(app, 'gate-clash', '/gate-pull'))
   if (clash.status !== 1 || !clash.stderr.includes('GET /gate-pull is already served by gate-pull'))
     fail(
@@ -807,10 +844,34 @@ async function checkFramedPull(app, origin) {
     )
   if (existsSync(join(app, 'plugins', 'gate-clash')))
     fail('a refused pull left its folder in the app')
-  const still = await (await fetch(`${origin}/app/${name}`)).text()
-  if (!still.includes('gate-pull')) fail(`after the refused clash /app/${name} answers ${still}`)
+  if (!(await answers('/gate-pull')).includes('gate-pull'))
+    fail('after the refused clash /app/gate-pull does not answer the first plugin')
+  // Past the watcher's debounce: none of that loaded the app's code again.
+  await new Promise((done) => setTimeout(done, 1500))
+  const after = reloadSeq()
+  if (after !== before)
+    fail(
+      `the frame loaded the app again during the pulls (reload seq ${String(before)} -> ${String(after)})`,
+    )
+  // An agent editing a pulled plugin: that is a change of the app's code, so the frame loads it again and the edit answers.
+  const source = join(app, 'plugins', name, 'index.ts')
+  writeFileSync(
+    source,
+    readFileSync(source, 'utf8').replace(
+      "c.json({ from: 'gate-pull' })",
+      "c.json({ from: 'gate-pull', edited: true })",
+    ),
+  )
+  const edited = await until(
+    async () =>
+      (await answers('/gate-pull').catch(() => '')).includes('"edited":true') ? true : undefined,
+    60_000,
+  )
+  if (edited !== true) fail('an edit to a pulled plugin was not loaded again')
+  if (reloadSeq() === after)
+    fail('an edit to a pulled plugin answered without the frame loading the app again')
   log(
-    'the pull line works in the frame: a wrong digest is refused, two releases pulled in a row answer in the canvas with no restart, list and remove work, a taken route is refused naming its plugin',
+    'the pull line works in the frame: pulls from a local file and from GitHub, and two that fail, load nothing again; list names where each pull came from, remove takes an untouched pull; a taken route is refused naming its plugin; an edit to a pulled plugin loads the app again',
   )
 }
 

@@ -5,8 +5,9 @@
  * `plugin-share` row's `pulled` config) and the plugin runs at once. Loading the whole app again for those writes restarts every app row for seconds,
  * and a second pull made meanwhile is cut off. The files themselves say which writes those were, so this needs no timer and no event:
  *
- * - `plugins/<name>/` that digests to the digest `blend.yaml` remembers for it is the released plugin as pulled. An edit changes the digest, so an
- *   agent editing a pulled plugin still has the app loaded again.
+ * - `plugins/<name>/` that digests to the digest of its pull is the released plugin as pulled. An edit changes the digest, so an agent editing a pulled
+ *   plugin still has the app loaded again. The digest is the one `blend.yaml` remembers or, for a pull `blend.yaml` does not remember (from a local
+ *   file), the one the running `pluginShare` installed.
  * - `plugins/<name>/` that is gone and was not there when the app's code was last loaded came and went live (a refused pull, a plugin removed live).
  * - `blend.yaml` that differs only in the pulled records changes no row.
  *
@@ -58,13 +59,16 @@ function pluginFolders(root: string): ReadonlySet<string> {
   return new Set(readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name))
 }
 
+/** The digest a running app's pull installed, by plugin name; undefined when it pulled no plugin of that name (or is not running). */
+export type PulledDigest = (name: string) => string | undefined
+
 /** The app's files as its code was last loaded, and the decision for each burst of changes after it. */
 export class AppliedLive {
   private definition: string
   private folders: ReadonlySet<string>
 
-  /** `root` is the app's folder; the state is read now, as the app's code was loaded at start. */
-  constructor(private readonly root: string) {
+  /** `root` is the app's folder; the state is read now, as the app's code was loaded at start. `pulledDigest` answers for a pull `blend.yaml` does not remember. */
+  constructor(private readonly root: string, private readonly pulledDigest: PulledDigest = () => undefined) {
     this.definition = this.read().app
     this.folders = pluginFolders(root)
   }
@@ -91,7 +95,7 @@ export class AppliedLive {
       if (name === undefined || name === '') return true
       const dir = join(this.root, 'plugins', name)
       if (existsSync(dir) && statSync(dir).isDirectory()) {
-        const remembered = now.pulled[name]
+        const remembered = now.pulled[name] ?? this.pulledDigest(name)
         if (remembered === undefined || digestFolder(dir) !== remembered) return true
       } else if (this.folders.has(name)) return true
     }
@@ -113,9 +117,9 @@ export class AppliedLive {
 export function watchAppFiles(
   root: string,
   reload: () => void,
-  options: { readonly debounceMs?: number; readonly report?: (cause: unknown) => void } = {},
+  options: { readonly debounceMs?: number; readonly report?: (cause: unknown) => void; readonly pulledDigest?: PulledDigest } = {},
 ): () => void {
-  const applied = new AppliedLive(root)
+  const applied = new AppliedLive(root, options.pulledDigest)
   const onChange = (changed: readonly string[]): void => {
     try {
       if (!applied.needsReload(changed)) return
@@ -125,10 +129,24 @@ export function watchAppFiles(
     }
     reload()
   }
-  const stopCode = watchFolders([join(root, 'src'), join(root, 'plugins')], onChange, options)
-  const stopBlend = watchFolder(root, onChange, { ...options, only: ['blend.yaml'] })
+  const watching = { ...(options.debounceMs === undefined ? {} : { debounceMs: options.debounceMs }), ...(options.report === undefined ? {} : { report: options.report }) }
+  const stopCode = watchFolders([join(root, 'src'), join(root, 'plugins')], onChange, watching)
+  const stopBlend = watchFolder(root, onChange, { ...watching, only: ['blend.yaml'] })
   return () => {
     stopCode()
     stopBlend()
+  }
+}
+
+/**
+ * The running app's `pluginShare` as the frame reads it: its `pulledDigest`, when the service is there and has one. Read at each call, as the app's rows
+ * come and go with a reload; anything else answers undefined, so the decision falls back to `blend.yaml` alone.
+ */
+export function pulledDigestOf(service: () => unknown): PulledDigest {
+  return (name) => {
+    const share = service() as { pulledDigest?: unknown } | undefined
+    if (typeof share?.pulledDigest !== 'function') return undefined
+    const digest: unknown = (share.pulledDigest as (name: string) => unknown).call(share, name)
+    return typeof digest === 'string' ? digest : undefined
   }
 }

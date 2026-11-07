@@ -101,7 +101,7 @@ export interface SharedPluginInfo {
   readonly state: string
   /** The source it was pulled from (`github:<owner>/<repo>@<version>` or an address); absent for one made in this app or pulled from a local file. */
   readonly pulledFrom?: string
-  /** Who released it: the account of a `github:` source. */
+  /** Who released it: the account of a `github:` source or of a release address on github.com. */
   readonly author?: string
 }
 
@@ -128,8 +128,9 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** The account of a `github:<owner>/<repo>@<version>` source. */
-const authorOf = (source: string): string | undefined => /^github:([^/]+)\//u.exec(source)?.[1]
+/** The account that released a source: the owner of a `github:<owner>/<repo>@<version>` source or of a release address on github.com. */
+const authorOf = (source: string): string | undefined =>
+  (/^github:([^/]+)\//u.exec(source) ?? /^https:\/\/github\.com\/([^/]+)\//u.exec(source))?.[1]
 
 /** The license a new public plugin is offered under; the plan shows it before the person says yes. */
 const DEFAULT_LICENSE = 'MIT'
@@ -180,6 +181,8 @@ export class PluginShare extends Service {
   private readonly ports: PublishPorts
   /** One at a time: two pulls of one name must not race for its folder, nor two publishes for its package. */
   private queue: Promise<unknown> = Promise.resolve()
+  /** The content digest of each plugin pulled while the app runs, a local file's too, which `blend.yaml` does not remember. */
+  private readonly live = new Map<string, string>()
 
   /**
    * The context the service was constructed with, in the app's realm. Inside a service method `this.ctx` is Cordis's shadow context of the caller: in the
@@ -195,7 +198,9 @@ export class PluginShare extends Service {
     this.ports = config.publish ?? { host: githubCli(), git: gitCli() }
     // Removing a plugin removes its record. Listened to here, not asked of each caller: every way of removing it goes through extensions.
     ctx.on('extensions/changed', (name, change) => {
-      if (change === 'removed') this.remember(name, undefined)
+      if (change !== 'removed') return
+      this.live.delete(name)
+      this.remember(name, undefined)
     })
     // Not awaited by the app's start: a person offline still gets their app, and the warning says what is missing.
     this.restored = this.inTurn(() => this.restore())
@@ -204,6 +209,14 @@ export class PluginShare extends Service {
   /** Pull a plugin into the running app. Never throws for what a person can act on: a refusal says what is wrong and what to do, and changes nothing. */
   pull(source: string): Promise<PullResult> {
     return this.inTurn(() => this.pullNow(source))
+  }
+
+  /**
+   * The content digest of a pulled plugin as it was installed: set before its folder appears, so whoever sees the folder change can tell the release as
+   * pulled from an edit (the frame then does not load the app again for it). A pull from a local file has no record in `blend.yaml`; this knows it too.
+   */
+  pulledDigest(name: string): string | undefined {
+    return this.live.get(name) ?? this.recorded(name)?.digest
   }
 
   /** The plugins installed while the app runs, each pulled one with its source and author. */
@@ -310,16 +323,17 @@ export class PluginShare extends Service {
   }
 
   private async removeNow(name: string): Promise<SharedRemoveResult> {
-    const record = this.recorded(name)
+    // Read before the removal, which forgets both the record and the live digest.
+    const pulled = this.pulledDigest(name)
     const removed = await this.own.extensions.remove(name)
     if (!removed.ok) return removed
     const folder = join(this.dir, name)
     if (!existsSync(folder)) return { ok: true, name, folder: 'none' }
-    if (record !== undefined && digestFolder(folder) === record.digest) {
+    if (pulled !== undefined && digestFolder(folder) === pulled) {
       rmSync(folder, { recursive: true, force: true })
       return { ok: true, name, folder: 'deleted' }
     }
-    const why = record === undefined ? "is this app's own plugin" : 'was changed after the pull'
+    const why = pulled === undefined ? "is this app's own plugin" : 'was changed after the pull'
     return {
       ok: true,
       name,
@@ -514,6 +528,8 @@ export class PluginShare extends Service {
           next,
         )
       }
+      const liveBefore = this.live.get(name)
+      this.live.set(name, digest)
       if (wrote) renameSync(incoming, target)
       // Remembered as the folder appears, before it is installed, so whoever sees the folder can tell it is these released bytes (the frame then does
       // not load the app again for a plugin the app installs live); a pull that does not end running puts back what was remembered before.
@@ -521,6 +537,8 @@ export class PluginShare extends Service {
       const undo = () => {
         if (wrote) rmSync(target, { recursive: true, force: true })
         if (remembered) this.remember(name, before)
+        if (liveBefore === undefined) this.live.delete(name)
+        else this.live.set(name, liveBefore)
       }
       let result: Awaited<ReturnType<Context['extensions']['install']>>
       try {

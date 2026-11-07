@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { digestFolder } from '@webboxes/blends-core'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AppliedLive, readDefinition, watchAppFiles } from '../src/applied-live.ts'
+import { AppliedLive, pulledDigestOf, readDefinition, watchAppFiles } from '../src/applied-live.ts'
 
 const BLEND = (pulled: Readonly<Record<string, string>>, extraRow = ''): string => {
   const records = Object.entries(pulled)
@@ -100,6 +100,45 @@ describe('AppliedLive', () => {
     expect(applied.needsReload([join(root, 'plugins', 'timer'), join(root, 'blend.yaml')])).toBe(false)
     rmSync(join(root, 'plugins', 'board'), { recursive: true })
     expect(applied.needsReload([join(root, 'plugins', 'board')])).toBe(true)
+  })
+})
+
+describe('a pull blend.yaml does not remember (from a local file)', () => {
+  /** What plugin-share writes for a local pull: the folder only, no record; the running service knows the digest. */
+  function pullLocal(root: string, name: string, live: Map<string, string>): void {
+    const incoming = join(root, 'plugins', `.pulling-${name}`)
+    mkdirSync(incoming, { recursive: true })
+    writeFileSync(join(incoming, 'index.ts'), `export const name = '${name}'\nexport function apply() {}\n`)
+    live.set(name, digestFolder(incoming))
+    renameSync(incoming, join(root, 'plugins', name))
+  }
+
+  it('does not load the app again for the folder the running pluginShare installed, and does for an edit to it', () => {
+    const root = app()
+    const live = new Map<string, string>()
+    const applied = new AppliedLive(root, (name) => live.get(name))
+    pullLocal(root, 'gate', live)
+    expect(applied.needsReload([join(root, 'plugins', 'gate'), join(root, 'plugins', 'gate', 'index.ts')])).toBe(false)
+    writeFileSync(join(root, 'plugins', 'gate', 'index.ts'), "export const name = 'gate'\nexport function apply() { /* edited */ }\n")
+    expect(applied.needsReload([join(root, 'plugins', 'gate', 'index.ts')])).toBe(true)
+  })
+
+  it('loads the app again when no running pluginShare knows the folder', () => {
+    const root = app()
+    const applied = new AppliedLive(root)
+    pullLocal(root, 'gate', new Map())
+    expect(applied.needsReload([join(root, 'plugins', 'gate')])).toBe(true)
+  })
+
+  it('reads the service at each call and answers only a string digest', () => {
+    let service: unknown
+    const digest = pulledDigestOf(() => service)
+    expect(digest('gate')).toBeUndefined()
+    service = { pulledDigest: () => 42 }
+    expect(digest('gate')).toBeUndefined()
+    service = { live: new Map([['gate', 'abc']]), pulledDigest(this: { live: Map<string, string> }, name: string) { return this.live.get(name) } }
+    expect(digest('gate')).toBe('abc')
+    expect(digest('other')).toBeUndefined()
   })
 })
 
