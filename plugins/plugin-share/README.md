@@ -14,6 +14,21 @@ The app must be running (`npm run dev`), because the pull installs into it live.
 
 The app remembers where each pulled plugin came from, in the `plugin-share` row of `blend.yaml`. A copy of the app fetches the same bytes at its next start.
 
+A plugin whose route or home widget another plugin already has is refused, and the message names that plugin. A different copy of a plugin with the same name is refused too, and the message says where the copy in the app came from.
+
+## List and remove
+
+```
+npm run acryl -- plugin list
+npm run acryl -- plugin remove <name>
+```
+
+The list names each plugin installed while the app runs, its version and state. A pulled one also shows the source it came from and its author, the GitHub account that released it.
+
+Remove takes the plugin out of the running app and forgets its record. Its folder goes too when it still holds the release exactly as pulled; the pull line brings it back. A folder with someone's work in it stays, and the answer says so: the app's own plugin, or a pulled one changed since. The app then starts it again at its next start unless you delete the folder.
+
+Both work in the frame as well.
+
 ## Publish
 
 ```

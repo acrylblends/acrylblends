@@ -35,6 +35,8 @@ import {
   type PullResult,
   pluginShare,
   type RestoreOutcome,
+  type SharedPluginInfo,
+  type SharedRemoveResult,
 } from '../index.ts'
 import { splitDigest } from '../pull-check.ts'
 import { pulledRecords } from '../pulled-records.ts'
@@ -109,6 +111,8 @@ async function boot({
     app as unknown as {
       pluginShare: {
         pull(source: string): Promise<PullResult>
+        list(): SharedPluginInfo[]
+        remove(name: string): Promise<SharedRemoveResult>
         planPublish(name: string, options?: PublishOptions): Promise<PublishPlan | PublishRefused>
         publish(
           name: string,
@@ -614,4 +618,79 @@ test('a plugin whose folder is there is not fetched at the start', async () => {
   const again = await boot({ releases: counting, root })
   assert.deepEqual(await again.restored(), [])
   assert.equal(asked, 0)
+})
+
+test('the list says where each pulled plugin came from and who released it; one made in the app has neither', async () => {
+  const release = pack({ 'index.ts': ROUTE })
+  const root = appFolder()
+  const { app, share } = await boot({ releases: releaseOf(release.tarball), root })
+  assert.ok((await share.pull('github:someone/hello@1.0.0')).ok)
+  mkdirSync(join(root, 'plugins', 'mine'))
+  writeFileSync(join(root, 'plugins', 'mine', 'index.ts'), routeSource('mine', '/mine', 'Mine'))
+  const installed = await (
+    app as unknown as { extensions: { install(dir: string): Promise<{ ok: boolean }> } }
+  ).extensions.install(join(root, 'plugins', 'mine'))
+  assert.ok(installed.ok)
+  assert.deepEqual(
+    share
+      .list()
+      .map(({ name, state, pulledFrom, author }) => ({ name, state, pulledFrom, author })),
+    [
+      {
+        name: 'hello',
+        state: 'active',
+        pulledFrom: 'github:someone/hello@1.0.0',
+        author: 'someone',
+      },
+      { name: 'mine', state: 'active', pulledFrom: undefined, author: undefined },
+    ],
+  )
+})
+
+test('removing a pulled plugin takes its folder and record when the folder is the release as pulled', async () => {
+  const release = pack({ 'index.ts': ROUTE })
+  const root = appFolder()
+  const { share, get } = await boot({ releases: releaseOf(release.tarball), root })
+  assert.ok((await share.pull('github:someone/hello@1.0.0')).ok)
+  assert.deepEqual(await share.remove('hello'), { ok: true, name: 'hello', folder: 'deleted' })
+  assert.equal(existsSync(join(root, 'plugins', 'hello')), false)
+  assert.deepEqual(recordsIn(root), {})
+  assert.equal((await get('/hello')).status, 404)
+  // The pull line brings it back.
+  assert.ok((await share.pull('github:someone/hello@1.0.0')).ok)
+})
+
+test('removing a pulled plugin changed since the pull keeps the folder and says why', async () => {
+  const release = pack({ 'index.ts': ROUTE })
+  const root = appFolder()
+  const { share } = await boot({ releases: releaseOf(release.tarball), root })
+  assert.ok((await share.pull('github:someone/hello@1.0.0')).ok)
+  writeFileSync(join(root, 'plugins', 'hello', 'mine.md'), 'an edit a person made\n')
+  const removed = await share.remove('hello')
+  assert.equal(removed.ok && removed.folder, 'kept')
+  assert.match(
+    removed.ok ? (removed.note ?? '') : '',
+    /plugins\/hello was changed after the pull, so it stays/,
+  )
+  assert.ok(existsSync(join(root, 'plugins', 'hello', 'mine.md')))
+  assert.deepEqual(recordsIn(root), {})
+})
+
+test('a different copy of the same name is refused, naming where the copy in the app came from', async () => {
+  const ana = pack({ 'index.ts': ROUTE })
+  const fay = pack({ 'index.ts': routeSource('hello', '/hello', 'Hi from fay') })
+  // Two people's releases of a plugin named hello: the port serves whichever is being pulled.
+  let serving = ana.tarball
+  const releases: ReleasePort = { ...releaseOf(ana.tarball), download: async () => serving }
+  const root = appFolder()
+  const { share } = await boot({ releases, root })
+  assert.ok((await share.pull('github:ana/hello@1.0.0')).ok)
+  serving = fay.tarball
+  const result = await share.pull('github:fay/hello@1.0.0')
+  refused(
+    result,
+    'folder-exists',
+    /^plugins\/hello holds a different copy of this plugin, pulled from github:ana\/hello@1\.0\.0$/,
+  )
+  assert.match(result.ok ? '' : result.next, /plugin remove hello/)
 })

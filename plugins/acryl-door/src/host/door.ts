@@ -35,8 +35,12 @@ export interface ExtensionsPort {
   list(): readonly unknown[]
 }
 
-/** The slice of acrylblends' `pluginShare` service the pull verb uses. */
+/** The slice of acrylblends' `pluginShare` service the pull, list and remove verbs use. */
 export interface PluginSharePort {
+  /** The plugins installed while the app runs, a pulled one with its source and author. */
+  list(): readonly unknown[]
+  /** Take a plugin out and forget its record; a pulled folder still holding the release as pulled goes too. */
+  remove(name: string): Promise<unknown>
   pull(source: string): Promise<{ readonly ok: boolean; readonly action?: string; readonly reason?: string; readonly next?: string }>
   planPublish(name: string, options?: PublishOptionsView): Promise<PublishPlanView | { readonly ok: false; readonly reason: string; readonly next: string }>
   publish(name: string, confirmed: PublishPlanView, options?: PublishOptionsView): Promise<{ readonly ok: boolean; readonly reason?: string }>
@@ -153,14 +157,14 @@ export class Door {
         const result = await this.act(input, signal, scope)
         return { value: result, text: `done${result.target === undefined ? '' : `: ${result.target.role} "${result.target.name}"`}${result.detail === undefined ? '' : ` (${result.detail})`}; look again before the next act` }
       }
-      case 'plugin-list': return this.plugin(extensions => extensions.list(), false)
+      case 'plugin-list': return this.plugin(plugins => plugins.list(), false, this.installed())
       case 'plugin-add': return this.plugin(extensions => extensions.install(this.insideApp(input.folder)))
       case 'plugin-pull': return this.pull(input.source)
       case 'plugin-publish': return this.planPublish(input)
       case 'plugin-remove': {
         const name = input.name
         if (typeof name !== 'string' || name === '') throw new DoorError('invalid', 'plugin remove needs a plugin name')
-        return this.plugin(extensions => extensions.remove(name))
+        return this.plugin(plugins => plugins.remove(name), true, this.installed())
       }
       case 'plugin-reload': return this.plugin(extensions => extensions.reload())
       case 'tool-list': {
@@ -337,8 +341,16 @@ export class Door {
     }
   }
 
-  private async plugin(run: (extensions: ExtensionsPort) => unknown, mutates = true): Promise<VerbAnswer> {
-    const extensions = this.deps.extensions()
+  /**
+   * Who lists and removes the app's plugins: plugin-share where the app has it, as it knows where each pulled plugin came from and is the one app service
+   * the frame's host reaches (extensions stays in the app's own realm there); extensions elsewhere.
+   */
+  private installed(): Pick<ExtensionsPort, 'list' | 'remove'> | undefined {
+    return this.deps.pluginShare?.() ?? this.deps.extensions()
+  }
+
+  private async plugin<Port = ExtensionsPort>(run: (plugins: Port) => unknown, mutates = true, port: Port | undefined = this.deps.extensions() as Port | undefined): Promise<VerbAnswer> {
+    const extensions = port
     if (extensions === undefined) throw new DoorError('unavailable', 'this door has no extensions plugin to drive. In ACRYL\'s frame none is needed: a saved change in src/ or plugins/ reloads the app by itself, so do not restart it. Elsewhere, the app has no way to install plugins while it runs')
     const value = await run(extensions)
     // The app changed under the open pages: reload them (not when the plugin was already as it should be), and answer once they are back.

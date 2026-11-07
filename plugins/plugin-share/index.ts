@@ -94,11 +94,42 @@ export type PullResult =
     }
   | PullRefused
 
+/** One plugin installed while the app runs, as a person reads the list: what it is and, for one pulled, where it came from and who released it. */
+export interface SharedPluginInfo {
+  readonly name: string
+  readonly version: string
+  readonly state: string
+  /** The source it was pulled from (`github:<owner>/<repo>@<version>` or an address); absent for one made in this app or pulled from a local file. */
+  readonly pulledFrom?: string
+  /** Who released it: the account of a `github:` source. */
+  readonly author?: string
+}
+
+/** What removing a plugin did with its folder in `plugins/`. */
+export type RemovedFolder =
+  /** It held the release as pulled, so nothing of anyone's is lost: the pull line brings it back. */
+  | 'deleted'
+  /** It is this app's own work, or a pulled plugin changed after the pull: it stays, and the app starts it again at its next start. */
+  | 'kept'
+  | 'none'
+
+export type SharedRemoveResult =
+  | {
+      readonly ok: true
+      readonly name: string
+      readonly folder: RemovedFolder
+      readonly note?: string
+    }
+  | { readonly ok: false; readonly name: string; readonly errors: readonly string[] }
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     pluginShare: PluginShare
   }
 }
+
+/** The account of a `github:<owner>/<repo>@<version>` source. */
+const authorOf = (source: string): string | undefined => /^github:([^/]+)\//u.exec(source)?.[1]
 
 /** The license a new public plugin is offered under; the plan shows it before the person says yes. */
 const DEFAULT_LICENSE = 'MIT'
@@ -173,6 +204,31 @@ export class PluginShare extends Service {
   /** Pull a plugin into the running app. Never throws for what a person can act on: a refusal says what is wrong and what to do, and changes nothing. */
   pull(source: string): Promise<PullResult> {
     return this.inTurn(() => this.pullNow(source))
+  }
+
+  /** The plugins installed while the app runs, each pulled one with its source and author. */
+  list(): SharedPluginInfo[] {
+    const file = join(this.own.appInstance.root, 'blend.yaml')
+    const records = existsSync(file) ? pulledRecords(readFileSync(file, 'utf8')) : {}
+    return this.own.extensions.list().map(({ name, version, state }) => {
+      const record = records[name]
+      const author = record === undefined ? undefined : authorOf(record.source)
+      return {
+        name,
+        version,
+        state,
+        ...(record === undefined ? {} : { pulledFrom: record.source }),
+        ...(author === undefined ? {} : { author }),
+      }
+    })
+  }
+
+  /**
+   * Take a plugin out of the running app and forget its record. A pulled plugin's folder is deleted when it still holds the release as pulled; a
+   * folder with someone's work in it (this app's own plugin, or a pulled one changed since) stays, and the answer says so.
+   */
+  remove(name: string): Promise<SharedRemoveResult> {
+    return this.inTurn(() => this.removeNow(name))
   }
 
   private inTurn<T>(step: () => Promise<T>): Promise<T> {
@@ -251,6 +307,25 @@ export class PluginShare extends Service {
       if (existsSync(join(root, LOCK_FILE))) writeLock(root)
     }
     return record === undefined || pulledRecords(next)[name] !== undefined
+  }
+
+  private async removeNow(name: string): Promise<SharedRemoveResult> {
+    const record = this.recorded(name)
+    const removed = await this.own.extensions.remove(name)
+    if (!removed.ok) return removed
+    const folder = join(this.dir, name)
+    if (!existsSync(folder)) return { ok: true, name, folder: 'none' }
+    if (record !== undefined && digestFolder(folder) === record.digest) {
+      rmSync(folder, { recursive: true, force: true })
+      return { ok: true, name, folder: 'deleted' }
+    }
+    const why = record === undefined ? "is this app's own plugin" : 'was changed after the pull'
+    return {
+      ok: true,
+      name,
+      folder: 'kept',
+      note: `plugins/${name} ${why}, so it stays and the app starts it again at its next start; delete the folder to drop it for good`,
+    }
   }
 
   /** What `blend.yaml` remembers about one pulled plugin now. */
@@ -424,17 +499,24 @@ export class PluginShare extends Service {
       const digest = digestFolder(incoming)
       // The folder may be there already: the same bytes are already pulled, anything else is someone's work.
       const wrote = !existsSync(target)
-      if (!wrote && digestFolder(target) !== digest) {
+      const before = this.recorded(name)
+      const held = wrote ? undefined : digestFolder(target)
+      if (held !== undefined && held !== digest) {
+        const holder = before === undefined ? 'made in this app' : `pulled from ${before.source}`
+        // Only an untouched pulled copy goes with `plugin remove`; anything else is someone's work, which the person moves themselves.
+        const next =
+          before !== undefined && held === before.digest
+            ? `keep it, or remove it (npm run acryl -- plugin remove ${name}) and pull again`
+            : `keep it, or move plugins/${name} out of plugins/ and pull again`
         return refuse(
           'folder-exists',
-          `plugins/${name} holds a different copy of this plugin`,
-          `keep it, or remove plugins/${name} and pull again`,
+          `plugins/${name} holds a different copy of this plugin, ${holder}`,
+          next,
         )
       }
       if (wrote) renameSync(incoming, target)
       // Remembered as the folder appears, before it is installed, so whoever sees the folder can tell it is these released bytes (the frame then does
       // not load the app again for a plugin the app installs live); a pull that does not end running puts back what was remembered before.
-      const before = this.recorded(name)
       const remembered = source !== undefined && this.remember(name, { source, integrity, digest })
       const undo = () => {
         if (wrote) rmSync(target, { recursive: true, force: true })

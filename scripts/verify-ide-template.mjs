@@ -761,12 +761,13 @@ async function checkFramedPull(app, origin) {
   const tarball = releaseServing(app, name, '/gate-pull')
   const npm = npmSpawn()
   // No retry: a pull is installed live and the frame does not load the app again for it (spec 049 T022), so the next pull right after it is answered.
-  const line = (input) =>
-    spawnSync(npm.command, ['run', 'acryl', '--', 'plugin', 'pull', input], {
+  const door = (...args) =>
+    spawnSync(npm.command, ['run', '--silent', 'acryl', '--', 'plugin', ...args], {
       cwd: app,
       encoding: 'utf8',
       ...npm.options,
     })
+  const line = (input) => door('pull', input)
   const refused = line(`${tarball}@sha256:${'0'.repeat(64)}`)
   if (refused.status !== 1 || !refused.stderr.includes('different bytes'))
     fail(`a wrong digest was not refused in the frame:\n${refused.stdout}${refused.stderr}`)
@@ -787,6 +788,17 @@ async function checkFramedPull(app, origin) {
   ]
   if (!both[0].includes('gate-pull') || !both[1].includes('gate-two'))
     fail(`after two pulls in a row the app answers ${both.join(' and ')}`)
+  // The door lists and removes plugins in the frame too, through plugin-share (spec 049 T021): the frame's host reaches no extensions of its own.
+  const listed = door('list', '--json')
+  const names = listed.status === 0 ? JSON.parse(listed.stdout).map((plugin) => plugin.name) : []
+  if (!names.includes(name) || !names.includes('gate-two'))
+    fail(`plugin list in the frame does not name both pulls:\n${listed.stdout}${listed.stderr}`)
+  const removed = door('remove', 'gate-two')
+  if (removed.status !== 0)
+    fail(`plugin remove failed in the frame:\n${removed.stdout}${removed.stderr}`)
+  const gone = await (await fetch(`${origin}/app/gate-two`)).text()
+  if (gone.includes('"from":"gate-two"'))
+    fail('after plugin remove /app/gate-two still answers the removed plugin')
   // A second person's plugin on the same route: refused with the first one's name, and the route still answers the first (spec 049 T025).
   const clash = line(releaseServing(app, 'gate-clash', '/gate-pull'))
   if (clash.status !== 1 || !clash.stderr.includes('GET /gate-pull is already served by gate-pull'))
@@ -798,7 +810,7 @@ async function checkFramedPull(app, origin) {
   const still = await (await fetch(`${origin}/app/${name}`)).text()
   if (!still.includes('gate-pull')) fail(`after the refused clash /app/${name} answers ${still}`)
   log(
-    'the pull line works in the frame: a wrong digest is refused, two releases pulled in a row answer in the canvas with no restart, a taken route is refused naming its plugin',
+    'the pull line works in the frame: a wrong digest is refused, two releases pulled in a row answer in the canvas with no restart, list and remove work, a taken route is refused naming its plugin',
   )
 }
 

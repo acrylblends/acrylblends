@@ -184,6 +184,8 @@ describe('act navigate says what the app answered at the path', () => {
 
   it('after a pull that changed the app, not after a refusal or a pull of what is already there, and the verb needs a source and the row', async () => {
     const pulling = (answer: { ok: boolean; action?: string; reason?: string; next?: string }): PluginSharePort => ({
+      list: () => [],
+      remove: async () => ({ ok: true }),
       pull: async () => answer,
       planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
       publish: async () => ({ ok: false }),
@@ -202,10 +204,27 @@ describe('act navigate says what the app answered at the path', () => {
     await expect(door(channel).run('plugin-pull', { source: 'github:a/b' }, never)).rejects.toThrow(/npx acrylblends add plugin-share/)
   })
 
+  it('plugin list and remove go through plugin-share where the app has it, as in the frame, where the door reaches no extensions', async () => {
+    const removed: string[] = []
+    const share: PluginSharePort = {
+      list: () => [{ name: 'pomodoro', version: '0.1.0', state: 'active', pulledFrom: 'github:inboxxobni/acrylblends-pomodoro@0.1.0', author: 'inboxxobni' }],
+      remove: async (name) => { removed.push(name); return { ok: true, name, folder: 'deleted' } },
+      pull: async () => ({ ok: true }),
+      planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
+      publish: async () => ({ ok: false }),
+    }
+    const d = door(new UiChannel(), { pluginShare: share, reloadOnChange: false })
+    expect((await d.run('plugin-list', {}, never)).value).toEqual(share.list())
+    expect((await d.run('plugin-remove', { name: 'pomodoro' }, never)).value).toEqual({ ok: true, name: 'pomodoro', folder: 'deleted' })
+    expect(removed).toEqual(['pomodoro'])
+  })
+
   it('plugin publish answers a plan and cannot publish, whatever its arguments say', async () => {
     const plan = { owner: 'inboxxobni', repo: 'hello', version: '0.1.0', visibility: 'public', license: 'MIT', createsRepository: true, files: ['index.ts'], digest: 'd', pullLine: 'npm run acryl -- plugin pull github:inboxxobni/hello@0.1.0@sha256:d' }
     const published: unknown[] = []
     const share: PluginSharePort = {
+      list: () => [],
+      remove: async () => ({ ok: true }),
       pull: async () => ({ ok: true }),
       planPublish: async () => plan,
       publish: async (...args) => { published.push(args); return { ok: true } },
