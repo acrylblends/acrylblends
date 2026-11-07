@@ -1,7 +1,7 @@
 {
   "name": "builder",
   "description": "The agent's tools for building the app it runs in: write, install, read, list and remove extensions, with real results.",
-  "requires": ["agent", "extensions", "sandbox"],
+  "requires": ["agent", "extensions", "sandbox", "plugin-share"],
   "inject": ["extensions", "tools", "appInstance"],
   "provides": [],
   "dependencies": {

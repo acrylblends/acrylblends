@@ -11,7 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { scripted, type Tools } from '../agent/index.ts'
 import { NAME } from '../extensions/index.ts'
 import type {} from '../instance/index.ts'
-import { packagePlugin } from './package.ts'
+import { packagePlugin } from '../plugin-share/package.ts'
 import { builderRules } from './script.ts'
 
 export interface BuilderConfig {

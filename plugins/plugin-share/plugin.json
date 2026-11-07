@@ -1,7 +1,7 @@
 {
   "name": "plugin-share",
   "description": "Share plugins between people. Pull one someone released into the running app: fetched without running anything, checked by digest and for every OS, then installed live. Publish one, only as a plan a person confirmed.",
-  "requires": ["instance", "extensions", "builder", "manifest"],
+  "requires": ["instance", "extensions", "manifest"],
   "inject": ["extensions", "appInstance"],
   "provides": ["pluginShare"],
   "dependencies": {

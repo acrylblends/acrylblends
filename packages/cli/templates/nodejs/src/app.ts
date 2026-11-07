@@ -14,6 +14,7 @@ import {
   loadManifest,
   type ParameterValue,
 } from '../plugins/manifest/index.ts'
+import { pluginShare } from '../plugins/plugin-share/index.ts'
 import { doorEnabled } from './door.ts'
 import { FRAME_MOUNT_PREFIX, routes } from './routes.ts'
 
@@ -23,6 +24,7 @@ export const registry = {
   'acryl-node-server': nodeServer,
   'acryl-door': door,
   extensions,
+  'plugin-share': pluginShare,
   routes,
 }
 
@@ -104,6 +106,8 @@ export async function composeInto(
   const leaveOut = new Set<string>(options.host === true ? HOST_ROWS : [])
   if (!own) leaveOut.add('acryl-node-server').add('acryl-door')
   if (!doorEnabled()) leaveOut.add('acryl-door')
+  // A pull runs a stranger's code and a publish leaves the machine: development only, like the door.
+  if (process.env.NODE_ENV === 'production') leaveOut.add('plugin-share')
   const manifest = without(read, ...leaveOut)
   // The rows that name one of the app's own plugin folders (a feature: plugins/<name>/ and its row) rather than a registry import. Each one that runs
   // is imported here; all of them, off or on, belong to their row, so the extensions row never starts them a second time.
@@ -128,6 +132,8 @@ export async function composeInto(
         sources: [{ dir: PLUGINS_DIR, trust: 'install' }],
         rows: ownRows,
       },
+      // Pulled plugins go where the extensions row installs from.
+      'plugin-share': { dir: PLUGINS_DIR },
       // Only the app's own server listens; the frame host owns the server and its port.
       ...(own ? { server: { port: chosen.port.start, scan: chosen.port.scan ? 20 : 0 } } : {}),
     },

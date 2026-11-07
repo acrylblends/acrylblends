@@ -652,7 +652,7 @@ ${composition.stdout}`)
     return await startServer()
   }
   await checkTileInBrowser(url, origin, jar, page, output, mock, restartSamePort)
-  if (template === 'agent') await checkFramedPull(app, origin)
+  if (template !== 'todo') await checkFramedPull(app, origin)
   // The frame's stable launch token end to end (119): verify-frame-token boots this app twice on its own port and asserts the same address after the
   // restart, that the address admits the page (303 and the cookie) and that the cookie admits the frame's WebSocket.
   await stopServer()

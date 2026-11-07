@@ -34,10 +34,10 @@ import {
   sharePlugin,
   storeRootOf,
 } from '@webboxes/plugin-hub'
-import { packagePlugin } from '../builder/package.ts'
 import { NAME } from '../extensions/index.ts'
 import type {} from '../instance/index.ts'
 import { LOCK_FILE, writeLock } from '../manifest/lock.ts'
+import { packagePlugin } from './package.ts'
 import {
   type PublishOptions,
   type PublishPlan,

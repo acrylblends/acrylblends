@@ -400,6 +400,7 @@ describe('init', () => {
       '@deepseek-ai/schemastery': '3.18.4',
       '@webboxes/app-persistence': '0.1.1',
       '@webboxes/blends-core': '0.5.0',
+      '@webboxes/plugin-hub': '0.2.0',
       typescript: '6.0.3',
       yaml: '2.9.0',
     })

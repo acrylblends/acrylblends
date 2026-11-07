@@ -24,7 +24,7 @@ It prints the plan: account, repository, version, visibility and license. Only a
 
 ## An app made by an older version
 
-Every new app has this plugin. `upgrade` does not add it to an older app, so add it and mount it by hand:
+Every new app has this plugin, except one made from the todo template, which installs nothing live. `upgrade` does not add it to an older app, so add it and mount it by hand:
 
 ```
 npx acrylblends add plugin-share
