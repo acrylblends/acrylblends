@@ -646,6 +646,11 @@ test('the list says where each pulled plugin came from and who released it; one 
       { name: 'mine', state: 'active', pulledFrom: undefined, author: undefined },
     ],
   )
+  // Everything extensions says is kept (a pending plugin's missing services among it): the source and author are added, nothing is left out.
+  assert.deepEqual(
+    share.list().map(({ pulledFrom: _from, author: _author, ...info }) => info),
+    (app as unknown as { extensions: { list(): readonly unknown[] } }).extensions.list(),
+  )
 })
 
 test('removing a pulled plugin takes its folder and record when the folder is the release as pulled', async () => {

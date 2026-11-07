@@ -34,7 +34,7 @@ import {
   sharePlugin,
   storeRootOf,
 } from '@webboxes/plugin-hub'
-import { NAME } from '../extensions/index.ts'
+import { type ExtensionInfo, NAME } from '../extensions/index.ts'
 import type {} from '../instance/index.ts'
 import { LOCK_FILE, writeLock } from '../manifest/lock.ts'
 import { packagePlugin } from './package.ts'
@@ -95,10 +95,8 @@ export type PullResult =
   | PullRefused
 
 /** One plugin installed while the app runs, as a person reads the list: what it is and, for one pulled, where it came from and who released it. */
-export interface SharedPluginInfo {
-  readonly name: string
-  readonly version: string
-  readonly state: string
+/** What extensions says about an installed plugin (its state, the services a pending one waits for, ...), and where a pulled one came from. */
+export interface SharedPluginInfo extends ExtensionInfo {
   /** The source it was pulled from (`github:<owner>/<repo>@<version>` or an address); absent for one made in this app or pulled from a local file. */
   readonly pulledFrom?: string
   /** Who released it: the account of a `github:` source or of a release address on github.com. */
@@ -223,13 +221,11 @@ export class PluginShare extends Service {
   list(): SharedPluginInfo[] {
     const file = join(this.own.appInstance.root, 'blend.yaml')
     const records = existsSync(file) ? pulledRecords(readFileSync(file, 'utf8')) : {}
-    return this.own.extensions.list().map(({ name, version, state }) => {
-      const record = records[name]
+    return this.own.extensions.list().map((info) => {
+      const record = records[info.name]
       const author = record === undefined ? undefined : authorOf(record.source)
       return {
-        name,
-        version,
-        state,
+        ...info,
         ...(record === undefined ? {} : { pulledFrom: record.source }),
         ...(author === undefined ? {} : { author }),
       }
