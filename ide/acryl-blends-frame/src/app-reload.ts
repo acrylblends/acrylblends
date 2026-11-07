@@ -11,6 +11,7 @@
  */
 
 import { existsSync, watch } from 'node:fs'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AppReloadView } from './contract.ts'
 import type { AppGeneration } from './app-generation.ts'
@@ -163,17 +164,19 @@ export function isNoise(filename: string): boolean {
 }
 
 /**
- * Calls `onChange` once, `debounceMs` after the last change of a file under `dir` (recursively, or only the `only` files at its top), whoever made it.
- * Returns the function that stops watching; a folder that does not exist is not watched (an app without `src/` has no code to load again).
+ * Calls `onChange` once, `debounceMs` after the last change of a file under `dir` (recursively, or only the `only` files at its top), whoever made it,
+ * with the paths that changed in the burst (`dir` itself when the system did not say which file). Returns the function that stops watching; a folder
+ * that does not exist is not watched (an app without `src/` has no code to load again).
  */
 export function watchFolder(
   dir: string,
-  onChange: () => void,
+  onChange: (changed: readonly string[]) => void,
   options: { readonly debounceMs?: number; readonly report?: (cause: unknown) => void; readonly only?: readonly string[] } = {},
 ): () => void {
   if (!existsSync(dir)) return () => {}
   const debounceMs = options.debounceMs ?? RELOAD_DEBOUNCE_MS
   let timer: NodeJS.Timeout | undefined
+  const changed = new Set<string>()
   const startedAt = Date.now()
   // `only`: the files at the folder's top that count (the app's blend.yaml in its root); the folder is then not watched below its top.
   const only = options.only
@@ -182,8 +185,13 @@ export function watchFolder(
     if (Date.now() - startedAt < REPLAY_WINDOW_MS) return
     if (only !== undefined && (typeof filename !== 'string' || !only.includes(filename))) return
     if (typeof filename === 'string' && isNoise(filename)) return
+    changed.add(typeof filename === 'string' ? join(dir, filename) : dir)
     clearTimeout(timer)
-    timer = setTimeout(onChange, debounceMs)
+    timer = setTimeout(() => {
+      const burst = [...changed]
+      changed.clear()
+      onChange(burst)
+    }, debounceMs)
   })
   watcher.on('error', (cause) => { options.report?.(cause) })
   return () => {
@@ -193,7 +201,7 @@ export function watchFolder(
 }
 
 /** {@link watchFolder} over several folders, one debounce per folder: a burst across two folders reloads once, as a reload already running takes the next one in. */
-export function watchFolders(dirs: readonly string[], onChange: () => void, options: { readonly debounceMs?: number; readonly report?: (cause: unknown) => void } = {}): () => void {
+export function watchFolders(dirs: readonly string[], onChange: (changed: readonly string[]) => void, options: { readonly debounceMs?: number; readonly report?: (cause: unknown) => void } = {}): () => void {
   const stops = dirs.map(dir => watchFolder(dir, onChange, options))
   return () => { for (const stop of stops) stop() }
 }

@@ -308,6 +308,9 @@ importers:
 
   ide/acryl-blends-frame:
     dependencies:
+      '@webboxes/blends-core':
+        specifier: 0.5.0
+        version: 0.5.0
       '@webboxes/plugin-hub':
         specifier: 0.2.0
         version: 0.2.0
@@ -323,6 +326,9 @@ importers:
       acryl-workspace:
         specifier: workspace:*
         version: link:../acryl-workspace
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
     devDependencies:
       '@acryl/ui':
         specifier: workspace:*

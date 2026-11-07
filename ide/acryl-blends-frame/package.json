@@ -59,11 +59,13 @@
     "prepack": "pnpm run check"
   },
   "dependencies": {
+    "@webboxes/blends-core": "0.5.0",
     "@webboxes/plugin-hub": "0.2.0",
     "acryl-app-shell": "workspace:*",
     "acryl-loopback-http": "workspace:*",
     "acryl-versions": "workspace:*",
-    "acryl-workspace": "workspace:*"
+    "acryl-workspace": "workspace:*",
+    "yaml": "2.9.0"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-llm": "0.2.0-rc.2",

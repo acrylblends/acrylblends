@@ -253,6 +253,12 @@ export class PluginShare extends Service {
     return record === undefined || pulledRecords(next)[name] !== undefined
   }
 
+  /** What `blend.yaml` remembers about one pulled plugin now. */
+  private recorded(name: string): PulledRecord | undefined {
+    const file = join(this.own.appInstance.root, 'blend.yaml')
+    return existsSync(file) ? pulledRecords(readFileSync(file, 'utf8'))[name] : undefined
+  }
+
   /** Fetch the remembered plugins whose folder is gone, exactly as recorded: other bytes are refused, and the record stays for the person to decide. */
   private async restore(): Promise<readonly RestoreOutcome[]> {
     const file = join(this.own.appInstance.root, 'blend.yaml')
@@ -418,16 +424,21 @@ export class PluginShare extends Service {
       const digest = digestFolder(incoming)
       // The folder may be there already: the same bytes are already pulled, anything else is someone's work.
       const wrote = !existsSync(target)
-      if (wrote) renameSync(incoming, target)
-      else if (digestFolder(target) !== digest) {
+      if (!wrote && digestFolder(target) !== digest) {
         return refuse(
           'folder-exists',
           `plugins/${name} holds a different copy of this plugin`,
           `keep it, or remove plugins/${name} and pull again`,
         )
       }
+      if (wrote) renameSync(incoming, target)
+      // Remembered as the folder appears, before it is installed, so whoever sees the folder can tell it is these released bytes (the frame then does
+      // not load the app again for a plugin the app installs live); a pull that does not end running puts back what was remembered before.
+      const before = this.recorded(name)
+      const remembered = source !== undefined && this.remember(name, { source, integrity, digest })
       const undo = () => {
         if (wrote) rmSync(target, { recursive: true, force: true })
+        if (remembered) this.remember(name, before)
       }
       let result: Awaited<ReturnType<Context['extensions']['install']>>
       try {
@@ -457,7 +468,7 @@ export class PluginShare extends Service {
         digest,
         action: result.action,
         state: result.state,
-        remembered: source !== undefined && this.remember(name, { source, integrity, digest }),
+        remembered,
       }
     } finally {
       rmSync(incoming, { recursive: true, force: true })
