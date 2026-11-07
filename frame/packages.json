@@ -18,6 +18,6 @@
     "acryl-system-prompt": { "name": "system-prompt", "version": "0.1.0" },
     "acryl-app-context": { "name": "app-context", "version": "0.1.0" },
     "acryl-versions": { "name": "versions", "version": "0.1.0" },
-    "acryl-blends-frame": { "name": "blends-frame", "version": "0.1.0" }
+    "acryl-blends-frame": { "name": "blends-frame", "version": "0.1.1" }
   }
 }
