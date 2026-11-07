@@ -10,13 +10,14 @@
  * Exit codes: 0 done, 1 the verb failed (its code and message are printed), 2 a usage error, 3 no running app in this folder.
  */
 
+import { createInterface } from 'node:readline/promises'
 import { existsSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readDoorFile, STATE_DIR, DOOR_FILE } from '../host/door-file.ts'
 
 const ACT_OPS = new Set(['click', 'type', 'select', 'press', 'scroll', 'wait', 'reload', 'navigate'])
-const VALUED = new Set(['--dir', '--ref', '--text', '--option', '--key', '--direction', '--amount', '--cursor', '--max-nodes', '--role', '--name', '--timeout-ms', '--id', '--width', '--height', '--window', '--tool', '--args', '--path'])
+const VALUED = new Set(['--dir', '--owner', '--ref', '--text', '--option', '--key', '--direction', '--amount', '--cursor', '--max-nodes', '--role', '--name', '--timeout-ms', '--id', '--width', '--height', '--window', '--tool', '--args', '--path'])
 const FLAGS = new Set(['--json', '--submit', '--no-clear', '--gone', '--force', '--help'])
 
 export class UsageError extends Error {}
@@ -42,7 +43,7 @@ const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
   act navigate --path <path of the app, e.g. /demo>
   act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]
   (look and every act take --window <n>: the desktop window whose page it is for; window list prints the numbers)
-  plugin list | plugin add <folder> | plugin pull <source> | plugin remove <name> | plugin reload
+  plugin list | plugin add <folder> | plugin pull <source> | plugin publish <name> [--owner <account>] | plugin remove <name> | plugin reload
   window list | window open [--path <p>] | window focus --id <n> | window close --id <n> [--force]
   window resize --id <n> --width <px> --height <px>
   menu list | menu click --path "File>New Note" [--force]
@@ -139,8 +140,13 @@ export function parseInvocation(argv: readonly string[], env: NodeJS.ProcessEnv 
       if (second === 'list' || second === 'reload') return make(`plugin-${second}`)
       if (second === 'add') { if (third === undefined) throw new UsageError('plugin add needs a folder, e.g. plugin add plugins/pomodoro'); return make('plugin-add', { folder: third }) }
       if (second === 'pull') { if (third === undefined) throw new UsageError('plugin pull needs a source, e.g. plugin pull github:someone/pomodoro@0.1.0'); return make('plugin-pull', { source: third }) }
+      if (second === 'publish') {
+        if (third === undefined) throw new UsageError('plugin publish needs a plugin name, e.g. plugin publish pomodoro')
+        const owner = values.get('--owner')
+        return make('plugin-publish', { name: third, ...(owner === undefined ? {} : { owner }) })
+      }
       if (second === 'remove') { if (third === undefined) throw new UsageError('plugin remove needs a plugin name'); return make('plugin-remove', { name: third }) }
-      throw new UsageError(`plugin needs list, add, pull, remove or reload\n${USAGE}`)
+      throw new UsageError(`plugin needs list, add, pull, publish, remove or reload\n${USAGE}`)
     }
     case 'window': {
       const id = integer(values, '--id')
@@ -200,6 +206,11 @@ export interface Io {
   readonly out: (text: string) => void
   readonly err: (text: string) => void
   readonly fetch?: typeof fetch
+  /**
+   * Ask the person at this terminal; absent when nobody is there (a pipe, an agent's shell), and then nothing that needs a yes can happen.
+   * @returns whether they said yes.
+   */
+  readonly ask?: (question: string) => Promise<boolean>
 }
 
 /** Run one invocation. @returns the exit code. */
@@ -244,7 +255,42 @@ export async function main(argv: readonly string[], io: Io): Promise<number> {
     return 1
   }
   io.out(invocation.json ? `${JSON.stringify(body.value)}\n` : `${body.text ?? ''}\n`)
+  if (invocation.verb === 'plugin-publish' && io.ask !== undefined && isPlan(body.value)) return confirmPublish(invocation, body.value, io, request, `${file.url}/api/acryl-door/publish-confirmed`, headers)
   return 0
+}
+
+const isPlan = (value: unknown): value is { readonly owner: string; readonly repo: string; readonly version: string } =>
+  typeof value === 'object' && value !== null && 'owner' in value
+
+/** The person's yes: only what they just read is published, and anything but a plain yes sends nothing. */
+async function confirmPublish(
+  invocation: Invocation,
+  plan: { readonly owner: string; readonly repo: string; readonly version: string },
+  io: Io,
+  request: typeof fetch,
+  url: string,
+  headers: Record<string, string>,
+): Promise<number> {
+  const yes = await io.ask?.(`Publish ${plan.owner}/${plan.repo} v${plan.version}? Type yes to send it: `)
+  if (yes !== true) { io.out('Nothing was sent.\n'); return 0 }
+  const response = await request(url, { method: 'POST', headers, body: JSON.stringify({ name: invocation.args.name, owner: invocation.args.owner, confirm: plan }) })
+  const body = await response.json().catch(() => undefined) as { ok?: boolean; message?: string; value?: { ok?: boolean; releaseUrl?: string; pullLine?: string; reason?: string; next?: string } } | undefined
+  const result = body?.value
+  if (body?.ok !== true || result?.ok !== true) {
+    io.err(`Not published: ${result?.reason ?? body?.message ?? 'the app did not answer'}${result?.next === undefined ? '' : `. ${result.next}`}\n`)
+    return 1
+  }
+  io.out(`Published: ${result.releaseUrl ?? ''}\nA friend gets exactly these bytes with:\n  ${result.pullLine ?? ''}\n`)
+  return 0
+}
+
+async function askAtTerminal(question: string): Promise<boolean> {
+  const prompt = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    return (await prompt.question(question)).trim().toLowerCase() === 'yes'
+  } finally {
+    prompt.close()
+  }
 }
 
 /** True when this file is the program Node was started with (not imported by a test). */
@@ -263,6 +309,7 @@ if (isProgram()) {
     cwd: process.cwd(),
     out: (text) => { process.stdout.write(text) },
     err: (text) => { process.stderr.write(text) },
+    ...(process.stdin.isTTY && process.stdout.isTTY ? { ask: askAtTerminal } : {}),
   }).then((code) => { process.exitCode = code }, (cause: unknown) => {
     process.stderr.write(`${cause instanceof Error ? cause.message : String(cause)}\n`)
     process.exitCode = 1

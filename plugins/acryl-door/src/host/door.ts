@@ -38,6 +38,30 @@ export interface ExtensionsPort {
 /** The slice of acrylblends' `pluginShare` service the pull verb uses. */
 export interface PluginSharePort {
   pull(source: string): Promise<{ readonly ok: boolean; readonly action?: string }>
+  planPublish(name: string, options?: { readonly owner?: string }): Promise<PublishPlanView | { readonly ok: false; readonly reason: string; readonly next: string }>
+  publish(name: string, confirmed: PublishPlanView, options?: { readonly owner?: string }): Promise<{ readonly ok: boolean; readonly reason?: string }>
+}
+
+/** A plan as the door shows it. The service owns it; the door passes it back unchanged. */
+export interface PublishPlanView {
+  readonly owner: string
+  readonly repo: string
+  readonly version: string
+  readonly visibility: string
+  readonly license: string
+  readonly createsRepository: boolean
+  readonly files: readonly string[]
+  readonly digest: string
+  readonly pullLine: string
+}
+
+/** What a plan says, for a person deciding. */
+export function renderPublishPlan(plan: PublishPlanView): string {
+  return [
+    `Publish to ${plan.owner}/${plan.repo}${plan.createsRepository ? ' (a new repository)' : ''}, ${plan.visibility}, version ${plan.version}, license ${plan.license}.`,
+    `Files: ${plan.files.join(', ')}.`,
+    `A friend gets exactly these bytes with: ${plan.pullLine}`,
+  ].join('\n')
 }
 
 /** The slice of acrylblends' `tools` registry (the `agent` plugin's) the tool verbs use, and where the built-in chat finds the verbs. */
@@ -126,6 +150,7 @@ export class Door {
       case 'plugin-list': return this.plugin(extensions => extensions.list(), false)
       case 'plugin-add': return this.plugin(extensions => extensions.install(this.insideApp(input.folder)))
       case 'plugin-pull': return this.pull(input.source)
+      case 'plugin-publish': return this.planPublish(input)
       case 'plugin-remove': {
         const name = input.name
         if (typeof name !== 'string' || name === '') throw new DoorError('invalid', 'plugin remove needs a plugin name')
@@ -316,11 +341,31 @@ export class Door {
     return { value, text: JSON.stringify(value, null, 2) }
   }
 
+  private share(): PluginSharePort {
+    const share = this.deps.pluginShare?.()
+    if (share === undefined) throw new DoorError('unavailable', 'this app has no plugin-share row; add the row')
+    return share
+  }
+
+  /** Only a plan: no argument of any verb can publish, so an agent never says yes for a person. */
+  private async planPublish(input: Record<string, unknown>): Promise<VerbAnswer> {
+    const { name, owner } = input
+    if (typeof name !== 'string' || name === '') throw new DoorError('invalid', 'plugin publish needs a plugin name, e.g. plugin publish pomodoro')
+    const value = await this.share().planPublish(name, typeof owner === 'string' && owner !== '' ? { owner } : {})
+    if ('ok' in value) return { value, text: `Refused: ${value.reason}. ${value.next}.` }
+    return { value, text: `${renderPublishPlan(value)}\nNothing was sent. Only a person can say yes: they run \`npm run acryl -- plugin publish ${name}\` in their own terminal, or press Share in the frame.` }
+  }
+
+  /** The person's yes, from their own terminal. Not a verb: MCP and the chat do not have it. */
+  async publishConfirmed(name: string, confirmed: PublishPlanView, owner: string | undefined): Promise<unknown> {
+    const value = await this.share().publish(name, confirmed, owner === undefined ? {} : { owner })
+    this.deps.audit.record({ at: new Date().toISOString(), tool: 'plugin-publish', target: { role: 'plugin', name: `${confirmed.owner}/${confirmed.repo}@${confirmed.version}` }, outcome: value.ok ? 'ok' : 'refused', approval: 'token' })
+    return value
+  }
+
   private async pull(source: unknown): Promise<VerbAnswer> {
     if (typeof source !== 'string' || source === '') throw new DoorError('invalid', 'plugin pull needs a source, e.g. plugin pull github:someone/pomodoro@0.1.0')
-    const share = this.deps.pluginShare?.()
-    if (share === undefined) throw new DoorError('unavailable', 'this app has no plugin-share row to pull with; add the row, or use plugin add <folder>')
-    const value = await share.pull(source)
+    const value = await this.share().pull(source)
     // A refusal changed nothing, and neither did pulling what is already there: the open pages stay.
     if (value.ok && value.action !== 'unchanged' && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
     return { value, text: JSON.stringify(value, null, 2) }

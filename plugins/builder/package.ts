@@ -20,11 +20,21 @@ export function packageManifest(
   name: string,
   description: string,
   version = '0.1.0',
+  release?: PackageRelease,
 ): Record<string, unknown> {
   return {
     name,
     version,
     description,
+    ...(release === undefined
+      ? {}
+      : {
+          license: release.license,
+          repository: {
+            type: 'git',
+            url: `git+https://github.com/${release.owner}/${release.repo}.git`,
+          },
+        }),
     type: 'module',
     exports: { '.': './index.ts', './package.json': './package.json' },
     // No `files` list: a plugin's plugin.json, data and .js files go with it, and the packer's own skips (node_modules, .git) apply.
@@ -35,9 +45,23 @@ export function packageManifest(
   }
 }
 
+/** Where a package is going to be released: written in now, so what is planned is byte for byte what is released. */
+export interface PackageRelease {
+  readonly owner: string
+  readonly repo: string
+  readonly license: string
+}
+
+export interface PackageOptions {
+  /** This version, instead of the one already packaged. */
+  readonly version?: string
+  readonly release?: PackageRelease
+}
+
 export interface PackagedPlugin {
   readonly dir: string
   readonly version: string
+  readonly files: readonly string[]
   /** The release file, next to the package folder. */
   readonly tarball: string
   /** The tarball's sha512, as the registry lists it. */
@@ -77,6 +101,16 @@ function withLineFeeds(dir: string): void {
   }
 }
 
+/** What the hub's share would otherwise add on the way out, changing the bytes after they were planned. */
+function markPublic(target: string): void {
+  const file = join(target, 'package.json')
+  const manifest = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+  writeFileSync(
+    file,
+    `${JSON.stringify({ ...manifest, acryl: { ...(manifest.acryl as object), visibility: 'public' } }, null, 2)}\n`,
+  )
+}
+
 function versionIn(target: string): string | undefined {
   try {
     const { version } = JSON.parse(readFileSync(join(target, 'package.json'), 'utf8')) as {
@@ -98,16 +132,17 @@ export async function packagePlugin(
   packages: string,
   name: string,
   description: string,
+  options: PackageOptions = {},
 ): Promise<PackagedPlugin> {
   const target = join(packages, name)
-  const version = versionIn(target)
+  const version = options.version ?? versionIn(target)
   rmSync(target, { recursive: true, force: true })
   mkdirSync(packages, { recursive: true })
   cpSync(source, target, { recursive: true, filter: (path) => !path.includes('node_modules') })
   try {
     writeFileSync(
       join(target, 'package.json'),
-      `${JSON.stringify(packageManifest(name, description, version), null, 2)}\n`,
+      `${JSON.stringify(packageManifest(name, description, version, options.release), null, 2)}\n`,
     )
     if (!existsSync(join(target, 'README.md'))) {
       writeFileSync(
@@ -125,6 +160,7 @@ export async function packagePlugin(
     const contract = await syncServiceContract(target)
     if (!contract.ok)
       throw new Error(`its service contract cannot be read: ${contract.errors.join('; ')}`)
+    if (options.release !== undefined) markPublic(target)
     const packed = packFolder(target)
     const tarball = join(packages, packed.fileName)
     writeFileSync(tarball, packed.tarball)
@@ -135,7 +171,14 @@ export async function packagePlugin(
         kind: 'file' as const,
       })),
     )
-    return { dir: target, version: packed.version, tarball, integrity: packed.integrity, digest }
+    return {
+      dir: target,
+      version: packed.version,
+      files: packed.files,
+      tarball,
+      integrity: packed.integrity,
+      digest,
+    }
   } catch (cause) {
     rmSync(target, { recursive: true, force: true })
     throw cause

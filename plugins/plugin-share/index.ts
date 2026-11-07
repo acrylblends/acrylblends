@@ -14,21 +14,38 @@ import {
 } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { type Context, Service } from '@deepseek-ai/cordis'
+import { findSecrets } from '@webboxes/app-persistence'
 import { digestFolder, type PluginFile } from '@webboxes/blends-core'
 import {
+  bumpVersion,
+  gitCli,
+  githubCli,
   githubReleasesOverHttps,
   httpsDownload,
   InvalidPluginSourceError,
   type PluginSource,
   PluginStore,
   PullError,
+  packFolder,
   parsePluginSource,
   pullPlugin,
   type ReleasePort,
   readTarball,
+  sharePlugin,
+  storeRootOf,
 } from '@webboxes/plugin-hub'
+import { packagePlugin } from '../builder/package.ts'
 import { NAME } from '../extensions/index.ts'
 import type {} from '../instance/index.ts'
+import {
+  type PublishOptions,
+  type PublishPlan,
+  type PublishPorts,
+  type PublishRefused,
+  type PublishResult,
+  pullLineOf,
+  samePlan,
+} from './publish.ts'
 import {
   missingServices,
   type PullRefused,
@@ -37,11 +54,21 @@ import {
   splitDigest,
 } from './pull-check.ts'
 
+export type {
+  PublishOptions,
+  PublishPlan,
+  PublishPorts,
+  PublishRefused,
+  PublishResult,
+} from './publish.ts'
+
 export interface PluginShareConfig {
   /** Where pulled plugins go; must be an extensions source. Defaults to `<project>/plugins`. */
   dir?: string
   /** Where a `github:` source reads releases. Defaults to GitHub over HTTPS. */
   releases?: ReleasePort
+  /** Where a publish goes. Defaults to the person's own `gh` and `git`. */
+  publish?: PublishPorts
 }
 
 export type PullResult =
@@ -63,6 +90,15 @@ declare module '@deepseek-ai/cordis' {
     pluginShare: PluginShare
   }
 }
+
+/** The license a new public plugin is offered under; the plan shows it before the person says yes. */
+const DEFAULT_LICENSE = 'MIT'
+
+const publishRefused = (reason: string, next: string): PublishRefused => ({
+  ok: false,
+  reason,
+  next,
+})
 
 const SOURCE_FORMS = 'github:<owner>/<repo>[@<version>] or a .tgz path or address'
 
@@ -92,20 +128,144 @@ const reasonOf = (cause: unknown): string => {
 export class PluginShare extends Service {
   private readonly dir: string
   private readonly releases: ReleasePort
-  /** One pull at a time: two pulls of one name must not race for its folder. */
+  private readonly ports: PublishPorts
+  /** One at a time: two pulls of one name must not race for its folder, nor two publishes for its package. */
   private queue: Promise<unknown> = Promise.resolve()
 
   constructor(ctx: Context, config: PluginShareConfig) {
     super(ctx, 'pluginShare')
     this.dir = resolve(config.dir ?? join(ctx.appInstance.root, 'plugins'))
     this.releases = config.releases ?? githubReleasesOverHttps()
+    this.ports = config.publish ?? { host: githubCli(), git: gitCli() }
   }
 
   /** Pull a plugin into the running app. Never throws for what a person can act on: a refusal says what is wrong and what to do, and changes nothing. */
   pull(source: string): Promise<PullResult> {
-    const run = this.queue.then(() => this.pullNow(source))
+    return this.inTurn(() => this.pullNow(source))
+  }
+
+  private inTurn<T>(step: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(step)
     this.queue = run.catch(() => undefined)
     return run
+  }
+
+  /**
+   * What publishing this plugin would do, read without sending anything. A plan is the only thing an agent can get: it never confirms for a person.
+   */
+  planPublish(name: string, options: PublishOptions = {}): Promise<PublishPlan | PublishRefused> {
+    return this.inTurn(() => this.planNow(name, options))
+  }
+
+  /**
+   * Publish exactly the plan a person said yes to: it is made again, and if anything differs (the plugin, the account, a release made meanwhile) nothing
+   * is sent. Only the person's own surfaces call this: the frame's confirm and the terminal's prompt. No verb reaches it.
+   */
+  publish(
+    name: string,
+    confirmed: PublishPlan,
+    options: PublishOptions = {},
+  ): Promise<PublishResult> {
+    return this.inTurn(async () => {
+      const plan = await this.planNow(name, options)
+      if ('ok' in plan) return plan
+      if (!samePlan(plan, confirmed)) {
+        return publishRefused(
+          `this plugin's publish changed since you confirmed it (now ${plan.owner}/${plan.repo} v${plan.version}, digest ${plan.digest}); nothing was sent`,
+          'look at the new plan and say yes again',
+        )
+      }
+      const { home } = this.ctx.appInstance
+      try {
+        const shared = await sharePlugin(
+          join(this.packages, name),
+          {
+            owner: plan.owner,
+            repo: plan.repo,
+            visibility: plan.visibility,
+            kind: 'source-plugin',
+          },
+          { ...this.ports, store: new PluginStore(storeRootOf(home)) },
+        )
+        if (shared.status === 'refused')
+          return publishRefused(shared.reason, 'fix what it names; nothing was sent')
+        return {
+          ok: true,
+          url: shared.url,
+          releaseUrl: shared.releaseUrl,
+          version: shared.version,
+          integrity: shared.integrity,
+          digest: plan.digest,
+          pullLine: plan.pullLine,
+        }
+      } catch (cause) {
+        return publishRefused(
+          reasonOf(cause),
+          'look at the repository; part of this publish may have been sent',
+        )
+      }
+    })
+  }
+
+  private get packages(): string {
+    return join(this.ctx.appInstance.home, 'plugin-packages')
+  }
+
+  private async planNow(
+    name: string,
+    options: PublishOptions,
+  ): Promise<PublishPlan | PublishRefused> {
+    const source = join(this.dir, name)
+    if (!NAME.test(name) || !existsSync(source))
+      return publishRefused(
+        `this app has no plugin "${name}" in plugins/`,
+        'name a folder of plugins/',
+      )
+    try {
+      const { host } = this.ports
+      const owner = options.owner ?? host.login()
+      const repo = name
+      const description = `The ${name} Cordis plugin.`
+      const release = { owner, repo, license: DEFAULT_LICENSE }
+      const existing = host.repository(owner, repo)
+      let packaged = await packagePlugin(source, this.packages, name, description, { release })
+      const released =
+        existing !== undefined && host.releaseExists(owner, repo, `v${packaged.version}`)
+          ? packaged.version
+          : undefined
+      if (released !== undefined)
+        packaged = await packagePlugin(source, this.packages, name, description, {
+          release,
+          version: bumpVersion(released, 'patch'),
+        })
+      const secrets = findSecrets(
+        readTarball(packFolder(packaged.dir).tarball).map((file) => ({
+          path: file.path,
+          text: Buffer.from(file.content).toString('utf8'),
+        })),
+      )
+      if (secrets.length > 0) {
+        return publishRefused(
+          `the secret check found ${String(secrets.length)} possible secret(s) in ${secrets.map((secret) => secret.path).join(', ')}; nothing was sent`,
+          "take them out of the plugin and read them from the app's settings",
+        )
+      }
+      return {
+        owner,
+        repo,
+        version: packaged.version,
+        visibility: 'public',
+        license: DEFAULT_LICENSE,
+        createsRepository: existing === undefined,
+        ...(released === undefined ? {} : { released }),
+        files: packaged.files,
+        integrity: packaged.integrity,
+        digest: packaged.digest,
+        pullLine: pullLineOf(owner, repo, packaged.version, packaged.digest),
+      }
+    } catch (cause) {
+      return publishRefused(reasonOf(cause), 'fix it, or sign in with gh; nothing was sent')
+    }
   }
 
   private async pullNow(input: string): Promise<PullResult> {

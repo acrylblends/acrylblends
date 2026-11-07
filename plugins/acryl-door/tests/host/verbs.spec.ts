@@ -65,6 +65,7 @@ const CLI_FORMS: Readonly<Record<Verb, readonly string[]>> = {
   'plugin-list': ['plugin', 'list'],
   'plugin-add': ['plugin', 'add', 'plugins/pomodoro'],
   'plugin-pull': ['plugin', 'pull', 'github:someone/pomodoro@0.1.0'],
+  'plugin-publish': ['plugin', 'publish', 'pomodoro', '--owner', 'inboxxobni'],
   'plugin-remove': ['plugin', 'remove', 'pomodoro'],
   'plugin-reload': ['plugin', 'reload'],
   'tool-list': ['tool', 'list'],

@@ -7,7 +7,7 @@
 
 import { Acryl } from 'acryl-router'
 import { UiControlError } from '../page/protocol.ts'
-import { Door, DoorError } from './door.ts'
+import { Door, DoorError, type PublishPlanView } from './door.ts'
 import { error, INVALID_JSON, jsonBody, operatorOnly, readJson, type ReportError } from './http.ts'
 import { VERBS } from './verbs.ts'
 
@@ -33,6 +33,23 @@ export function operatorRoutes(prefix: string, secret: string, door: Door, repor
         }
         reportError(`run the door verb ${verb}`, cause)
         return c.json(error('the verb could not be run'), 500)
+      }
+    })
+    // A person's yes to a plan, from the prompt in their own terminal. Not a verb, so MCP and the chat do not offer it. An agent with this machine's
+    // secret could still reach it: the door keeps honest agents from publishing by accident, the person's account is the real boundary.
+    .post(`${prefix}/publish-confirmed`, operatorOnly(secret), jsonBody, async (c) => {
+      const body = await readJson(c)
+      const { name, confirm, owner } = (body === INVALID_JSON || typeof body !== 'object' || body === null ? {} : body) as { name?: unknown; confirm?: unknown; owner?: unknown }
+      if (typeof name !== 'string' || typeof confirm !== 'object' || confirm === null) {
+        return c.json({ ok: false, code: 'invalid', message: 'the body is { name, confirm }' } satisfies CallResponse, 400)
+      }
+      try {
+        const value = await door.publishConfirmed(name, confirm as PublishPlanView, typeof owner === 'string' ? owner : undefined)
+        return c.json({ ok: true, value, text: JSON.stringify(value, null, 2) } satisfies CallResponse)
+      } catch (cause) {
+        if (cause instanceof DoorError) return c.json({ ok: false, code: cause.code, message: cause.message } satisfies CallResponse, 409)
+        reportError('publish a plugin', cause)
+        return c.json(error('the plugin could not be published'), 500)
       }
     })
 }

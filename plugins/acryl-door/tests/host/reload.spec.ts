@@ -183,7 +183,11 @@ describe('act navigate says what the app answered at the path', () => {
   })
 
   it('after a pull that changed the app, not after a refusal or a pull of what is already there, and the verb needs a source and the row', async () => {
-    const pulling = (answer: { ok: boolean; action?: string }): PluginSharePort => ({ pull: async () => answer })
+    const pulling = (answer: { ok: boolean; action?: string }): PluginSharePort => ({
+      pull: async () => answer,
+      planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
+      publish: async () => ({ ok: false }),
+    })
     const channel = new UiChannel()
     const page = browser(channel, { backAfterMs: 20 })
     await door(channel, { pluginShare: pulling({ ok: false }) }).run('plugin-pull', { source: 'github:a/b' }, never)
@@ -194,5 +198,24 @@ describe('act navigate says what the app answered at the path', () => {
     expect(page.calls.filter((call) => call.request.op === 'reload')).toHaveLength(1)
     await expect(door(channel, { pluginShare: pulling({ ok: true }) }).run('plugin-pull', {}, never)).rejects.toThrow(/needs a source/)
     await expect(door(channel).run('plugin-pull', { source: 'github:a/b' }, never)).rejects.toThrow(/no plugin-share row/)
+  })
+
+  it('plugin publish answers a plan and cannot publish, whatever its arguments say', async () => {
+    const plan = { owner: 'inboxxobni', repo: 'hello', version: '0.1.0', visibility: 'public', license: 'MIT', createsRepository: true, files: ['index.ts'], digest: 'd', pullLine: 'npm run acryl -- plugin pull github:inboxxobni/hello@0.1.0@sha256:d' }
+    const published: unknown[] = []
+    const share: PluginSharePort = {
+      pull: async () => ({ ok: true }),
+      planPublish: async () => plan,
+      publish: async (...args) => { published.push(args); return { ok: true } },
+    }
+    const d = door(new UiChannel(), { pluginShare: share })
+    const answer = await d.run('plugin-publish', { name: 'hello', confirm: plan, yes: true }, never)
+    expect(answer.value).toEqual(plan)
+    expect(answer.text).toContain('Publish to inboxxobni/hello (a new repository), public, version 0.1.0, license MIT.')
+    expect(answer.text).toContain('Only a person can say yes')
+    expect(answer.text).toContain(plan.pullLine)
+    expect(published).toEqual([])
+    await d.publishConfirmed('hello', plan, 'inboxxobni')
+    expect(published).toEqual([['hello', plan, { owner: 'inboxxobni' }]])
   })
 })

@@ -66,7 +66,7 @@ export function pullRefusal(
   files: readonly PluginFile[],
   context: PullContext,
 ): PullRefused | undefined {
-  const name = String(manifest['name'])
+  const name = String(manifest.name)
   if (!context.nameFits(name)) {
     return refuse(
       'name',
@@ -91,7 +91,7 @@ export function pullRefusal(
     )
   }
   const dependencies = Object.keys(
-    (manifest['dependencies'] as Record<string, unknown> | undefined) ?? {},
+    (manifest.dependencies as Record<string, unknown> | undefined) ?? {},
   )
   if (dependencies.length > 0) {
     return refuse(

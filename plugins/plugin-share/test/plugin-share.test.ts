@@ -1,16 +1,39 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { digestFiles } from '@webboxes/blends-core'
-import { packFolder, type ReleasePort, readTarball } from '@webboxes/plugin-hub'
+import {
+  integrityOf,
+  type PublishGitPort,
+  packFolder,
+  type ReleasePort,
+  type RepositoryHostPort,
+  readTarball,
+} from '@webboxes/plugin-hub'
 import * as router from '../../acryl-router/src/index.ts'
 import { routeSource } from '../../builder/script.ts'
 import { extensions } from '../../extensions/index.ts'
 import { instance, pinnedInstance } from '../../instance/index.ts'
-import { type PullResult, pluginShare } from '../index.ts'
+import {
+  type PublishOptions,
+  type PublishPlan,
+  type PublishPorts,
+  type PublishRefused,
+  type PublishResult,
+  type PullResult,
+  pluginShare,
+} from '../index.ts'
 import { splitDigest } from '../pull-check.ts'
 
 const cleanup: Array<() => Promise<void> | void> = []
@@ -59,7 +82,7 @@ const releaseOf = (tarball: Uint8Array, tag = 'v1.0.0'): ReleasePort => ({
   download: async () => tarball,
 })
 
-async function boot(config: { releases?: ReleasePort } = {}) {
+async function boot(config: { releases?: ReleasePort; publish?: PublishPorts } = {}) {
   const root = scratch('share-root-')
   const app = new Context()
   const fibers = [
@@ -72,8 +95,19 @@ async function boot(config: { releases?: ReleasePort } = {}) {
   cleanup.push(async () => {
     for (const fiber of [...fibers].reverse()) await fiber.dispose()
   })
-  const share = (app as unknown as { pluginShare: { pull(source: string): Promise<PullResult> } })
-    .pluginShare
+  const share = (
+    app as unknown as {
+      pluginShare: {
+        pull(source: string): Promise<PullResult>
+        planPublish(name: string, options?: PublishOptions): Promise<PublishPlan | PublishRefused>
+        publish(
+          name: string,
+          confirmed: PublishPlan,
+          options?: PublishOptions,
+        ): Promise<PublishResult>
+      }
+    }
+  ).pluginShare
   const get = async (path: string) => {
     const response = await (
       app as unknown as { router: { request(path: string): Promise<Response> } }
@@ -277,4 +311,150 @@ test('the service leaves with its fiber', async () => {
   assert.ok(app.get('pluginShare'))
   await fibers.at(-1)?.dispose()
   assert.equal(app.get('pluginShare'), undefined)
+})
+
+// Publishing. The host and git are stand-ins: no test here can reach GitHub.
+function fakeHost(login = 'someone') {
+  const sent: string[] = []
+  const repos = new Set<string>()
+  const releases = new Map<string, Buffer>()
+  const host: RepositoryHostPort = {
+    login: () => login,
+    repository: (owner, repo) =>
+      repos.has(`${owner}/${repo}`)
+        ? { visibility: 'public', url: `https://github.com/${owner}/${repo}` }
+        : undefined,
+    createRepository(owner, repo, visibility) {
+      sent.push(`create ${owner}/${repo} ${visibility}`)
+      repos.add(`${owner}/${repo}`)
+    },
+    setVisibility: () => {},
+    addTopics(owner, repo, topics) {
+      sent.push(`topics ${owner}/${repo} ${topics.join(',')}`)
+    },
+    releaseExists: (owner, repo, tag) => releases.has(`${owner}/${repo}@${tag}`),
+    createRelease(owner, repo, tag, _title, _notes, asset) {
+      sent.push(`release ${owner}/${repo} ${tag}`)
+      releases.set(`${owner}/${repo}@${tag}`, readFileSync(asset))
+      return `https://github.com/${owner}/${repo}/releases/tag/${tag}`
+    },
+    cloneUrl: (owner, repo) => `https://github.com/${owner}/${repo}.git`,
+  }
+  const git: PublishGitPort = {
+    clone: (_url, dir) => mkdirSync(dir, { recursive: true }),
+    commitAll: () => true,
+    tag: () => {},
+    push: () => sent.push('push'),
+  }
+  return { host, git, sent, releases }
+}
+
+async function bootWithPlugin(hub: ReturnType<typeof fakeHost>) {
+  const booted = await boot({ publish: { host: hub.host, git: hub.git } })
+  mkdirSync(join(booted.root, 'plugins', 'hello'), { recursive: true })
+  writeFileSync(join(booted.root, 'plugins', 'hello', 'index.ts'), ROUTE)
+  return booted
+}
+
+const refusedPublish = (answer: PublishPlan | PublishRefused, reason: RegExp) => {
+  assert.ok('ok' in answer && answer.ok === false, JSON.stringify(answer))
+  assert.match(answer.reason, reason)
+}
+
+const planned = (plan: PublishPlan | PublishRefused): PublishPlan => {
+  assert.ok('owner' in plan, JSON.stringify(plan))
+  return plan
+}
+
+test('a plan names the account, repository and version and sends nothing', async () => {
+  const hub = fakeHost()
+  const { share } = await bootWithPlugin(hub)
+  const plan = planned(await share.planPublish('hello'))
+  assert.deepEqual(
+    [plan.owner, plan.repo, plan.version, plan.visibility, plan.license, plan.createsRepository],
+    ['someone', 'hello', '0.1.0', 'public', 'MIT', true],
+  )
+  assert.deepEqual(hub.sent, [])
+})
+
+test('publishing exactly the confirmed plan releases those bytes, and the pull line carries their digest', async () => {
+  const hub = fakeHost()
+  const { share } = await bootWithPlugin(hub)
+  const plan = planned(await share.planPublish('hello', { owner: 'inboxxobni' }))
+  const result = await share.publish('hello', plan, { owner: 'inboxxobni' })
+  assert.ok(result.ok, JSON.stringify(result))
+  assert.deepEqual(hub.sent, [
+    'create inboxxobni/hello public',
+    'push',
+    'release inboxxobni/hello v0.1.0',
+    'topics inboxxobni/hello cordis-plugin',
+  ])
+  const bytes = hub.releases.get('inboxxobni/hello@v0.1.0')
+  assert.ok(bytes)
+  assert.equal(result.integrity, plan.integrity)
+  assert.equal(integrityOf(bytes), plan.integrity, 'the released bytes are the planned bytes')
+  assert.equal(
+    result.pullLine,
+    `npm run acryl -- plugin pull github:inboxxobni/hello@0.1.0@sha256:${plan.digest}`,
+  )
+})
+
+test("what another person pulls is the plan's digest", async () => {
+  const hub = fakeHost()
+  const { share } = await bootWithPlugin(hub)
+  const plan = planned(await share.planPublish('hello'))
+  assert.ok((await share.publish('hello', plan)).ok)
+  const bytes = hub.releases.get('someone/hello@v0.1.0')
+  assert.ok(bytes)
+  const other = await boot({
+    releases: {
+      release: async () => ({
+        tag: 'v0.1.0',
+        assets: [{ name: 'hello-0.1.0.tgz', url: 'fixture:hello' }],
+      }),
+      download: async () => bytes,
+    },
+  })
+  const pulled = await other.share.pull(`github:someone/hello@0.1.0@sha256:${plan.digest}`)
+  assert.ok(pulled.ok, JSON.stringify(pulled))
+  assert.deepEqual((await other.get('/hello')).body, { text: 'Hello' })
+})
+
+test('nothing is sent when the plugin, the account or the version changed since the person said yes', async () => {
+  const hub = fakeHost()
+  const { share, root } = await bootWithPlugin(hub)
+  const plan = planned(await share.planPublish('hello'))
+  writeFileSync(join(root, 'plugins', 'hello', 'note.md'), 'one more file\n')
+  const edited = await share.publish('hello', plan)
+  assert.equal(edited.ok, false)
+  assert.match(edited.ok ? '' : edited.reason, /changed since you confirmed/)
+  const elsewhere = planned(await share.planPublish('hello'))
+  const other = await share.publish('hello', { ...elsewhere, owner: 'someone-else' })
+  assert.equal(other.ok, false)
+  assert.deepEqual(hub.sent, [])
+})
+
+test('a released version is not released again: the plan names the next patch', async () => {
+  const hub = fakeHost()
+  const { share, root } = await bootWithPlugin(hub)
+  assert.ok((await share.publish('hello', planned(await share.planPublish('hello')))).ok)
+  writeFileSync(join(root, 'plugins', 'hello', 'note.md'), 'a change\n')
+  const next = planned(await share.planPublish('hello'))
+  assert.deepEqual([next.version, next.released, next.createsRepository], ['0.1.1', '0.1.0', false])
+  const result = await share.publish('hello', next)
+  assert.ok(result.ok, JSON.stringify(result))
+  assert.ok(hub.releases.has('someone/hello@v0.1.1'))
+})
+
+test('a plugin holding a secret, or not on disk, is refused and nothing is sent', async () => {
+  const hub = fakeHost()
+  const { share, root } = await bootWithPlugin(hub)
+  refusedPublish(await share.planPublish('ghost'), /no plugin "ghost"/)
+  writeFileSync(
+    join(root, 'plugins', 'hello', 'config.ts'),
+    `export const key = 'ghp_${'a'.repeat(36)}'\n`,
+  )
+  const plan = await share.planPublish('hello')
+  refusedPublish(plan, /secret/)
+  assert.deepEqual(hub.sent, [])
 })

@@ -9,7 +9,7 @@ import { MAX_SNAPSHOT_NODES, MAX_WAIT_MS } from '../page/protocol.ts'
 /** The verbs that only use the page: what a page-only door (a production assistant) offers. */
 export const PAGE_VERBS = ['look', 'act'] as const satisfies readonly Verb[]
 
-export const VERBS = ['brief', 'look', 'act', 'plugin-list', 'plugin-add', 'plugin-pull', 'plugin-remove', 'plugin-reload', 'tool-list', 'tool-call', 'window-list', 'window-open', 'window-focus', 'window-close', 'window-resize', 'menu-list', 'menu-click'] as const
+export const VERBS = ['brief', 'look', 'act', 'plugin-list', 'plugin-add', 'plugin-pull', 'plugin-publish', 'plugin-remove', 'plugin-reload', 'tool-list', 'tool-call', 'window-list', 'window-open', 'window-focus', 'window-close', 'window-resize', 'menu-list', 'menu-click'] as const
 export type Verb = (typeof VERBS)[number]
 
 /** The JSON Schema of a verb's arguments, as MCP lists it. */
@@ -90,6 +90,11 @@ export const VERB_SPECS: Readonly<Record<Verb, VerbSpec>> = {
     usage: 'plugin pull <source>: fetch a plugin someone released (github:<owner>/<repo>[@<version>][@sha256:<digest>], or a .tgz), check it and start it, live',
     description: 'Fetch a plugin someone released, without running anything; check its digest, that it works on every OS and that this app has the services it needs; then install and start it without a restart. A refusal says why and changes nothing.',
     arguments: { type: 'object', properties: { source: { type: 'string', description: 'github:<owner>/<repo>[@<version>][@sha256:<digest>], or a .tgz path or https address' } }, required: ['source'], additionalProperties: false },
+  },
+  'plugin-publish': {
+    usage: 'plugin publish <name> [--owner <account>]: show what publishing this plugin would send; in a person\'s own terminal, ask them',
+    description: 'Show what publishing a plugin would send: the account, repository, version, license, files and the line a friend pulls it with. Sends nothing. Only a person can say yes, in their own terminal or with Share in the frame; tell them the plan and how.',
+    arguments: { type: 'object', properties: { name: { type: 'string', description: 'a plugin of plugins/' }, owner: { type: 'string', description: 'the GitHub account or organization; the signed-in one when absent' } }, required: ['name'], additionalProperties: false },
   },
   'plugin-remove': {
     usage: 'plugin remove <name>: stop and remove an installed plugin',
