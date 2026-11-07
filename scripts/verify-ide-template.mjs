@@ -758,6 +758,17 @@ function setInputValue(selector, value) {
  */
 async function checkFramedPull(app, origin, jar) {
   const name = 'gate-pull'
+  // What the host reported for a door verb that threw: the door answers only "the verb could not be run", the cause is in the app's error log.
+  const reported = () => {
+    const logs = join(app, '.acrylblends', 'logs')
+    const lines = existsSync(logs)
+      ? readdirSync(logs)
+          .filter((file) => file.endsWith('.error.log'))
+          .flatMap((file) => readFileSync(join(logs, file), 'utf8').split(/\r?\n/u))
+          .filter((entry) => entry.includes('acryl-door: failed'))
+      : []
+    return lines.length === 0 ? '' : `\nthe host reported:\n${lines.slice(-5).join('\n')}`
+  }
   const tarball = releaseServing(app, name, '/gate-pull')
   const npm = npmSpawn()
   const door = (...args) =>
@@ -778,6 +789,8 @@ async function checkFramedPull(app, origin, jar) {
         jar,
         '-H',
         'Sec-Fetch-Site: same-origin',
+        '-H',
+        `Origin: ${origin}`,
         `${origin}/api/acryl-blends-frame/app`,
       ],
       { encoding: 'utf8' },
@@ -796,21 +809,40 @@ async function checkFramedPull(app, origin, jar) {
   // Pulls in a row, no retry: from a local file (which blend.yaml does not remember), from GitHub, and a local one again.
   const pulled = line(tarball)
   if (pulled.status !== 0)
-    fail(`the pull line failed in the frame:\n${pulled.stdout}${pulled.stderr}`)
+    fail(`the pull line failed in the frame:\n${pulled.stdout}${pulled.stderr}${reported()}`)
   if (!(await answers('/gate-pull')).includes('gate-pull'))
     fail('the pulled plugin does not answer at /app/gate-pull')
   // A release on GitHub, pulled by its https address: remembered in blend.yaml, as a github: pull is. The address, not github:, keeps the gate off
   // api.github.com's anonymous rate limit on shared CI runners; github: sources are covered by plugin-share's tests.
   const POMODORO =
     'https://github.com/inboxxobni/acrylblends-pomodoro/releases/download/v0.1.0/acrylblends-pomodoro-0.1.0.tgz'
-  const fromGitHub = line(POMODORO)
-  if (fromGitHub.status !== 0)
-    fail(`a pull from GitHub failed in the frame:\n${fromGitHub.stdout}${fromGitHub.stderr}`)
-  if (!(await answers('/pomodoro')).includes('minutes'))
-    fail('the plugin pulled from GitHub does not answer at /app/pomodoro')
+  // Offline, a local run skips this one pull and says so; CI never does: a runner that cannot reach github.com fails here.
+  const online = await fetch('https://github.com/', {
+    method: 'HEAD',
+    signal: AbortSignal.timeout(15_000),
+  }).then(
+    () => true,
+    () => false,
+  )
+  if (!online && process.env.CI)
+    fail('CI cannot reach github.com, so the pull of a GitHub release was not checked')
+  if (online) {
+    const fromGitHub = line(POMODORO)
+    if (fromGitHub.status !== 0)
+      fail(
+        `a pull from GitHub failed in the frame:\n${fromGitHub.stdout}${fromGitHub.stderr}${reported()}`,
+      )
+    if (!(await answers('/pomodoro')).includes('minutes'))
+      fail('the plugin pulled from GitHub does not answer at /app/pomodoro')
+  } else
+    log(
+      'SKIPPED: GitHub pull, no network - the pull of a GitHub release by its address and its author in the list were not checked',
+    )
   const second = line(releaseServing(app, 'gate-two', '/gate-two'))
   if (second.status !== 0)
-    fail(`a pull right after another failed in the frame:\n${second.stdout}${second.stderr}`)
+    fail(
+      `a pull right after another failed in the frame:\n${second.stdout}${second.stderr}${reported()}`,
+    )
   if (
     !(await answers('/gate-pull')).includes('gate-pull') ||
     !(await answers('/gate-two')).includes('gate-two')
@@ -823,17 +855,22 @@ async function checkFramedPull(app, origin, jar) {
   if (
     !names.includes(name) ||
     !names.includes('gate-two') ||
-    !names.includes('acrylblends-pomodoro')
+    (online && !names.includes('acrylblends-pomodoro'))
   )
     fail(`plugin list in the frame does not name the pulls:\n${listed.stdout}${listed.stderr}`)
-  const pomodoro = plugins.find((plugin) => plugin.name === 'acrylblends-pomodoro')
-  if (pomodoro?.pulledFrom !== POMODORO || pomodoro.author !== 'inboxxobni')
-    fail(`plugin list does not say where the GitHub pull came from: ${JSON.stringify(pomodoro)}`)
+  if (online) {
+    const pomodoro = plugins.find((plugin) => plugin.name === 'acrylblends-pomodoro')
+    if (pomodoro?.pulledFrom !== POMODORO || pomodoro.author !== 'inboxxobni')
+      fail(`plugin list does not say where the GitHub pull came from: ${JSON.stringify(pomodoro)}`)
+  }
   const removed = door('remove', 'gate-two')
   if (removed.status !== 0)
     fail(`plugin remove failed in the frame:\n${removed.stdout}${removed.stderr}`)
-  if ((await answers('/gate-two')).includes('"from":"gate-two"'))
-    fail('after plugin remove /app/gate-two still answers the removed plugin')
+  const afterRemove = await answers('/gate-two')
+  if (afterRemove.includes('"from":"gate-two"'))
+    fail(
+      `after plugin remove /app/gate-two still answers the removed plugin (${afterRemove}); the remove said:\n${removed.stdout}${removed.stderr}${reported()}`,
+    )
   if (existsSync(join(app, 'plugins', 'gate-two')))
     fail('plugin remove left the folder of an untouched pull')
   // A second person's plugin on the same route, another pull that fails: refused with the first one's name, and the route still answers the first (T025).
