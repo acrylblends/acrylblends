@@ -106,6 +106,27 @@ describe('what an app needs at run time is not also a development dependency', (
     expect(manifestIn(dir).devDependencies).toEqual({ vitest: '4' })
   })
 
+  it('a plugin that asks for a newer version moves the app forward, because its code was written against that version', () => {
+    const dir = appWith('older-pin', { dependencies: { core: '0.4.0', caret: '^1.2.0' } })
+    expect(mergeDependencies(dir, { core: '0.5.0', caret: '1.3.0' })).toEqual(['core', 'caret'])
+    expect(manifestIn(dir).dependencies).toEqual({ caret: '1.3.0', core: '0.5.0' })
+  })
+
+  it('a plugin never moves the app back, and leaves a tag or a path alone', () => {
+    const dir = appWith('newer-pin', {
+      dependencies: { core: '0.6.0', same: '1.0.0', tagged: 'latest', local: 'file:../x' },
+    })
+    expect(
+      mergeDependencies(dir, { core: '0.5.0', same: '1.0.0', tagged: '9.0.0', local: '9.0.0' }),
+    ).toEqual([])
+    expect(manifestIn(dir).dependencies).toEqual({
+      core: '0.6.0',
+      local: 'file:../x',
+      same: '1.0.0',
+      tagged: 'latest',
+    })
+  })
+
   it('a development dependency of a package the app already needs at run time is not added', () => {
     const dir = appWith('runtime-first', { dependencies: { ws: '8.21.3' } })
     expect(

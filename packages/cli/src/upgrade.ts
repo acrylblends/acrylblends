@@ -591,7 +591,7 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
         `the ${conflicts + frameBackups} edited file(s) replaced by --force are saved in ${posix(relative(appDir, backup))}/\n`,
       )
     io.stdout.write(
-      `acrylblends is now ^${VERSION} in package.json${addedDependencies.length > 0 ? `; new dependencies: ${[...new Set(addedDependencies)].join(', ')}` : ''}: run npm install, then npm run check and npm test\n`,
+      `acrylblends is now ^${VERSION} in package.json${addedDependencies.length > 0 ? `; dependencies to install: ${[...new Set(addedDependencies)].join(', ')}` : ''}: run npm install, then npm run check and npm test\n`,
     )
     return 0
   } finally {

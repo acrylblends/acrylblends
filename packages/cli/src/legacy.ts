@@ -8,6 +8,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { TEMPLATES, type Template, templateDir } from './templates'
+import { compareVersions } from './version'
 
 /** The app name init substituted for `__APP_NAME__` in the template's files. */
 const PLACEHOLDER = '__APP_NAME__'
@@ -117,19 +118,6 @@ export function brokenEntry(appDir: string): string | undefined {
   const file = join(appDir, 'src', 'main.ts')
   const text = read(file)
   return text !== undefined && /from '\.\/plugins\//u.test(text) ? 'src/main.ts' : undefined
-}
-
-/** Semver order for the release versions (numeric segments; a pre-release sorts before its release). */
-function compareVersions(a: string, b: string): number {
-  const pa = a.split(/[.-]/u).map((part) => (Number.isNaN(Number(part)) ? part : Number(part)))
-  const pb = b.split(/[.-]/u).map((part) => (Number.isNaN(Number(part)) ? part : Number(part)))
-  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
-    const x = pa[i] ?? 0
-    const y = pb[i] ?? 0
-    if (x < y) return -1
-    if (x > y) return 1
-  }
-  return 0
 }
 
 /** The first release whose scaffold an upgrade can carry forward: 0.7.8 fixed the entry module's plugin imports. */
