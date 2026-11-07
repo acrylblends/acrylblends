@@ -34,6 +34,7 @@ npm create acrylblends@latest my-app -- --template nodejs --install --pm npm
 | Option | |
 | --- | --- |
 | `--template <name>` | `blank`, `nodejs`, `notes`, `chat`, `todo` or `agent` (the same list as `acrylblends init`; `acryl-app` still means `agent`; a bare name after the directory means the same: `npm create acrylblends@latest my-app notes`) |
+| `--desktop` | put the app inside the ACRYL frame: `npm run dev` opens it with the chat, the panels and Settings. Not with a starter from a source |
 | `--install` | install the dependencies after creating the app |
 | `--pm <manager>` | `npm`, `pnpm`, `yarn` or `bun` (default: the one that ran the command) |
 | `-y`, `--yes` | ask nothing: template `nodejs`, directory `acrylblends-app` unless given |

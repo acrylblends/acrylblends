@@ -74,6 +74,7 @@ describe('options', () => {
       directory: 'my-app',
       template: 'notes',
       install: true,
+      desktop: false,
       pm: 'pnpm',
       yes: true,
       source: undefined,
@@ -155,6 +156,30 @@ describe('create', () => {
       '--yes',
       '--no-next',
     ])
+  })
+
+  it('--desktop asks init for the framed app, and a plain create does not', async () => {
+    const s = fakeIo()
+    expect(await runCreate(['framed', 'agent', '--desktop'], s.io)).toBe(0)
+    expect(s.err()).toBe('')
+    expect(s.runs[0]?.args.slice(1)).toEqual([
+      'init',
+      join(scratch, 'framed'),
+      '--template',
+      'agent',
+      '--name',
+      'framed',
+      '--yes',
+      '--no-next',
+      '--desktop',
+    ])
+  })
+
+  it('--desktop is refused with a starter from a source, which decides its own shape', async () => {
+    const s = fakeIo()
+    expect(await runCreate(['framed', '--from', 'acrylblends.notes', '--desktop'], s.io)).toBe(2)
+    expect(s.err()).toContain('--desktop goes with a template')
+    expect(s.runs).toEqual([])
   })
 
   it('refuses a folder that is not empty and changes nothing', async () => {

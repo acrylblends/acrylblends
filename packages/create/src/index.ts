@@ -94,6 +94,7 @@ Only starters made for ${CLASS} (runtime: ${PACKAGE}) are apps this command can 
 Options:
   --template <name>   one of the templates below (asked when not given); a bare name after the directory means the same
                       (npm create ${PACKAGE}@latest my-app notes). Every template is a Cordis app: blend.yaml, plugins/
+  --desktop           put the app inside the ACRYL frame: npm run dev opens it with the chat, the panels and Settings
   --install           install the dependencies after creating the app (the lifecycle scripts it will run are listed first)
   --pm <manager>      ${PACKAGE_MANAGERS.join(', ')} (default: the one that ran this command, else npm)
   -y, --yes           ask nothing: template nodejs unless --template is given, directory ${PACKAGE}-app
@@ -153,6 +154,8 @@ export interface CreateOptions {
   directory: string | undefined
   template: Template | undefined
   install: boolean
+  /** Put the app inside the ACRYL frame, as `acrylblends init --desktop` does. */
+  desktop: boolean
   pm: PackageManager | undefined
   yes: boolean
   /** `github:owner/repo[#ref]`, `@scope/name`, a packed `.tgz`, a folder, or a registry id: a template from outside this package. */
@@ -197,12 +200,17 @@ export function parseCreateOptions(argv: readonly string[]): CreateOptions {
   if (values.from !== undefined && values.template !== undefined)
     throw new UsageError('give --from or --template, not both')
   const source = values.from ?? positionalSource
+  if (values.desktop === true && source !== undefined)
+    throw new UsageError(
+      '--desktop goes with a template; a starter from a source decides its own shape',
+    )
   if (values.registry !== undefined && !(source !== undefined && REGISTRY_ID.test(source)))
     throw new UsageError('--registry goes with a registry id: --from <id> --registry <source>')
   return {
     directory: positionals[0],
     template: bare ?? named,
     install: values.install === true,
+    desktop: values.desktop === true,
     pm: values.pm as PackageManager | undefined,
     yes: values.yes === true,
     source,
@@ -220,6 +228,7 @@ const parse = (argv: readonly string[]) =>
       from: { type: 'string' },
       registry: { type: 'string' },
       install: { type: 'boolean' },
+      desktop: { type: 'boolean' },
       pm: { type: 'string' },
       yes: { type: 'boolean', short: 'y' },
     },
@@ -521,6 +530,7 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
         name,
         '--yes',
         '--no-next',
+        ...(options.desktop ? ['--desktop'] : []),
       ],
       io.cwd,
     )

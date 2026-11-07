@@ -5,7 +5,7 @@ app is created, then **opened inside ACRYL's IDE** (projects on the left, the ap
 chat model works on the app from inside the frame, and coding agents run in terminal tabs in the same folder. The data layer, the desktop window and
 the panel-first flow of the previous handout are gone.
 
-The handout is written for **acrylblends 1.2.0 or newer** (the release that carries the frame). A room on an older release is on the previous handout;
+The handout is written for **acrylblends 1.3.0 or newer** (the release whose `create --desktop` makes the framed app). A room on an older release is on the previous handout;
 check with `npx acrylblends@latest --version` before the day.
 
 ## Before the room: put this on every machine

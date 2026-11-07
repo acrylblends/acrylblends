@@ -8,7 +8,7 @@ app around it: a folder of Cordis plugins with a `blend.yaml`, running on your m
 The frame is the workshop's point. You do not edit a folder and alt-tab to a browser: your app is a page inside the workspace, the agents work in
 the same folder the frame shows, and every change you or an agent makes is one restart away from the page.
 
-This guide is for **acrylblends 1.2.0 or newer**; `npm create acrylblends@latest` gives you that. An app you made with an older release gets the
+This guide is for **acrylblends 1.3.0 or newer**; `npm create acrylblends@latest` gives you that. An app you made with an older release gets the
 frame with the upgrade in block 6.
 
 ## 0. Before you start (10 minutes)
@@ -81,7 +81,7 @@ between watching and building.
 ## 1. Create the app; the frame opens on it (10 minutes)
 
 ```sh
-npm create acrylblends@latest my-app agent
+npm create acrylblends@latest my-app agent -- --desktop
 cd my-app
 npm install
 npm run dev
