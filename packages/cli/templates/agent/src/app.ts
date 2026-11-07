@@ -216,6 +216,8 @@ export async function composeInto(
             ...(legacy ? [{ dir: legacyDir, trust: 'install' as const }] : []),
           ],
           rows: ownRows,
+          // Messages name a route as the plugin wrote it, not under the frame's canvas prefix.
+          ...(options.host === true ? { routePrefix: FRAME_MOUNT_PREFIX } : {}),
         },
         builder: { dir: extensionsDir },
         'plugin-share': { dir: extensionsDir },

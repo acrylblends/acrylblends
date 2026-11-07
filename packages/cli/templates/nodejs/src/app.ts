@@ -131,6 +131,8 @@ export async function composeInto(
         ...(process.env.NODE_ENV === 'production' ? { readOnly: true } : {}),
         sources: [{ dir: PLUGINS_DIR, trust: 'install' }],
         rows: ownRows,
+        // Messages name a route as the plugin wrote it, not under the frame's canvas prefix.
+        ...(prefix === undefined ? {} : { routePrefix: prefix }),
       },
       // Pulled plugins go where the extensions row installs from.
       'plugin-share': { dir: PLUGINS_DIR },

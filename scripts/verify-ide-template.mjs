@@ -758,6 +758,52 @@ function setInputValue(selector, value) {
  */
 async function checkFramedPull(app, origin) {
   const name = 'gate-pull'
+  const tarball = releaseServing(app, name, '/gate-pull')
+  const npm = npmSpawn()
+  const run = (input) =>
+    spawnSync(npm.command, ['run', 'acryl', '--', 'plugin', 'pull', input], {
+      cwd: app,
+      encoding: 'utf8',
+      ...npm.options,
+    })
+  // The frame reloads the app's rows after each change, and a pull in those seconds is told to try again, as a person then does.
+  const line = async (input) => {
+    for (let tries = 0; ; tries += 1) {
+      const answered = run(input)
+      if (!answered.stderr.includes('is restarting') || tries === 30) return answered
+      await new Promise((done) => setTimeout(done, 1000))
+    }
+  }
+  const refused = await line(`${tarball}@sha256:${'0'.repeat(64)}`)
+  if (refused.status !== 1 || !refused.stderr.includes('different bytes'))
+    fail(`a wrong digest was not refused in the frame:\n${refused.stdout}${refused.stderr}`)
+  if (existsSync(join(app, 'plugins', name))) fail('a refused pull left its folder in the app')
+  const pulled = await line(tarball)
+  if (pulled.status !== 0)
+    fail(`the pull line failed in the frame:\n${pulled.stdout}${pulled.stderr}`)
+  // The frame reloads the app's rows after a change to its files; the plugin comes back from its folder.
+  const answer = await until(async () => {
+    const reply = await fetch(`${origin}/app/${name}`).catch(() => undefined)
+    return reply?.ok ? await reply.text() : undefined
+  }, 60_000)
+  if (!answer?.includes('gate-pull')) fail(`the pulled plugin does not answer at /app/${name}`)
+  // A second person's plugin on the same route: refused with the first one's name, and the route still answers the first (spec 049 T025).
+  const clash = await line(releaseServing(app, 'gate-clash', '/gate-pull'))
+  if (clash.status !== 1 || !clash.stderr.includes('GET /gate-pull is already served by gate-pull'))
+    fail(
+      `a plugin whose route is taken was not refused in the frame:\n${clash.stdout}${clash.stderr}`,
+    )
+  if (existsSync(join(app, 'plugins', 'gate-clash')))
+    fail('a refused pull left its folder in the app')
+  const still = await (await fetch(`${origin}/app/${name}`)).text()
+  if (!still.includes('gate-pull')) fail(`after the refused clash /app/${name} answers ${still}`)
+  log(
+    'the pull line works in the frame: a wrong digest is refused, a release answers in the canvas, a taken route is refused naming its plugin',
+  )
+}
+
+/** A plugin release serving GET `path`, with the check the builder writes, packed as `plugin publish` packs it. */
+function releaseServing(app, name, path) {
   const source = join(app, '..', `${name}-source`)
   mkdirSync(source, { recursive: true })
   writeFileSync(
@@ -775,39 +821,17 @@ async function checkFramedPull(app, origin) {
 export const name = '${name}'
 export const inject = ['router']
 export function apply(ctx) {
-  ctx.router.route('/', new Acryl().get('/${name}', (c) => c.json({ pulled: true })))
+  ctx.router.route('/', new Acryl().get('${path}', (c) => c.json({ from: '${name}' })))
 }
 export async function check(ctx) {
-  const reply = await ctx.router.request('/${name}')
-  if (!reply.ok) throw new Error('GET /${name} answered ' + reply.status)
+  const reply = await ctx.router.request('${path}')
+  if (!reply.ok) throw new Error('GET ${path} answered ' + reply.status)
 }
 `,
   )
   const tarball = join(app, '..', `${name}-1.0.0.tgz`)
   writeFileSync(tarball, packFolder(source).tarball)
-  const npm = npmSpawn()
-  const line = (input) =>
-    spawnSync(npm.command, ['run', 'acryl', '--', 'plugin', 'pull', input], {
-      cwd: app,
-      encoding: 'utf8',
-      ...npm.options,
-    })
-  const refused = line(`${tarball}@sha256:${'0'.repeat(64)}`)
-  if (refused.status !== 1 || !refused.stderr.includes('different bytes'))
-    fail(`a wrong digest was not refused in the frame:\n${refused.stdout}${refused.stderr}`)
-  if (existsSync(join(app, 'plugins', name))) fail('a refused pull left its folder in the app')
-  const pulled = line(tarball)
-  if (pulled.status !== 0)
-    fail(`the pull line failed in the frame:\n${pulled.stdout}${pulled.stderr}`)
-  // The frame reloads the app's rows after a change to its files; the plugin comes back from its folder.
-  const answer = await until(async () => {
-    const reply = await fetch(`${origin}/app/${name}`).catch(() => undefined)
-    return reply?.ok ? await reply.text() : undefined
-  }, 60_000)
-  if (!answer?.includes('pulled')) fail(`the pulled plugin does not answer at /app/${name}`)
-  log(
-    'the pull line works in the frame: a wrong digest is refused, a release answers in the canvas',
-  )
+  return tarball
 }
 
 /**

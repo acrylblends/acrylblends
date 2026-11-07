@@ -150,8 +150,15 @@ export class PluginShare extends Service {
   /** One at a time: two pulls of one name must not race for its folder, nor two publishes for its package. */
   private queue: Promise<unknown> = Promise.resolve()
 
+  /**
+   * The context the service was constructed with, in the app's realm. Inside a service method `this.ctx` is Cordis's shadow context of the caller: in the
+   * frame that is the host's door, which does not see the app's own services (`home`), so a plugin needing them was refused. As `extensions` does.
+   */
+  private readonly own: Context
+
   constructor(ctx: Context, config: PluginShareConfig) {
     super(ctx, 'pluginShare')
+    this.own = ctx
     this.dir = resolve(config.dir ?? join(ctx.appInstance.root, 'plugins'))
     this.releases = config.releases ?? githubReleasesOverHttps()
     this.ports = config.publish ?? { host: githubCli(), git: gitCli() }
@@ -199,7 +206,7 @@ export class PluginShare extends Service {
           'look at the new plan and say yes again',
         )
       }
-      const { home } = this.ctx.appInstance
+      const { home } = this.own.appInstance
       try {
         const shared = await sharePlugin(
           join(this.packages, name),
@@ -233,7 +240,7 @@ export class PluginShare extends Service {
 
   /** Write one plugin's record into `blend.yaml`, and the lock when the app has one, so the two still match. @returns whether the app holds the record. */
   private remember(name: string, record: PulledRecord | undefined): boolean {
-    const { root } = this.ctx.appInstance
+    const { root } = this.own.appInstance
     const file = join(root, 'blend.yaml')
     if (!existsSync(file)) return false
     const text = readFileSync(file, 'utf8')
@@ -248,7 +255,7 @@ export class PluginShare extends Service {
 
   /** Fetch the remembered plugins whose folder is gone, exactly as recorded: other bytes are refused, and the record stays for the person to decide. */
   private async restore(): Promise<readonly RestoreOutcome[]> {
-    const file = join(this.ctx.appInstance.root, 'blend.yaml')
+    const file = join(this.own.appInstance.root, 'blend.yaml')
     if (!existsSync(file)) return []
     const outcomes: RestoreOutcome[] = []
     for (const [name, record] of Object.entries(pulledRecords(readFileSync(file, 'utf8')))) {
@@ -271,7 +278,7 @@ export class PluginShare extends Service {
   }
 
   private get packages(): string {
-    return join(this.ctx.appInstance.home, 'plugin-packages')
+    return join(this.own.appInstance.home, 'plugin-packages')
   }
 
   private async planNow(
@@ -338,7 +345,7 @@ export class PluginShare extends Service {
   }
 
   private async pullNow(input: string, expectIntegrity?: string): Promise<PullResult> {
-    const { home, root } = this.ctx.appInstance
+    const { home, root } = this.own.appInstance
     let read: ReturnType<typeof readSource>
     try {
       read = readSource(input, root)
@@ -376,7 +383,7 @@ export class PluginShare extends Service {
       const refused = pullRefusal(pulled.manifest, files, {
         digest: read.digest,
         nameFits: (name) => NAME.test(name),
-        hasService: (service) => this.ctx.get(service as never) !== undefined,
+        hasService: (service) => this.own.get(service as never) !== undefined,
       })
       if (refused !== undefined) return refused
       return await this.install(
@@ -424,7 +431,7 @@ export class PluginShare extends Service {
       }
       let result: Awaited<ReturnType<Context['extensions']['install']>>
       try {
-        result = await this.ctx.extensions.install(target)
+        result = await this.own.extensions.install(target)
       } catch (cause) {
         undo()
         return refuse(
@@ -438,7 +445,7 @@ export class PluginShare extends Service {
         return refuse('install', result.errors.join('; '), result.next)
       }
       if (result.state === 'pending') {
-        await this.ctx.extensions.remove(name)
+        await this.own.extensions.remove(name)
         undo()
         return missingServices(result.missing)
       }

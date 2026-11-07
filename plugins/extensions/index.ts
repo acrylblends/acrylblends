@@ -32,6 +32,13 @@ import type {} from '../instance/index.ts'
 import type { Sandbox } from '../sandbox/index.ts'
 import { appendLedger, type LedgerEntry, readLedger } from './ledger.ts'
 import { type PluginStore, pluginVersion } from './plugin-store.ts'
+import {
+  addedRoutes,
+  type FiberRoutesView,
+  routeClash,
+  type ServedRoute,
+  servedRoutes,
+} from './routes.ts'
 import { folderPluginStore } from './stage.ts'
 
 /** A fiber's lifecycle state, by name (Cordis's own enum is a `const enum`, which does not exist at run time). */
@@ -93,6 +100,8 @@ export interface ExtensionsConfig {
    * are not extensions, so they are neither found nor started here, and installing one is refused with that reason.
    */
   rows?: readonly string[]
+  /** The path the app is mounted under (the frame's canvas, `/app`): a message names a route as the plugin wrote it, without it. */
+  routePrefix?: string
 }
 
 const READ_ONLY =
@@ -121,7 +130,7 @@ export type InstallResult =
   | {
       readonly ok: false
       /** check: before anything changed; import: loading the code; activate: starting it; verify: its own `check` failed. */
-      readonly stage: 'check' | 'import' | 'activate' | 'verify' | 'approval'
+      readonly stage: 'check' | 'import' | 'activate' | 'conflict' | 'verify' | 'approval'
       readonly name?: string
       readonly errors: readonly string[]
       /** Present for an update: whether the version that was running is running again. */
@@ -157,6 +166,8 @@ interface Installed {
   readonly dir: string
   readonly module: PluginModule
   fiber: Fiber
+  /** The routes its mount added, so a later plugin whose route is taken is told whose it is. */
+  readonly routes: readonly ServedRoute[]
 }
 
 interface Record_ {
@@ -245,11 +256,13 @@ export class Extensions extends Service {
    */
   private readonly owner: Context
   private readonly store: PluginStore
+  private readonly routePrefix: string
 
   constructor(ctx: Context, config: ExtensionsConfig, store: PluginStore) {
     super(ctx, 'extensions')
     this.owner = ctx
     this.store = store
+    this.routePrefix = (config.routePrefix ?? '').replace(/\/+$/u, '')
     this.readOnly = config.readOnly === true
     this.off = new Set(config.off ?? [])
     this.rows = new Set(config.rows ?? [])
@@ -588,6 +601,41 @@ export class Extensions extends Service {
   }
 
   /** Mount a module as a child fiber and wait until it settles. */
+  /** Every route the app serves now, read from the router's labels on every running fiber. */
+  private served(): ServedRoute[] {
+    const fibers = [...this.ctx.registry.values()].flatMap(
+      (runtime) => [...runtime.fibers] as unknown as FiberRoutesView[],
+    )
+    return servedRoutes(fibers)
+  }
+
+  /**
+   * A route the new plugin added that another plugin already serves: the router would answer with the other one, so the new route would never be
+   * reached. Refused before the plugin's own check, which the other plugin's answer would pass.
+   */
+  private conflict(
+    added: readonly ServedRoute[],
+    before: readonly ServedRoute[],
+  ): { stage: 'conflict'; error: string } | undefined {
+    const clash = routeClash(added, before)
+    if (clash === undefined) return undefined
+    const { route, taken } = clash
+    const owner =
+      [...this.installed.values()].find((entry) =>
+        entry.routes.some((own) => own.method === taken.method && own.path === taken.path),
+      )?.name ?? (taken.owner === '' ? 'the app' : taken.owner)
+    const shown = (path: string): string =>
+      this.routePrefix !== '' && path.startsWith(`${this.routePrefix}/`)
+        ? path.slice(this.routePrefix.length)
+        : path
+    const same =
+      taken.path === route.path ? '' : ` (it serves ${taken.method} ${shown(taken.path)})`
+    return {
+      stage: 'conflict',
+      error: `${route.method} ${shown(route.path)} is already served by ${owner}${same}; rename this plugin's route, or remove ${owner} first`,
+    }
+  }
+
   private async mount(module: PluginModule): Promise<{ fiber: Fiber; error?: unknown }> {
     // An extension is a plugin module whose config, if any, comes from its own defaults.
     const fiber = this.owner.plugin(module as unknown as Parameters<Context['plugin']>[0])
@@ -666,8 +714,10 @@ export class Extensions extends Service {
     }
 
     if (previous) await previous.fiber.dispose()
+    const before = this.served()
     const mounted = await this.mount(module)
     const state = STATES[mounted.fiber.state] ?? 'failed'
+    const added = state === 'active' ? addedRoutes(before, this.served()) : []
     // Commit before "done": a plugin that started still has to pass its own check before the install counts.
     const failure =
       mounted.error !== undefined || state === 'failed'
@@ -676,7 +726,7 @@ export class Extensions extends Service {
             error: message(mounted.error ?? 'the plugin failed to start'),
           }
         : state === 'active'
-          ? await this.verify(module, mounted.fiber.ctx)
+          ? (this.conflict(added, before) ?? (await this.verify(module, mounted.fiber.ctx)))
           : undefined
     if (failure) {
       await mounted.fiber.dispose().catch(() => undefined)
@@ -714,6 +764,7 @@ export class Extensions extends Service {
       dir: staged.dir,
       module,
       fiber: mounted.fiber,
+      routes: added,
     })
     this.stale.delete(name)
     this.saveState()
@@ -758,6 +809,7 @@ export class Extensions extends Service {
       }
       try {
         const module = await this.load(folder.dir, folder.name)
+        const before = this.served()
         const mounted = await this.mount(module)
         this.installed.set(folder.name, {
           name: folder.name,
@@ -766,6 +818,7 @@ export class Extensions extends Service {
           dir: folder.dir,
           module,
           fiber: mounted.fiber,
+          routes: addedRoutes(before, this.served()),
         })
         if (mounted.error !== undefined)
           summary.failed.push({ name: folder.name, error: message(mounted.error) })
@@ -830,6 +883,7 @@ export class Extensions extends Service {
           continue
         }
         const module = await this.load(record.dir, name)
+        const before = this.served()
         const mounted = await this.mount(module)
         if (mounted.error !== undefined)
           summary.failed.push({ name, error: message(mounted.error) })
@@ -840,6 +894,7 @@ export class Extensions extends Service {
           dir: record.dir,
           module,
           fiber: mounted.fiber,
+          routes: addedRoutes(before, this.served()),
         })
       } catch (error) {
         summary.failed.push({ name, error: message(error) })
