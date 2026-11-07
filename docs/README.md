@@ -76,6 +76,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 1.2.0](release-notes/1.2.0.md) - a new app is a repository of plugin folders with snapshots; `create --from` makes a blueprint your own (name, lock, first commit); `init --desktop` installs the ACRYL frame from npm, one framework copy
 - [Release notes acrylblends 1.3.1](release-notes/acrylblends-1.3.1.md) - plugins from several people in one app: a taken route or widget is refused naming its plugin, the list says who released each one, and every template that installs live can pull; in the frame a pull no longer restarts the app
 - [Release notes acrylblends 1.3.0](release-notes/acrylblends-1.3.0.md) - share a plugin between people: `plugin pull` and `plugin publish`, `npm run acryl`, and upgrade moves a dependency forward
+- [Release notes create-acrylblends 1.4.1](release-notes/create-1.4.1.md) - a new app has plugin list, remove and route removal in the frame (it asks for acrylblends 1.3.1)
 - [Release notes create-acrylblends 1.4.0](release-notes/create-1.4.0.md) - `--desktop` puts the new app inside the ACRYL frame
 - [Release notes 1.3.0](release-notes/1.3.0.md) - `create --from` downloads only the app you asked for, checked against its sha512
 - [Release notes 1.2.1](release-notes/1.2.1.md) - `create --from` works on a registry larger than one template (it failed past 5000 files)
