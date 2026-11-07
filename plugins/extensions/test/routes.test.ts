@@ -6,6 +6,7 @@ import { afterEach, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import * as router from '../../acryl-router/src/index.ts'
+import * as homePage from '../../home/index.ts'
 import { instance, pinnedInstance } from '../../instance/index.ts'
 import { extensions } from '../index.ts'
 import { addedRoutes, pathsOverlap, routeClash, type ServedRoute } from '../routes.ts'
@@ -52,6 +53,7 @@ async function app() {
   const fibers = [
     root.plugin(instance, pinnedInstance(home, { root: appRoot })),
     root.plugin(router),
+    root.plugin(homePage),
     root.plugin(extensions, {}),
   ]
   for (const fiber of fibers) await fiber.await()
@@ -74,9 +76,23 @@ export async function check(ctx) { const r = await ctx.router.request('${path.re
     )
     return dir
   }
+  /** A plugin putting a widget with id `id` on the home page, with a check that finds it. */
+  const widget = (name: string, id: string) => {
+    const dir = join(home, 'extensions', name)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      join(dir, 'index.ts'),
+      `export const name = '${name}'
+export const inject = ['home']
+export function apply(ctx) { ctx.effect(() => ctx.home.widget({ id: '${id}', title: '${name}', render: () => '<p>${name}</p>' })) }
+export async function check(ctx) { if (!ctx.home.widgets().some((w) => w.title === '${name}')) throw new Error('no widget') }
+`,
+    )
+    return dir
+  }
   const answer = async (path: string) =>
     (await (await root.router.request(path)).json()) as { from: string }
-  return { root, plugin, answer }
+  return { root, plugin, widget, answer }
 }
 
 test('a plugin whose route another plugin serves is refused, naming it, and the other keeps the route', async () => {
@@ -120,4 +136,23 @@ test('an update keeps its own route, and a removed plugin frees it', async () =>
   await root.extensions.remove('ana-notes')
   assert.equal((await root.extensions.install(plugin('fay-notes', '/notes'))).ok, true)
   assert.equal((await answer('/notes')).from, 'fay-notes')
+})
+
+test("a plugin putting a widget under another plugin's name is refused, and that plugin's widget stays on the page", async () => {
+  const { root, widget } = await app()
+  assert.equal((await root.extensions.install(widget('ana-notes', 'ana-notes'))).ok, true)
+  const refused = await root.extensions.install(widget('fay-notes', 'ana-notes'))
+  assert.equal(refused.ok, false)
+  assert.match(
+    refused.ok === false ? refused.errors.join() : '',
+    /already has a widget "ana-notes", the plugin ana-notes's; a widget's id is the name of the plugin that puts it there/u,
+  )
+  assert.deepEqual(
+    root.extensions.list().map((extension) => extension.name),
+    ['ana-notes'],
+  )
+  assert.deepEqual(
+    root.home.widgets().map((shown) => shown.title),
+    ['ana-notes'],
+  )
 })
