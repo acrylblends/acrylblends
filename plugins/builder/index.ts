@@ -5,13 +5,13 @@
  * extensions folder, installs it, and gets back the real result (`active`, `pending` with what it waits for, or the error, with the
  * previous version restored). Writes are confined to that folder. The tools register in `ctx.effect`, so they leave with the builder.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { syncServiceContract } from '@webboxes/plugin-hub'
 import { scripted, type Tools } from '../agent/index.ts'
 import { NAME } from '../extensions/index.ts'
 import type {} from '../instance/index.ts'
+import { packagePlugin } from './package.ts'
 import { builderRules } from './script.ts'
 
 export interface BuilderConfig {
@@ -19,22 +19,6 @@ export interface BuilderConfig {
   dir?: string
   /** Where `package_plugin` writes standalone packages. Defaults to `<project>/plugin-packages`. */
   packagesDir?: string
-}
-
-/** The package.json of a standalone plugin package: the host framework is a peer, never a second installed copy. */
-export function packageManifest(name: string, description: string): Record<string, unknown> {
-  return {
-    name,
-    version: '0.1.0',
-    description,
-    type: 'module',
-    exports: { '.': './index.ts', './package.json': './package.json' },
-    // No `files` list: a plugin's plugin.json, data and .js files go with it, and the packer's own skips (node_modules, .git) apply.
-    // ACRYL measured it: a host package listed under dependencies brings a second copy of the framework, and its services stop
-    // matching after a restart. A peer names the version and installs nothing.
-    peerDependencies: { '@deepseek-ai/cordis': '4.0.4' },
-    keywords: ['cordis', 'cordis-plugin', 'acrylblends'],
-  }
 }
 
 const EXTENSIONS = new Set(['.ts', '.js', '.mjs', '.json', '.md'])
@@ -155,7 +139,7 @@ export const builder = {
     )
     register(
       'package_plugin',
-      'Turn an extension into a standalone plugin package other apps can use: input { name, description? }. Returns its folder.',
+      'Turn an extension into a standalone plugin package other apps can pull: input { name, description? }. Writes the package folder and its release .tgz, the same bytes on every OS. Returns the folder, the file, its sha512 and its content digest.',
       async (input) => {
         const name = pluginName(input)
         if (
@@ -167,32 +151,17 @@ export const builder = {
         const description = String(
           (input as { description?: unknown }).description ?? `The ${name} Cordis plugin.`,
         )
-        const target = join(packagesDir, name)
-        rmSync(target, { recursive: true, force: true })
-        mkdirSync(packagesDir, { recursive: true })
-        cpSync(folder(name), target, {
-          recursive: true,
-          filter: (path) => !path.includes('node_modules'),
-        })
-        writeFileSync(
-          join(target, 'package.json'),
-          `${JSON.stringify(packageManifest(name, description), null, 2)}\n`,
-        )
-        if (!existsSync(join(target, 'README.md'))) {
-          writeFileSync(
-            join(target, 'README.md'),
-            `# ${name}\n\n${description}\n\nA Cordis plugin. In an ACRYLBLENDS app: \`acrylblends add <this folder>\`.\n`,
-          )
-        }
-        // The contract other people's apps and the registry read: what the plugin needs and provides, from its code.
-        const contract = await syncServiceContract(target)
-        if (!contract.ok) {
-          rmSync(target, { recursive: true, force: true })
+        try {
+          return {
+            ok: true,
+            name,
+            ...(await packagePlugin(folder(name), packagesDir, name, description)),
+          }
+        } catch (cause) {
           throw new BuilderError(
-            `${name}: its service contract cannot be read: ${contract.errors.join('; ')}`,
+            `${name}: ${cause instanceof Error ? cause.message : String(cause)}`,
           )
         }
-        return { ok: true, name, dir: target }
       },
     )
 

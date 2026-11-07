@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
-import { packFolder } from '@webboxes/plugin-hub'
+import { integrityOf, packFolder } from '@webboxes/plugin-hub'
 import * as router from '../../acryl-router/src/index.ts'
 import * as state from '../../acryl-state/src/index.ts'
 import { agent, memory, model, tools } from '../../agent/index.ts'
@@ -110,6 +110,69 @@ test('a package carries its contract and every file of the plugin, so the regist
   assert.deepEqual(acryl.requires.host, ['router'])
   assert.deepEqual(acryl.provides.host, [])
   assert.deepEqual(packed.manifest.keywords, ['cordis', 'cordis-plugin', 'acrylblends'])
+})
+
+test('packing a plugin is deterministic: twice, or with Windows line endings, the same sha512 and digest', async () => {
+  const { app, ask, root } = await boot()
+  await ask('create route hello /hello Hello')
+  const pack = async () =>
+    (await app.tools.call('package_plugin', { name: 'hello' })) as {
+      dir: string
+      tarball: string
+      integrity: string
+      digest: string
+      version: string
+    }
+  const first = await pack()
+  assert.equal(first.version, '0.1.0')
+  assert.equal(first.tarball, join(root, 'plugin-packages', 'hello-0.1.0.tgz'))
+  assert.equal(first.integrity, integrityOf(readFileSync(first.tarball)))
+  assert.match(first.digest, /^[0-9a-f]{64}$/)
+  await new Promise((done) => setTimeout(done, 1100))
+  assert.equal(
+    (await pack()).integrity,
+    first.integrity,
+    'the time it was packed is not in the bytes',
+  )
+
+  const entry = join(root, 'plugins', 'hello', 'index.ts')
+  writeFileSync(entry, readFileSync(entry, 'utf8').replaceAll('\n', '\r\n'))
+  const windows = await pack()
+  assert.equal(windows.integrity, first.integrity, 'line endings are not in the bytes')
+  assert.equal(windows.digest, first.digest)
+  assert.equal(
+    readFileSync(entry, 'utf8').includes('\r\n'),
+    true,
+    "the person's own file is left as it is",
+  )
+})
+
+test('a package keeps its version, so a person bumps it deliberately', async () => {
+  const { app, ask, root } = await boot()
+  await ask('create route hello /hello Hello')
+  await app.tools.call('package_plugin', { name: 'hello' })
+  const file = join(root, 'plugin-packages', 'hello', 'package.json')
+  writeFileSync(
+    file,
+    JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), version: '0.3.0' }),
+  )
+  const again = (await app.tools.call('package_plugin', { name: 'hello' })) as {
+    version: string
+    tarball: string
+  }
+  assert.equal(again.version, '0.3.0')
+  assert.ok(again.tarball.endsWith('hello-0.3.0.tgz'))
+})
+
+test('a plugin that would not work on every OS is refused, and no package is left', async () => {
+  const { app, ask, root } = await boot()
+  await ask('create route hello /hello Hello')
+  writeFileSync(join(root, 'plugins', 'hello', 'aux.txt'), 'x\n')
+  await assert.rejects(
+    app.tools.call('package_plugin', { name: 'hello' }),
+    /aux\.txt.*reserved by Windows/,
+  )
+  assert.equal(existsSync(join(root, 'plugin-packages', 'hello')), false)
 })
 
 test('writes stay inside the plugin folder and only take source files', async () => {
