@@ -37,6 +37,7 @@ import {
 import { packagePlugin } from '../builder/package.ts'
 import { NAME } from '../extensions/index.ts'
 import type {} from '../instance/index.ts'
+import { LOCK_FILE, writeLock } from '../manifest/lock.ts'
 import {
   type PublishOptions,
   type PublishPlan,
@@ -53,6 +54,7 @@ import {
   refuse,
   splitDigest,
 } from './pull-check.ts'
+import { type PulledRecord, pulledRecords, withPulledRecord } from './pulled-records.ts'
 
 export type {
   PublishOptions,
@@ -61,6 +63,11 @@ export type {
   PublishRefused,
   PublishResult,
 } from './publish.ts'
+
+/** One remembered plugin the app fetched again at its start because its folder was gone. */
+export type RestoreOutcome =
+  | { readonly name: string; readonly ok: true }
+  | { readonly name: string; readonly ok: false; readonly reason: string; readonly next: string }
 
 export interface PluginShareConfig {
   /** Where pulled plugins go; must be an extensions source. Defaults to `<project>/plugins`. */
@@ -82,6 +89,8 @@ export type PullResult =
       readonly digest: string
       readonly action: 'installed' | 'updated' | 'unchanged'
       readonly state: string
+      /** Whether the app's `blend.yaml` and lock now name this source, so a copy of the app can fetch it. A local file names nothing to fetch. */
+      readonly remembered: boolean
     }
   | PullRefused
 
@@ -120,12 +129,20 @@ function readSource(
   return { source: parsed, ...(digest === undefined ? {} : { digest }) }
 }
 
+/** The source as another machine can fetch it: the version pinned; a file on this machine names nothing. */
+function recordedSource(source: PluginSource, version: string): string | undefined {
+  if (source.kind === 'github') return `github:${source.owner}/${source.repo}@${version}`
+  return source.kind === 'tarball-url' ? source.url : undefined
+}
+
 const reasonOf = (cause: unknown): string => {
   if (cause instanceof PullError || cause instanceof InvalidPluginSourceError) return cause.reason
   return cause instanceof Error ? cause.message : String(cause)
 }
 
 export class PluginShare extends Service {
+  /** What was fetched again at this start. */
+  readonly restored: Promise<readonly RestoreOutcome[]>
   private readonly dir: string
   private readonly releases: ReleasePort
   private readonly ports: PublishPorts
@@ -137,6 +154,12 @@ export class PluginShare extends Service {
     this.dir = resolve(config.dir ?? join(ctx.appInstance.root, 'plugins'))
     this.releases = config.releases ?? githubReleasesOverHttps()
     this.ports = config.publish ?? { host: githubCli(), git: gitCli() }
+    // Removing a plugin removes its record. Listened to here, not asked of each caller: every way of removing it goes through extensions.
+    ctx.on('extensions/changed', (name, change) => {
+      if (change === 'removed') this.remember(name, undefined)
+    })
+    // Not awaited by the app's start: a person offline still gets their app, and the warning says what is missing.
+    this.restored = this.inTurn(() => this.restore())
   }
 
   /** Pull a plugin into the running app. Never throws for what a person can act on: a refusal says what is wrong and what to do, and changes nothing. */
@@ -207,6 +230,45 @@ export class PluginShare extends Service {
     })
   }
 
+  /** Write one plugin's record into `blend.yaml`, and the lock when the app has one, so the two still match. @returns whether the app holds the record. */
+  private remember(name: string, record: PulledRecord | undefined): boolean {
+    const { root } = this.ctx.appInstance
+    const file = join(root, 'blend.yaml')
+    if (!existsSync(file)) return false
+    const text = readFileSync(file, 'utf8')
+    const next = withPulledRecord(text, name, record)
+    if (next !== text) {
+      writeFileSync(`${file}.tmp`, next)
+      renameSync(`${file}.tmp`, file)
+      if (existsSync(join(root, LOCK_FILE))) writeLock(root)
+    }
+    return record === undefined || pulledRecords(next)[name] !== undefined
+  }
+
+  /** Fetch the remembered plugins whose folder is gone, exactly as recorded: other bytes are refused, and the record stays for the person to decide. */
+  private async restore(): Promise<readonly RestoreOutcome[]> {
+    const file = join(this.ctx.appInstance.root, 'blend.yaml')
+    if (!existsSync(file)) return []
+    const outcomes: RestoreOutcome[] = []
+    for (const [name, record] of Object.entries(pulledRecords(readFileSync(file, 'utf8')))) {
+      if (existsSync(join(this.dir, name))) continue
+      const result = await this.pullNow(
+        `${record.source}@sha256:${record.digest}`,
+        record.integrity,
+      )
+      outcomes.push(
+        result.ok
+          ? { name, ok: true }
+          : { name, ok: false, reason: result.reason, next: result.next },
+      )
+      if (!result.ok)
+        console.warn(
+          `plugin-share: ${name} was not fetched again: ${result.reason}. ${result.next}.`,
+        )
+    }
+    return outcomes
+  }
+
   private get packages(): string {
     return join(this.ctx.appInstance.home, 'plugin-packages')
   }
@@ -268,7 +330,7 @@ export class PluginShare extends Service {
     }
   }
 
-  private async pullNow(input: string): Promise<PullResult> {
+  private async pullNow(input: string, expectIntegrity?: string): Promise<PullResult> {
     const { home, root } = this.ctx.appInstance
     let read: ReturnType<typeof readSource>
     try {
@@ -285,11 +347,15 @@ export class PluginShare extends Service {
     try {
       let pulled: Awaited<ReturnType<typeof pullPlugin>>
       try {
-        pulled = await pullPlugin(read.source, {
-          store: new PluginStore(scratch),
-          releases: this.releases,
-          download: httpsDownload(),
-        })
+        pulled = await pullPlugin(
+          read.source,
+          {
+            store: new PluginStore(scratch),
+            releases: this.releases,
+            download: httpsDownload(),
+          },
+          expectIntegrity === undefined ? {} : { expectIntegrity },
+        )
       } catch (cause) {
         return refuse(
           'fetch',
@@ -311,6 +377,7 @@ export class PluginShare extends Service {
         pulled.stored.version,
         pulled.stored.integrity,
         files,
+        recordedSource(read.source, pulled.stored.version),
       )
     } finally {
       rmSync(scratch, { recursive: true, force: true })
@@ -323,6 +390,7 @@ export class PluginShare extends Service {
     version: string,
     integrity: string,
     files: readonly PluginFile[],
+    source: string | undefined,
   ): Promise<PullResult> {
     const target = join(this.dir, name)
     const incoming = join(this.dir, `.pulling-${name}`)
@@ -375,6 +443,7 @@ export class PluginShare extends Service {
         digest,
         action: result.action,
         state: result.state,
+        remembered: source !== undefined && this.remember(name, { source, integrity, digest }),
       }
     } finally {
       rmSync(incoming, { recursive: true, force: true })

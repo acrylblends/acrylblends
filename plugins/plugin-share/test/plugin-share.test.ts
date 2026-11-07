@@ -25,6 +25,7 @@ import * as router from '../../acryl-router/src/index.ts'
 import { routeSource } from '../../builder/script.ts'
 import { extensions } from '../../extensions/index.ts'
 import { instance, pinnedInstance } from '../../instance/index.ts'
+import { captureApp, verifyApp } from '../../manifest/snapshot.ts'
 import {
   type PublishOptions,
   type PublishPlan,
@@ -33,8 +34,10 @@ import {
   type PublishResult,
   type PullResult,
   pluginShare,
+  type RestoreOutcome,
 } from '../index.ts'
 import { splitDigest } from '../pull-check.ts'
+import { pulledRecords } from '../pulled-records.ts'
 
 const cleanup: Array<() => Promise<void> | void> = []
 afterEach(async () => {
@@ -82,8 +85,14 @@ const releaseOf = (tarball: Uint8Array, tag = 'v1.0.0'): ReleasePort => ({
   download: async () => tarball,
 })
 
-async function boot(config: { releases?: ReleasePort; publish?: PublishPorts } = {}) {
-  const root = scratch('share-root-')
+async function boot({
+  root = scratch('share-root-'),
+  ...config
+}: {
+  releases?: ReleasePort
+  publish?: PublishPorts
+  root?: string
+} = {}) {
   const app = new Context()
   const fibers = [
     app.plugin(instance, pinnedInstance(join(root, '.acrylblends'), { root })),
@@ -92,9 +101,10 @@ async function boot(config: { releases?: ReleasePort; publish?: PublishPorts } =
     app.plugin(pluginShare, config),
   ]
   for (const fiber of fibers) await fiber.await()
-  cleanup.push(async () => {
+  const stop = async () => {
     for (const fiber of [...fibers].reverse()) await fiber.dispose()
-  })
+  }
+  cleanup.push(stop)
   const share = (
     app as unknown as {
       pluginShare: {
@@ -132,7 +142,10 @@ async function boot(config: { releases?: ReleasePort; publish?: PublishPorts } =
       [],
     )
   }
-  return { app, fibers, root, share, get, installed, untouched }
+  const restored = () =>
+    (app as unknown as { pluginShare: { restored: Promise<readonly RestoreOutcome[]> } })
+      .pluginShare.restored
+  return { app, fibers, root, share, get, installed, untouched, stop, restored }
 }
 
 const refused = (result: PullResult, refusal: string, reason: RegExp) => {
@@ -457,4 +470,131 @@ test('a plugin holding a secret, or not on disk, is refused and nothing is sent'
   const plan = await share.planPublish('hello')
   refusedPublish(plan, /secret/)
   assert.deepEqual(hub.sent, [])
+})
+
+// Remembering a pull: the source and digests stand in the app's own definition, so a copy of the app can fetch the same bytes.
+const BLEND = `# What this app is.
+apiVersion: blends.acryl.dev/v1alpha1
+kind: Blueprint
+metadata: { id: acme.board, name: board, version: 0.1.0 }
+spec:
+  runtime: cordis
+  rows:
+    - id: router # the routes every plugin mounts on
+      name: acryl-router
+    - id: extensions
+      name: extensions
+    - id: plugin-share
+      name: plugin-share
+`
+
+function appFolder(): string {
+  const root = scratch('share-app-')
+  writeFileSync(join(root, 'blend.yaml'), BLEND)
+  return root
+}
+
+const recordsIn = (root: string) => pulledRecords(readFileSync(join(root, 'blend.yaml'), 'utf8'))
+
+test('a pull is written into blend.yaml and the lock, the comments stay, and removing the plugin removes the record', async () => {
+  const release = pack({ 'index.ts': ROUTE })
+  const root = appFolder()
+  captureApp(root)
+  const { app, share } = await boot({ releases: releaseOf(release.tarball), root })
+  const result = await share.pull('github:someone/hello')
+  assert.ok(result.ok, JSON.stringify(result))
+  const record = {
+    source: 'github:someone/hello@1.0.0',
+    integrity: release.integrity,
+    digest: release.digest,
+  }
+  assert.deepEqual(recordsIn(root), { hello: record })
+  const text = readFileSync(join(root, 'blend.yaml'), 'utf8')
+  assert.match(text, /# the routes every plugin mounts on/)
+  const lock = JSON.parse(readFileSync(join(root, 'blend.lock.json'), 'utf8'))
+  assert.deepEqual(
+    lock.rows.find((row: { id: string }) => row.id === 'plugin-share').config.pulled.hello,
+    record,
+  )
+  assert.equal(verifyApp(root).ok, true, verifyApp(root).problems.join('; '))
+
+  await (
+    app as unknown as { extensions: { remove(name: string): Promise<unknown> } }
+  ).extensions.remove('hello')
+  assert.deepEqual(recordsIn(root), {})
+  assert.equal(
+    verifyApp(join(root)).problems.filter((problem) => problem.includes('blend.yaml')).length,
+    0,
+  )
+})
+
+test('a local .tgz has no source another machine could fetch, so nothing is recorded, and the answer says so', async () => {
+  const release = pack({ 'index.ts': ROUTE })
+  const root = appFolder()
+  const { share } = await boot({ root })
+  writeFileSync(join(root, 'hello-1.0.0.tgz'), release.tarball)
+  const result = await share.pull('hello-1.0.0.tgz')
+  assert.ok(result.ok, JSON.stringify(result))
+  assert.equal(result.remembered, false)
+  assert.deepEqual(recordsIn(root), {})
+})
+
+test('a refused pull records nothing', async () => {
+  const release = pack({
+    'index.ts': `export const name = 'hello'\nexport function apply() { throw new Error('refuses to start') }\n`,
+  })
+  const root = appFolder()
+  const { share } = await boot({ releases: releaseOf(release.tarball), root })
+  assert.equal((await share.pull('github:someone/hello@1.0.0')).ok, false)
+  assert.deepEqual(recordsIn(root), {})
+  assert.equal(readFileSync(join(root, 'blend.yaml'), 'utf8'), BLEND)
+})
+
+test('a copy of the app without the folder fetches the recorded plugin, verified, and runs it', async () => {
+  const release = pack({ 'index.ts': ROUTE })
+  const root = appFolder()
+  const first = await boot({ releases: releaseOf(release.tarball), root })
+  assert.ok((await first.share.pull('github:someone/hello@1.0.0')).ok)
+  await first.stop()
+  rmSync(join(root, 'plugins', 'hello'), { recursive: true })
+
+  const copy = await boot({ releases: releaseOf(release.tarball), root })
+  assert.deepEqual(await copy.restored(), [{ name: 'hello', ok: true }])
+  assert.deepEqual((await copy.get('/hello')).body, { text: 'Hello' })
+})
+
+test('bytes changed since the record are refused, not silently replaced, and the record stays', async () => {
+  const release = pack({ 'index.ts': ROUTE })
+  const root = appFolder()
+  const first = await boot({ releases: releaseOf(release.tarball), root })
+  assert.ok((await first.share.pull('github:someone/hello@1.0.0')).ok)
+  await first.stop()
+  rmSync(join(root, 'plugins', 'hello'), { recursive: true })
+
+  const replaced = pack({ 'index.ts': `${ROUTE}// the same version, other bytes\n` })
+  const copy = await boot({ releases: releaseOf(replaced.tarball), root })
+  const [outcome] = await copy.restored()
+  assert.equal(outcome?.ok, false)
+  assert.match(outcome?.reason ?? '', /checksum/)
+  assert.equal(existsSync(join(root, 'plugins', 'hello')), false)
+  assert.equal(recordsIn(root).hello?.digest, release.digest)
+})
+
+test('a plugin whose folder is there is not fetched at the start', async () => {
+  const release = pack({ 'index.ts': ROUTE })
+  const root = appFolder()
+  const first = await boot({ releases: releaseOf(release.tarball), root })
+  assert.ok((await first.share.pull('github:someone/hello@1.0.0')).ok)
+  await first.stop()
+  let asked = 0
+  const counting: ReleasePort = {
+    release: async () => {
+      asked += 1
+      return undefined
+    },
+    download: async () => new Uint8Array(),
+  }
+  const again = await boot({ releases: counting, root })
+  assert.deepEqual(await again.restored(), [])
+  assert.equal(asked, 0)
 })
