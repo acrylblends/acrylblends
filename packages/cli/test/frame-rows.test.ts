@@ -4,10 +4,10 @@
  * app-route prefix fix).
  */
 
-import { Context } from '@deepseek-ai/cordis'
+import { Context, type Fiber } from '@deepseek-ai/cordis'
+import { Acryl } from 'acrylblends'
+import * as router from 'acrylblends/cordis/router'
 import { describe, expect, it } from 'vitest'
-import * as router from '../../../plugins/acryl-router/src/index.ts'
-import { Acryl } from '../../../plugins/acryl-router/src/index.ts'
 import { appPluginsRow } from '../src/frame-rows'
 
 const row = appPluginsRow('/app')
@@ -62,7 +62,8 @@ describe('the generated app-plugins row', () => {
   })
 
   it("a plugin's route is the plugin's own: it answers under the prefix, and stops answering when that plugin alone is removed", async () => {
-    // The row as generated, with the app's composeInto handed in: it mounts one plugin of the app, as the extensions row mounts a pulled one.
+    // The row as generated, with the app's composeInto handed in: it mounts one plugin of the app, as the extensions row mounts a pulled one. The
+    // router is the one the generated host loads (acrylblends/cordis/router).
     const apply = new Function(
       'composeInto',
       `${row.replace(/^import .*$/mu, '').replaceAll('export ', '')}\nreturn apply`,
@@ -80,7 +81,7 @@ describe('the generated app-plugins row', () => {
       mounted.push(fiber)
       return Promise.resolve([fiber])
     }) as (ctx: Context, config: object) => Promise<void>
-    const mounted: Array<{ await(): Promise<void>; dispose(): Promise<unknown> }> = []
+    const mounted: Fiber[] = []
     const host = new Context()
     await host.plugin(router).await()
     host.provide('appInstance', {})
