@@ -8,6 +8,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import { syncServiceContract } from '@webboxes/plugin-hub'
 import { scripted, type Tools } from '../agent/index.ts'
 import { NAME } from '../extensions/index.ts'
 import type {} from '../instance/index.ts'
@@ -28,7 +29,7 @@ export function packageManifest(name: string, description: string): Record<strin
     description,
     type: 'module',
     exports: { '.': './index.ts', './package.json': './package.json' },
-    files: ['*.ts', '**/*.ts', 'README.md'],
+    // No `files` list: a plugin's plugin.json, data and .js files go with it, and the packer's own skips (node_modules, .git) apply.
     // ACRYL measured it: a host package listed under dependencies brings a second copy of the framework, and its services stop
     // matching after a restart. A peer names the version and installs nothing.
     peerDependencies: { '@deepseek-ai/cordis': '4.0.4' },
@@ -155,7 +156,7 @@ export const builder = {
     register(
       'package_plugin',
       'Turn an extension into a standalone plugin package other apps can use: input { name, description? }. Returns its folder.',
-      (input) => {
+      async (input) => {
         const name = pluginName(input)
         if (
           !existsSync(join(folder(name), 'index.ts')) &&
@@ -181,6 +182,14 @@ export const builder = {
           writeFileSync(
             join(target, 'README.md'),
             `# ${name}\n\n${description}\n\nA Cordis plugin. In an ACRYLBLENDS app: \`acrylblends add <this folder>\`.\n`,
+          )
+        }
+        // The contract other people's apps and the registry read: what the plugin needs and provides, from its code.
+        const contract = await syncServiceContract(target)
+        if (!contract.ok) {
+          rmSync(target, { recursive: true, force: true })
+          throw new BuilderError(
+            `${name}: its service contract cannot be read: ${contract.errors.join('; ')}`,
           )
         }
         return { ok: true, name, dir: target }

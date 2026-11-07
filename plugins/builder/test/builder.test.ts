@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
+import { packFolder } from '@webboxes/plugin-hub'
 import * as router from '../../acryl-router/src/index.ts'
 import * as state from '../../acryl-state/src/index.ts'
 import { agent, memory, model, tools } from '../../agent/index.ts'
@@ -82,6 +83,33 @@ test('package_plugin turns an extension into a standalone package with Cordis as
   )
   assert.ok(existsSync(join(packaged.dir, 'index.ts')))
   await assert.rejects(app.tools.call('package_plugin', { name: 'ghost' }), /has no index\.ts/)
+})
+
+test('a package carries its contract and every file of the plugin, so the registry and other apps read it right', async () => {
+  const { app, ask, root } = await boot()
+  await ask('create route hello /hello Hello')
+  writeFileSync(join(root, 'plugins', 'hello', 'plugin.json'), '{"name":"hello"}\n')
+  writeFileSync(join(root, 'plugins', 'hello', 'defaults.json'), '{"text":"Hello"}\n')
+  writeFileSync(join(root, 'plugins', 'hello', 'helper.js'), 'export const helper = 1\n')
+  const { dir } = (await app.tools.call('package_plugin', { name: 'hello' })) as { dir: string }
+  const packed = packFolder(dir)
+  for (const file of [
+    'index.ts',
+    'plugin.json',
+    'defaults.json',
+    'helper.js',
+    'README.md',
+    'package.json',
+  ]) {
+    assert.ok(packed.files.includes(file), `${file} is not among ${packed.files.join(', ')}`)
+  }
+  const acryl = packed.manifest.acryl as {
+    requires: { host: string[] }
+    provides: { host: string[] }
+  }
+  assert.deepEqual(acryl.requires.host, ['router'])
+  assert.deepEqual(acryl.provides.host, [])
+  assert.deepEqual(packed.manifest.keywords, ['cordis', 'cordis-plugin', 'acrylblends'])
 })
 
 test('writes stay inside the plugin folder and only take source files', async () => {

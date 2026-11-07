@@ -5,7 +5,8 @@
   "inject": ["extensions", "tools", "appInstance"],
   "provides": [],
   "dependencies": {
-    "@deepseek-ai/cordis": "4.0.4"
+    "@deepseek-ai/cordis": "4.0.4",
+    "@webboxes/plugin-hub": "0.2.0"
   },
   "mount": "mount it after agent and extensions: root.plugin(builder, { dir: join(root, 'plugins') }); dir must be an extensions source"
 }
