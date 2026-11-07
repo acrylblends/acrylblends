@@ -1,0 +1,13 @@
+{
+  "name": "plugin-share",
+  "description": "Pull a plugin someone released into the running app: fetched without running anything, checked by digest and for every OS, then installed live.",
+  "requires": ["instance", "extensions"],
+  "inject": ["extensions", "appInstance"],
+  "provides": ["pluginShare"],
+  "dependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@webboxes/blends-core": "0.5.0",
+    "@webboxes/plugin-hub": "0.2.0"
+  },
+  "mount": "mount it after extensions, in development builds: root.plugin(pluginShare, { dir: join(root, 'plugins') }); dir must be an extensions source"
+}

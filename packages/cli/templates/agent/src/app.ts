@@ -20,6 +20,7 @@ import {
   type ParameterValue,
 } from '../plugins/manifest/index.ts'
 import { ASSISTANT_PROMPT, type OpenAIConfig, openai } from '../plugins/openai/index.ts'
+import { pluginShare } from '../plugins/plugin-share/index.ts'
 import { sandboxPlugin } from '../plugins/sandbox/index.ts'
 import { save } from '../plugins/save/index.ts'
 import { tasks } from '../plugins/tasks/index.ts'
@@ -36,6 +37,7 @@ export const registry = {
   'acryl-state': state,
   extensions,
   builder,
+  'plugin-share': pluginShare,
   save,
   sandbox: sandboxPlugin,
   routes,
@@ -77,6 +79,7 @@ export interface App {
 const DEVELOPMENT_ROWS: Record<string, string> = {
   agent: 'POST /ask runs the agent, which spends the model key and calls its tools',
   builder: 'the agent can write plugin source into plugins/',
+  'plugin-share': 'a plugin pulled from a release runs in this process',
   extensions:
     'a plugin installed live runs in this process, and POST /extensions/approve decides installs',
 }
@@ -215,6 +218,7 @@ export async function composeInto(
           rows: ownRows,
         },
         builder: { dir: extensionsDir },
+        'plugin-share': { dir: extensionsDir },
         ...(assistant
           ? {
               // Every answer comes right after a look, so it says what the visitor's page shows now.

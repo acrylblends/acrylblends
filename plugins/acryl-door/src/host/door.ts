@@ -35,6 +35,11 @@ export interface ExtensionsPort {
   list(): readonly unknown[]
 }
 
+/** The slice of acrylblends' `pluginShare` service the pull verb uses. */
+export interface PluginSharePort {
+  pull(source: string): Promise<{ readonly ok: boolean; readonly action?: string }>
+}
+
 /** The slice of acrylblends' `tools` registry (the `agent` plugin's) the tool verbs use, and where the built-in chat finds the verbs. */
 export interface ToolsPort {
   /** @returns the function that removes the tool. @throws when the name is taken. */
@@ -54,6 +59,8 @@ export interface DoorDeps {
   readonly appBase?: string | undefined
   /** Read at each call: the services may come and go while the door runs. */
   readonly extensions: () => ExtensionsPort | undefined
+  /** Read at each call, as `extensions` is; absent where the app has no plugin-share row. */
+  readonly pluginShare?: () => PluginSharePort | undefined
   readonly tools: () => ToolsPort | undefined
   /** The app tools the door offers; anything else is refused before it reaches the registry. */
   readonly expose: readonly string[]
@@ -118,6 +125,7 @@ export class Door {
       }
       case 'plugin-list': return this.plugin(extensions => extensions.list(), false)
       case 'plugin-add': return this.plugin(extensions => extensions.install(this.insideApp(input.folder)))
+      case 'plugin-pull': return this.pull(input.source)
       case 'plugin-remove': {
         const name = input.name
         if (typeof name !== 'string' || name === '') throw new DoorError('invalid', 'plugin remove needs a plugin name')
@@ -305,6 +313,16 @@ export class Door {
     // The app changed under the open pages: reload them (not when the plugin was already as it should be), and answer once they are back.
     const unchanged = typeof value === 'object' && value !== null && (value as { action?: unknown }).action === 'unchanged'
     if (mutates && !unchanged && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
+    return { value, text: JSON.stringify(value, null, 2) }
+  }
+
+  private async pull(source: unknown): Promise<VerbAnswer> {
+    if (typeof source !== 'string' || source === '') throw new DoorError('invalid', 'plugin pull needs a source, e.g. plugin pull github:someone/pomodoro@0.1.0')
+    const share = this.deps.pluginShare?.()
+    if (share === undefined) throw new DoorError('unavailable', 'this app has no plugin-share row to pull with; add the row, or use plugin add <folder>')
+    const value = await share.pull(source)
+    // A refusal changed nothing, and neither did pulling what is already there: the open pages stay.
+    if (value.ok && value.action !== 'unchanged' && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
     return { value, text: JSON.stringify(value, null, 2) }
   }
 

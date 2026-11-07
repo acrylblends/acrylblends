@@ -42,7 +42,7 @@ const USAGE = `usage: acryl <verb> [options] [--json] [--dir <app folder>]
   act navigate --path <path of the app, e.g. /demo>
   act wait (--text <t> | --role <role> [--name <n>]) [--gone] [--timeout-ms <ms>]
   (look and every act take --window <n>: the desktop window whose page it is for; window list prints the numbers)
-  plugin list | plugin add <folder> | plugin remove <name> | plugin reload
+  plugin list | plugin add <folder> | plugin pull <source> | plugin remove <name> | plugin reload
   window list | window open [--path <p>] | window focus --id <n> | window close --id <n> [--force]
   window resize --id <n> --width <px> --height <px>
   menu list | menu click --path "File>New Note" [--force]
@@ -138,8 +138,9 @@ export function parseInvocation(argv: readonly string[], env: NodeJS.ProcessEnv 
     case 'plugin': {
       if (second === 'list' || second === 'reload') return make(`plugin-${second}`)
       if (second === 'add') { if (third === undefined) throw new UsageError('plugin add needs a folder, e.g. plugin add plugins/pomodoro'); return make('plugin-add', { folder: third }) }
+      if (second === 'pull') { if (third === undefined) throw new UsageError('plugin pull needs a source, e.g. plugin pull github:someone/pomodoro@0.1.0'); return make('plugin-pull', { source: third }) }
       if (second === 'remove') { if (third === undefined) throw new UsageError('plugin remove needs a plugin name'); return make('plugin-remove', { name: third }) }
-      throw new UsageError(`plugin needs list, add, remove or reload\n${USAGE}`)
+      throw new UsageError(`plugin needs list, add, pull, remove or reload\n${USAGE}`)
     }
     case 'window': {
       const id = integer(values, '--id')

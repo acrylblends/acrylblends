@@ -12,6 +12,7 @@
     "sandbox",
     "extensions",
     "builder",
+    "plugin-share",
     "agent-panel",
     "manifest",
     "save",

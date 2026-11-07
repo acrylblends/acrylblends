@@ -6,7 +6,7 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
-import { Door, type ExtensionsPort } from '../../src/host/door.ts'
+import { Door, type ExtensionsPort, type PluginSharePort } from '../../src/host/door.ts'
 import { UiChannel, type PageStream } from '../../src/host/channel.ts'
 import type { AuditLog } from '../../src/host/audit.ts'
 import type { ChannelToPage, UiResult } from '../../src/page/protocol.ts'
@@ -40,12 +40,13 @@ function browser(channel: UiChannel, options: { answers?: boolean; backAfterMs?:
   return { calls }
 }
 
-function door(channel: UiChannel, extra: { extensions?: ExtensionsPort; reloadOnChange?: boolean; pageBackMs?: number } = {}): Door {
+function door(channel: UiChannel, extra: { extensions?: ExtensionsPort; pluginShare?: PluginSharePort; reloadOnChange?: boolean; pageBackMs?: number } = {}): Door {
   return new Door({
     channel,
     audit,
     app: { name: 'demo', root: '/tmp/demo' },
     extensions: () => extra.extensions,
+    pluginShare: () => extra.pluginShare,
     tools: () => undefined,
     expose: [],
     ...(extra.reloadOnChange === undefined ? {} : { reloadOnChange: extra.reloadOnChange }),
@@ -179,5 +180,19 @@ describe('act navigate says what the app answered at the path', () => {
     } finally {
       await new Promise((resolve) => server.close(resolve))
     }
+  })
+
+  it('after a pull that changed the app, not after a refusal or a pull of what is already there, and the verb needs a source and the row', async () => {
+    const pulling = (answer: { ok: boolean; action?: string }): PluginSharePort => ({ pull: async () => answer })
+    const channel = new UiChannel()
+    const page = browser(channel, { backAfterMs: 20 })
+    await door(channel, { pluginShare: pulling({ ok: false }) }).run('plugin-pull', { source: 'github:a/b' }, never)
+    await door(channel, { pluginShare: pulling({ ok: true, action: 'unchanged' }) }).run('plugin-pull', { source: 'github:a/b' }, never)
+    expect(page.calls).toEqual([])
+    const answer = await door(channel, { pluginShare: pulling({ ok: true, action: 'installed' }) }).run('plugin-pull', { source: 'github:a/b' }, never)
+    expect(answer.value).toEqual({ ok: true, action: 'installed' })
+    expect(page.calls.filter((call) => call.request.op === 'reload')).toHaveLength(1)
+    await expect(door(channel, { pluginShare: pulling({ ok: true }) }).run('plugin-pull', {}, never)).rejects.toThrow(/needs a source/)
+    await expect(door(channel).run('plugin-pull', { source: 'github:a/b' }, never)).rejects.toThrow(/no plugin-share row/)
   })
 })
