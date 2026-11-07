@@ -19,6 +19,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -30,6 +31,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { packFolder } from '@webboxes/plugin-hub'
 import { devtools, startChrome, stopChrome } from './lib/door-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
 import { doorSpawn, npmSpawn } from './lib/platform.mjs'
@@ -650,6 +652,7 @@ ${composition.stdout}`)
     return await startServer()
   }
   await checkTileInBrowser(url, origin, jar, page, output, mock, restartSamePort)
+  if (template === 'agent') await checkFramedPull(app, origin)
   // The frame's stable launch token end to end (119): verify-frame-token boots this app twice on its own port and asserts the same address after the
   // restart, that the address admits the page (303 and the cookie) and that the cookie admits the frame's WebSocket.
   await stopServer()
@@ -747,6 +750,64 @@ function setInputValue(selector, value) {
   input.dispatchEvent(new Event('input', { bubbles: true }))
   return true
 })()`
+}
+
+/**
+ * The pull line a person copies, in the app as the frame runs it: the door row is the host's and the app's rows are in their own realm, so the line reaches
+ * plugin-share only if the overlay lets it, and the plugin's own check finds its route only under the canvas prefix. A wrong digest fails and installs nothing.
+ */
+async function checkFramedPull(app, origin) {
+  const name = 'gate-pull'
+  const source = join(app, '..', `${name}-source`)
+  mkdirSync(source, { recursive: true })
+  writeFileSync(
+    join(source, 'package.json'),
+    JSON.stringify({
+      name,
+      version: '1.0.0',
+      type: 'module',
+      keywords: ['cordis-plugin', 'acrylblends'],
+    }),
+  )
+  writeFileSync(
+    join(source, 'index.ts'),
+    `import { Acryl } from 'acrylblends'
+export const name = '${name}'
+export const inject = ['router']
+export function apply(ctx) {
+  ctx.router.route('/', new Acryl().get('/${name}', (c) => c.json({ pulled: true })))
+}
+export async function check(ctx) {
+  const reply = await ctx.router.request('/${name}')
+  if (!reply.ok) throw new Error('GET /${name} answered ' + reply.status)
+}
+`,
+  )
+  const tarball = join(app, '..', `${name}-1.0.0.tgz`)
+  writeFileSync(tarball, packFolder(source).tarball)
+  const npm = npmSpawn()
+  const line = (input) =>
+    spawnSync(npm.command, ['run', 'acryl', '--', 'plugin', 'pull', input], {
+      cwd: app,
+      encoding: 'utf8',
+      ...npm.options,
+    })
+  const refused = line(`${tarball}@sha256:${'0'.repeat(64)}`)
+  if (refused.status !== 1 || !refused.stderr.includes('different bytes'))
+    fail(`a wrong digest was not refused in the frame:\n${refused.stdout}${refused.stderr}`)
+  if (existsSync(join(app, 'plugins', name))) fail('a refused pull left its folder in the app')
+  const pulled = line(tarball)
+  if (pulled.status !== 0)
+    fail(`the pull line failed in the frame:\n${pulled.stdout}${pulled.stderr}`)
+  // The frame reloads the app's rows after a change to its files; the plugin comes back from its folder.
+  const answer = await until(async () => {
+    const reply = await fetch(`${origin}/app/${name}`).catch(() => undefined)
+    return reply?.ok ? await reply.text() : undefined
+  }, 60_000)
+  if (!answer?.includes('pulled')) fail(`the pulled plugin does not answer at /app/${name}`)
+  log(
+    'the pull line works in the frame: a wrong digest is refused, a release answers in the canvas',
+  )
 }
 
 /**

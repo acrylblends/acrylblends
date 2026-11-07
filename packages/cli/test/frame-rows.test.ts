@@ -16,7 +16,27 @@ function rowRoutePath(): (prefix: string, path: string) => string {
   return new Function(`return (${match[0]})`)() as (prefix: string, path: string) => string
 }
 
+/** The router view exactly as the generated row builds it. */
+function rowRouter(): (router: object, prefix: string) => { request(input: unknown): unknown } {
+  const source =
+    /function prefixedAppRoute[\s\S]*?\n\}\n[\s\S]*?function appRouter\(router, prefix\) \{[\s\S]*?\n\}/u.exec(
+      row,
+    )
+  if (source === null) throw new Error('the generated row has no appRouter')
+  return new Function(`${source[0]}\nreturn appRouter`)() as never
+}
+
 describe('the generated app-plugins row', () => {
+  it("a plugin's own request finds its route under the prefix, so its install check passes in the frame", () => {
+    const asked: unknown[] = []
+    const view = rowRouter()({ request: (input: unknown) => asked.push(input) }, '/app')
+    view.request('/pomodoro')
+    view.request('/app/pomodoro')
+    const whole = new Request('http://x/pomodoro')
+    view.request(whole)
+    expect(asked).toEqual(['/app/pomodoro', '/app/pomodoro', whole])
+  })
+
   it('runs the app rows under a router whose mounts land under the frame prefix', () => {
     expect(row).toContain("import { composeInto } from '../src/app.ts'")
     expect(row).toContain('const appScope = ctx.extend({ router: appRouter(ctx.router, prefix) })')

@@ -349,7 +349,7 @@ export class Door {
 
   private share(): PluginSharePort {
     const share = this.deps.pluginShare?.()
-    if (share === undefined) throw new DoorError('unavailable', 'this app has no plugin-share plugin (an app made by an older version does not, and upgrade does not add it): see the README of plugin-share after `npx acrylblends add plugin-share`')
+    if (share === undefined) throw new DoorError('unavailable', 'plugin-share is not running in this app. If the app just changed it is restarting, so try again in a moment. An app made by an older version does not have it, and upgrade does not add it: run `npx acrylblends add plugin-share` and follow its README')
     return share
   }
 

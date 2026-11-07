@@ -164,6 +164,8 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(overlay).toContain('- id: app-plugins')
     expect(overlay).toContain('name: ./frame/app-plugins.mjs')
     expect(overlay).toMatch(/isolate: \{[^}]*"agent":true/u)
+    // The door and the frame call plugin-share from the host's side.
+    expect(overlay).not.toContain('"pluginShare"')
     expect(overlay).toContain('- id: app-routes')
     expect(existsSync(join(root, 'frame', 'app-plugins.mjs'))).toBe(true)
     expect(read(root, 'frame/app-plugins.mjs')).toContain(
