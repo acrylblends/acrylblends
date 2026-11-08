@@ -249,7 +249,9 @@ describe('upgrading a pre-frame app to the host layout', () => {
 
   it('leaves an app whose scaffold is not the previous release (edited, or another version) alone', async () => {
     const root = await preFrameApp('custom-scaffold')
+    // Both files of the blank scaffold are the app's own: with an untouched src/app.ts the app is still the blank template's, and only routes.ts is kept.
     writeFileSync(join(root, 'src', 'routes.ts'), '// my own routes\nexport const routes = {}\n')
+    writeFileSync(join(root, 'src', 'app.ts'), '// my own composition root\nexport {}\n')
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { code, out } = await runUpgrade(root)
     expect(code).toBe(0)

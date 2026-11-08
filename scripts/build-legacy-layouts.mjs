@@ -57,12 +57,27 @@ function scaffoldFiles(template) {
 
 /** The published versions of the CLI: the tags are release commits, and a tag that never reached npm cannot have made an app in someone's hands. */
 function publishedVersions() {
-  return new Set(
-    JSON.parse(
-      execFileSync('npm', ['view', 'acrylblends', 'versions', '--json'], { encoding: 'utf8' }),
-    ),
-  )
+  let listed
+  try {
+    listed = execFileSync('npm', ['view', 'acrylblends', 'versions', '--json'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    // The check is the gate's guard that every published release is recorded: offline a local run says what it did not check, and CI never skips it.
+    if (check && !process.env.CI) {
+      log(
+        'SKIPPED: no network, so the fixtures were not compared with the published releases (npm view acrylblends failed)',
+      )
+      process.exit(0)
+    }
+    throw error
+  }
+  return new Set(JSON.parse(listed))
 }
+
+/** Published versions that were never releases: 0.0.0-stage only held the name on npm, with no tag and no templates. */
+const NOT_RELEASES = new Set(['0.0.0-stage'])
 
 /** Every release with templates: version, and for each template the scaffold file contents (or undefined when that release had no such template). */
 function releases() {
@@ -71,6 +86,14 @@ function releases() {
     .trim()
     .split('\n')
     .filter(Boolean)
+  // A checkout without the release tags (a shallow CI clone) would find no release and pass on nothing: every published version must have its tag here.
+  const untagged = [...published].filter(
+    (version) => !tags.includes(`v${version}`) && !NOT_RELEASES.has(version),
+  )
+  if (untagged.length > 0)
+    fail(
+      `no tag for the published release${untagged.length === 1 ? '' : 's'} ${untagged.join(', ')}: fetch the tags (git fetch --tags) and run again`,
+    )
   const out = []
   for (const tag of tags) {
     const version = tag.slice(1)
@@ -94,10 +117,8 @@ function releases() {
           files[file] = execFileSync(
             'git',
             ['show', `${tag}:packages/cli/templates/${template}/${file}`],
-            {
-              cwd: root,
-              encoding: 'utf8',
-            },
+            // A file the tag does not have is an expected answer here (the template is incomplete in that release), so git's message is not shown.
+            { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
           )
         } catch {
           complete = false
