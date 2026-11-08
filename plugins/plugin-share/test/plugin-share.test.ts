@@ -653,22 +653,34 @@ test('the list says where each pulled plugin came from and who released it; one 
   ).extensions.install(join(root, 'plugins', 'mine'))
   assert.ok(installed.ok)
   assert.deepEqual(
-    share
-      .list()
-      .map(({ name, state, pulledFrom, author }) => ({ name, state, pulledFrom, author })),
+    share.list().map(({ name, state, pulledFrom, author, release }) => ({
+      name,
+      state,
+      pulledFrom,
+      author,
+      release,
+    })),
     [
       {
         name: 'hello',
         state: 'active',
         pulledFrom: 'github:someone/hello@1.0.0',
         author: 'someone',
+        release: '1.0.0',
       },
-      { name: 'mine', state: 'active', pulledFrom: undefined, author: undefined },
+      // Its folder has no package.json, so no release version: extensions' `version` (the content's short digest) is all there is.
+      {
+        name: 'mine',
+        state: 'active',
+        pulledFrom: undefined,
+        author: undefined,
+        release: undefined,
+      },
     ],
   )
-  // Everything extensions says is kept (a pending plugin's missing services among it): the source and author are added, nothing is left out.
+  // Everything extensions says is kept (a pending plugin's missing services among it): the source, author and release are added, nothing is left out.
   assert.deepEqual(
-    share.list().map(({ pulledFrom: _from, author: _author, ...info }) => info),
+    share.list().map(({ pulledFrom: _from, author: _author, release: _release, ...info }) => info),
     (app as unknown as { extensions: { list(): readonly unknown[] } }).extensions.list(),
   )
 })

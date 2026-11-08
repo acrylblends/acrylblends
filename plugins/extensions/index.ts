@@ -116,6 +116,8 @@ export interface ExtensionInfo {
   readonly missing: readonly string[]
   /** The source folder no longer exists; the last installed version still runs. */
   readonly stale: boolean
+  /** The routes its mount added, as the plugin wrote them (without the frame's prefix), so a surface can link to its pages. */
+  readonly routes: readonly { readonly method: string; readonly path: string }[]
 }
 
 export type InstallResult =
@@ -353,6 +355,7 @@ export class Extensions extends Service {
           state,
           missing: state === 'pending' ? this.missing(entry.module) : [],
           stale: this.stale.has(entry.name),
+          routes: entry.routes.map(({ method, path }) => ({ method, path: this.written(path) })),
         }
       })
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -609,6 +612,13 @@ export class Extensions extends Service {
     return servedRoutes(fibers)
   }
 
+  /** A served path as the plugin wrote it: without the frame's canvas prefix. */
+  private written(path: string): string {
+    return this.routePrefix !== '' && path.startsWith(`${this.routePrefix}/`)
+      ? path.slice(this.routePrefix.length)
+      : path
+  }
+
   /**
    * A route the new plugin added that another plugin already serves: the router would answer with the other one, so the new route would never be
    * reached. Refused before the plugin's own check, which the other plugin's answer would pass.
@@ -624,15 +634,11 @@ export class Extensions extends Service {
       [...this.installed.values()].find((entry) =>
         entry.routes.some((own) => own.method === taken.method && own.path === taken.path),
       )?.name ?? (taken.owner === '' ? 'the app' : taken.owner)
-    const shown = (path: string): string =>
-      this.routePrefix !== '' && path.startsWith(`${this.routePrefix}/`)
-        ? path.slice(this.routePrefix.length)
-        : path
     const same =
-      taken.path === route.path ? '' : ` (it serves ${taken.method} ${shown(taken.path)})`
+      taken.path === route.path ? '' : ` (it serves ${taken.method} ${this.written(taken.path)})`
     return {
       stage: 'conflict',
-      error: `${route.method} ${shown(route.path)} is already served by ${owner}${same}; rename this plugin's route, or remove ${owner} first`,
+      error: `${route.method} ${this.written(route.path)} is already served by ${owner}${same}; rename this plugin's route, or remove ${owner} first`,
     }
   }
 

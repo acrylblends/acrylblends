@@ -118,6 +118,8 @@ export interface SharedPluginInfo extends ExtensionInfo {
   readonly pulledFrom?: string
   /** Who released it: the account of a `github:` source or of a release address on github.com. */
   readonly author?: string
+  /** The version its `package.json` names (`version` is the installed content's short digest); absent without one. */
+  readonly release?: string
 }
 
 /** What removing a plugin did with its folder in `plugins/`. */
@@ -146,6 +148,20 @@ declare module '@deepseek-ai/cordis' {
 /** The account that released a source: the owner of a `github:<owner>/<repo>@<version>` source or of a release address on github.com. */
 const authorOf = (source: string): string | undefined =>
   (/^github:([^/]+)\//u.exec(source) ?? /^https:\/\/github\.com\/([^/]+)\//u.exec(source))?.[1]
+
+/** The version a plugin folder's `package.json` names, when it names a plain one. */
+function releaseOf(folder: string): string | undefined {
+  try {
+    const version = (
+      JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')) as { version?: unknown }
+    ).version
+    return typeof version === 'string' && /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/u.test(version)
+      ? version
+      : undefined
+  } catch {
+    return undefined
+  }
+}
 
 /** The license a new public plugin is offered under; the plan shows it before the person says yes. */
 const DEFAULT_LICENSE = 'MIT'
@@ -304,10 +320,12 @@ export class PluginShare extends Service {
     return this.own.extensions.list().map((info) => {
       const record = records[info.name]
       const author = record === undefined ? undefined : authorOf(record.source)
+      const release = releaseOf(join(this.dir, info.name))
       return {
         ...info,
         ...(record === undefined ? {} : { pulledFrom: record.source }),
         ...(author === undefined ? {} : { author }),
+        ...(release === undefined ? {} : { release }),
       }
     })
   }
