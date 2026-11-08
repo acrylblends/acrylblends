@@ -105,7 +105,7 @@ export function renderCards(cards: readonly ShowcaseCard[], base = ''): string {
       ]
       return [
         `<article class="card" data-plugin="${escapeHtml(card.name)}" data-state="${escapeHtml(card.state)}">`,
-        `<header><h2>${escapeHtml(card.name)}</h2><span class="version">${escapeHtml(card.version)}</span><span class="state state-${escapeHtml(card.state)}">${escapeHtml(card.state)}</span></header>`,
+        `<header><h2>${escapeHtml(card.name)}</h2><p class="meta"><span class="version">${escapeHtml(card.version)}</span><span class="state state-${escapeHtml(card.state)}">${escapeHtml(card.state)}</span></p></header>`,
         `<p class="author">${author}</p>`,
         `<p class="source"><code>${escapeHtml(card.source)}</code></p>`,
         links.length === 0
@@ -126,10 +126,11 @@ h1{margin:0 0 4px;font-size:20px}
 .lead{margin:0 0 20px;color:var(--dim)}
 #cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .card{padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);min-width:0}
-.card header{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
-.card h2{margin:0;font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.card header{margin-bottom:8px}
+.card h2{margin:0 0 4px;font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.card .meta{display:flex;align-items:center;gap:8px;margin:0}
 .version{color:var(--dim);font-variant-numeric:tabular-nums}
-.state{margin-left:auto;padding:1px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;color:var(--dim)}
+.state{padding:1px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;color:var(--dim)}
 .state-active{color:var(--ok);border-color:currentColor}
 .state-failed,.state-pending{color:var(--warn);border-color:currentColor}
 .card p{margin:4px 0}

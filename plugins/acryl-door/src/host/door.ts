@@ -398,7 +398,7 @@ export class Door {
     if (typeof source !== 'string' || source === '') throw new DoorError('invalid', 'plugin pull needs a source, e.g. plugin pull github:someone/pomodoro@0.1.0')
     const value = await this.share().pull(source)
     // A refusal is a failed command, so a script does not read it as done; it changed nothing, and the open pages stay.
-    if (!value.ok) throw new DoorError('refused', `${value.reason ?? 'the pull was refused'}. ${value.next ?? 'nothing changed'}.`)
+    if (!value.ok) throw new DoorError('refused', `${sentence(value.reason ?? 'the pull was refused')} ${sentence(value.next ?? 'nothing changed')}`)
     // Neither did pulling what is already there change anything.
     if (value.action !== 'unchanged' && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
     return { value, text: JSON.stringify(value, null, 2) }
@@ -409,7 +409,7 @@ export class Door {
     if (source !== undefined) throw new DoorError('invalid', 'plugin pull takes a source or --from <list>, not both')
     if (typeof from !== 'string' || from === '') throw new DoorError('invalid', 'plugin pull --from needs a list, e.g. plugin pull --from group.txt')
     const value = await this.share().pullList(from)
-    if (!value.ok) throw new DoorError('refused', `${value.reason}. ${value.next}.`)
+    if (!value.ok) throw new DoorError('refused', `${sentence(value.reason)} ${sentence(value.next)}`)
     const changed = value.entries.some(entry => entry.result.ok && entry.result.action !== 'unchanged')
     if (changed && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
     const lines = value.entries.map(entry => `${entry.source}: ${pullLine(entry.result)}`)
@@ -455,6 +455,12 @@ export class Door {
 
 /** One source's outcome in a list pull, as a person reads it. */
 function pullLine(result: PullView): string {
-  if (!result.ok) return `refused: ${result.reason ?? 'the pull was refused'}. ${result.next ?? 'nothing changed'}.`
+  if (!result.ok) return `refused: ${sentence(result.reason ?? 'the pull was refused')} ${sentence(result.next ?? 'nothing changed')}`
   return `${result.action ?? 'pulled'}${result.name === undefined ? '' : ` ${result.name}`}`
+}
+
+/** A text as one sentence: the full stop added only when it has no closing punctuation of its own (a reason may end with one, a next step often does). */
+function sentence(text: string): string {
+  const trimmed = text.trim()
+  return /[.!?]$/u.test(trimmed) ? trimmed : `${trimmed}.`
 }

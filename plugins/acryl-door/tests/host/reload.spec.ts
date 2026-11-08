@@ -222,7 +222,7 @@ describe('act navigate says what the app answered at the path', () => {
       from: 'group.txt',
       entries: [
         { line: 1, source: 'github:a/hello@0.1.0', result: { ok: true, action: 'installed', name: 'hello' } },
-        { line: 3, source: 'github:b/echo@0.1.0', result: { ok: false, reason: 'echo claims the route /hello, which hello already serves', next: 'ask its author to rename the route' } },
+        { line: 3, source: 'github:b/echo@0.1.0', result: { ok: false, reason: 'echo claims the route /hello, which hello already serves', next: 'ask its author to rename the route.' } },
         { line: 4, source: 'github:c/greet@0.1.0', result: { ok: true, action: 'installed', name: 'greet' } },
       ],
     })
