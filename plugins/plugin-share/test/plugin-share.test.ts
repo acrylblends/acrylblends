@@ -434,6 +434,22 @@ test('publishing exactly the confirmed plan releases those bytes, and the pull l
   )
 })
 
+test('a plan confirmed through JSON in another field order publishes; one with another digest sends nothing', async () => {
+  const hub = fakeHost()
+  const { share } = await bootWithPlugin(hub)
+  const plan = planned(await share.planPublish('hello'))
+  // As the frame's confirm sends it back: parsed from JSON, fields in whatever order that surface wrote them.
+  const reordered = JSON.parse(
+    JSON.stringify(Object.fromEntries(Object.entries(plan).reverse())),
+  ) as typeof plan
+  const changed = { ...reordered, digest: '0'.repeat(64) }
+  const refused = await share.publish('hello', changed)
+  assert.equal(refused.ok, false)
+  assert.deepEqual(hub.sent, [], 'a plan that is not the one shown sends nothing')
+  const result = await share.publish('hello', reordered)
+  assert.ok(result.ok, JSON.stringify(result))
+})
+
 test("what another person pulls is the plan's digest", async () => {
   const hub = fakeHost()
   const { share } = await bootWithPlugin(hub)

@@ -58,8 +58,22 @@ export interface PublishPorts {
 export const pullLineOf = (owner: string, repo: string, version: string, digest: string): string =>
   `npm run acryl -- plugin pull github:${owner}/${repo}@${version}@sha256:${digest}`
 
-/** The same plan: what the person confirmed is what would be published now. `released` only explains the version, and is gone once the next one is packaged. */
+/**
+ * The same plan: what the person confirmed is what would be published now. `released` only explains the version, and is gone once the next one is packaged.
+ * Field by field, so a plan that came back through JSON from another surface (the frame's confirm) is the same plan whatever order its fields arrived in.
+ */
 export function samePlan(a: PublishPlan, b: PublishPlan): boolean {
-  const compared = ({ released: _released, ...rest }: PublishPlan) => JSON.stringify(rest)
-  return compared(a) === compared(b)
+  return (
+    a.owner === b.owner &&
+    a.repo === b.repo &&
+    a.version === b.version &&
+    a.visibility === b.visibility &&
+    a.license === b.license &&
+    a.createsRepository === b.createsRepository &&
+    a.integrity === b.integrity &&
+    a.digest === b.digest &&
+    a.pullLine === b.pullLine &&
+    a.files.length === b.files.length &&
+    a.files.every((file, index) => file === b.files[index])
+  )
 }
