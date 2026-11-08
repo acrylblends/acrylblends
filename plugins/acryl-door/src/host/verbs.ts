@@ -87,9 +87,9 @@ export const VERB_SPECS: Readonly<Record<Verb, VerbSpec>> = {
     arguments: { type: 'object', properties: { folder: { type: 'string', description: 'a folder inside the app, e.g. plugins/pomodoro' } }, required: ['folder'], additionalProperties: false },
   },
   'plugin-pull': {
-    usage: 'plugin pull <source>: fetch a plugin someone released (github:<owner>/<repo>[@<version>][@sha256:<digest>], or a .tgz), check it and start it, live',
-    description: 'Fetch a plugin someone released, without running anything; check its digest, that it works on every OS and that this app has the services it needs; then install and start it without a restart. A refusal says why and changes nothing.',
-    arguments: { type: 'object', properties: { source: { type: 'string', description: 'github:<owner>/<repo>[@<version>][@sha256:<digest>], or a .tgz path or https address' } }, required: ['source'], additionalProperties: false },
+    usage: 'plugin pull <source> | --from <list>: fetch a plugin someone released (github:<owner>/<repo>[@<version>][@sha256:<digest>], or a .tgz), or every plugin of a group\'s list, check each and start it, live',
+    description: 'Fetch a plugin someone released, without running anything; check its digest, that it works on every OS and that this app has the services it needs; then install and start it without a restart. A refusal says why and changes nothing. With from instead of source, pull every source of a group\'s list (one per line, # comments); each is pulled on its own, so a refused one is named with its reason and the others still come in.',
+    arguments: { type: 'object', properties: { source: { type: 'string', description: 'github:<owner>/<repo>[@<version>][@sha256:<digest>], or a .tgz path or https address' }, from: { type: 'string', description: 'instead of source: a list of sources, a file in the app (e.g. group.txt) or an https address' } }, additionalProperties: false },
   },
   'plugin-publish': {
     usage: 'plugin publish <name> [--owner <account>] [--license <id>]: show what publishing this plugin would send; in a person\'s own terminal, ask them',

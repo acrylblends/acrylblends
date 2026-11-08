@@ -10,6 +10,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -54,6 +55,7 @@ import {
   refuse,
   splitDigest,
 } from './pull-check.ts'
+import { LIST_MAX_BYTES, parsePullList, pullListLocation } from './pull-list.ts'
 import { type PulledRecord, pulledRecords, withPulledRecord } from './pulled-records.ts'
 
 export type {
@@ -76,6 +78,8 @@ export interface PluginShareConfig {
   releases?: ReleasePort
   /** Where a publish goes. Defaults to the person's own `gh` and `git`. */
   publish?: PublishPorts
+  /** How an https address is read: a release `.tgz` and a list of sources. Defaults to HTTPS with the hub's size and time limits. */
+  download?: (url: string) => Promise<Uint8Array>
 }
 
 export type PullResult =
@@ -92,6 +96,19 @@ export type PullResult =
       /** Whether the app's `blend.yaml` and lock now name this source, so a copy of the app can fetch it. A local file names nothing to fetch. */
       readonly remembered: boolean
     }
+  | PullRefused
+
+/** One source of a list and what pulling it did. */
+export interface PullListEntry {
+  /** Its line in the list. */
+  readonly line: number
+  readonly source: string
+  readonly result: PullResult
+}
+
+/** A list pulled: every source with its own result (some may be refused while the others install), or the list itself refused. */
+export type PullListResult =
+  | { readonly ok: true; readonly from: string; readonly entries: readonly PullListEntry[] }
   | PullRefused
 
 /** One plugin installed while the app runs, as a person reads the list: what it is and, for one pulled, where it came from and who released it. */
@@ -176,6 +193,7 @@ export class PluginShare extends Service {
   readonly restored: Promise<readonly RestoreOutcome[]>
   private readonly dir: string
   private readonly releases: ReleasePort
+  private readonly download: (url: string) => Promise<Uint8Array>
   private readonly ports: PublishPorts
   /** One at a time: two pulls of one name must not race for its folder, nor two publishes for its package. */
   private queue: Promise<unknown> = Promise.resolve()
@@ -193,6 +211,7 @@ export class PluginShare extends Service {
     this.own = ctx
     this.dir = resolve(config.dir ?? join(ctx.appInstance.root, 'plugins'))
     this.releases = config.releases ?? githubReleasesOverHttps()
+    this.download = config.download ?? httpsDownload()
     this.ports = config.publish ?? { host: githubCli(), git: gitCli() }
     // Removing a plugin removes its record. Listened to here, not asked of each caller: every way of removing it goes through extensions.
     ctx.on('extensions/changed', (name, change) => {
@@ -207,6 +226,67 @@ export class PluginShare extends Service {
   /** Pull a plugin into the running app. Never throws for what a person can act on: a refusal says what is wrong and what to do, and changes nothing. */
   pull(source: string): Promise<PullResult> {
     return this.inTurn(() => this.pullNow(source))
+  }
+
+  /**
+   * Pull every source of a list, a file in the app or an https address (a gist, a file in the group's repository): one after the other and each on
+   * its own, so a source that is refused, or clashes with a plugin already here, is reported with its reason while the others install and keep running.
+   * A list that cannot be read, or has a line that is not one source, pulls nothing.
+   */
+  async pullList(from: string): Promise<PullListResult> {
+    const text = await this.readList(from)
+    if (typeof text !== 'string') return text
+    const { sources, problems } = parsePullList(text)
+    if (problems.length > 0)
+      return refuse('list', `${from}: ${problems.join('; ')}`, 'fix the list; nothing was pulled')
+    if (sources.length === 0)
+      return refuse(
+        'list',
+        `${from} names no plugin`,
+        'write one source per line, e.g. github:someone/pomodoro@0.1.0',
+      )
+    const entries: PullListEntry[] = []
+    for (const { line, source } of sources)
+      entries.push({ line, source, result: await this.pull(source) })
+    return { ok: true, from, entries }
+  }
+
+  /** The text of a list, or why it cannot be read. */
+  private async readList(from: string): Promise<string | PullRefused> {
+    const where = pullListLocation(from)
+    if (where === undefined)
+      return refuse(
+        'list',
+        `"${from}" is not a list`,
+        'name a file in the app (e.g. group.txt) or an https address of one',
+      )
+    try {
+      let bytes: Uint8Array
+      if (where.kind === 'address') bytes = await this.download(where.url)
+      else {
+        const path = resolve(this.own.appInstance.root, where.path)
+        if (!existsSync(path) || !statSync(path).isFile())
+          return refuse(
+            'list',
+            `there is no file ${where.path}`,
+            'name a file in the app, or an https address',
+          )
+        bytes = readFileSync(path)
+      }
+      if (bytes.length > LIST_MAX_BYTES)
+        return refuse(
+          'list',
+          `${from} is larger than ${String(LIST_MAX_BYTES)} bytes, so it is not a list of plugins`,
+          'name the list itself',
+        )
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    } catch (cause) {
+      return refuse(
+        'list',
+        `${from} could not be read: ${reasonOf(cause)}`,
+        'check the address; nothing was pulled',
+      )
+    }
   }
 
   /**
@@ -457,7 +537,7 @@ export class PluginShare extends Service {
           {
             store: new PluginStore(scratch),
             releases: this.releases,
-            download: httpsDownload(),
+            download: this.download,
           },
           expectIntegrity === undefined ? {} : { expectIntegrity },
         )

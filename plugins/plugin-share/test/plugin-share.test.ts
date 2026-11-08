@@ -32,6 +32,7 @@ import {
   type PublishPorts,
   type PublishRefused,
   type PublishResult,
+  type PullListResult,
   type PullResult,
   pluginShare,
   type RestoreOutcome,
@@ -39,6 +40,7 @@ import {
   type SharedRemoveResult,
 } from '../index.ts'
 import { splitDigest } from '../pull-check.ts'
+import { parsePullList, pullListLocation } from '../pull-list.ts'
 import { pulledRecords } from '../pulled-records.ts'
 
 const cleanup: Array<() => Promise<void> | void> = []
@@ -93,6 +95,7 @@ async function boot({
 }: {
   releases?: ReleasePort
   publish?: PublishPorts
+  download?: (url: string) => Promise<Uint8Array>
   root?: string
 } = {}) {
   const app = new Context()
@@ -111,6 +114,7 @@ async function boot({
     app as unknown as {
       pluginShare: {
         pull(source: string): Promise<PullResult>
+        pullList(from: string): Promise<PullListResult>
         list(): SharedPluginInfo[]
         pulledDigest(name: string): string | undefined
         remove(name: string): Promise<SharedRemoveResult>
@@ -733,4 +737,140 @@ test("the running service knows the digest of every pull it installed, a local f
   assert.deepEqual(await share.remove('hello'), { ok: true, name: 'hello', folder: 'deleted' })
   assert.equal(share.pulledDigest('hello'), undefined)
   assert.equal(existsSync(join(root, 'plugins', 'hello')), false)
+})
+
+/** Three releases as local files of the app: two plugins with their own routes, and a third whose route is already the first one's. */
+function groupReleases(root: string) {
+  const files = {
+    'hello-1.0.0.tgz': pack({ 'index.ts': ROUTE }),
+    'greet-1.0.0.tgz': pack(
+      { 'index.ts': routeSource('greet', '/greet', 'Greet') },
+      { name: 'greet' },
+    ),
+    'echo-1.0.0.tgz': pack({ 'index.ts': routeSource('echo', '/hello', 'Echo') }, { name: 'echo' }),
+  }
+  for (const [name, release] of Object.entries(files))
+    writeFileSync(join(root, name), release.tarball)
+  return files
+}
+
+test('a list pulls each source on its own: a clashing one is refused by name and the others install and answer', async () => {
+  const { share, get, root, installed } = await boot()
+  groupReleases(root)
+  writeFileSync(
+    join(root, 'group.txt'),
+    [
+      '# the group, one line each',
+      'hello-1.0.0.tgz',
+      'npm run acryl -- plugin pull echo-1.0.0.tgz   # pasted as plugin publish prints it',
+      '',
+      'plugin pull greet-1.0.0.tgz',
+      'hello-1.0.0.tgz',
+    ].join('\r\n'),
+  )
+  const result = await share.pullList('group.txt')
+  assert.ok(result.ok, JSON.stringify(result))
+  if (!result.ok) return
+  assert.deepEqual(
+    result.entries.map((entry) => [entry.line, entry.source, entry.result.ok]),
+    [
+      [2, 'hello-1.0.0.tgz', true],
+      [3, 'echo-1.0.0.tgz', false],
+      [5, 'greet-1.0.0.tgz', true],
+    ],
+    'each source once, in order, with its line',
+  )
+  const echo = result.entries[1]?.result
+  assert.ok(echo !== undefined && !echo.ok)
+  if (echo !== undefined && !echo.ok)
+    assert.match(echo.reason, /hello/u, 'the refusal names the plugin that has the route')
+  assert.deepEqual(
+    (await get('/hello')).body,
+    { text: 'Hello' },
+    'the first plugin keeps its route',
+  )
+  assert.deepEqual(
+    (await get('/greet')).body,
+    { text: 'Greet' },
+    'a source after the refused one still installs',
+  )
+  assert.deepEqual((installed() as Array<{ name: string }>).map((info) => info.name).sort(), [
+    'greet',
+    'hello',
+  ])
+  assert.ok(!existsSync(join(root, 'plugins', 'echo')), 'the refused one leaves no folder')
+})
+
+test('a list at an https address is read through the download port', async () => {
+  const { root } = await boot()
+  groupReleases(root)
+  const asked: string[] = []
+  const { share, get } = await boot({
+    root,
+    download: async (url) => {
+      asked.push(url)
+      return new TextEncoder().encode('hello-1.0.0.tgz\ngreet-1.0.0.tgz\n')
+    },
+  })
+  const result = await share.pullList('https://gist.example/group.txt')
+  assert.ok(result.ok && result.entries.every((entry) => entry.result.ok), JSON.stringify(result))
+  assert.deepEqual(asked, ['https://gist.example/group.txt'])
+  assert.deepEqual((await get('/greet')).body, { text: 'Greet' })
+})
+
+test('a list that is not one, cannot be read or has a line that is not a source pulls nothing', async () => {
+  const { share, root, untouched } = await boot({
+    download: async () => {
+      throw new Error('https://gist.example/missing answered 404')
+    },
+  })
+  groupReleases(root)
+  writeFileSync(join(root, 'two-words.txt'), 'hello-1.0.0.tgz\nhello-1.0.0.tgz greet-1.0.0.tgz\n')
+  writeFileSync(join(root, 'empty.txt'), '# nobody yet\n\n')
+  writeFileSync(join(root, 'huge.txt'), 'x'.repeat(64 * 1024 + 1))
+  const list = async (from: string, reason: RegExp) => {
+    const result = await share.pullList(from)
+    assert.equal(result.ok, false, JSON.stringify(result))
+    if (result.ok) return
+    assert.equal(result.refusal, 'list')
+    assert.match(result.reason, reason)
+    assert.ok(result.next.length > 0)
+  }
+  await list('two-words.txt', /line 2 holds more than one word/u)
+  await list('empty.txt', /names no plugin/u)
+  await list('huge.txt', /larger than 65536 bytes/u)
+  await list('nowhere.txt', /there is no file nowhere\.txt/u)
+  await list('http://gist.example/group.txt', /is not a list/u)
+  await list('github:someone/hello@1.0.0', /is not a list/u)
+  await list('https://gist.example/missing', /could not be read: .*404/u)
+  for (const name of [
+    'hello-1.0.0.tgz',
+    'greet-1.0.0.tgz',
+    'echo-1.0.0.tgz',
+    'two-words.txt',
+    'empty.txt',
+    'huge.txt',
+  ])
+    rmSync(join(root, name))
+  await untouched()
+})
+
+test('a list is read line by line: comments, a pasted pull command, repeats and Windows line ends', () => {
+  assert.deepEqual(
+    parsePullList(
+      '# group\r\ngithub:a/x@1.0.0 # ana\r\nnpm run acryl -- plugin pull github:b/y@0.2.0@sha256:abc\r\ngithub:a/x@1.0.0\r\n',
+    ),
+    {
+      sources: [
+        { line: 2, source: 'github:a/x@1.0.0' },
+        { line: 3, source: 'github:b/y@0.2.0@sha256:abc' },
+      ],
+      problems: [],
+    },
+  )
+  assert.deepEqual(pullListLocation('https://x/y.txt'), { kind: 'address', url: 'https://x/y.txt' })
+  assert.deepEqual(pullListLocation('lists/group.txt'), { kind: 'file', path: 'lists/group.txt' })
+  assert.deepEqual(pullListLocation('C:\\group.txt'), { kind: 'file', path: 'C:\\group.txt' })
+  assert.equal(pullListLocation('http://x/y.txt'), undefined)
+  assert.equal(pullListLocation('github:a/x'), undefined)
 })

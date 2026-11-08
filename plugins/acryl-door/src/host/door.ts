@@ -41,10 +41,20 @@ export interface PluginSharePort {
   list(): readonly unknown[]
   /** Take a plugin out and forget its record; a pulled folder still holding the release as pulled goes too. */
   remove(name: string): Promise<unknown>
-  pull(source: string): Promise<{ readonly ok: boolean; readonly action?: string; readonly reason?: string; readonly next?: string }>
+  pull(source: string): Promise<PullView>
+  /** Pull each source of a group's list on its own: one that is refused does not stop the others. */
+  pullList(from: string): Promise<PullListView>
   planPublish(name: string, options?: PublishOptionsView): Promise<PublishPlanView | { readonly ok: false; readonly reason: string; readonly next: string }>
   publish(name: string, confirmed: PublishPlanView, options?: PublishOptionsView): Promise<{ readonly ok: boolean; readonly reason?: string }>
 }
+
+/** What one pull did, or why it was refused. */
+export interface PullView { readonly ok: boolean; readonly action?: string; readonly name?: string; readonly reason?: string; readonly next?: string }
+
+/** What a list pull did for each source, or why the list itself was refused (then nothing was pulled). */
+export type PullListView =
+  | { readonly ok: true; readonly from: string; readonly entries: readonly { readonly line: number; readonly source: string; readonly result: PullView }[] }
+  | { readonly ok: false; readonly reason: string; readonly next: string }
 
 /** Who a plan publishes as, and under which license; the service's defaults when absent. */
 export interface PublishOptionsView {
@@ -159,7 +169,7 @@ export class Door {
       }
       case 'plugin-list': return this.plugin(plugins => plugins.list(), false, this.installed())
       case 'plugin-add': return this.plugin(extensions => extensions.install(this.insideApp(input.folder)))
-      case 'plugin-pull': return this.pull(input.source)
+      case 'plugin-pull': return input.from === undefined ? this.pull(input.source) : this.pullList(input.from, input.source)
       case 'plugin-publish': return this.planPublish(input)
       case 'plugin-remove': {
         const name = input.name
@@ -394,6 +404,22 @@ export class Door {
     return { value, text: JSON.stringify(value, null, 2) }
   }
 
+  /** A group's list: every source is pulled on its own, so one refused plugin is named with its reason and the others still install and run. */
+  private async pullList(from: unknown, source: unknown): Promise<VerbAnswer> {
+    if (source !== undefined) throw new DoorError('invalid', 'plugin pull takes a source or --from <list>, not both')
+    if (typeof from !== 'string' || from === '') throw new DoorError('invalid', 'plugin pull --from needs a list, e.g. plugin pull --from group.txt')
+    const value = await this.share().pullList(from)
+    if (!value.ok) throw new DoorError('refused', `${value.reason}. ${value.next}.`)
+    const changed = value.entries.some(entry => entry.result.ok && entry.result.action !== 'unchanged')
+    if (changed && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
+    const lines = value.entries.map(entry => `${entry.source}: ${pullLine(entry.result)}`)
+    const refused = value.entries.filter(entry => !entry.result.ok)
+    const summary = `${String(value.entries.length - refused.length)} of ${String(value.entries.length)} from ${value.from} pulled`
+    // Some refused: the command failed, so a script sees it, but the ones that came in stay in and keep running.
+    if (refused.length > 0) throw new DoorError('refused', [`${summary}; ${String(refused.length)} refused, the others are in and running.`, ...lines].join('\n'))
+    return { value, text: [`${summary}.`, ...lines].join('\n') }
+  }
+
   /** A folder named by an agent, resolved from the app folder; it must be inside the app. */
   private insideApp(folder: unknown): string {
     if (typeof folder !== 'string' || folder === '') throw new DoorError('invalid', 'plugin add needs a folder, e.g. plugins/pomodoro')
@@ -425,4 +451,10 @@ export class Door {
     }
     return { value, text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }
   }
+}
+
+/** One source's outcome in a list pull, as a person reads it. */
+function pullLine(result: PullView): string {
+  if (!result.ok) return `refused: ${result.reason ?? 'the pull was refused'}. ${result.next ?? 'nothing changed'}.`
+  return `${result.action ?? 'pulled'}${result.name === undefined ? '' : ` ${result.name}`}`
 }

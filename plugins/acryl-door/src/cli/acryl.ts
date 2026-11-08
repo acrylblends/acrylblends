@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { readDoorFile, STATE_DIR, DOOR_FILE } from '../host/door-file.ts'
 
 const ACT_OPS = new Set(['click', 'type', 'select', 'press', 'scroll', 'wait', 'reload', 'navigate'])
-const VALUED = new Set(['--dir', '--owner', '--license', '--ref', '--text', '--option', '--key', '--direction', '--amount', '--cursor', '--max-nodes', '--role', '--name', '--timeout-ms', '--id', '--width', '--height', '--window', '--tool', '--args', '--path'])
+const VALUED = new Set(['--dir', '--owner', '--license', '--ref', '--text', '--option', '--key', '--direction', '--amount', '--cursor', '--max-nodes', '--role', '--name', '--timeout-ms', '--id', '--width', '--height', '--window', '--tool', '--args', '--path', '--from'])
 const FLAGS = new Set(['--json', '--submit', '--no-clear', '--gone', '--force', '--help'])
 
 export class UsageError extends Error {}
@@ -139,7 +139,12 @@ export function parseInvocation(argv: readonly string[], env: NodeJS.ProcessEnv 
     case 'plugin': {
       if (second === 'list' || second === 'reload') return make(`plugin-${second}`)
       if (second === 'add') { if (third === undefined) throw new UsageError('plugin add needs a folder, e.g. plugin add plugins/pomodoro'); return make('plugin-add', { folder: third }) }
-      if (second === 'pull') { if (third === undefined) throw new UsageError('plugin pull needs a source, e.g. plugin pull github:someone/pomodoro@0.1.0'); return make('plugin-pull', { source: third }) }
+      if (second === 'pull') {
+        const from = values.get('--from')
+        if (from !== undefined) { if (third !== undefined) throw new UsageError('plugin pull takes a source or --from <list>, not both'); return make('plugin-pull', { from }) }
+        if (third === undefined) throw new UsageError('plugin pull needs a source, e.g. plugin pull github:someone/pomodoro@0.1.0, or --from <list>')
+        return make('plugin-pull', { source: third })
+      }
       if (second === 'publish') {
         if (third === undefined) throw new UsageError('plugin publish needs a plugin name, e.g. plugin publish pomodoro')
         const owner = values.get('--owner')

@@ -187,6 +187,7 @@ describe('act navigate says what the app answered at the path', () => {
       list: () => [],
       remove: async () => ({ ok: true }),
       pull: async () => answer,
+      pullList: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
       planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
       publish: async () => ({ ok: false }),
     })
@@ -204,12 +205,48 @@ describe('act navigate says what the app answered at the path', () => {
     await expect(door(channel).run('plugin-pull', { source: 'github:a/b' }, never)).rejects.toThrow(/npx acrylblends add plugin-share/)
   })
 
+  it('plugin pull --from pulls a group list: a refused source is named with its reason, the others come in, and the page reloads once', async () => {
+    const asked: string[] = []
+    const listing = (answer: Awaited<ReturnType<PluginSharePort['pullList']>>): PluginSharePort => ({
+      list: () => [],
+      remove: async () => ({ ok: true }),
+      pull: async () => ({ ok: true }),
+      pullList: async (from) => { asked.push(from); return answer },
+      planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
+      publish: async () => ({ ok: false }),
+    })
+    const channel = new UiChannel()
+    const page = browser(channel, { backAfterMs: 20 })
+    const mixed = listing({
+      ok: true,
+      from: 'group.txt',
+      entries: [
+        { line: 1, source: 'github:a/hello@0.1.0', result: { ok: true, action: 'installed', name: 'hello' } },
+        { line: 3, source: 'github:b/echo@0.1.0', result: { ok: false, reason: 'echo claims the route /hello, which hello already serves', next: 'ask its author to rename the route' } },
+        { line: 4, source: 'github:c/greet@0.1.0', result: { ok: true, action: 'installed', name: 'greet' } },
+      ],
+    })
+    const refused = door(channel, { pluginShare: mixed }).run('plugin-pull', { from: 'group.txt' }, never)
+    await expect(refused).rejects.toMatchObject({ code: 'refused' })
+    await expect(refused).rejects.toThrow(/2 of 3 from group\.txt pulled; 1 refused, the others are in and running\.\ngithub:a\/hello@0\.1\.0: installed hello\ngithub:b\/echo@0\.1\.0: refused: echo claims the route \/hello, which hello already serves\. ask its author to rename the route\.\ngithub:c\/greet@0\.1\.0: installed greet/)
+    expect(asked).toEqual(['group.txt'])
+    expect(page.calls.filter((call) => call.request.op === 'reload')).toHaveLength(1)
+    const clean = await door(channel, { pluginShare: listing({ ok: true, from: 'https://x.test/g.txt', entries: [{ line: 1, source: 'github:a/hello', result: { ok: true, action: 'unchanged', name: 'hello' } }] }) }).run('plugin-pull', { from: 'https://x.test/g.txt' }, never)
+    expect(clean.text).toBe('1 of 1 from https://x.test/g.txt pulled.\ngithub:a/hello: unchanged hello')
+    expect(page.calls.filter((call) => call.request.op === 'reload')).toHaveLength(1)
+    await expect(door(channel, { pluginShare: listing({ ok: false, reason: 'group.txt: line 2 holds more than one word', next: 'fix the list; nothing was pulled' }) }).run('plugin-pull', { from: 'group.txt' }, never))
+      .rejects.toMatchObject({ code: 'refused', message: 'group.txt: line 2 holds more than one word. fix the list; nothing was pulled.' })
+    await expect(door(channel, { pluginShare: mixed }).run('plugin-pull', { from: 'group.txt', source: 'github:a/b' }, never)).rejects.toThrow(/not both/)
+    await expect(door(channel, { pluginShare: mixed }).run('plugin-pull', { from: '' }, never)).rejects.toThrow(/needs a list/)
+  })
+
   it('plugin list and remove go through plugin-share where the app has it, as in the frame, where the door reaches no extensions', async () => {
     const removed: string[] = []
     const share: PluginSharePort = {
       list: () => [{ name: 'pomodoro', version: '0.1.0', state: 'active', pulledFrom: 'github:inboxxobni/acrylblends-pomodoro@0.1.0', author: 'inboxxobni' }],
       remove: async (name) => { removed.push(name); return { ok: true, name, folder: 'deleted' } },
       pull: async () => ({ ok: true }),
+      pullList: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
       planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
       publish: async () => ({ ok: false }),
     }
@@ -226,6 +263,7 @@ describe('act navigate says what the app answered at the path', () => {
       list: () => [],
       remove: async () => ({ ok: true }),
       pull: async () => ({ ok: true }),
+      pullList: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
       planPublish: async () => plan,
       publish: async (...args) => { published.push(args); return { ok: true } },
     }

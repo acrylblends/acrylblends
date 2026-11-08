@@ -17,6 +17,8 @@ export type Refusal =
   | 'missing-service'
   | 'folder-exists'
   | 'install'
+  /** A list of sources that cannot be read, or holds a line that is not one source. */
+  | 'list'
 
 export interface PullRefused {
   readonly ok: false
