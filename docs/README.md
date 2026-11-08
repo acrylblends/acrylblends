@@ -74,9 +74,11 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 1.0.10](release-notes/1.0.10.md) - a production install no longer carries vitest (the optional peer for the conformance suites is gone)
 - [Release notes 1.1.0](release-notes/1.1.0.md) - a page follows its state over one WebSocket (`watch` of `/api/state/client.js`), so windows no longer use up the browser's six connections
 - [Release notes 1.2.0](release-notes/1.2.0.md) - a new app is a repository of plugin folders with snapshots; `create --from` makes a blueprint your own (name, lock, first commit); `init --desktop` installs the ACRYL frame from npm, one framework copy
+- [Release notes acrylblends 1.4.0](release-notes/acrylblends-1.4.0.md) - a group's app: `plugin pull --from <list>` pulls everyone's plugins in one command, each refused one named while the others run; `add showcase` shows who made what; the agent template's home page shows widgets
 - [Release notes acrylblends 1.3.2](release-notes/acrylblends-1.3.2.md) - `upgrade` works again on an untouched app made by 1.2.0, 1.3.0 or 1.3.1, and the gate fails when a release is missing from what it knows
 - [Release notes acrylblends 1.3.1](release-notes/acrylblends-1.3.1.md) - plugins from several people in one app: a taken route or widget is refused naming its plugin, the list says who released each one, and every template that installs live can pull; in the frame a pull no longer restarts the app
 - [Release notes acrylblends 1.3.0](release-notes/acrylblends-1.3.0.md) - share a plugin between people: `plugin pull` and `plugin publish`, `npm run acryl`, and upgrade moves a dependency forward
+- [Release notes create-acrylblends 1.4.2](release-notes/create-1.4.2.md) - a new app has `pull --from`, the showcase and the agent home page (it asks for acrylblends 1.4.0)
 - [Release notes create-acrylblends 1.4.1](release-notes/create-1.4.1.md) - a new app has plugin list, remove and route removal in the frame (it asks for acrylblends 1.3.1)
 - [Release notes create-acrylblends 1.4.0](release-notes/create-1.4.0.md) - `--desktop` puts the new app inside the ACRYL frame
 - [Release notes 1.3.0](release-notes/1.3.0.md) - `create --from` downloads only the app you asked for, checked against its sha512
