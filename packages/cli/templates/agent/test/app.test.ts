@@ -44,6 +44,32 @@ test('answers health checks and 404 for unknown paths', () =>
     await missing.body?.cancel()
   }))
 
+test('a plugin puts its widget on the home page, and the widget leaves with the plugin', () =>
+  withApp(async (app) => {
+    const page = async () =>
+      (await app.root.router.request('/', { headers: { accept: 'text/html' } })).text()
+    const feature = app.root.plugin({
+      name: 'hello-widget',
+      inject: ['home'],
+      apply(ctx: typeof app.root) {
+        ctx.effect(() =>
+          ctx.home.widget({
+            id: 'hello-widget',
+            title: 'Hello',
+            render: () => '<p id="hello">hi</p>',
+          }),
+        )
+      },
+    })
+    await feature.await()
+    assert.match(
+      await page(),
+      /<section class="widget" data-widget="hello-widget">[\s\S]*<p id="hello">hi<\/p>/,
+    )
+    await feature.dispose()
+    assert.doesNotMatch(await page(), /data-widget="hello-widget"/)
+  }))
+
 /** A sandbox may forbid listening on a port (Codex's workspace-write does); the one test that starts the real server is skipped there, and says so. */
 /**
  * Whether this environment forbids listening at all: only a sandbox's refusal (EPERM/EACCES) means the real-server test must skip. A loaded

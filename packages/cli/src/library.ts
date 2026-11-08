@@ -103,7 +103,7 @@ export function readLibrary(root: string = libraryRoot()): Map<string, LibraryPl
 /** The plugins to copy for `names`: each one after everything it requires, no duplicates. */
 export function closure(
   names: readonly string[],
-  library: Map<string, LibraryPlugin>,
+  library: ReadonlyMap<string, LibraryPlugin>,
 ): LibraryPlugin[] {
   const ordered: LibraryPlugin[] = []
   const visiting = new Set<string>()

@@ -123,6 +123,9 @@ function carriedCopies(dir: string): string[] {
 /** The plugins the frame's host layer mounts by path: any framed app carries them, and an app made before the frame gets them here. */
 const HOST_PLUGINS = ['acryl-web-server', 'acryl-page'] as const
 
+/** A library plugin a scaffold file imports: `from '../plugins/<name>/...'`. */
+const PLUGIN_IMPORT = /from '\.\.\/plugins\/([^/']+)\//gu
+
 /** The profile script the DSH-profile layout used; the host launcher replaced it, so an app upgraded from that layout drops it. */
 const OLD_PROFILE_SCRIPT = 'scripts/ide-profile.mjs'
 
@@ -158,8 +161,11 @@ export type FrameStep =
       readonly files: readonly FrameFileWrite[]
       /** App-owned scaffold files left exactly as the app has them (edited or removed), each with whether the frame can mount it. */
       readonly kept: readonly { readonly file: string; readonly mountable: boolean }[]
-      /** Frame plugins the app does not carry yet. */
-      readonly hostPlugins: readonly string[]
+      /**
+       * Library plugins the app does not carry yet and gets: the frame's host plugins, and every plugin the scaffold files written here import (with what
+       * they require), so a release whose template mounts a new plugin (the agent template's `home`) leaves an app that starts.
+       */
+      readonly addedPlugins: readonly string[]
       /** The DSH-profile script of the older layout, removed when it is acrylblends' own. */
       readonly removeProfileScript: boolean
       /** Paths the app edited; refused without `--force`. */
@@ -253,9 +259,15 @@ export function planFrameStep(
       state: generatedState(existsSync(path) ? readText(path) : undefined, rows.appPlugins),
     })
   }
-  const hostPlugins = HOST_PLUGINS.filter(
-    (plugin) => library.has(plugin) && !existsSync(join(appDir, 'plugins', plugin)),
+  const imported = files
+    .filter((file) => file.file.endsWith('.ts'))
+    .flatMap((file) => [...file.text.matchAll(PLUGIN_IMPORT)].map((match) => match[1] as string))
+  const addedPlugins = closure(
+    [...new Set([...HOST_PLUGINS, ...imported])].filter((plugin) => library.has(plugin)),
+    library,
   )
+    .map((plugin) => plugin.name)
+    .filter((plugin) => !existsSync(join(appDir, 'plugins', plugin)))
   const oldScript = join(appDir, OLD_PROFILE_SCRIPT)
   const removeProfileScript =
     existsSync(oldScript) && GENERATED_MARKER.test(readText(oldScript).split('\n', 1)[0] ?? '')
@@ -269,7 +281,7 @@ export function planFrameStep(
     files.some((file) => file.state !== 'same') ||
     profile.manifestChanged ||
     profile.files.some((file) => file.state !== 'same') ||
-    hostPlugins.length > 0 ||
+    addedPlugins.length > 0 ||
     removeProfileScript
   return {
     kind: 'planned',
@@ -278,7 +290,7 @@ export function planFrameStep(
     profile,
     files,
     kept,
-    hostPlugins,
+    addedPlugins,
     removeProfileScript,
     conflicts,
     ...(conflictLines === undefined ? {} : { conflictLines }),
@@ -307,7 +319,7 @@ export function frameReport(frame: FrameStep): string {
     parts.push(
       `scripts/ide-host.mjs client rows added (${frame.profile.clientRowsAdded.join(', ')})`,
     )
-  for (const plugin of frame.hostPlugins) parts.push(`plugins/${plugin} added`)
+  for (const plugin of frame.addedPlugins) parts.push(`plugins/${plugin} added`)
   if (frame.removeProfileScript) parts.push(`${OLD_PROFILE_SCRIPT} removed`)
   if (frame.profile.manifestChanged)
     parts.push('package.json merged (dev runs scripts/ide-host.mjs)')
@@ -560,7 +572,7 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
         cpSync(join(appDir, file.file), join(backup, file.file))
         frameBackups += 1
       }
-      for (const plugin of frame.hostPlugins) {
+      for (const plugin of frame.addedPlugins) {
         const known = library.get(plugin)
         if (known === undefined) continue
         copyPlugin(known, appDir)

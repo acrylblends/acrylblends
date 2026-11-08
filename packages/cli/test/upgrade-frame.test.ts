@@ -74,6 +74,17 @@ async function preFrameApp(
   rmSync(join(root, 'frame'), { recursive: true, force: true })
   for (const plugin of ['acryl-page', 'acryl-web-server'])
     rmSync(join(root, 'plugins', plugin), { recursive: true, force: true })
+  // No released agent app carried the home page's widgets (the agent template mounts `home` since 1.3.2): neither the plugin nor its row.
+  if (template === 'agent') {
+    rmSync(join(root, 'plugins', 'home'), { recursive: true, force: true })
+    const blend = join(root, 'blend.yaml')
+    const withoutHome = readFileSync(blend, 'utf8').replace(
+      /^ *# The home page's widgets[^\n]*\n *- id: home\n *name: home\n/mu,
+      '',
+    )
+    expect(withoutHome).not.toContain('name: home')
+    writeFileSync(blend, withoutHome)
+  }
   expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
   return root
 }
@@ -175,6 +186,13 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(appTs).toContain('export async function composeInto')
     expect(appTs).toContain("'agent-panel': { mount: FRAME_MOUNT_PREFIX }")
     expect(out()).toMatch(/src\/app\.ts updated/u)
+    // The new scaffold registers the home page's widgets: the plugin it imports comes with it, so the upgraded app starts. Its blend.yaml is the
+    // person's and stays as it is, without a home row; the routes run without one (the widgets appear once a `home` row is added).
+    expect(appTs).toContain("import * as home from '../plugins/home/index.ts'")
+    expect(existsSync(join(root, 'plugins', 'home', 'index.ts'))).toBe(true)
+    expect(out()).toMatch(/plugins\/home added/u)
+    expect(read(root, 'blend.yaml')).not.toContain('name: home')
+    expect(read(root, 'src/routes.ts')).toContain("inject: ['router'],")
   })
 
   it('is idempotent: a second run changes no bytes and says everything is up to date', async () => {

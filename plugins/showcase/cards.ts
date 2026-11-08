@@ -70,13 +70,20 @@ const escapeHtml = (text: string): string =>
     .replaceAll('"', '&quot;')
 
 /**
- * A link inside the app, relative to the showcase page: the page is `<base>/showcase`, so `./hello` is `<base>/hello` whether the app is served at
- * the root of its own server or under the frame's `/app`.
+ * The path the app is served at, read from the showcase's own request path: `''` on the app's own server, `/app` in the frame. Links are built from it,
+ * because a relative link cannot name the app's root (`./` from `/app/showcase` is `/app/`, which the app does not serve).
  */
-const inApp = (path: string): string => `.${path === '/' ? '/' : path}`
+export function appBase(requestPath: string): string {
+  const at = requestPath.lastIndexOf('/showcase')
+  return at <= 0 ? '' : requestPath.slice(0, at)
+}
+
+/** A path of the app as the browser asks for it: under `base`, and the root as `base` itself (or `/`). */
+const inApp = (base: string, path: string): string =>
+  path === '/' ? base || '/' : `${base}${path}`
 
 /** The cards as HTML: the list the page shows, and what the stream sends on each change. Every value is escaped. */
-export function renderCards(cards: readonly ShowcaseCard[]): string {
+export function renderCards(cards: readonly ShowcaseCard[], base = ''): string {
   if (cards.length === 0)
     return '<p class="empty">No plugins yet. Pull one: <code>npm run acryl -- plugin pull github:&lt;owner&gt;/&lt;repo&gt;</code>, or a group\'s list with <code>--from group.txt</code>.</p>'
   return cards
@@ -86,8 +93,10 @@ export function renderCards(cards: readonly ShowcaseCard[]): string {
           ? '<span class="dim">made here</span>'
           : `<a href="https://github.com/${escapeHtml(card.author)}" target="_blank" rel="noopener">@${escapeHtml(card.author)}</a>`
       const links = [
-        ...card.pages.map((page) => `<a href="${escapeHtml(inApp(page))}">${escapeHtml(page)}</a>`),
-        ...(card.widget ? [`<a href="${inApp('/')}">home widget</a>`] : []),
+        ...card.pages.map(
+          (page) => `<a href="${escapeHtml(inApp(base, page))}">${escapeHtml(page)}</a>`,
+        ),
+        ...(card.widget ? [`<a href="${escapeHtml(inApp(base, '/'))}">home widget</a>`] : []),
         ...(card.tool === undefined
           ? []
           : [
@@ -132,19 +141,19 @@ a:hover{text-decoration:underline}
 #live{font-size:12px;color:var(--dim)}`
 
 /** The whole page; the script follows the stream and replaces the cards on each change. */
-export function renderPage(cards: readonly ShowcaseCard[]): string {
+export function renderPage(cards: readonly ShowcaseCard[], base = ''): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Showcase</title><style>${STYLES}</style></head>
 <body><main>
 <h1>Showcase</h1>
 <p class="lead">Every plugin in this app, who made it and where it came from. <span id="live" role="status"></span></p>
-<section id="cards" aria-live="polite">${renderCards(cards)}</section>
+<section id="cards" aria-live="polite">${renderCards(cards, base)}</section>
 </main>
 <script type="module">
 const cards = document.getElementById('cards')
 const live = document.getElementById('live')
-const events = new EventSource('./showcase/events')
+const events = new EventSource(${JSON.stringify(`${base}/showcase/events`).replaceAll('<', '\\u003c')})
 events.addEventListener('cards', (event) => { cards.innerHTML = event.data; live.textContent = 'live' })
 events.onerror = () => { live.textContent = 'reconnecting...' }
 </script>

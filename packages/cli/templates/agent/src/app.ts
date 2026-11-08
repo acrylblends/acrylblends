@@ -10,6 +10,7 @@ import { agent, memory, model, scripted, tools } from '../plugins/agent/index.ts
 import * as panel from '../plugins/agent-panel/index.ts'
 import { builder } from '../plugins/builder/index.ts'
 import { extensions } from '../plugins/extensions/index.ts'
+import * as home from '../plugins/home/index.ts'
 import { type AppInstance, instance } from '../plugins/instance/index.ts'
 import {
   appPluginNames,
@@ -34,6 +35,7 @@ export const registry = {
   memory,
   agent,
   'acryl-router': router,
+  home,
   'acryl-state': state,
   extensions,
   builder,

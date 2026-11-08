@@ -46,7 +46,7 @@ export function apply(ctx) {
 }
 `
 
-async function boot(releases: ReleasePort) {
+async function boot(releases: ReleasePort, before?: (ctx: Context) => void) {
   const root = scratch('showcase-root-')
   // The app's definition, where a pull records where each plugin came from.
   writeFileSync(
@@ -57,11 +57,12 @@ async function boot(releases: ReleasePort) {
   const fibers = [
     app.plugin(instance, pinnedInstance(join(root, '.acrylblends'), { root })),
     app.plugin(router),
-    app.plugin(home),
+    ...(before === undefined ? [app.plugin(home)] : []),
     app.plugin(extensions, { sources: [{ dir: join(root, 'plugins'), trust: 'install' }] }),
     app.plugin(pluginShare, { releases }),
   ]
   for (const fiber of fibers) await fiber.await()
+  before?.(app)
   const shown = app.plugin(showcase)
   await shown.await()
   fibers.push(shown)
@@ -81,7 +82,7 @@ async function boot(releases: ReleasePort) {
     (app as unknown as { router: { request(path: string): Promise<Response> } }).router.request(
       path,
     )
-  return { root, share, request, shown }
+  return { root, share, request, shown, app }
 }
 
 /** Reads a server-sent event stream one `cards` event at a time. */
@@ -171,7 +172,16 @@ test('a card names the plugin, its author, version, source and state, and links 
     },
   ])
   const html = showcase.renderCards(cards)
-  assert.match(html, /<a href="\.\/hello">\/hello<\/a> <a href="\.\/">home widget<\/a>/u)
+  assert.match(html, /<a href="\/hello">\/hello<\/a> <a href="\/">home widget<\/a>/u)
+  // In the frame the app is served at /app: its root is /app itself (the app does not serve /app/), its pages are under it.
+  assert.match(
+    showcase.renderCards(cards, '/app'),
+    /<a href="\/app\/hello">\/hello<\/a> <a href="\/app">home widget<\/a>/u,
+  )
+  assert.equal(showcase.appBase('/showcase'), '')
+  assert.equal(showcase.appBase('/showcase/events'), '')
+  assert.equal(showcase.appBase('/app/showcase'), '/app')
+  assert.equal(showcase.appBase('/app/showcase/events'), '/app')
   assert.match(
     html,
     /<a href="https:\/\/github\.com\/inboxxobni" target="_blank" rel="noopener">@inboxxobni<\/a>/u,
@@ -201,7 +211,7 @@ test('the page and its stream follow every pull and removal, and the streams end
   const text = await page.text()
   assert.match(text, /<title>Showcase<\/title>/u)
   assert.match(text, /No plugins yet/u)
-  assert.match(text, /new EventSource\('\.\/showcase\/events'\)/u)
+  assert.match(text, /new EventSource\("\/showcase\/events"\)/u)
 
   const stream = events(await request('/showcase/events'))
   assert.match((await stream.next()) ?? '', /No plugins yet/u)
@@ -212,7 +222,7 @@ test('the page and its stream follow every pull and removal, and the streams end
   assert.match(afterHello, /data-plugin="hello" data-state="active"/u)
   assert.match(afterHello, /<span class="version">1\.0\.0<\/span>/u)
   assert.match(afterHello, /@inboxxobni/u)
-  assert.match(afterHello, /<a href="\.\/hello">\/hello<\/a>/u)
+  assert.match(afterHello, /<a href="\/hello">\/hello<\/a>/u)
 
   const board = await share.pull('github:someone-else/board@1.0.0')
   assert.ok(board.ok, JSON.stringify(board))
@@ -241,4 +251,22 @@ test('the page and its stream follow every pull and removal, and the streams end
   await shown.dispose()
   assert.equal(await stream.next(), undefined)
   assert.equal((await request('/showcase')).status, 404)
+})
+
+test("a service of the same name with another shape (the frame host's tools) leaves the cards answering", async () => {
+  const { request } = await boot(
+    { release: async () => undefined, download: async () => new Uint8Array() },
+    (ctx) => {
+      // As the DSH harness's tool registry is in the frame: `tools` with no list(); and a `home` whose widgets() throws.
+      ctx.provide('tools', { register: () => () => undefined })
+      ctx.provide('home', {
+        widgets: () => {
+          throw new Error('not this home')
+        },
+      })
+    },
+  )
+  const answered = await request('/showcase/plugins')
+  assert.equal(answered.status, 200)
+  assert.deepEqual(await answered.json(), [])
 })
