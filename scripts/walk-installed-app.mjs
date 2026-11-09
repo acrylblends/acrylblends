@@ -216,10 +216,16 @@ check(
 // --- self-extension: what the agent does, with no restart asked for
 mkdirSync(join(source, 'plugins', 'notes'), { recursive: true })
 writeFileSync(join(source, 'plugins', 'notes', 'index.ts'), plugin('first note'))
+// The row the app's AGENTS.md asks for: a feature is a plugin folder and its row in blend.yaml, before the routes row.
+const blend = join(source, 'blend.yaml')
+const rows = readFileSync(blend, 'utf8')
+const routesRow = '    - id: routes\n      name: routes\n'
+if (!rows.includes(routesRow)) throw new Error('the walk cannot find the routes row in blend.yaml')
+writeFileSync(blend, rows.replace(routesRow, `    - id: notes\n      name: notes\n${routesRow}`))
 let took = await until(frame, 'app/notes/items', (text) => text.includes('first note'), 25_000)
 check(
   took !== undefined,
-  `a plugin folder written into the running app is served${took === undefined ? ' (not within 25 s)' : ` after ${took.toFixed(1)} s`}`,
+  `a plugin (its folder and its row in blend.yaml) written into the running app is served${took === undefined ? ' (not within 25 s)' : ` after ${took.toFixed(1)} s`}`,
 )
 took = await until(frame, 'app/', (text) => text.includes('<ul id="notes">'), 5_000)
 check(took !== undefined, "the plugin's widget is on the home page")
