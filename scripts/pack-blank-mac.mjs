@@ -283,13 +283,16 @@ writeFileSync(
 log(`declared ${String(Object.keys(declared).length)} installed packages`)
 
 // 4. The product marker, and what Electron needs to find its main process and the packager its identity.
+// The product is ACRYL Blends; Blank is only the starting app a person's first app is made from. The name is the installed app's, the DMG's and the root
+// folder's in the OS data folder, so every app the person makes (AccountingApp, CRMApp, ...) lives beside the others under one product.
+const PRODUCT = 'ACRYL Blends'
 const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
 manifest.main = 'plugins/desktop/main.ts'
-manifest.productName = 'ACRYL Blends Blank'
+manifest.productName = PRODUCT
 manifest.description = 'The ACRYL Blends frame around an empty app: make it yours from the chat.'
 manifest.build = {
   appId: 'dev.acrylblends.blank',
-  productName: 'ACRYL Blends Blank',
+  productName: PRODUCT,
   asar: false,
   npmRebuild: false,
   files: ['**/*', '!dist/**', '!**/.acrylblends/**', '!**/*.map'],
@@ -300,7 +303,7 @@ manifest.build = {
     category: 'public.app-category.developer-tools',
     icon: undefined,
   },
-  dmg: { title: 'ACRYL Blends Blank' },
+  dmg: { title: PRODUCT },
 }
 // 4a. The product's own git (app-storage.md, "Git on a clean machine"): a clean Mac has only the shim that asks to install the Command Line Tools, and
 // versions, export, the terminals and the agents all run `git`. It lies beside the app in Resources/git, and the desktop shell puts it first on the
@@ -325,7 +328,7 @@ const program = [
 ]
 writeFileSync(
   join(app, 'product.json'),
-  `${JSON.stringify({ product: 'ACRYL Blends Blank', appName: 'Blank', program }, null, 2)}\n`,
+  `${JSON.stringify({ product: PRODUCT, appName: 'Blank', program }, null, 2)}\n`,
 )
 log(`the Program: ${program.join(', ')}`)
 

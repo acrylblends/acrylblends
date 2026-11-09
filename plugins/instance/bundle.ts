@@ -19,7 +19,7 @@ import { ROOT_ENV } from './index.ts'
 
 /** The product marker at the bundle root: which product it is, its first app's name, and which paths of the app tree are the Program. */
 export interface Product {
-  /** The product's name: its root folder in the OS per-user data folder (`ACRYL Blends Blank`). */
+  /** The product's name: its root folder in the OS per-user data folder (`ACRYL Blends`). */
   readonly product: string
   /** The name the first app gets, until the person names it (`Blank`). */
   readonly appName: string

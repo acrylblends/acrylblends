@@ -424,7 +424,7 @@ export class NewerLayoutError extends AppInstanceError {
  * yet (the migration runner comes with layout 2).
  */
 export function openProductStorage(options: {
-  /** The product's name, its root folder's name (`ACRYL Blends Blank`). */
+  /** The product's name, its root folder's name (`ACRYL Blends`). */
   readonly product: string
   /** The product version, written into a new root's layout.json. */
   readonly writtenBy: string
