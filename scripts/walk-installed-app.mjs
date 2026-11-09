@@ -71,6 +71,8 @@ const childEnv = {
   XDG_DATA_HOME: join(home, '.local', 'share'),
   XDG_CONFIG_HOME: join(home, '.config'),
   XDG_CACHE_HOME: join(home, '.cache'),
+  // The walk may itself run on the app's runtime as Node; the app it starts must start as an app.
+  ELECTRON_RUN_AS_NODE: undefined,
 }
 
 let failures = 0
@@ -114,6 +116,19 @@ const alive = (pid) => {
   } catch {
     return false
   }
+}
+/**
+ * Quit the app the way a person does: a SIGTERM to the main process (logout, `kill`), a close request to its windows on Windows. Never to the whole process
+ * group: Chromium's own child processes would die under the main one and crash it (found on Ubuntu), which no person's quit does.
+ */
+function quitApp(pid) {
+  if (win) spawnSync('taskkill', ['/PID', String(pid)], { stdio: 'ignore' })
+  else
+    try {
+      process.kill(pid, 'SIGTERM')
+    } catch {
+      // Already gone.
+    }
 }
 function killTree(pid, force) {
   if (win) spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
@@ -250,7 +265,7 @@ check(
 frame = again ?? frame
 
 // --- persistence: quit, start again
-killTree(child.pid, false)
+quitApp(child.pid)
 const gone = await (async () => {
   for (let i = 0; i < 40; i += 1) {
     if (!alive(frame.pid) && !alive(child.pid)) return true
@@ -276,7 +291,7 @@ check(
 
 // --- update: the whole bundle is replaced, while the app is not running, by a changed copy of itself
 if (programDir !== undefined && frame !== undefined) {
-  killTree(child.pid, false)
+  quitApp(child.pid)
   for (let i = 0; i < 40 && (alive(frame.pid) || alive(child.pid)); i += 1) await sleep(500)
   const next = join(scratch, 'bundle-v2')
   cpSync(bundle, next, { recursive: true, verbatimSymlinks: true })
@@ -316,7 +331,7 @@ if (programDir !== undefined && frame !== undefined) {
 }
 
 // --- the app's folder
-killTree(child.pid, false)
+quitApp(child.pid)
 await sleep(2_000)
 check(
   statSync(join(dataRoot, 'apps', readdirSync(appsDir)[0], 'source')).isDirectory() &&
