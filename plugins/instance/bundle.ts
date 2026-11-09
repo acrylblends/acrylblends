@@ -25,6 +25,11 @@ export interface Product {
   readonly appName: string
   /** The Program's paths in the app tree, `/`-separated and relative; a folder ends in `/` (`node_modules/`, `plugins/acryl-router/`, `cordis.yml`). */
   readonly program: readonly string[]
+  /**
+   * A folder of the bundle that holds the Blend this product is: its first app is made from it (the person's part of it) instead of from the bundle itself.
+   * `/`-separated, relative, no `.` or `..` segment. Absent in a product that ships the starting app as its own tree (the Blank product).
+   */
+  readonly seed?: string
 }
 
 export const PRODUCT_FILE = 'product.json'
@@ -34,10 +39,11 @@ export function readProduct(bundle: string): Product | undefined {
   try {
     const value: unknown = JSON.parse(readFileSync(join(bundle, PRODUCT_FILE), 'utf8'))
     if (value === null || typeof value !== 'object') return undefined
-    const { product, appName, program } = value as {
+    const { product, appName, program, seed } = value as {
       product?: unknown
       appName?: unknown
       program?: unknown
+      seed?: unknown
     }
     if (typeof product !== 'string' || product.trim() === '') return undefined
     return {
@@ -47,6 +53,7 @@ export function readProduct(bundle: string): Product | undefined {
       program: Array.isArray(program)
         ? program.filter((path): path is string => isProgramPath(path))
         : [],
+      ...(isProgramPath(seed) ? { seed: seed.replace(/\/$/u, '') } : {}),
     }
   } catch {
     return undefined

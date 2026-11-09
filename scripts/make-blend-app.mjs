@@ -3,7 +3,7 @@
  * One OS app per Blend (specs/049-framework-architecture/app-storage.md in ACRYL, "one OS app per Blend"): turn the packed product into a second app with
  * its own name, identity and its own root in the OS data folder, on the OS this runs on.
  *
- *   macOS:          node scripts/make-blend-app.mjs --engine <ACRYL Blends.app> --name MyAccounting [--out <dir>]
+ *   macOS:          node scripts/make-blend-app.mjs --engine <ACRYL Blends.app> --name MyAccounting [--out <dir>] [--seed <a pulled Blend's folder> [--git <git>]]
  *   Windows, Linux: node scripts/make-blend-app.mjs --engine <engine folder> --exe <its executable> --name MyAccounting [--out <dir>]
  *
  * macOS: a signed app cannot be renamed without breaking its seal, so the copy is made where the Blend is installed and sealed again there, ad hoc (no
@@ -16,7 +16,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { makeDirApp, NAME, slugOf } from './lib/blend-app.mjs'
+import { applySeed, assertSeedFits, MARKER, makeDirApp, NAME, slugOf } from './lib/blend-app.mjs'
 
 const args = process.argv.slice(2)
 const option = (name) => {
@@ -26,16 +26,30 @@ const option = (name) => {
 const engine = option('--engine')
 const name = option('--name')
 const out = resolve(option('--out') ?? '.')
+const seedOption = option('--seed')
+const seed = seedOption === undefined ? undefined : resolve(seedOption)
+const git = option('--git') ?? 'git'
 if (engine === undefined || name === undefined)
   throw new Error(
     'usage: make-blend-app.mjs --engine <engine> [--exe <executable>] --name <Name> [--out <dir>]',
   )
 if (!NAME.test(name))
   throw new Error(`"${name}" cannot be an app name: letters, digits, space, - and _`)
+// A Blend the engine cannot run is refused before anything is copied.
+if (seed !== undefined)
+  assertSeedFits({
+    seed,
+    resourcesApp: join(
+      resolve(engine),
+      ...(process.platform === 'darwin' ? ['Contents', 'Resources', 'app'] : MARKER.slice(0, 2)),
+    ),
+  })
 if (process.platform !== 'darwin') {
   const exe = option('--exe')
   if (exe === undefined) throw new Error("--exe: the engine folder's executable is needed")
   const made = makeDirApp({ engine: resolve(engine), name, out, exe, platform: process.platform })
+  if (seed !== undefined)
+    applySeed({ seed, resourcesApp: join(made.dir, ...MARKER.slice(0, 2)), git })
   console.log(`make-blend-app: ${made.exe} (linked to ${resolve(engine)})`)
   process.exit(0)
 }
@@ -95,6 +109,7 @@ const marker = join(contents, 'Resources', 'app', 'product.json')
 const product = JSON.parse(readFileSync(marker, 'utf8'))
 writeFileSync(marker, `${JSON.stringify({ ...product, product: name, appName: name }, null, 2)}\n`)
 
+if (seed !== undefined) applySeed({ seed, resourcesApp: join(contents, 'Resources', 'app'), git })
 run('codesign', ['--force', '--deep', '-s', '-', target])
 run('codesign', ['--verify', '--deep', '--strict', target])
 console.log(`make-blend-app: ${target} (${newId}), sealed ad hoc, verified`)

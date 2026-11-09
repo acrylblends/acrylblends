@@ -104,8 +104,10 @@ export function openProductApp(
   let app = storage.last()
   if (app === undefined) {
     log(`product: making the app "${product.appName}" from the bundled app (first start, one time)`)
+    // A product that is one Blend carries it in a folder of its bundle; the Blank product's starting app is the bundle's own tree.
+    const from = product.seed === undefined ? bundle : join(bundle, product.seed)
     app = storage.create(product.appName, (source) => {
-      seedSource(bundle, source, product.program)
+      seedSource(from, source, product.program)
     })
   }
   return storage.open(app.id)

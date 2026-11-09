@@ -190,3 +190,47 @@ test('a root written by a newer version stops with a message naming that version
   )
   assert.equal(readFileSync(layout, 'utf8'), newer)
 })
+
+test('a product that is one Blend makes its first app from the Blend in its bundle, not from the bundle’s own tree, and without the Program the Blend carried', () => {
+  const root = scratch()
+  bundle(root)
+  // The Blend: its own plugin and source, a copy of a framework plugin (the Program serves that one from the bundle), and the repository it travels with.
+  const seed = join(root, 'seed')
+  mkdirSync(join(seed, 'plugins', 'finops'), { recursive: true })
+  mkdirSync(join(seed, 'plugins', 'acryl-router'), { recursive: true })
+  mkdirSync(join(seed, 'template-git'), { recursive: true })
+  writeFileSync(join(seed, 'plugins', 'finops', 'index.ts'), 'export const finops = 1\n')
+  writeFileSync(join(seed, 'plugins', 'acryl-router', 'index.ts'), 'export const copy = 1\n')
+  writeFileSync(join(seed, 'blend.yaml'), 'kind: Blueprint\n')
+  writeFileSync(join(seed, 'template-git', 'HEAD'), 'ref: refs/heads/main\n')
+  const product = { product: 'Cloud Costs', appName: 'Cloud Costs', program: PROGRAM, seed: 'seed' }
+  const app = openProductApp(
+    openProductStorage({ product: 'Cloud Costs', writtenBy: '1.0.0', env: {}, home: scratch() }),
+    product,
+    root,
+    () => {},
+  )
+  assert.equal(
+    readFileSync(join(app.root, 'plugins', 'finops', 'index.ts'), 'utf8'),
+    'export const finops = 1\n',
+  )
+  assert.ok(existsSync(join(app.root, 'blend.yaml')))
+  assert.ok(existsSync(join(app.root, '.git', 'HEAD')))
+  // Not the bundle's own tree (the Blank starter's src), and not the Blend's copy of a Program plugin.
+  assert.equal(existsSync(join(app.root, 'src', 'app.ts')), false)
+  assert.equal(existsSync(join(app.root, 'plugins', 'acryl-router')), false)
+})
+
+test('the marker names a seed folder only as a relative path inside the bundle', () => {
+  const root = scratch()
+  for (const [seed, expected] of [
+    ['seed', 'seed'],
+    ['seed/', 'seed'],
+    ['../outside', undefined],
+    ['/abs', undefined],
+    ['a\\b', undefined],
+  ] as const) {
+    writeFileSync(join(root, 'product.json'), JSON.stringify({ product: 'P', seed }))
+    assert.equal(readProduct(root)?.seed, expected, seed)
+  }
+})

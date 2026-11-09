@@ -3,17 +3,23 @@
  * and the copy of a Windows or Linux engine folder under that name. The copy links every file to the engine's (hard links on one volume: a second app costs
  * the folders and one file, not the engine's size) except the product marker, which is the one file that differs.
  */
+import { execFileSync } from 'node:child_process'
 import {
   copyFileSync,
+  cpSync,
+  existsSync,
   linkSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
   renameSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 /** A name that is a folder name on every OS (plugins/instance/storage.ts `isPortableName`, the same rule) and a file name inside an Info.plist. */
@@ -84,4 +90,122 @@ export function makeDirApp({ engine, name, out, exe, platform }) {
       ].join('\n'),
     )
   return { dir, exe: join(dir, renamed) }
+}
+
+/**
+ * What a pulled Blend needs that the engine does not carry: a framework plugin its `plugins/library.lock.json` copied in that the Program lacks, and a
+ * package its manifest depends on that the engine's `node_modules` lacks (a product runs no npm, so nothing is installed for it).
+ * @param program - the product marker's Program paths.
+ * @param modules - the engine's `node_modules` folder.
+ */
+export function seedProblems({ seed, program, modules }) {
+  const problems = []
+  const lock = join(seed, 'plugins', 'library.lock.json')
+  const library = existsSync(lock)
+    ? Object.keys(JSON.parse(readFileSync(lock, 'utf8')).plugins ?? {})
+    : []
+  for (const name of library)
+    if (!program.includes(`plugins/${name}/`))
+      problems.push(`the framework plugin ${name} is not in the engine`)
+  const manifest = JSON.parse(readFileSync(join(seed, 'package.json'), 'utf8'))
+  for (const name of Object.keys(manifest.dependencies ?? {}))
+    if (!existsSync(join(modules, name, 'package.json')))
+      problems.push(`the package ${name} is not in the engine`)
+  return problems
+}
+
+/** The manifest a product's source has (the Blank product's `package-product.json`): the app's own fields, its packages as peers at the engine's versions, no scripts. */
+export function sourceManifest(manifest, modules) {
+  const { scripts: _scripts, dependencies = {}, devDependencies: _dev, ...own } = manifest
+  const installed = (name) =>
+    JSON.parse(readFileSync(join(modules, name, 'package.json'), 'utf8')).version
+  return {
+    ...own,
+    peerDependencies: Object.fromEntries(
+      Object.keys(dependencies)
+        .sort()
+        .map((name) => [name, installed(name)]),
+    ),
+  }
+}
+
+const GIT_IDENTITY = [
+  '-c',
+  'user.name=ACRYL Blends',
+  '-c',
+  'user.email=build@acrylblends.dev',
+  '-c',
+  'commit.gpgsign=false',
+]
+
+/** Throw the one message of what `seed` needs that the engine's `resourcesApp` lacks; else the engine's product marker. Run before anything is copied. */
+export function assertSeedFits({ seed, resourcesApp }) {
+  const product = JSON.parse(readFileSync(join(resourcesApp, 'product.json'), 'utf8'))
+  const problems = seedProblems({
+    seed,
+    program: product.program,
+    modules: join(resourcesApp, 'node_modules'),
+  })
+  if (problems.length > 0)
+    throw new Error(`this Blend cannot run on this engine: ${problems.join('; ')}`)
+  return product
+}
+
+/**
+ * Put a Blend into a product (a folder `resourcesApp`, the engine's `resources/app`): its files in `seed/`, its repository as `seed/template-git` with the
+ * Program taken out of the commit (a source never holds it), and the marker naming the folder. The product's first app is made from it
+ * (plugins/desktop/product.ts). Throws one message listing what the engine lacks for this Blend.
+ * @param seed - the pulled Blend's folder (`npm create acrylblends@latest app -- --from <id>`).
+ * @param git - the git to run (the product's own, else the one on the PATH).
+ */
+export function applySeed({ seed, resourcesApp, git = 'git' }) {
+  const marker = join(resourcesApp, 'product.json')
+  const product = assertSeedFits({ seed, resourcesApp })
+  const modules = join(resourcesApp, 'node_modules')
+  const dest = join(resourcesApp, 'seed')
+  rmSync(dest, { recursive: true, force: true })
+  const skip = (path) =>
+    ['node_modules', '.git', 'package-lock.json', 'dist', '.acrylblends'].includes(
+      path.slice(seed.length + 1).split(/[\\/]/u)[0] ?? '',
+    )
+  cpSync(seed, dest, { recursive: true, filter: (path) => !skip(path) })
+  const carried = `${JSON.stringify(sourceManifest(JSON.parse(readFileSync(join(seed, 'package.json'), 'utf8')), modules), null, 2)}\n`
+  writeFileSync(join(dest, 'package-product.json'), carried)
+  // The repository: the Blend's own history (or one made now), with a last commit that drops the Program from the index and records the source's manifest.
+  const work = mkdtempSync(join(tmpdir(), 'blend-seed-'))
+  try {
+    cpSync(seed, work, { recursive: true, filter: (path) => !skip(path) || path === seed })
+    if (existsSync(join(seed, '.git')))
+      cpSync(join(seed, '.git'), join(work, '.git'), { recursive: true })
+    const run = (...argv) =>
+      execFileSync(git, [...GIT_IDENTITY, ...argv], { cwd: work, encoding: 'utf8' })
+    if (!existsSync(join(work, '.git'))) {
+      run('init', '-q')
+      run('add', '-A')
+      run('commit', '-q', '-m', 'the Blend as pulled')
+    }
+    run(
+      'rm',
+      '-r',
+      '-q',
+      '--cached',
+      '--ignore-unmatch',
+      '--',
+      ...product.program.map((path) => path.replace(/\/$/u, '')),
+    )
+    writeFileSync(join(work, 'package-product.json'), carried)
+    const blob = run('hash-object', '-w', 'package-product.json').trim()
+    run('update-index', '--add', '--cacheinfo', `100644,${blob},package.json`)
+    run(
+      'commit',
+      '-q',
+      '-m',
+      "product: the person's part of the app; the framework is served from the product's bundle",
+    )
+    cpSync(join(work, '.git'), join(dest, 'template-git'), { recursive: true })
+  } finally {
+    rmSync(work, { recursive: true, force: true })
+  }
+  writeFileSync(marker, `${JSON.stringify({ ...product, seed: 'seed' }, null, 2)}\n`)
+  return dest
 }
