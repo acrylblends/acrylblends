@@ -227,6 +227,10 @@ check(
   (await until(frame, 'app/', (text) => text.includes('<h1>'), 5_000)) !== undefined,
   'the first page is served',
 )
+check(
+  (await until(frame, 'app/', (text) => text.includes('<h1>Blank</h1>'), 5_000)) !== undefined,
+  "the first page's heading is the app's name (Blank), not the scaffold's folder name",
+)
 
 // --- self-extension: what the agent does, with no restart asked for
 mkdirSync(join(source, 'plugins', 'notes'), { recursive: true })

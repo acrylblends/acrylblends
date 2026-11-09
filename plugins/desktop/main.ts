@@ -312,6 +312,11 @@ if (!app.requestSingleInstanceLock()) {
       created.webContents.setUserAgent(
         `${created.webContents.getUserAgent()} AcrylWindow/${String(created.id)}`,
       )
+      // The window is named for the app it shows (its name, and a new one after a rename), not for the page's own `<title>`: the frame's page says "ACRYL".
+      created.on('page-title-updated', (event) => {
+        event.preventDefault()
+        created.setTitle(chosen.name)
+      })
       created.once('ready-to-show', () => created.show())
       // A new window of the page never opens inside the app: an http(s) or mailto address goes to the system browser, anything else nowhere.
       created.webContents.setWindowOpenHandler(({ url: target }) => {
@@ -501,6 +506,8 @@ if (!app.requestSingleInstanceLock()) {
         renamed: (renamed) => {
           chosen = Object.freeze({ ...chosen, name: renamed.name })
           app.setName(renamed.name)
+          for (const open of BrowserWindow.getAllWindows())
+            if (!open.isDestroyed()) open.setTitle(renamed.name)
         },
         platform: process.platform,
         ...(git === undefined ? {} : { git }),

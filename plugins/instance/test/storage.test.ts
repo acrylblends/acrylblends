@@ -234,8 +234,11 @@ test('a child started with instanceEnv chooses the same home and start port, wha
   assert.equal(child.home, chosen.home)
   assert.equal(child.dshHome, chosen.dshHome)
   assert.equal(child.port.start, chosen.port.start)
+  // The folder the host runs on is `source`, which names nothing: the app's own name reaches the page through the environment.
+  assert.equal(child.name, 'Shop')
   assert.deepEqual(Object.keys(instanceEnv(chosen)).sort(), [
     'ACRYLBLENDS_HOME',
+    'ACRYLBLENDS_NAME',
     'ACRYLBLENDS_PORT',
     'ACRYLBLENDS_ROOT',
   ])

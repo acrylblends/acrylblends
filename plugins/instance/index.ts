@@ -53,6 +53,8 @@ export const HOME_ENV = 'ACRYLBLENDS_HOME'
  */
 export const ROOT_ENV = 'ACRYLBLENDS_ROOT'
 export const PORT_ENV = 'ACRYLBLENDS_PORT'
+/** The app's name, for a process that runs from the bundle on the app's `source` folder: the folder's own name says nothing (`source`). Set by `instanceEnv`. */
+export const NAME_ENV = 'ACRYLBLENDS_NAME'
 export const HOST_ENV = 'ACRYLBLENDS_HOST'
 /** The names hosting platforms set: used when `ACRYLBLENDS_PORT` and `ACRYLBLENDS_HOST` are not. */
 export const PLATFORM_PORT_ENV = 'PORT'
@@ -178,7 +180,10 @@ export function selectInstance(options: {
   const pinned = env[HOME_ENV]?.trim()
   return withRunEnv(
     pinned
-      ? pinnedInstance(pinned, { name: plainName(projectRoot), root: projectRoot })
+      ? pinnedInstance(pinned, {
+          name: env[NAME_ENV]?.trim() || plainName(projectRoot),
+          root: projectRoot,
+        })
       : projectInstance(projectRoot),
     env,
   )
@@ -207,6 +212,7 @@ export function withRunEnv(
 export function instanceEnv(instance: AppInstance): Record<string, string> {
   return {
     [ROOT_ENV]: instance.root,
+    [NAME_ENV]: instance.name,
     [HOME_ENV]: instance.home,
     [PORT_ENV]: String(instance.port.start),
     ...(instance.host === undefined ? {} : { [HOST_ENV]: instance.host }),
