@@ -159,6 +159,27 @@ export interface FrameHostLaunch {
   readonly program?: string
 }
 
+/**
+ * The arguments of a packaged product's host (the runtime is Electron as Node): `--watch` first, as the app's `dev` script has it, so a saved change in the
+ * person's source or plugins restarts the host and the app shows it, with no extensions plugin in the frame to do it (found on a packed app: an edit of
+ * `src/routes.ts` stayed unseen until the app was quit). Then the loader and, when the Program is in a bundle, the overlay that serves it.
+ */
+export function packagedHostArgs(program: string, root: string): string[] {
+  return [
+    '--watch',
+    // The loader first and the overlay second: a hook registered later runs first, so the overlay sees every import before the loader's aliases.
+    '--import',
+    pathToFileURL(join(program, 'plugins', 'acryl-node-server', 'src', 'register.ts')).href,
+    ...(program === root
+      ? []
+      : [
+          '--import',
+          pathToFileURL(join(program, 'plugins', 'instance', 'bundle-overlay.ts')).href,
+        ]),
+    join(program, HOST_SCRIPT),
+  ]
+}
+
 /** Start the app's frame host as `npm run dev` does, in the app folder; its output is passed through to `write`. */
 export function startFrameHost(
   root: string,
@@ -171,22 +192,7 @@ export function startFrameHost(
   const command =
     launch.runtime === undefined
       ? hostCommand(env, platform)
-      : {
-          file: launch.runtime,
-          args: [
-            // The loader first and the overlay second: a hook registered later runs first, so the overlay sees every import before the loader's aliases.
-            '--import',
-            pathToFileURL(join(program, 'plugins', 'acryl-node-server', 'src', 'register.ts')).href,
-            ...(program === root
-              ? []
-              : [
-                  '--import',
-                  pathToFileURL(join(program, 'plugins', 'instance', 'bundle-overlay.ts')).href,
-                ]),
-            join(program, HOST_SCRIPT),
-          ],
-          shell: false,
-        }
+      : { file: launch.runtime, args: packagedHostArgs(program, root), shell: false }
   // The host leads its own process group on macOS and Linux, so a stop reaches npm, the host and every terminal it runs; Windows stops the tree with taskkill.
   const child: ChildProcess = spawn(command.file, command.args, {
     cwd: root,

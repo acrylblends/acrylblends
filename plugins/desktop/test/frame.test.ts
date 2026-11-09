@@ -9,6 +9,7 @@ import {
   hostCommand,
   isFrameApp,
   navigation,
+  packagedHostArgs,
   runningFrame,
   startFrameHost,
   withoutToken,
@@ -190,4 +191,13 @@ test('a host that cannot start at all rejects instead of hanging', async () => {
   )
   await assert.rejects(host.ready, /ended before it served the frame/u)
   await host.stop()
+})
+
+test("a packaged product watches the person's files and serves the Program from its bundle", () => {
+  const args = packagedHostArgs(join('/bundle'), join('/person/source'))
+  assert.equal(args[0], '--watch')
+  assert.equal(args.filter((arg) => arg === '--import').length, 2)
+  assert.match(args.at(-1) ?? '', /ide-host\.mjs$/u)
+  // The Program in the app folder itself has no overlay to load.
+  assert.equal(packagedHostArgs('/app', '/app').filter((arg) => arg === '--import').length, 1)
 })
