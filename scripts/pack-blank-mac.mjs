@@ -286,6 +286,24 @@ log(`declared ${String(Object.keys(declared).length)} installed packages`)
 // The product is ACRYL Blends; Blank is only the starting app a person's first app is made from. The name is the installed app's, the DMG's and the root
 // folder's in the OS data folder, so every app the person makes (AccountingApp, CRMApp, ...) lives beside the others under one product.
 const PRODUCT = 'ACRYL Blends'
+// Seal the bundle ad hoc, after the builder has laid it out and before the DMG is made. With no signing step the main program keeps Electron's linker
+// signature (identifier `Electron`, no sealed resources, Info.plist not bound), so the bundle was not sealed and `codesign --verify --deep --strict` failed.
+// An ad hoc seal makes every file of the bundle part of the signature: an app that writes into its own bundle shows at once. No hardened runtime: the
+// person's native modules (node-pty, sharp) are not signed by us and a hardened process refuses to load them. A Developer ID signature and notarization
+// replace this seal at release (app-storage.md).
+writeFileSync(
+  join(work, 'seal-bundle.cjs'),
+  `const { spawnSync } = require('node:child_process')
+const { join } = require('node:path')
+exports.default = async (context) => {
+  const bundle = join(context.appOutDir, context.packager.appInfo.productFilename + '.app')
+  const sealed = spawnSync('codesign', ['--force', '--deep', '--sign', '-', bundle], { stdio: 'inherit' })
+  if (sealed.status !== 0) throw new Error('codesign failed for ' + bundle)
+  const checked = spawnSync('codesign', ['--verify', '--deep', '--strict', bundle], { stdio: 'inherit' })
+  if (checked.status !== 0) throw new Error('the sealed bundle does not verify: ' + bundle)
+}
+`,
+)
 const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
 manifest.main = 'plugins/desktop/main.ts'
 manifest.productName = PRODUCT
@@ -299,17 +317,13 @@ manifest.build = {
   directories: { output: 'dist' },
   mac: {
     target: [{ target: 'dmg', arch: [arch] }],
-    // Ad hoc, not none: with no signing step the main program keeps Electron's linker signature (identifier `Electron`, no sealed resources, Info.plist
-    // not bound), so the bundle was not sealed and `codesign --verify --deep --strict` failed. An ad hoc seal makes every file of the bundle part of the
-    // signature: an app that writes into its own bundle shows at once. No hardened runtime: the person's native modules (node-pty, sharp) are not signed
-    // by us and a hardened process refuses to load them. A Developer ID signature and notarization replace this one at release (app-storage.md).
-    identity: '-',
-    hardenedRuntime: false,
-    gatekeeperAssess: false,
+    // No signing by the builder (it passes --timestamp, which an ad hoc signature refuses); `afterPack` below seals the bundle instead.
+    identity: null,
     category: 'public.app-category.developer-tools',
     icon: undefined,
   },
   dmg: { title: PRODUCT },
+  afterPack: join(work, 'seal-bundle.cjs'),
 }
 // 4a. The product's own git (app-storage.md, "Git on a clean machine"): a clean Mac has only the shim that asks to install the Command Line Tools, and
 // versions, export, the terminals and the agents all run `git`. It lies beside the app in Resources/git, and the desktop shell puts it first on the

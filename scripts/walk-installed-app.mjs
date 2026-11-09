@@ -9,9 +9,11 @@
  *                       and an edit of it is served again.
  *   3. self-repair    - the host process killed from outside is started again by the app, on the same address, and the plugin is still served.
  *   4. persistence    - quit the app and start it again: the same app, the plugin and its edit are there.
- *   5. update         - the whole bundle replaced by another (`--update-from`): the new Program is served and the app, its plugin and its history are untouched.
+ *   5. update         - the whole bundle replaced by a changed copy of itself (`--program`): the new Program is the one served (a marker in the framework's
+ *                       home plugin shows on the page) and the app, its plugin and its history are untouched. The copy is made here, so the update is simulated;
+ *                       it is a real replacement of the folder, not an in-place patch.
  *
- *   node scripts/walk-installed-app.mjs --exe <app executable> --bundle <the folder the update replaces> --scratch <empty folder> [--update-from <bundle folder>]
+ *   node scripts/walk-installed-app.mjs --exe <app executable> --bundle <the folder the update replaces> --scratch <empty folder> [--program <the Program's folder inside the bundle>]
  *
  * It never touches the real data folder: the child's home is `<scratch>/home` (macOS, Linux) or `<scratch>/local` (Windows). It needs a display where the OS
  * has one (a Linux server without one runs it under `xvfb-run`). Every line is `PASS`, `FAIL` or `INFO`; the exit code is the number of failures.
@@ -38,11 +40,11 @@ const option = (name) => {
 const exe = resolve(option('--exe') ?? '')
 const bundle = resolve(option('--bundle') ?? '')
 const scratch = resolve(option('--scratch') ?? '')
-const updateFrom =
-  option('--update-from') === undefined ? undefined : resolve(option('--update-from'))
+/** Where the framework's code is inside the bundle (`Contents/Resources/app` on macOS, `resources/app` elsewhere); naming it turns the update step on. */
+const programDir = option('--program')
 if (!existsSync(exe) || !existsSync(bundle) || option('--scratch') === undefined)
   throw new Error(
-    'usage: walk-installed-app.mjs --exe <app executable> --bundle <bundle folder> --scratch <folder> [--update-from <bundle folder>]',
+    'usage: walk-installed-app.mjs --exe <app executable> --bundle <bundle folder> --scratch <folder> [--program <Program folder inside the bundle>]',
   )
 if (existsSync(scratch) && readdirSync(scratch).length > 0)
   throw new Error(
@@ -266,24 +268,38 @@ check(
   'the bundle is byte for byte what it was before the first start, after a live edit, a kill, a quit and a restart',
 )
 
-// --- update: the whole bundle is replaced while the app is not running
-if (updateFrom !== undefined && frame !== undefined) {
-  const hashBefore = bundleBefore
+// --- update: the whole bundle is replaced, while the app is not running, by a changed copy of itself
+if (programDir !== undefined && frame !== undefined) {
   killTree(child.pid, false)
   for (let i = 0; i < 40 && (alive(frame.pid) || alive(child.pid)); i += 1) await sleep(500)
-  rmSync(bundle, { recursive: true, force: true })
-  cpSync(updateFrom, bundle, { recursive: true, verbatimSymlinks: true })
-  say(
-    'INFO',
-    `bundle replaced by ${updateFrom} (${treeHash(bundle) === hashBefore ? 'same bytes' : 'different bytes'})`,
+  const next = join(scratch, 'bundle-v2')
+  cpSync(bundle, next, { recursive: true, verbatimSymlinks: true })
+  const home = join(next, programDir, 'plugins', 'home', 'index.ts')
+  const text = readFileSync(home, 'utf8')
+  const marked = text.replace(
+    '<section class="widget"',
+    '<section class="widget" data-program="v2"',
   )
+  if (marked === text) throw new Error(`the walk cannot mark the framework's home plugin (${home})`)
+  writeFileSync(home, marked)
+  // A macOS bundle is sealed: the changed copy is signed again, as a real update is signed by its maker.
+  if (process.platform === 'darwin')
+    spawnSync('codesign', ['--force', '--deep', '--sign', '-', next], { stdio: 'ignore' })
+  rmSync(bundle, { recursive: true, force: true })
+  cpSync(next, bundle, { recursive: true, verbatimSymlinks: true })
+  rmSync(next, { recursive: true, force: true })
   launch()
   frame = await served(90_000)
   check(
     frame !== undefined &&
+      (await until(frame, 'app/', (t) => t.includes('data-program="v2"'), 20_000)) !== undefined,
+    'after the update the app starts on the new bundle: its framework code is the one served',
+  )
+  check(
+    frame !== undefined &&
       (await until(frame, 'app/notes/items', (t) => t.includes('edited live'), 20_000)) !==
         undefined,
-    'after the update the app starts on the new bundle and its plugin is served',
+    "after the update the person's plugin and its edit are served by the same app",
   )
   check(readdirSync(appsDir).length === 1, 'the update made no second app')
   const log = spawnSync('git', ['status', '--short'], { cwd: source, encoding: 'utf8' })
