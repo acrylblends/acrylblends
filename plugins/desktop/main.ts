@@ -27,6 +27,7 @@ import {
 } from './door-shell.ts'
 import {
   type FrameHost,
+  type HostEnd,
   isFrameApp,
   navigation,
   openFrameSettings,
@@ -35,6 +36,7 @@ import {
   withoutToken,
 } from './frame.ts'
 import { productGit, withGitFirst } from './git.ts'
+import { appendHostLog, nextRestart } from './host-supervisor.ts'
 import { hasSettings, settingsPlacement } from './menu.ts'
 import { openProductApp, seedSource } from './product.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
@@ -145,17 +147,82 @@ if (!app.requestSingleInstanceLock()) {
       // The host chooses the same home and port as this window: decided here once, never again from the folder it runs in. The product's git comes first
       // on its PATH, so everything the host starts finds it by name.
       const env = { ...process.env, ...instanceEnv(chosen) }
-      host = startFrameHost(
+      const logs = join(chosen.home, 'logs')
+      const started = startFrameHost(
         chosen.root,
         git === undefined ? env : withGitFirst(env, git, process.platform),
         (text) => {
+          // Kept on disk too: a packaged app has no terminal, and a host that stops must leave its reason.
+          appendHostLog(logs, text)
           process.stdout.write(text)
         },
         process.platform,
         // A packaged product carries no npm: its host runs on this app's own Electron runtime.
         app.isPackaged ? { runtime: process.execPath, program: programRoot } : {},
       )
-      return host.ready
+      host = started
+      // Watched once it serves: a host that ends before that fails the start itself (the caller quits with the reason).
+      return started.ready.then((address) => {
+        void started.ended.then((end) => recover(started, end))
+        return address
+      })
+    }
+    /** When the host stopped by itself (it did not die with the window or a switch of app): the times, so a host that keeps stopping is given up on. */
+    const stops: number[] = []
+    /** The host this window started ended without being asked to: start it again and show it in every window, or say why not. */
+    const recover = async (first: FrameHost, end: HostEnd): Promise<void> => {
+      if (end.requested || host !== first) return
+      /** The host this loop is answering for: the one that stopped, then each attempt that did not serve. A switch of app replaces `host`, and then it is not ours any more. */
+      let ours = first
+      const logs = join(chosen.home, 'logs')
+      let last = end
+      for (;;) {
+        const exit = last.signal ?? `code ${String(last.code)}`
+        appendHostLog(logs, `\n[desktop] the frame host ended by itself (${exit})\n`)
+        console.error(`desktop: the frame host ended by itself (${exit}); ${last.tail.slice(-400)}`)
+        const decision = nextRestart(stops, Date.now())
+        if (!decision.restart) {
+          const answer = await dialog.showMessageBox({
+            type: 'error',
+            message: `${chosen.name} keeps stopping`,
+            detail: `Its engine stopped by itself ${String(stops.length)} times in two minutes (${exit}).\n\nLast output:\n${last.tail.slice(-600)}\n\nThe whole output is in ${logs}`,
+            buttons: ['Try again', 'Quit'],
+            defaultId: 0,
+            cancelId: 1,
+          })
+          if (answer.response !== 0) {
+            await shutdown.request(1)
+            return
+          }
+          stops.length = 0
+          continue
+        }
+        stops.push(Date.now())
+        await new Promise((done) => setTimeout(done, decision.delayMs))
+        if (host !== ours) return
+        try {
+          url = await startHost()
+        } catch (cause) {
+          if (host !== undefined) ours = host
+          // It ended before it served: that is another stop, with the reason it gave.
+          last = {
+            code: null,
+            signal: null,
+            tail: cause instanceof Error ? cause.message : String(cause),
+            requested: false,
+          }
+          continue
+        }
+        origin = new URL(url).origin
+        for (const shown of live())
+          shown.loadURL(url).catch((cause: unknown) => {
+            console.warn(
+              `desktop: the window could not load the restarted app: ${cause instanceof Error ? cause.message : String(cause)}`,
+            )
+          })
+        console.log(`desktop: the frame host was started again at ${origin}`)
+        return
+      }
     }
     if (frame) {
       // The frame that already runs for this folder (`npm run dev`, or another window's host), else a host of this window's own.

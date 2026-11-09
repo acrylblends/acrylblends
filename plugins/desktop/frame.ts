@@ -140,9 +140,19 @@ export function hostCommand(
     : { file: 'npm', args: ['run', 'dev'], shell: false }
 }
 
+/** How a host ended: its exit, the last of its output, and whether the window asked for it (`stop`) or it ended by itself. */
+export interface HostEnd {
+  readonly code: number | null
+  readonly signal: NodeJS.Signals | null
+  readonly tail: string
+  readonly requested: boolean
+}
+
 export interface FrameHost {
   /** The frame address the host printed, or a rejection with the host's output when it ended first. */
   readonly ready: Promise<string>
+  /** Resolves once, when the host has ended, whenever that is: after it served the frame too (a stop it did not get asked for is a death). */
+  readonly ended: Promise<HostEnd>
   /** Stop the host and what it started; resolves once it has exited. */
   stop(): Promise<void>
 }
@@ -209,16 +219,21 @@ export function startFrameHost(
   })
   let output = ''
   let exited = false
+  let requested = false
+  let outcome: Pick<HostEnd, 'code' | 'signal'> = { code: null, signal: null }
   const exit = new Promise<void>((done) => {
-    child.once('exit', () => {
+    child.once('exit', (code, signal) => {
       exited = true
+      outcome = { code, signal }
       done()
     })
-    child.once('error', () => {
+    child.once('error', (cause) => {
       exited = true
+      output += `\n${cause.message}`
       done()
     })
   })
+  const ended = exit.then((): HostEnd => ({ ...outcome, tail: output.slice(-3000), requested }))
   const ready = new Promise<string>((done, fail) => {
     const take = (chunk: Buffer) => {
       const text = chunk.toString()
@@ -249,9 +264,15 @@ export function startFrameHost(
       // The group is already gone.
     }
   }
+  // What the host left running (its terminals, the watcher's child) does not outlive a host that ended by itself.
+  void exit.then(() => {
+    if (!requested) signal('SIGTERM')
+  })
   return {
     ready,
+    ended,
     async stop() {
+      requested = true
       if (exited) return
       signal('SIGTERM')
       const graceful = await Promise.race([

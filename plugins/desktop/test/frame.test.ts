@@ -201,3 +201,33 @@ test("a packaged product watches the person's files and serves the Program from 
   // The Program in the app folder itself has no overlay to load.
   assert.equal(packagedHostArgs('/app', '/app').filter((arg) => arg === '--import').length, 1)
 })
+
+test('a host that dies after it served the frame is reported with its exit and its last output; a stop the window asked for is not a death', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'desktop-host-'))
+  try {
+    const dies = fakeNpm(
+      dir,
+      `console.log('acrylblends host: http://127.0.0.1:3999/?token=abc')
+setTimeout(() => { console.error('TypeError: boom'); process.exit(7) }, 200)
+`,
+    )
+    const host = startFrameHost(dir, { ...process.env, ...dies }, () => {})
+    await host.ready
+    const end = await host.ended
+    assert.deepEqual([end.code, end.signal, end.requested], [7, null, false])
+    assert.match(end.tail, /TypeError: boom/u)
+
+    const holds = fakeNpm(
+      dir,
+      `console.log('acrylblends host: http://127.0.0.1:3998/?token=abc')
+setInterval(() => {}, 1000)
+`,
+    )
+    const stopped = startFrameHost(dir, { ...process.env, ...holds }, () => {})
+    await stopped.ready
+    await stopped.stop()
+    assert.equal((await stopped.ended).requested, true)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
