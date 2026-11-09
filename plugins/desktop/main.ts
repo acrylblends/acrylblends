@@ -36,7 +36,7 @@ import {
   withoutToken,
 } from './frame.ts'
 import { productGit, withGitFirst } from './git.ts'
-import { appendHostLog, nextRestart } from './host-supervisor.ts'
+import { appendHostLog, hostCrashed, nextRestart } from './host-supervisor.ts'
 import { hasSettings, settingsPlacement } from './menu.ts'
 import { openProductApp, seedSource } from './product.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
@@ -155,18 +155,31 @@ if (!app.requestSingleInstanceLock()) {
           // Kept on disk too: a packaged app has no terminal, and a host that stops must leave its reason.
           appendHostLog(logs, text)
           process.stdout.write(text)
+          // The watcher that runs the host stays alive when the host crashes (it waits for a saved file): that line is the death.
+          recent = (recent + text).slice(-3000)
+          if (serving && hostCrashed(text))
+            void started.stop().then(() => recover(started, crashedEnd(recent)))
         },
         process.platform,
         // A packaged product carries no npm: its host runs on this app's own Electron runtime.
         app.isPackaged ? { runtime: process.execPath, program: programRoot } : {},
       )
       host = started
+      let serving = false
+      let recent = ''
       // Watched once it serves: a host that ends before that fails the start itself (the caller quits with the reason).
       return started.ready.then((address) => {
+        serving = true
         void started.ended.then((end) => recover(started, end))
         return address
       })
     }
+    const crashedEnd = (text: string): HostEnd => ({
+      code: null,
+      signal: null,
+      tail: text,
+      requested: false,
+    })
     /** When the host stopped by itself (it did not die with the window or a switch of app): the times, so a host that keeps stopping is given up on. */
     const stops: number[] = []
     /** The host this window started ended without being asked to: start it again and show it in every window, or say why not. */

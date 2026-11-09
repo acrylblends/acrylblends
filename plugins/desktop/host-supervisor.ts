@@ -53,3 +53,11 @@ export function appendHostLog(dir: string, text: string, now: Date = new Date())
     // The disk is full or the folder is gone: the host goes on.
   }
 }
+
+/**
+ * `node --watch` does not end when the host it runs crashes: it prints this line and waits for a saved file (reproduced on a packed app by killing the host's
+ * child: the watcher stayed, the port was closed, nothing answered and nothing restarted). So the window reads the line as the host's death.
+ */
+export function hostCrashed(output: string): boolean {
+  return /Failed running '/u.test(output)
+}

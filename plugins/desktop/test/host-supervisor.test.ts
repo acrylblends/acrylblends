@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { appendHostLog, nextRestart, RESTART_POLICY } from '../host-supervisor.ts'
+import { appendHostLog, hostCrashed, nextRestart, RESTART_POLICY } from '../host-supervisor.ts'
 
 test('a host that stops is restarted after a short wait that grows, and given up on when it keeps stopping', () => {
   const now = 1_000_000
@@ -29,4 +29,17 @@ test("the host's output is kept in a log of the app, one file a day, old ones re
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test("the watcher's report that the host crashed is a death; its other lines are not", () => {
+  const crashed =
+    "Failed running '/app/scripts/ide-host.mjs'. Waiting for file changes before restarting..."
+  assert.equal(hostCrashed(crashed), true)
+  assert.equal(hostCrashed(`${crashed}\n`), true)
+  // A restart the watcher does on a saved file is the live reload, not a death.
+  assert.equal(
+    hostCrashed("Restarting '/app/scripts/ide-host.mjs'\nacrylblends host: http://127.0.0.1:3325/"),
+    false,
+  )
+  assert.equal(hostCrashed("Gracefully restarted '/app/scripts/ide-host.mjs'"), false)
 })
