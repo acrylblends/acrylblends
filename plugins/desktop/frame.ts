@@ -170,13 +170,28 @@ export interface FrameHostLaunch {
 }
 
 /**
+ * What a packaged host watches: the person's own files that make the app, and nothing else. `node --watch` alone follows only the modules the host has loaded,
+ * so a new plugin folder, or a row added to `blend.yaml`, stayed unseen until some loaded file changed (found on a packed app: a plugin written into
+ * `plugins/notes/` was not served after 15 s). Naming a path turns the module watching off, so the folders are named whole; `.git` (a commit must not restart
+ * the app) and the app's data are not among them.
+ */
+export const WATCHED_IN_SOURCE = ['src', 'plugins', 'blend.yaml'] as const
+
+/**
  * The arguments of a packaged product's host (the runtime is Electron as Node): `--watch` first, as the app's `dev` script has it, so a saved change in the
  * person's source or plugins restarts the host and the app shows it, with no extensions plugin in the frame to do it (found on a packed app: an edit of
  * `src/routes.ts` stayed unseen until the app was quit). Then the loader and, when the Program is in a bundle, the overlay that serves it.
  */
-export function packagedHostArgs(program: string, root: string): string[] {
+export function packagedHostArgs(
+  program: string,
+  root: string,
+  exists: (path: string) => boolean = existsSync,
+): string[] {
   return [
     '--watch',
+    ...WATCHED_IN_SOURCE.map((name) => join(root, name))
+      .filter((path) => exists(path))
+      .map((path) => `--watch-path=${path}`),
     // The loader first and the overlay second: a hook registered later runs first, so the overlay sees every import before the loader's aliases.
     '--import',
     pathToFileURL(join(program, 'plugins', 'acryl-node-server', 'src', 'register.ts')).href,

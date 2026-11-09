@@ -299,7 +299,13 @@ manifest.build = {
   directories: { output: 'dist' },
   mac: {
     target: [{ target: 'dmg', arch: [arch] }],
-    identity: null,
+    // Ad hoc, not none: with no signing step the main program keeps Electron's linker signature (identifier `Electron`, no sealed resources, Info.plist
+    // not bound), so the bundle was not sealed and `codesign --verify --deep --strict` failed. An ad hoc seal makes every file of the bundle part of the
+    // signature: an app that writes into its own bundle shows at once. No hardened runtime: the person's native modules (node-pty, sharp) are not signed
+    // by us and a hardened process refuses to load them. A Developer ID signature and notarization replace this one at release (app-storage.md).
+    identity: '-',
+    hardenedRuntime: false,
+    gatekeeperAssess: false,
     category: 'public.app-category.developer-tools',
     icon: undefined,
   },

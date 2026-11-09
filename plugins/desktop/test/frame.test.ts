@@ -202,6 +202,30 @@ test("a packaged product watches the person's files and serves the Program from 
   assert.equal(packagedHostArgs('/app', '/app').filter((arg) => arg === '--import').length, 1)
 })
 
+test("a packaged host watches the person's src, plugins and blend.yaml whole, so a new plugin folder is seen, and never .git or data", () => {
+  const source = join('/person/source')
+  const args = packagedHostArgs('/bundle', source, () => true)
+  assert.deepEqual(
+    args.filter((arg) => arg.startsWith('--watch-path=')),
+    [
+      `--watch-path=${join(source, 'src')}`,
+      `--watch-path=${join(source, 'plugins')}`,
+      `--watch-path=${join(source, 'blend.yaml')}`,
+    ],
+  )
+  assert.equal(
+    args.some((arg) => arg.includes('.git')),
+    false,
+  )
+  // A path the app does not have is not named: node refuses to watch what is not there.
+  assert.equal(
+    packagedHostArgs('/bundle', source, (path) => path.endsWith('plugins')).filter((arg) =>
+      arg.startsWith('--watch-path='),
+    ).length,
+    1,
+  )
+})
+
 test('a host that dies after it served the frame is reported with its exit and its last output; a stop the window asked for is not a death', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'desktop-host-'))
   try {
