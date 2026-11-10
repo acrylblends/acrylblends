@@ -730,7 +730,9 @@ function hostIdentity(instance: unknown): HostIdentity {
 export function apply(ctx: Context, config: FrameConfig = {}): void {
   const appPage = typeof config.appPage === 'string' && config.appPage.startsWith('/') ? config.appPage : undefined
   // The app's GitHub owner for shares; the signed-in gh account when the app names none.
-  const shareOwner = typeof config.shareOwner === 'string' && /^[A-Za-z0-9-]+$/u.test(config.shareOwner) ? config.shareOwner : undefined
+  // `ACRYLBLENDS_SHARE_OWNER` is the same choice made by whoever starts the app (a rehearsal or a workshop host), without editing the bundle.
+  const wantedOwner = config.shareOwner ?? process.env.ACRYLBLENDS_SHARE_OWNER
+  const shareOwner = typeof wantedOwner === 'string' && /^[A-Za-z0-9-]+$/u.test(wantedOwner) ? wantedOwner : undefined
   const shareTo = shareOwner === undefined ? {} : { owner: shareOwner }
   const root = (ctx.appInstance as { readonly root?: unknown }).root
   if (typeof root !== 'string') throw new Error('acryl-blends-frame: the app instance has no app folder (root)')
