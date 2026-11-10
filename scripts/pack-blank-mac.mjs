@@ -144,6 +144,31 @@ if (
 )
   throw new Error('the checkout is not built: run `corepack pnpm run build` first')
 
+// A build that exists is not a build that is current: a merge or an edit leaves the output of the last build in place, and the bundle would ship it
+// (the frame and the scaffolder run from `lib` and `dist`, not from `src`). The newest source file of each built package must be older than its output.
+const newestFile = (folder) => {
+  let newest = 0
+  for (const entry of readdirSync(folder, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue
+    const path = join(folder, entry.name)
+    newest = Math.max(newest, entry.isDirectory() ? newestFile(path) : statSync(path).mtimeMs)
+  }
+  return newest
+}
+const stale = []
+for (const [pkg, out] of [
+  ['ide/acryl-blends-frame', 'lib'],
+  ['packages/cli', 'dist'],
+]) {
+  const src = join(root, pkg, 'src')
+  if (existsSync(src) && newestFile(src) > newestFile(join(root, pkg, out)))
+    stale.push(`${pkg} (${out} is older than src)`)
+}
+if (stale.length > 0)
+  throw new Error(
+    `the checkout's build is out of date: ${stale.join(', ')}. Run \`corepack pnpm run build\` first`,
+  )
+
 // 1. A Blank app with the desktop shell, made by this checkout's CLI, exactly as a person would make one.
 rmSync(work, { recursive: true, force: true })
 mkdirSync(work, { recursive: true })
