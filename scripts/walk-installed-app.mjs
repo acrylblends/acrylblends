@@ -282,7 +282,20 @@ const gone = await (async () => {
   }
   return false
 })()
-check(gone, 'quitting the app ends the app and its host (nothing is left running)')
+check(
+  gone,
+  `quitting the app ends the app and its host (nothing is left running)${
+    gone
+      ? ''
+      : ` (still alive: ${[
+          ['app', child.pid],
+          ['host', frame.pid],
+        ]
+          .filter(([, pid]) => alive(pid))
+          .map(([name, pid]) => `${name} ${pid}`)
+          .join(', ')})`
+  }`,
+)
 launch()
 frame = await served(90_000)
 check(
