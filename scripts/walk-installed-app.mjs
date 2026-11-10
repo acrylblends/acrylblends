@@ -227,6 +227,11 @@ check(
   (await until(frame, 'app/', (text) => text.includes('<h1>'), 5_000)) !== undefined,
   'the first page is served',
 )
+const fresh = spawnSync('git', ['status', '--short'], { cwd: source, encoding: 'utf8' })
+check(
+  fresh.status === 0 && fresh.stdout.trim() === '',
+  `a new app's repository is clean before anyone changed it${fresh.stdout.trim() === '' ? '' : ` (${fresh.stdout.trim().replaceAll('\n', ' | ')})`}`,
+)
 check(
   (await until(frame, 'app/', (text) => text.includes('<h1>Blank</h1>'), 5_000)) !== undefined,
   "the first page's heading is the app's name (Blank), not the scaffold's folder name",

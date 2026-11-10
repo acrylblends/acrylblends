@@ -22,15 +22,17 @@ const SKIPPED = new Set([
   'product.json',
   'template-git',
   'gitignore-product',
+  'gitattributes-product',
   'package-product.json',
 ])
 
 /**
- * The app's own files that the packager drops or rewrites inside a bundle, and the plain names they travel under. electron-builder excludes `.gitignore`
+ * The app's own files that the packager drops or rewrites inside a bundle, and the plain names they travel under. electron-builder excludes `.gitignore` and `.gitattributes`
  * by name, and it ships a filtered manifest (the `scripts` block goes), so neither can reach the source as itself; `seedSource` writes them back.
  */
 const CARRIED: readonly { readonly carrier: string; readonly file: string }[] = [
   { carrier: 'gitignore-product', file: '.gitignore' },
+  { carrier: 'gitattributes-product', file: '.gitattributes' },
   { carrier: 'package-product.json', file: 'package.json' },
 ]
 
@@ -38,6 +40,7 @@ const CARRIED: readonly { readonly carrier: string; readonly file: string }[] = 
 const PRODUCT_NAMES = [
   'product.json',
   'gitignore-product',
+  'gitattributes-product',
   'package-product.json',
   'template-git/',
 ] as const

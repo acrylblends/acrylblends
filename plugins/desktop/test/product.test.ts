@@ -44,6 +44,7 @@ function bundle(root: string): void {
     '{"name":"test-app","scripts":{"dev":"node x"}}\n',
   )
   writeFileSync(join(root, 'gitignore-product'), 'node_modules/\n.acrylblends/\n')
+  writeFileSync(join(root, 'gitattributes-product'), '* text=auto eol=lf\n')
   writeFileSync(join(root, 'src', 'app.ts'), 'export {}\n')
   writeFileSync(join(root, 'dist', 'build.txt'), 'x')
   writeFileSync(join(root, '.acrylblends', 'state.yaml'), 'x')
@@ -84,6 +85,8 @@ test('a new app’s source is the person’s part of the bundled app, with what 
   seedSource(`${root}${sep}`, source, PROGRAM)
   // The `.gitignore` and the manifest the packager refused to ship are there as themselves.
   assert.equal(readFileSync(join(source, '.gitignore'), 'utf8'), 'node_modules/\n.acrylblends/\n')
+  // Line endings stay pinned in the person's repository, so a plugin made on Windows digests the same on a Mac.
+  assert.equal(readFileSync(join(source, '.gitattributes'), 'utf8'), '* text=auto eol=lf\n')
   assert.equal(
     readFileSync(join(source, 'package.json'), 'utf8'),
     '{"name":"test-app","scripts":{"dev":"node x"}}\n',
@@ -93,6 +96,7 @@ test('a new app’s source is the person’s part of the bundled app, with what 
   for (const absent of [
     'template-git',
     'gitignore-product',
+    'gitattributes-product',
     'package-product.json',
     'product.json',
     'dist',

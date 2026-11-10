@@ -357,6 +357,9 @@ log(`the Program: ${program.join(', ')}`)
 // (plugins/desktop/product.ts). The product's own build-time files stay out of the repository's status through its local exclude, never the app's tracked
 // .gitignore.
 cpSync(join(app, '.gitignore'), join(app, 'gitignore-product'))
+// `.gitattributes` pins the line endings of the app's files (a plugin written on Windows must digest the same on a Mac): the template commits it, the builder drops it by name.
+if (existsSync(join(app, '.gitattributes')))
+  cpSync(join(app, '.gitattributes'), join(app, 'gitattributes-product'))
 // The source's manifest lists no framework package as its own: the bundle provides every package the scaffold declared, so they are peers, at the
 // version installed here (never a build machine's file: path). Its scripts name Program files and a product runs no npm, so they stay with the bundle.
 // What the person installs later is theirs: `dependencies` in their source.
@@ -379,7 +382,13 @@ const sourceManifest = {
 writeFileSync(join(app, 'package-product.json'), `${JSON.stringify(sourceManifest, null, 2)}\n`)
 const exclude = join(app, '.git', 'info', 'exclude')
 const excluded = existsSync(exclude) ? readFileSync(exclude, 'utf8') : ''
-const productNames = ['product.json', 'gitignore-product', 'package-product.json', 'template-git/']
+const productNames = [
+  'product.json',
+  'gitignore-product',
+  'gitattributes-product',
+  'package-product.json',
+  'template-git/',
+]
 const missingNames = productNames.filter(
   (name) =>
     !excluded
