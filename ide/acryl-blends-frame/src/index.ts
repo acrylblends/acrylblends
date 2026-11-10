@@ -66,6 +66,7 @@ import {
   parseSharePlan,
   type PushPlan,
   type SharePlan,
+  type ShareVisibility,
   type FrameBranch,
   type FrameState,
   type GitRemoteState,
@@ -220,7 +221,7 @@ export interface PluginsPort {
   read(): Promise<AppPluginsView>
   switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
   /** What sharing one local plugin would do (repository, version, visibility); nothing is sent. */
-  planShare(name: string): Promise<SharePlan>
+  planShare(name: string, visibility?: ShareVisibility): Promise<SharePlan>
   /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path: only the plan the person confirmed. */
   share(name: string, confirmed: SharePlan): Promise<ShareAppPluginResult>
 }
@@ -564,7 +565,8 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
       const name = pluginName(body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : body as Record<string, unknown>)
       if (name === undefined) return c.json(error('name one local plugin'), 400)
       try {
-        return c.json(await plugins.planShare(name))
+        const asked = (body as Record<string, unknown>).visibility
+        return c.json(await plugins.planShare(name, asked === 'public' || asked === 'private' ? asked : undefined))
       } catch (cause) {
         report(cause)
         return c.json(error(cause instanceof Error ? cause.message : 'the share could not be planned'), 409)
@@ -808,7 +810,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       },
       // A local plugin goes to GitHub through the plugin-hub path: the same pack, secret check, repository, release and local store an
       // ACRYL plugin share uses, with the user's own gh and git doing the publishing.
-      planShare: async (name) => planAppPluginShare(root, ctx.appInstance.home, name, shareTo, githubSharePorts()),
+      planShare: async (name, visibility) => planAppPluginShare(root, ctx.appInstance.home, name, { ...shareTo, ...(visibility === undefined ? {} : { visibility }) }, githubSharePorts()),
       share: async (name, confirmed) => shareAppPlugin(root, ctx.appInstance.home, name, confirmed, shareTo, githubSharePorts()),
     }
     // The chat's agent finished a turn that changed files: save a version by itself (./auto-save.ts), and remember which turn it was.
