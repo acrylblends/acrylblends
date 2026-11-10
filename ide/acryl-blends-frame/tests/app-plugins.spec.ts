@@ -144,7 +144,7 @@ describe('sharing a local plugin', () => {
   it('asks a question naming the repository, whether it is created, the version and who can see it', () => {
     expect(shareQuestion(plan)).toBe('Create repository tester/hello-share on GitHub and publish v0.1.0? It will be private.')
     expect(shareQuestion({ ...plan, createsRepository: false, version: '0.1.1', released: '0.1.0', visibility: 'public' }))
-      .toBe('Publish v0.1.1 to tester/hello-share on GitHub? v0.1.0 is released there, so this is the next version. It will be public: anyone can read it and pull it into their own app.')
+      .toBe('Publish v0.1.1 to tester/hello-share on GitHub? v0.1.0 is released there, so this is the next version. It will be public, under the MIT license: anyone can read it and pull it into their own app.')
     expect(parseSharePlan(JSON.parse(JSON.stringify(plan)))).toEqual(plan)
     expect(() => parseSharePlan({ ...plan, owner: '../x' })).toThrow('repository')
     expect(() => parseSharePlan(undefined)).toThrow('not a plan')
@@ -261,10 +261,16 @@ describe('sharing a local plugin', () => {
       const { ports, did } = standIn({})
       expect((await planAppPluginShare(root, home, 'hello-share', { owner: 'inboxxobni' }, ports)).visibility).toBe('private')
       const open = await planAppPluginShare(root, home, 'hello-share', { owner: 'inboxxobni', visibility: 'public' }, ports)
-      expect(open.visibility).toBe('public')
-      // A plan confirmed as private is not published as public, and the other way round.
-      await expect(shareAppPlugin(root, home, 'hello-share', { ...open, visibility: 'private' }, { owner: 'inboxxobni' }, ports)).resolves.toBeDefined()
-      expect(did.some(step => step.includes('public'))).toBe(false)
+      // A public plan names its license (MIT unless the app says otherwise), and a private one has none.
+      expect(open).toMatchObject({ visibility: 'public', license: 'MIT' })
+      const closed = await planAppPluginShare(root, home, 'hello-share', { owner: 'inboxxobni' }, ports)
+      expect(closed.license).toBeUndefined()
+      // A plan confirmed as private is not published as public: a changed visibility or license is refused, nothing is sent.
+      await expect(shareAppPlugin(root, home, 'hello-share', { ...open, visibility: 'private' }, { owner: 'inboxxobni' }, ports)).rejects.toThrow('changed since you confirmed')
+      expect(did.filter(step => step !== 'login')).toEqual([])
+      // The package of a public share carries the license the plan named.
+      await shareAppPlugin(root, home, 'hello-share', open, { owner: 'inboxxobni' }, ports)
+      expect(JSON.parse(readFileSync(join(pluginPackagesOf(home), 'hello-share', 'package.json'), 'utf8')).license).toBe('MIT')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
