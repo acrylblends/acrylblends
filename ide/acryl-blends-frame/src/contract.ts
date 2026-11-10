@@ -278,6 +278,8 @@ export interface SharePlan {
   readonly createsRepository: boolean
   /** The version already released there; the plan then releases the next patch. */
   readonly released?: string
+  /** The license a public share is offered under, as an SPDX id (MIT unless the app says otherwise); a private share has none. */
+  readonly license?: string
 }
 
 const GITHUB_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
@@ -285,17 +287,18 @@ const GITHUB_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
 /** @throws when the value is not a share plan. */
 export function parseSharePlan(value: unknown): SharePlan {
   if (!isRecord(value)) throw new Error('share plan: not a plan')
-  const { owner, repo, version, visibility, createsRepository, released } = value
+  const { owner, repo, version, visibility, createsRepository, released, license } = value
   if (typeof owner !== 'string' || !GITHUB_NAME.test(owner) || typeof repo !== 'string' || !GITHUB_NAME.test(repo)) throw new Error('share plan: repository')
   if (typeof version !== 'string' || version === '' || (released !== undefined && (typeof released !== 'string' || released === ''))) throw new Error('share plan: version')
   if ((visibility !== 'private' && visibility !== 'public') || typeof createsRepository !== 'boolean') throw new Error('share plan: visibility')
-  return { owner, repo, version, visibility, createsRepository, ...(released === undefined ? {} : { released }) }
+  if (license !== undefined && (typeof license !== 'string' || !/^[A-Za-z0-9.+-]+$/u.test(license))) throw new Error('share plan: license')
+  return { owner, repo, version, visibility, createsRepository, ...(released === undefined ? {} : { released }), ...(license === undefined ? {} : { license }) }
 }
 
 /** The same plan: what the person confirmed is what would be published now. */
 export function samePlan(a: SharePlan, b: SharePlan): boolean {
   return a.owner === b.owner && a.repo === b.repo && a.version === b.version && a.visibility === b.visibility
-    && a.createsRepository === b.createsRepository && a.released === b.released
+    && a.createsRepository === b.createsRepository && a.released === b.released && a.license === b.license
 }
 
 /**

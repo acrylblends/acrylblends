@@ -19,7 +19,7 @@ export function shareQuestion(plan: SharePlan): string {
     ? `Create repository ${where} on GitHub and publish v${plan.version}?`
     : `Publish v${plan.version} to ${where} on GitHub?`
   const released = plan.released === undefined ? '' : ` v${plan.released} is released there, so this is the next version.`
-  const who = plan.visibility === 'public' ? 'public: anyone can read it and pull it into their own app' : 'private'
+  const who = plan.visibility === 'public' ? `public, under the ${plan.license ?? 'MIT'} license: anyone can read it and pull it into their own app` : 'private'
   return `${what}${released} It will be ${who}.`
 }
 

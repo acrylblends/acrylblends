@@ -350,11 +350,12 @@ export async function readFramePlugins(root: string, rows: readonly FrameRow[]):
 
 /** The package.json a local plugin is shared with: the fields the builder's package_plugin writes (plugins/builder/index.ts), plus the Loader
  * patch the plugin-hub's share requires so the package can also be installed as a row. */
-export function pluginPackageManifest(name: string, description: string, version = '0.1.0'): Record<string, unknown> {
+export function pluginPackageManifest(name: string, description: string, version = '0.1.0', license?: string): Record<string, unknown> {
   return {
     name,
     version,
     description,
+    ...(license === undefined ? {} : { license }),
     type: 'module',
     exports: { '.': './index.ts', './package.json': './package.json' },
     files: ['*.ts', '**/*.ts', 'README.md', 'cordis.patch.yml'],
@@ -400,7 +401,7 @@ export async function recordShare(file: string, name: string, shared: SharedPlug
 export const pluginPackagesOf = (home: string): string => join(home, 'plugin-packages')
 
 /** Copy one local plugin into its package folder under `packages`, the way the builder's package_plugin does; answers the folder. */
-export async function packageAppPlugin(root: string, name: string, packages: string): Promise<string> {
+export async function packageAppPlugin(root: string, name: string, packages: string, license?: string): Promise<string> {
   if (!(await madePlugins(root)).includes(name)) throw new Error(`plugins/ has no local plugin "${name}"`)
   const source = join(root, 'plugins', name)
   const target = join(packages, name)
@@ -419,7 +420,7 @@ export async function packageAppPlugin(root: string, name: string, packages: str
     filter: (path) => !/(^|[\\/])(node_modules|\.git)([\\/]|$)/u.test(path.slice(source.length)),
   })
   const description = await packageDescription(source)
-  writeFileSync(join(target, 'package.json'), `${JSON.stringify(pluginPackageManifest(name, description, version), null, 2)}\n`)
+  writeFileSync(join(target, 'package.json'), `${JSON.stringify(pluginPackageManifest(name, description, version, license), null, 2)}\n`)
   // The row a Loader install mounts (the plugin-hub reads this patch); a Blends app adds the folder through its extensions row instead.
   writeFileSync(join(target, 'cordis.patch.yml'), `- insert:\n    - id: ${name}\n      name: ./index.ts\n`)
   if (!existsSync(join(target, 'README.md'))) {
@@ -453,17 +454,18 @@ export type ShareAppPluginResult = SharedPluginView & { readonly owner: string; 
 /**
  * What sharing one local plugin would do, read without sending anything: it packages the plugin under the app's home and asks the host who is
  * signed in, whether the repository exists and whether this version is released there (then the plan releases the next patch).
- * @param options - the repository owner (the signed-in account when absent) and the visibility the person asked for (private when absent: a share is
- *   public only when the person chose it, because anyone can then read and pull it).
+ * @param options - the repository owner (the signed-in account when absent), the visibility the person asked for (private when absent: a share is
+ *   public only when the person chose it, because anyone can then read and pull it) and the license of a public share (MIT when absent; the plan names it).
  */
-export async function planAppPluginShare(root: string, home: string, name: string, options: { readonly owner?: string; readonly visibility?: ShareVisibility }, ports: SharePorts): Promise<SharePlan> {
-  const dir = await packageAppPlugin(root, name, pluginPackagesOf(home))
-  const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as { version?: unknown; acryl?: { visibility?: unknown } }
+export async function planAppPluginShare(root: string, home: string, name: string, options: { readonly owner?: string; readonly visibility?: ShareVisibility; readonly license?: string }, ports: SharePorts): Promise<SharePlan> {
+  const visibility: ShareVisibility = options.visibility ?? 'private'
+  const license = visibility === 'public' ? (options.license ?? 'MIT') : undefined
+  const dir = await packageAppPlugin(root, name, pluginPackagesOf(home), license)
+  const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as { version?: unknown }
   const current = typeof manifest.version === 'string' && parseVersion(manifest.version) !== undefined ? manifest.version : undefined
   if (current === undefined) throw new Error(`${name}: its package has no semantic version`)
   const owner = options.owner ?? ports.host.login()
   const repo = name
-  const visibility = options.visibility ?? (manifest.acryl?.visibility === 'public' ? 'public' : 'private')
   const existing = ports.host.repository(owner, repo)
   const released = existing !== undefined && ports.host.releaseExists(owner, repo, `v${current}`)
   return {
@@ -473,6 +475,7 @@ export async function planAppPluginShare(root: string, home: string, name: strin
     visibility,
     createsRepository: existing === undefined,
     ...(released ? { released: current } : {}),
+    ...(license === undefined ? {} : { license }),
   }
 }
 
@@ -493,7 +496,7 @@ export async function shareAppPlugin(
   ports: SharePorts,
 ): Promise<ShareAppPluginResult> {
   // The visibility is the one the person confirmed: the plan is made again with it, and a change since then still refuses below.
-  const plan = await planAppPluginShare(root, home, name, { ...options, visibility: confirmed.visibility }, ports)
+  const plan = await planAppPluginShare(root, home, name, { ...options, visibility: confirmed.visibility, ...(confirmed.license === undefined ? {} : { license: confirmed.license }) }, ports)
   if (!samePlan(plan, confirmed)) throw new Error(`The share changed since you confirmed it (${plan.owner}/${plan.repo} v${plan.version}); nothing was sent. Look at it again.`)
   const dir = join(pluginPackagesOf(home), name)
   // A version is released once: the confirmed plan names the next patch, written now.
