@@ -15,7 +15,7 @@ import type { UiChannel } from './channel.ts'
 import { NO_DESKTOP, type ShellChannel } from './shell.ts'
 import { VERB_SPECS, VERBS } from './verbs.ts'
 
-export type DoorErrorCode = 'invalid' | 'unknown-verb' | 'unavailable' | 'not-exposed' | 'outside-app' | 'failed' | ShellErrorCode
+export type DoorErrorCode = 'invalid' | 'unknown-verb' | 'unavailable' | 'not-exposed' | 'outside-app' | 'failed' | 'refused' | ShellErrorCode
 
 export class DoorError extends Error {
   readonly code: DoorErrorCode
@@ -33,6 +33,55 @@ export interface ExtensionsPort {
   remove(name: string): Promise<unknown>
   reload(): Promise<unknown>
   list(): readonly unknown[]
+}
+
+/** The slice of acrylblends' `pluginShare` service the pull, list and remove verbs use. */
+export interface PluginSharePort {
+  /** The plugins installed while the app runs, a pulled one with its source and author. */
+  list(): readonly unknown[]
+  /** Take a plugin out and forget its record; a pulled folder still holding the release as pulled goes too. */
+  remove(name: string): Promise<unknown>
+  pull(source: string): Promise<PullView>
+  /** Pull each source of a group's list on its own: one that is refused does not stop the others. */
+  pullList(from: string): Promise<PullListView>
+  planPublish(name: string, options?: PublishOptionsView): Promise<PublishPlanView | { readonly ok: false; readonly reason: string; readonly next: string }>
+  publish(name: string, confirmed: PublishPlanView, options?: PublishOptionsView): Promise<{ readonly ok: boolean; readonly reason?: string }>
+}
+
+/** What one pull did, or why it was refused. */
+export interface PullView { readonly ok: boolean; readonly action?: string; readonly name?: string; readonly reason?: string; readonly next?: string }
+
+/** What a list pull did for each source, or why the list itself was refused (then nothing was pulled). */
+export type PullListView =
+  | { readonly ok: true; readonly from: string; readonly entries: readonly { readonly line: number; readonly source: string; readonly result: PullView }[] }
+  | { readonly ok: false; readonly reason: string; readonly next: string }
+
+/** Who a plan publishes as, and under which license; the service's defaults when absent. */
+export interface PublishOptionsView {
+  readonly owner?: string
+  readonly license?: string
+}
+
+/** A plan as the door shows it. The service owns it; the door passes it back unchanged. */
+export interface PublishPlanView {
+  readonly owner: string
+  readonly repo: string
+  readonly version: string
+  readonly visibility: string
+  readonly license: string
+  readonly createsRepository: boolean
+  readonly files: readonly string[]
+  readonly digest: string
+  readonly pullLine: string
+}
+
+/** What a plan says, for a person deciding. */
+export function renderPublishPlan(plan: PublishPlanView): string {
+  return [
+    `Publish to ${plan.owner}/${plan.repo}${plan.createsRepository ? ' (a new repository)' : ''}, ${plan.visibility}, version ${plan.version}, license ${plan.license}.`,
+    `Files: ${plan.files.join(', ')}.`,
+    `A friend gets exactly these bytes with: ${plan.pullLine}`,
+  ].join('\n')
 }
 
 /** The slice of acrylblends' `tools` registry (the `agent` plugin's) the tool verbs use, and where the built-in chat finds the verbs. */
@@ -54,6 +103,8 @@ export interface DoorDeps {
   readonly appBase?: string | undefined
   /** Read at each call: the services may come and go while the door runs. */
   readonly extensions: () => ExtensionsPort | undefined
+  /** Read at each call, as `extensions` is; absent where the app has no plugin-share row. */
+  readonly pluginShare?: () => PluginSharePort | undefined
   readonly tools: () => ToolsPort | undefined
   /** The app tools the door offers; anything else is refused before it reaches the registry. */
   readonly expose: readonly string[]
@@ -116,12 +167,14 @@ export class Door {
         const result = await this.act(input, signal, scope)
         return { value: result, text: `done${result.target === undefined ? '' : `: ${result.target.role} "${result.target.name}"`}${result.detail === undefined ? '' : ` (${result.detail})`}; look again before the next act` }
       }
-      case 'plugin-list': return this.plugin(extensions => extensions.list(), false)
+      case 'plugin-list': return this.plugin(plugins => plugins.list(), false, this.installed())
       case 'plugin-add': return this.plugin(extensions => extensions.install(this.insideApp(input.folder)))
+      case 'plugin-pull': return input.from === undefined ? this.pull(input.source) : this.pullList(input.from, input.source)
+      case 'plugin-publish': return this.planPublish(input)
       case 'plugin-remove': {
         const name = input.name
         if (typeof name !== 'string' || name === '') throw new DoorError('invalid', 'plugin remove needs a plugin name')
-        return this.plugin(extensions => extensions.remove(name))
+        return this.plugin(plugins => plugins.remove(name), true, this.installed())
       }
       case 'plugin-reload': return this.plugin(extensions => extensions.reload())
       case 'tool-list': {
@@ -298,14 +351,73 @@ export class Door {
     }
   }
 
-  private async plugin(run: (extensions: ExtensionsPort) => unknown, mutates = true): Promise<VerbAnswer> {
-    const extensions = this.deps.extensions()
+  /**
+   * Who lists and removes the app's plugins: plugin-share where the app has it, as it knows where each pulled plugin came from and is the one app service
+   * the frame's host reaches (extensions stays in the app's own realm there); extensions elsewhere.
+   */
+  private installed(): Pick<ExtensionsPort, 'list' | 'remove'> | undefined {
+    return this.deps.pluginShare?.() ?? this.deps.extensions()
+  }
+
+  private async plugin<Port = ExtensionsPort>(run: (plugins: Port) => unknown, mutates = true, port: Port | undefined = this.deps.extensions() as Port | undefined): Promise<VerbAnswer> {
+    const extensions = port
     if (extensions === undefined) throw new DoorError('unavailable', 'this door has no extensions plugin to drive. In ACRYL\'s frame none is needed: a saved change in src/ or plugins/ reloads the app by itself, so do not restart it. Elsewhere, the app has no way to install plugins while it runs')
     const value = await run(extensions)
     // The app changed under the open pages: reload them (not when the plugin was already as it should be), and answer once they are back.
     const unchanged = typeof value === 'object' && value !== null && (value as { action?: unknown }).action === 'unchanged'
     if (mutates && !unchanged && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
     return { value, text: JSON.stringify(value, null, 2) }
+  }
+
+  private share(): PluginSharePort {
+    const share = this.deps.pluginShare?.()
+    if (share === undefined) throw new DoorError('unavailable', 'plugin-share is not running in this app. If the app just changed it is restarting, so try again in a moment. An app made by an older version does not have it, and upgrade does not add it: run `npx acrylblends add plugin-share` and follow its README')
+    return share
+  }
+
+  /** Only a plan: no argument of any verb can publish, so an agent never says yes for a person. */
+  private async planPublish(input: Record<string, unknown>): Promise<VerbAnswer> {
+    const { name, owner, license } = input
+    if (typeof name !== 'string' || name === '') throw new DoorError('invalid', 'plugin publish needs a plugin name, e.g. plugin publish pomodoro')
+    const value = await this.share().planPublish(name, {
+      ...(typeof owner === 'string' && owner !== '' ? { owner } : {}),
+      ...(typeof license === 'string' && license !== '' ? { license } : {}),
+    })
+    if ('ok' in value) throw new DoorError('refused', `${value.reason}. ${value.next}.`)
+    return { value, text: `${renderPublishPlan(value)}\nNothing was sent. Only a person can say yes: they run \`npm run acryl -- plugin publish ${name}\` in their own terminal, or press Share in the frame. \`--license <id>\` changes the license before the yes.` }
+  }
+
+  /** The person's yes, from their own terminal. Not a verb: MCP and the chat do not have it. */
+  async publishConfirmed(name: string, confirmed: PublishPlanView, options: PublishOptionsView): Promise<unknown> {
+    const value = await this.share().publish(name, confirmed, options)
+    this.deps.audit.record({ at: new Date().toISOString(), tool: 'plugin-publish', target: { role: 'plugin', name: `${confirmed.owner}/${confirmed.repo}@${confirmed.version}` }, outcome: value.ok ? 'ok' : 'refused', approval: 'token' })
+    return value
+  }
+
+  private async pull(source: unknown): Promise<VerbAnswer> {
+    if (typeof source !== 'string' || source === '') throw new DoorError('invalid', 'plugin pull needs a source, e.g. plugin pull github:someone/pomodoro@0.1.0')
+    const value = await this.share().pull(source)
+    // A refusal is a failed command, so a script does not read it as done; it changed nothing, and the open pages stay.
+    if (!value.ok) throw new DoorError('refused', `${sentence(value.reason ?? 'the pull was refused')} ${sentence(value.next ?? 'nothing changed')}`)
+    // Neither did pulling what is already there change anything.
+    if (value.action !== 'unchanged' && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
+    return { value, text: JSON.stringify(value, null, 2) }
+  }
+
+  /** A group's list: every source is pulled on its own, so one refused plugin is named with its reason and the others still install and run. */
+  private async pullList(from: unknown, source: unknown): Promise<VerbAnswer> {
+    if (source !== undefined) throw new DoorError('invalid', 'plugin pull takes a source or --from <list>, not both')
+    if (typeof from !== 'string' || from === '') throw new DoorError('invalid', 'plugin pull --from needs a list, e.g. plugin pull --from group.txt')
+    const value = await this.share().pullList(from)
+    if (!value.ok) throw new DoorError('refused', `${sentence(value.reason)} ${sentence(value.next)}`)
+    const changed = value.entries.some(entry => entry.result.ok && entry.result.action !== 'unchanged')
+    if (changed && this.deps.reloadOnChange !== false) await this.deps.channel.reloadAll()
+    const lines = value.entries.map(entry => `${entry.source}: ${pullLine(entry.result)}`)
+    const refused = value.entries.filter(entry => !entry.result.ok)
+    const summary = `${String(value.entries.length - refused.length)} of ${String(value.entries.length)} from ${value.from} pulled`
+    // Some refused: the command failed, so a script sees it, but the ones that came in stay in and keep running.
+    if (refused.length > 0) throw new DoorError('refused', [`${summary}; ${String(refused.length)} refused, the others are in and running.`, ...lines].join('\n'))
+    return { value, text: [`${summary}.`, ...lines].join('\n') }
   }
 
   /** A folder named by an agent, resolved from the app folder; it must be inside the app. */
@@ -339,4 +451,16 @@ export class Door {
     }
     return { value, text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }
   }
+}
+
+/** One source's outcome in a list pull, as a person reads it. */
+function pullLine(result: PullView): string {
+  if (!result.ok) return `refused: ${sentence(result.reason ?? 'the pull was refused')} ${sentence(result.next ?? 'nothing changed')}`
+  return `${result.action ?? 'pulled'}${result.name === undefined ? '' : ` ${result.name}`}`
+}
+
+/** A text as one sentence: the full stop added only when it has no closing punctuation of its own (a reason may end with one, a next step often does). */
+function sentence(text: string): string {
+  const trimmed = text.trim()
+  return /[.!?]$/u.test(trimmed) ? trimmed : `${trimmed}.`
 }

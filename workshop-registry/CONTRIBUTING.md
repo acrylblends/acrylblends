@@ -9,6 +9,7 @@
 5. **Nothing that runs on install.** `package.json` defines none of `preinstall`, `install`, `postinstall`, `prepare` and the like.
 6. **Small.** No file over 1 MB, no more than 8 MB or 1500 files in total, no `node_modules/` or `.git/`.
 7. **No keys.** Nothing that looks like a private key, an API key, a GitHub or npm token.
+8. **Works on every OS.** No name Windows reserves or refuses (`con`, `nul.txt`, a trailing dot or space, `< > : " | ? * \`), no two paths that differ only in case, no path over 200 characters, and no carriage return in a text file: save with LF. `make-entry` refuses these before it makes the entry, and adds the `.gitattributes` that keeps line endings LF.
 
 ## Changing your entry
 

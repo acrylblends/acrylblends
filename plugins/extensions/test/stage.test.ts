@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, test } from 'node:test'
-import { discard, prune, stage } from '../stage.ts'
+import { discard, folderPluginStore, prune, stage } from '../stage.ts'
 
 let root: string
 let saved: string | undefined
@@ -65,4 +65,20 @@ test('under node --watch nothing staged is deleted (the watcher would restart th
   discard(second.dir)
   assert.equal(existsSync(first.dir), true)
   assert.equal(existsSync(second.dir), true)
+})
+
+test('the plugin store keeps versions behind its port: put reuses, holds answers, discard and keepOnly drop', () => {
+  const store = folderPluginStore(join(root, 'staged'))
+  const one = store.put('board', source('one'))
+  assert.equal(store.put('board', source('one')).dir, one.dir)
+  assert.equal(store.holds(one), true)
+  const two = store.put('board', source('two'))
+  store.keepOnly('board', two)
+  assert.equal(store.holds(one), false)
+  assert.equal(store.holds(two), true)
+  store.discard(two)
+  assert.equal(store.holds(two), false)
+  const three = store.put('board', source('three'))
+  store.keepOnly('board')
+  assert.equal(store.holds(three), false)
 })

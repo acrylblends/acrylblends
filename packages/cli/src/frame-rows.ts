@@ -25,6 +25,12 @@ export const HOST_PROVIDED_IDS: ReadonlySet<string> = new Set([
   'acryl-door',
 ])
 
+/**
+ * Services the app's rows provide that the host's own rows call: the door and the frame reach `pluginShare`, and no host row provides that name. Left out of
+ * the isolate list, so they find it; every other service stays in the app's realm.
+ */
+const REACHED_FROM_HOST: ReadonlySet<string> = new Set(['pluginShare'])
+
 /** One row of the generated layer. `isolate` is the Loader's entry option: the services this row's whole subtree provides in its own realm. */
 export interface FrameRow {
   readonly id: string
@@ -58,12 +64,14 @@ export function appPluginsRow(prefix: string): string {
     "  return path === base || path.startsWith(base + '/') ? path : base + (path.startsWith('/') ? '' : '/') + path",
     '}',
     '',
-    "/** The router as the app's rows see it: mounts land under the prefix, every other member is the host router's. */",
+    "/** The router as the app's rows see it: mounts land under the prefix, and a plugin's own request (its install check) finds them there; every other member is the host router's. */",
     'function appRouter(router, prefix) {',
     '  const route = (path, app) => router.route(prefixedAppRoute(prefix, path), app)',
+    "  const request = (input, ...rest) => router.request(typeof input === 'string' && input.startsWith('/') ? prefixedAppRoute(prefix, input) : input, ...rest)",
     '  return new Proxy(router, {',
     '    get(target, property) {',
     "      if (property === 'route') return route",
+    "      if (property === 'request') return request",
     '      const value = Reflect.get(target, property, target)',
     "      return typeof value === 'function' ? value.bind(target) : value",
     '    },',
@@ -72,8 +80,10 @@ export function appPluginsRow(prefix: string): string {
     '',
     'export async function apply(ctx, config) {',
     `  const prefix = typeof config?.appPrefix === 'string' ? config.appPrefix : ${JSON.stringify(prefix)}`,
-    "  // The rows read ctx.router as the app's own router: the same paths as on their own server, under the frame's prefix.",
-    '  const appScope = ctx.extend({ router: appRouter(ctx.router, prefix) })',
+    "  // The rows read ctx.router as the app's own router: the same paths as on their own server, under the frame's prefix. A getter, read by each plugin",
+    '  // from its own context: it gets the host router traced for that context, so a route it mounts is its own and goes when the plugin is removed',
+    "  // (a router taken once here would make every route this row's, served until the whole app reloads).",
+    "  const appScope = ctx.extend({ get router() { return appRouter(this.get('router'), prefix) } })",
     '  const fibers = await composeInto(appScope, ctx.appInstance, { host: true })',
     "  ctx.effect(() => () => { for (const fiber of [...fibers].reverse()) void fiber.dispose() }, 'app-plugins: dispose')",
     '}',
@@ -118,7 +128,12 @@ function providedServices(appDir: string): Record<string, true> {
     }
   }
   for (const row of ownRowIds(appDir)) walk(join(appDir, 'plugins', row))
-  return Object.fromEntries([...provided].sort().map((name) => [name, true as const]))
+  return Object.fromEntries(
+    [...provided]
+      .filter((name) => !REACHED_FROM_HOST.has(name))
+      .sort()
+      .map((name) => [name, true as const]),
+  )
 }
 
 export interface AppFrameRows {

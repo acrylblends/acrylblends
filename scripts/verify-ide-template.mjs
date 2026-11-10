@@ -19,6 +19,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -30,6 +31,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { packFolder } from '@webboxes/plugin-hub'
 import { devtools, startChrome, stopChrome } from './lib/door-probe.mjs'
 import { frameSpecsEnv } from './lib/ide-specs.mjs'
 import { doorSpawn, npmSpawn } from './lib/platform.mjs'
@@ -306,11 +308,6 @@ function startMockLlm() {
 }
 
 const DSH_VERSION = process.env.IDE_PROFILE_DSH_VERSION ?? '0.2.0-rc.2'
-/** The framework release this CLI scaffolds an app for (`copyTemplate` writes the same range into the app's package.json). */
-const cliVersion = JSON.parse(
-  readFileSync(join(root, 'packages', 'cli', 'package.json'), 'utf8'),
-).version
-const frameworkVersion = `^${cliVersion}`
 
 const scratch = mkdtempSync(join(tmpdir(), `ide-template-${template}-`))
 const app = existing === undefined ? join(scratch, `${template}-app`) : resolve(existing)
@@ -323,7 +320,7 @@ let cleanupError
 try {
   const env = {
     ...process.env,
-    ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, { dshVersion: DSH_VERSION, frameworkVersion }),
+    ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, { dshVersion: DSH_VERSION }),
   }
   if (existing === undefined) {
     const init = spawnSync(
@@ -361,6 +358,24 @@ try {
     for (const file of ['cordis.patch.yml', 'scripts/ide-host.mjs', 'frame/app-plugins.mjs'])
       if (!existsSync(join(app, file))) fail(`the app given to --existing has no ${file}`)
     log(`checking the app at ${app} (--existing)`)
+  }
+
+  if (template === 'blank' || template === 'agent') {
+    // The collective app (spec 049 T024): the group's plugins come in with one list, and the showcase page shows them.
+    const add = spawnSync(process.execPath, [cli, 'add', 'showcase'], {
+      cwd: app,
+      encoding: 'utf8',
+      env,
+    })
+    if (add.status !== 0)
+      fail(`add showcase failed (exit ${String(add.status)}):\n${add.stdout}${add.stderr}`)
+    if (
+      !/- id: plugin-share\r?\n\s+name: plugin-share\r?\n\s+- id: showcase\r?\n/u.test(
+        readFileSync(join(app, 'blend.yaml'), 'utf8'),
+      )
+    )
+      fail('add did not mount the showcase row right after plugin-share in blend.yaml')
+    log('the showcase is added, after plugin-share')
   }
 
   if (page.panel === true) {
@@ -554,6 +569,19 @@ ${composition.stdout}`)
   if (brief === undefined) fail('a door call did not answer within 30s')
   log('a door call answers')
 
+  // One framework copy: the frame packages' middleware runs on the router of the host that serves it. With two copies (the frame linked from the
+  // checkout, the framework from npm) a known private path asked with another method found no match result and answered 500 instead of 405.
+  const wrongMethod = spawnSync(
+    'curl',
+    ['-s', '-o', '/dev/null', '-D', '-', '-X', 'POST', `${origin}/api/acryl-support/diagnostics`],
+    { encoding: 'utf8' },
+  ).stdout
+  if (!/^HTTP\/[\d.]+ 405\b/mu.test(wrongMethod) || !/^allow: .*\bGET\b/imu.test(wrongMethod))
+    fail(
+      `POST to a GET-only private route did not answer 405 with its Allow:\n${wrongMethod}\nserver said:\n${output.slice(-2500)}`,
+    )
+  log('a private route asked with another method answers 405 with its Allow')
+
   // The app's own page answers directly, so a tile failure is never the app's own route.
   const directFile = join(scratch, 'direct.html')
   const direct = await until(async () => {
@@ -642,6 +670,8 @@ ${composition.stdout}`)
     return await startServer()
   }
   await checkTileInBrowser(url, origin, jar, page, output, mock, restartSamePort)
+  if (template !== 'todo') await checkFramedPull(app, origin, jar)
+  if (template === 'blank' || template === 'agent') await checkCollectiveApp(app, origin, jar)
   // The frame's stable launch token end to end (119): verify-frame-token boots this app twice on its own port and asserts the same address after the
   // restart, that the address admits the page (303 and the cookie) and that the cookie admits the frame's WebSocket.
   await stopServer()
@@ -739,6 +769,511 @@ function setInputValue(selector, value) {
   input.dispatchEvent(new Event('input', { bubbles: true }))
   return true
 })()`
+}
+
+/** The frame's reload view: its seq moves on each time the frame loads the app's code again (spec 049 T022). Read as the page reads it. */
+function frameReloadSeq(origin, jar) {
+  const read = spawnSync(
+    'curl',
+    [
+      '-s',
+      '-b',
+      jar,
+      '-H',
+      'Sec-Fetch-Site: same-origin',
+      '-H',
+      `Origin: ${origin}`,
+      `${origin}/api/acryl-blends-frame/app`,
+    ],
+    { encoding: 'utf8' },
+  )
+  const view = JSON.parse(read.stdout || '{}')
+  if (!Number.isInteger(view.seq)) fail(`the frame's reload view is not readable: ${read.stdout}`)
+  return view.seq
+}
+
+/**
+ * The pull line a person copies, in the app as the frame runs it: the door row is the host's and the app's rows are in their own realm, so the line reaches
+ * plugin-share only if the overlay lets it, and the plugin's own check finds its route only under the canvas prefix. A wrong digest fails and installs nothing.
+ */
+async function checkFramedPull(app, origin, jar) {
+  const name = 'gate-pull'
+  // What the host reported for a door verb that threw: the door answers only "the verb could not be run", the cause is in the app's error log.
+  const reported = () => {
+    const logs = join(app, '.acrylblends', 'logs')
+    const lines = existsSync(logs)
+      ? readdirSync(logs)
+          .filter((file) => file.endsWith('.error.log'))
+          .flatMap((file) => readFileSync(join(logs, file), 'utf8').split(/\r?\n/u))
+          .filter((entry) => entry.includes('acryl-door: failed'))
+      : []
+    return lines.length === 0 ? '' : `\nthe host reported:\n${lines.slice(-5).join('\n')}`
+  }
+  const tarball = releaseServing(app, name, '/gate-pull')
+  const npm = npmSpawn()
+  const door = (...args) =>
+    spawnSync(npm.command, ['run', '--silent', 'acryl', '--', 'plugin', ...args], {
+      cwd: app,
+      encoding: 'utf8',
+      ...npm.options,
+    })
+  const line = (input) => door('pull', input)
+  const answers = async (path) => (await fetch(`${origin}/app${path}`)).text()
+  const reloadSeq = () => frameReloadSeq(origin, jar)
+  const before = reloadSeq()
+
+  // A pull that fails: a wrong digest is refused and leaves nothing.
+  const refused = line(`${tarball}@sha256:${'0'.repeat(64)}`)
+  if (refused.status !== 1 || !refused.stderr.includes('different bytes'))
+    fail(`a wrong digest was not refused in the frame:\n${refused.stdout}${refused.stderr}`)
+  if (existsSync(join(app, 'plugins', name))) fail('a refused pull left its folder in the app')
+  // Pulls in a row, no retry: from a local file (which blend.yaml does not remember), from GitHub, and a local one again.
+  const pulled = line(tarball)
+  if (pulled.status !== 0)
+    fail(`the pull line failed in the frame:\n${pulled.stdout}${pulled.stderr}${reported()}`)
+  if (!(await answers('/gate-pull')).includes('gate-pull'))
+    fail('the pulled plugin does not answer at /app/gate-pull')
+  // A release on GitHub, pulled by its https address: remembered in blend.yaml, as a github: pull is. The address, not github:, keeps the gate off
+  // api.github.com's anonymous rate limit on shared CI runners; github: sources are covered by plugin-share's tests.
+  const POMODORO =
+    'https://github.com/inboxxobni/acrylblends-pomodoro/releases/download/v0.1.0/acrylblends-pomodoro-0.1.0.tgz'
+  // Offline, a local run skips this one pull and says so; CI never does: a runner that cannot reach github.com fails here.
+  const online = await fetch('https://github.com/', {
+    method: 'HEAD',
+    signal: AbortSignal.timeout(15_000),
+  }).then(
+    () => true,
+    () => false,
+  )
+  if (!online && process.env.CI)
+    fail('CI cannot reach github.com, so the pull of a GitHub release was not checked')
+  if (online) {
+    const fromGitHub = line(POMODORO)
+    if (fromGitHub.status !== 0)
+      fail(
+        `a pull from GitHub failed in the frame:\n${fromGitHub.stdout}${fromGitHub.stderr}${reported()}`,
+      )
+    if (!(await answers('/pomodoro')).includes('minutes'))
+      fail('the plugin pulled from GitHub does not answer at /app/pomodoro')
+  } else
+    log(
+      'SKIPPED: GitHub pull, no network - the pull of a GitHub release by its address and its author in the list were not checked',
+    )
+  const second = line(releaseServing(app, 'gate-two', '/gate-two'))
+  if (second.status !== 0)
+    fail(
+      `a pull right after another failed in the frame:\n${second.stdout}${second.stderr}${reported()}`,
+    )
+  if (
+    !(await answers('/gate-pull')).includes('gate-pull') ||
+    !(await answers('/gate-two')).includes('gate-two')
+  )
+    fail('after pulls in a row the pulled plugins do not all answer')
+  // The door lists and removes plugins in the frame too, through plugin-share (spec 049 T021): the frame's host reaches no extensions of its own.
+  const listed = door('list', '--json')
+  const plugins = listed.status === 0 ? JSON.parse(listed.stdout) : []
+  const names = plugins.map((plugin) => plugin.name)
+  if (
+    !names.includes(name) ||
+    !names.includes('gate-two') ||
+    (online && !names.includes('acrylblends-pomodoro'))
+  )
+    fail(`plugin list in the frame does not name the pulls:\n${listed.stdout}${listed.stderr}`)
+  if (online) {
+    const pomodoro = plugins.find((plugin) => plugin.name === 'acrylblends-pomodoro')
+    if (pomodoro?.pulledFrom !== POMODORO || pomodoro.author !== 'inboxxobni')
+      fail(`plugin list does not say where the GitHub pull came from: ${JSON.stringify(pomodoro)}`)
+  }
+  const removed = door('remove', 'gate-two')
+  if (removed.status !== 0)
+    fail(`plugin remove failed in the frame:\n${removed.stdout}${removed.stderr}`)
+  const afterRemove = await answers('/gate-two')
+  if (afterRemove.includes('"from":"gate-two"'))
+    fail(
+      `after plugin remove /app/gate-two still answers the removed plugin (${afterRemove}); the remove said:\n${removed.stdout}${removed.stderr}${reported()}`,
+    )
+  if (existsSync(join(app, 'plugins', 'gate-two')))
+    fail('plugin remove left the folder of an untouched pull')
+  // A second person's plugin on the same route, another pull that fails: refused with the first one's name, and the route still answers the first (T025).
+  const clash = line(releaseServing(app, 'gate-clash', '/gate-pull'))
+  if (clash.status !== 1 || !clash.stderr.includes('GET /gate-pull is already served by gate-pull'))
+    fail(
+      `a plugin whose route is taken was not refused in the frame:\n${clash.stdout}${clash.stderr}`,
+    )
+  if (existsSync(join(app, 'plugins', 'gate-clash')))
+    fail('a refused pull left its folder in the app')
+  if (!(await answers('/gate-pull')).includes('gate-pull'))
+    fail('after the refused clash /app/gate-pull does not answer the first plugin')
+  // Past the watcher's debounce: none of that loaded the app's code again.
+  await new Promise((done) => setTimeout(done, 1500))
+  const after = reloadSeq()
+  if (after !== before)
+    fail(
+      `the frame loaded the app again during the pulls (reload seq ${String(before)} -> ${String(after)})`,
+    )
+  // An agent editing a pulled plugin: that is a change of the app's code, so the frame loads it again and the edit answers.
+  const source = join(app, 'plugins', name, 'index.ts')
+  writeFileSync(
+    source,
+    readFileSync(source, 'utf8').replace(
+      "c.json({ from: 'gate-pull' })",
+      "c.json({ from: 'gate-pull', edited: true })",
+    ),
+  )
+  const edited = await until(
+    async () =>
+      (await answers('/gate-pull').catch(() => '')).includes('"edited":true') ? true : undefined,
+    60_000,
+  )
+  if (edited !== true) fail('an edit to a pulled plugin was not loaded again')
+  if (reloadSeq() === after)
+    fail('an edit to a pulled plugin answered without the frame loading the app again')
+  log(
+    'the pull line works in the frame: pulls from a local file and from GitHub, and two that fail, load nothing again; list names where each pull came from, remove takes an untouched pull; a taken route is refused naming its plugin; an edit to a pulled plugin loads the app again',
+  )
+}
+
+/** A tool plugin's release: `tool.json` with examples the install runs in the sandbox, and the tool's `run`. */
+function releaseTool(app, name) {
+  const source = join(app, '..', `${name}-source`)
+  mkdirSync(source, { recursive: true })
+  writeFileSync(
+    join(source, 'package.json'),
+    JSON.stringify({
+      name,
+      version: '1.0.0',
+      type: 'module',
+      keywords: ['cordis-plugin', 'acrylblends'],
+    }),
+  )
+  writeFileSync(
+    join(source, 'tool.json'),
+    JSON.stringify({
+      description: 'Counts the words of a text.',
+      examples: [{ input: { text: 'one app' }, output: { words: 2 } }],
+    }),
+  )
+  writeFileSync(
+    join(source, 'index.ts'),
+    'export function run(input: { text: string }) {\n  return { words: input.text.trim().split(/\\s+/u).length }\n}\n',
+  )
+  const tarball = join(app, '..', `${name}-1.0.0.tgz`)
+  writeFileSync(tarball, packFolder(source).tarball)
+  return tarball
+}
+
+/** A plugin release that puts a widget on the home page, with a check that finds it there. */
+function releaseWidget(app, name) {
+  const source = join(app, '..', `${name}-source`)
+  mkdirSync(source, { recursive: true })
+  writeFileSync(
+    join(source, 'package.json'),
+    JSON.stringify({
+      name,
+      version: '2.1.0',
+      type: 'module',
+      keywords: ['cordis-plugin', 'acrylblends'],
+    }),
+  )
+  writeFileSync(
+    join(source, 'index.ts'),
+    `export const name = '${name}'
+export const inject = ['home']
+export function apply(ctx) {
+  ctx.effect(() => ctx.home.widget({ id: '${name}', title: 'From ${name}', render: () => '<p>${name} says hello</p>' }))
+}
+export async function check(ctx) {
+  if (!ctx.home.widgets().some((widget) => widget.id === '${name}')) throw new Error('the widget is not on the home page')
+}
+`,
+  )
+  const tarball = join(app, '..', `${name}-2.1.0.tgz`)
+  writeFileSync(tarball, packFolder(source).tarball)
+  return tarball
+}
+
+/**
+ * The collective app (spec 049 T024): a group's list pulled in one command into the app as the frame runs it. Each source is pulled on its own, so a
+ * route clash and a wrong digest are refused by name while the others come in; the showcase lists every plugin with where it came from, its links open,
+ * and an open showcase page follows a removal live. The frame loads nothing again throughout, so the canvas never shows a reload or a 404.
+ */
+async function checkCollectiveApp(app, origin, jar) {
+  // The agent template runs the app's agent tools, so its group list carries a tool too; blank has the widgets and no tools.
+  const withTool = template === 'agent'
+  const npm = npmSpawn()
+  const door = (...args) =>
+    spawnSync(npm.command, ['run', '--silent', 'acryl', '--', 'plugin', ...args], {
+      cwd: app,
+      encoding: 'utf8',
+      ...npm.options,
+    })
+  // As a browser asks: blank's root answers JSON to an API client and its page, with the widgets, to a browser.
+  const answer = async (path) => {
+    const response = await fetch(`${origin}/app${path}`, { headers: { accept: 'text/html,*/*' } })
+    return { status: response.status, text: await response.text() }
+  }
+  const before = frameReloadSeq(origin, jar)
+  const route = releaseServing(app, 'group-route', '/group-route')
+  const widget = releaseWidget(app, 'group-widget')
+  const clash = releaseServing(app, 'group-clash', '/group-route')
+  const late = releaseServing(app, 'group-late', '/group-late')
+  const tool = withTool ? releaseTool(app, 'group-tool') : undefined
+  const POMODORO =
+    'https://github.com/inboxxobni/acrylblends-pomodoro/releases/download/v0.1.0/acrylblends-pomodoro-0.1.0.tgz'
+  const online = existsSync(join(app, 'plugins', 'acrylblends-pomodoro'))
+  // As a group keeps it: a comment, a line pasted as `plugin publish` prints it, a blank line, CRLF.
+  writeFileSync(
+    join(app, 'group.txt'),
+    [
+      '# our group, one plugin each',
+      route,
+      `npm run acryl -- plugin pull ${widget}`,
+      '',
+      `${clash}   # ana's: takes /group-route too`,
+      `${late}@sha256:${'0'.repeat(64)}`,
+      ...(tool === undefined ? [] : [tool]),
+      ...(online ? [POMODORO] : []),
+    ].join('\r\n'),
+  )
+  const pulled = door('pull', '--from', 'group.txt')
+  const said = `${pulled.stdout}${pulled.stderr}`
+  if (pulled.status !== 1)
+    fail(
+      `a list with two refused sources did not fail the command (exit ${String(pulled.status)}):\n${said}`,
+    )
+  const total = 4 + (online ? 1 : 0) + (tool === undefined ? 0 : 1)
+  for (const expected of [
+    `${String(total - 2)} of ${String(total)} from group.txt pulled; 2 refused, the others are in and running.`,
+    `${route}: installed group-route`,
+    `${widget}: installed group-widget`,
+    `${clash}: refused: GET /group-route is already served by group-route`,
+    'different bytes',
+    ...(tool === undefined ? [] : [`${tool}: installed group-tool`]),
+    ...(online ? [`${POMODORO}: unchanged acrylblends-pomodoro`] : []),
+  ])
+    if (!said.includes(expected))
+      fail(`the list pull did not say ${JSON.stringify(expected)}:\n${said}`)
+  for (const refused of ['group-clash', 'group-late'])
+    if (existsSync(join(app, 'plugins', refused)))
+      fail(`the refused ${refused} left its folder in the app`)
+  if (!(await answer('/group-route')).text.includes('group-route'))
+    fail('group-route does not answer at /app/group-route')
+  const home = await answer('')
+  if (!home.text.includes('group-widget says hello'))
+    fail(`the home page does not show group-widget's widget:\n${home.text.slice(0, 600)}`)
+
+  // The showcase: a card for each plugin with its author, release and links; every link opens.
+  const listed = await answer('/showcase/plugins')
+  if (listed.status !== 200) {
+    const logs = join(app, '.acrylblends', 'logs')
+    const errors = existsSync(logs)
+      ? readdirSync(logs)
+          .filter((file) => file.endsWith('.log'))
+          .map((file) =>
+            readFileSync(join(logs, file), 'utf8').split(/\r?\n/u).slice(-30).join('\n'),
+          )
+          .join('\n')
+      : '(no logs)'
+    fail(
+      `the showcase's list answers ${String(listed.status)}: ${listed.text.slice(0, 300)}\nthe app's logs end with:\n${errors}`,
+    )
+  }
+  const cards = JSON.parse(listed.text)
+  const card = (name) => cards.find((entry) => entry.name === name)
+  const expectCard = (name, fields) => {
+    const found = card(name)
+    for (const [key, value] of Object.entries(fields))
+      if (JSON.stringify(found?.[key]) !== JSON.stringify(value))
+        fail(
+          `the showcase card of ${name} has ${key} ${JSON.stringify(found?.[key])}, expected ${JSON.stringify(value)}: ${JSON.stringify(found)}`,
+        )
+  }
+  expectCard('group-route', {
+    version: '1.0.0',
+    state: 'active',
+    pages: ['/group-route'],
+    widget: false,
+  })
+  expectCard('group-widget', { version: '2.1.0', state: 'active', pages: [], widget: true })
+  if (tool !== undefined)
+    expectCard('group-tool', {
+      version: '1.0.0',
+      state: 'active',
+      pages: [],
+      widget: false,
+      tool: 'group-tool',
+    })
+  if (online)
+    expectCard('acrylblends-pomodoro', {
+      author: 'inboxxobni',
+      source: POMODORO,
+      version: '0.1.0',
+      state: 'active',
+    })
+  if (card('group-clash') !== undefined || card('group-late') !== undefined)
+    fail(`the showcase shows a refused plugin: ${JSON.stringify(cards)}`)
+  for (const entry of cards)
+    for (const path of entry.pages) {
+      const opened = await answer(path)
+      if (opened.status !== 200)
+        fail(
+          `the showcase links ${entry.name}'s page ${path}, which answers ${String(opened.status)}`,
+        )
+    }
+
+  // The page as a person has it open: it follows a removal live, without loading again.
+  const profile = mkdtempSync(join(tmpdir(), 'ide-template-showcase-'))
+  let launched
+  try {
+    launched = await startChrome(profile)
+    const cdp = await devtools(launched.port)
+    try {
+      await cdp.send('Page.enable')
+      await cdp.send('Runtime.enable')
+      const evaluate = async (expression) =>
+        (await cdp.send('Runtime.evaluate', { expression, returnByValue: true })).result?.result
+          ?.value
+      await cdp.send('Page.navigate', { url: `${origin}/app/showcase` })
+      const shown = await until(
+        async () =>
+          (await evaluate(
+            `document.getElementById('live')?.textContent === 'live' && [...document.querySelectorAll('[data-plugin]')].map((card) => card.dataset.plugin).join(',')`,
+          )) || undefined,
+        30_000,
+      )
+      if (
+        typeof shown !== 'string' ||
+        !shown.includes('group-route') ||
+        !shown.includes('group-widget')
+      )
+        fail(`the showcase page did not show the cards live (it showed ${JSON.stringify(shown)})`)
+      // The widget's link is the app's root as the browser asks it (the app does not serve /app/), and it shows the widget.
+      const widgetLink = await evaluate(
+        `document.querySelector('[data-plugin="group-widget"] .links a')?.href`,
+      )
+      if (widgetLink !== `${origin}/app`)
+        fail(
+          `the showcase links group-widget's home widget to ${String(widgetLink)}, expected ${origin}/app`,
+        )
+      const widgetPage = await fetch(widgetLink, { headers: { accept: 'text/html' } })
+      if (
+        widgetPage.status !== 200 ||
+        !(await widgetPage.text()).includes('group-widget says hello')
+      )
+        fail(
+          `the showcase's home widget link answers ${String(widgetPage.status)} without the widget`,
+        )
+      // The stream itself, read over HTTP: after the removal it sends cards without the plugin. The door may also reload the open page (it reloads
+      // every app page after a plugin change), so the page is checked for the card being gone, whichever of the two brought it.
+      const abort = new AbortController()
+      const stream = await fetch(`${origin}/app/showcase/events`, { signal: abort.signal })
+      const reader = stream.body.getReader()
+      const decoder = new TextDecoder()
+      let received = ''
+      const nextCards = async () => {
+        for (;;) {
+          const end = received.indexOf('\n\n')
+          if (end !== -1) {
+            const block = received.slice(0, end)
+            received = received.slice(end + 2)
+            if (block.startsWith('event: cards')) return block
+            continue
+          }
+          const { value, done } = await reader.read()
+          if (done) return undefined
+          received += decoder.decode(value, { stream: true })
+        }
+      }
+      const first = await nextCards()
+      if (!first?.includes('data-plugin="group-widget"'))
+        fail(
+          `the showcase stream's first cards do not show group-widget: ${String(first).slice(0, 300)}`,
+        )
+      await evaluate('window.__sameDocument = true')
+      const removed = door('remove', 'group-widget')
+      if (removed.status !== 0)
+        fail(`plugin remove group-widget failed:\n${removed.stdout}${removed.stderr}`)
+      const timer = setTimeout(() => abort.abort(), 15_000)
+      const after = await nextCards().catch(() => undefined)
+      clearTimeout(timer)
+      abort.abort()
+      if (
+        after === undefined ||
+        after.includes('data-plugin="group-widget"') ||
+        !after.includes('data-plugin="group-route"')
+      )
+        fail(
+          `the showcase stream did not send the cards without the removed plugin within 15 s: ${String(after).slice(0, 300)}`,
+        )
+      const followed = await until(
+        async () =>
+          (await evaluate(
+            `document.getElementById('live')?.textContent === 'live' && !document.querySelector('[data-plugin="group-widget"]') && !!document.querySelector('[data-plugin="group-route"]')`,
+          ))
+            ? true
+            : undefined,
+        15_000,
+      )
+      if (followed !== true)
+        fail('the open showcase page still shows the removed plugin after 15 s')
+      log(
+        `the open showcase page dropped the removed plugin ${(await evaluate('window.__sameDocument === true')) ? 'live, in the same page' : 'after the door reloaded it'}`,
+      )
+      const link = await evaluate(
+        `document.querySelector('[data-plugin="group-route"] .links a')?.href`,
+      )
+      if (link !== `${origin}/app/group-route`)
+        fail(
+          `the showcase links group-route's page to ${String(link)}, expected ${origin}/app/group-route`,
+        )
+    } finally {
+      cdp.close()
+    }
+  } finally {
+    if (launched !== undefined) await stopChrome(launched.child)
+    rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
+  }
+  await new Promise((done) => setTimeout(done, 1500))
+  const after = frameReloadSeq(origin, jar)
+  if (after !== before)
+    fail(
+      `the frame loaded the app again during the group pull (reload seq ${String(before)} -> ${String(after)})`,
+    )
+  log(
+    `the collective app: one list pulled ${String(total - 2)} plugins, refused a route clash and a wrong digest by name, the showcase lists each with its links, its stream sends a removal live and the open page drops the card; the frame loaded nothing again`,
+  )
+}
+
+/** A plugin release serving GET `path`, with the check the builder writes, packed as `plugin publish` packs it. */
+function releaseServing(app, name, path) {
+  const source = join(app, '..', `${name}-source`)
+  mkdirSync(source, { recursive: true })
+  writeFileSync(
+    join(source, 'package.json'),
+    JSON.stringify({
+      name,
+      version: '1.0.0',
+      type: 'module',
+      keywords: ['cordis-plugin', 'acrylblends'],
+    }),
+  )
+  writeFileSync(
+    join(source, 'index.ts'),
+    `import { Acryl } from 'acrylblends'
+export const name = '${name}'
+export const inject = ['router']
+export function apply(ctx) {
+  ctx.router.route('/', new Acryl().get('${path}', (c) => c.json({ from: '${name}' })))
+}
+export async function check(ctx) {
+  const reply = await ctx.router.request('${path}')
+  if (!reply.ok) throw new Error('GET ${path} answered ' + reply.status)
+}
+`,
+  )
+  const tarball = join(app, '..', `${name}-1.0.0.tgz`)
+  writeFileSync(tarball, packFolder(source).tarball)
+  return tarball
 }
 
 /**
@@ -966,7 +1501,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
           snapshot?.state === 'shown' &&
           snapshot.labels.some((label) => /^Branches$/iu.test(label)) &&
           snapshot.branches >= 1 &&
-          snapshot.labels.some((label) => /^Versions of this branch$/iu.test(label)) &&
+          snapshot.labels.some((label) => /^Versions$/iu.test(label)) &&
           snapshot.versions >= 1
         )
           return snapshot
@@ -977,10 +1512,7 @@ async function checkTileInBrowser(url, origin, jar, page, output, mock, restartH
         fail(
           `the left panel has no branches: ${JSON.stringify(await evaluate('document.body.innerText.slice(0, 500)'))}`,
         )
-      if (
-        !left.labels.some((label) => /^Versions of this branch$/iu.test(label)) ||
-        left.versions < 1
-      )
+      if (!left.labels.some((label) => /^Versions$/iu.test(label)) || left.versions < 1)
         fail(`the left panel has no versions of the branch: ${JSON.stringify(left)}`)
       log(
         `the left panel shows ${String(left.branches)} branch(es) and ${String(left.versions)} version(s)`,

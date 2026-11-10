@@ -11,9 +11,10 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
+import { writeArchives } from '../../../workshop-registry/scripts/registry-archives.mjs'
 import { type Io, runCreate, TEMPLATE_MANIFEST } from '../src/index'
-import { type Fetchers, parseSource } from '../src/source'
+import { type Fetchers, parseSource, realFetchers, SourceError } from '../src/source'
 
 const scratch = mkdtempSync(join(tmpdir(), 'create-source-test-'))
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
@@ -96,6 +97,14 @@ describe('template sources', () => {
     expect(() => parseSource('./missing.tgz', scratch)).toThrow(/does not exist/)
   })
 
+  it("keeps an entry's own .gitattributes rather than writing the default over it", async () => {
+    const own = '* text=auto eol=lf\n*.png binary\n'
+    const tgz = pack({ ...app(), '.gitattributes': own })
+    const s = fakeIo()
+    expect(await runCreate(['own-attributes', tgz], s.io)).toBe(0)
+    expect(readFileSync(join(scratch, 'own-attributes', '.gitattributes'), 'utf8')).toBe(own)
+  })
+
   it('creates an app from a packed tarball: files, placeholders, name, framework range, docs; no manifest copied', async () => {
     const tgz = pack(app())
     const s = fakeIo()
@@ -109,6 +118,7 @@ describe('template sources', () => {
     expect(pkg.dependencies.acrylblends).toMatch(/^\^\d+\.\d+\.\d+/)
     expect(pkg.dependencies.acrylblends).not.toBe('^0.0.1')
     expect(existsSync(join(dir, '.gitignore'))).toBe(true)
+    expect(readFileSync(join(dir, '.gitattributes'), 'utf8')).toMatch(/^\* text=auto eol=lf$/mu)
     expect(existsSync(join(dir, TEMPLATE_MANIFEST))).toBe(false)
     expect(existsSync(join(dir, 'docs/framework/README.md'))).toBe(true)
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('a hello app')
@@ -220,6 +230,25 @@ describe('template sources', () => {
     const s = fakeIo()
     expect(await runCreate(['needs', tgz], s.io)).toBe(0)
     expect(s.out()).toContain('npx acrylblends add desktop')
+  })
+})
+
+describe('a download that fails', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('says so in one line, whether the host cannot be reached or refuses', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new TypeError('fetch failed')
+    })
+    const unreachable = realFetchers.download('https://registry.example.org/index.json')
+    await expect(unreachable).rejects.toThrow(SourceError)
+    await expect(unreachable).rejects.toThrow(
+      'could not reach https://registry.example.org/index.json: fetch failed',
+    )
+    vi.stubGlobal('fetch', async () => new Response('', { status: 404 }))
+    await expect(realFetchers.download('https://registry.example.org/x')).rejects.toThrow(
+      'https://registry.example.org/x answered 404',
+    )
   })
 })
 
@@ -342,6 +371,63 @@ describe('starters from a registry', () => {
     expect(execFileSync('git', ['status', '--porcelain'], { cwd: made, encoding: 'utf8' })).toBe('')
   })
 
+  it('renames a curated starter, whose manifest carries a display name, from its package name', async () => {
+    // A curated blueprint is titled "Productivity Hub" in its manifest; the scaffold wrote its package name where an app names itself.
+    const starter: Record<string, string> = {
+      ...app(),
+      'package.json': JSON.stringify({
+        name: 'productivity-hub',
+        scripts: { test: 'node --test' },
+      }),
+      'blend.yaml':
+        'metadata:\n  id: acrylblends.productivity-hub\n  name: Productivity Hub\n  version: 0.1.0\nspec:\n  runtime: cordis\n',
+      'README.md': '# Productivity Hub\n\nA calm personal workbench.\n',
+      'src/routes.ts': "export const APP_NAME = 'productivity-hub'\n",
+      'scripts/ide-host.mjs': "const profileName = 'acrylblends-productivity-hub'\n",
+      'package-lock.json': `${JSON.stringify({ name: 'productivity-hub', lockfileVersion: 3, packages: { '': { name: 'productivity-hub' } } }, null, 2)}\n`,
+    }
+    const root = join(scratch, `registry-${counter++}`)
+    for (const [path, text] of Object.entries(starter)) {
+      mkdirSync(join(root, 'blends', 'acrylblends.productivity-hub', path, '..'), {
+        recursive: true,
+      })
+      writeFileSync(join(root, 'blends', 'acrylblends.productivity-hub', path), text)
+    }
+    writeFileSync(
+      join(root, 'index.json'),
+      JSON.stringify({
+        formatVersion: 1,
+        entries: [
+          {
+            id: 'acrylblends.productivity-hub',
+            name: 'Productivity Hub',
+            version: '0.1.0',
+            path: 'blends/acrylblends.productivity-hub',
+            runtime: 'acrylblends',
+          },
+        ],
+      }),
+    )
+    const s = fakeIo()
+    expect(
+      await runCreate(
+        ['my-hub', '--from', 'acrylblends.productivity-hub', '--registry', root, '-y'],
+        s.io,
+      ),
+      s.err(),
+    ).toBe(0)
+    const made = join(scratch, 'my-hub')
+    const read = (file: string) => readFileSync(join(made, file), 'utf8')
+    expect(read('README.md')).toBe('# Productivity Hub\n\nA calm personal workbench.\n')
+    expect(read('src/routes.ts')).toBe("export const APP_NAME = 'my-hub'\n")
+    expect(read('scripts/ide-host.mjs')).toBe("const profileName = 'acrylblends-my-hub'\n")
+    expect(JSON.parse(read('package-lock.json'))).toEqual({
+      name: 'my-hub',
+      lockfileVersion: 3,
+      packages: { '': { name: 'my-hub' } },
+    })
+  })
+
   it('takes a registry folder written as a bare path, and says in one line, naming the folder, when it has no index.json', async () => {
     const bare = fakeIo()
     const name = registry().slice(scratch.length + 1)
@@ -413,11 +499,209 @@ describe('starters from a registry', () => {
       s.err(),
     ).toBe(0)
     expect(downloads).toEqual([
+      'https://acrylblends.github.io/registry/index.json',
       'https://codeload.github.com/acrylblends/acrylblends.github.io/tar.gz/HEAD',
     ])
     const bad = fakeIo()
     expect(await runCreate(['x', 'notes', '--registry', 'github:a/b'], bad.io)).toBe(2)
     expect(bad.err()).toContain('--registry goes with a registry id')
+  })
+
+  /** Grow a registry past the template limits (5000 files, 50 MB) beside its entries, as every published entry grows the public one. */
+  function grow(root: string): string {
+    const growth = join(root, 'registry', 'blends', 'acrylblends.other')
+    mkdirSync(growth, { recursive: true })
+    for (let i = 0; i <= 5000; i += 1) writeFileSync(join(growth, `f${i}.txt`), `${i}\n`)
+    writeFileSync(join(growth, 'big.bin'), Buffer.alloc(51 * 1024 * 1024))
+    return root
+  }
+
+  it('reads a registry larger than a template may be, from a folder and from GitHub, and still makes the small starter', async () => {
+    const big = grow(registry('site'))
+    const folder = fakeIo()
+    expect(
+      await runCreate(
+        ['grown', '--from', 'acrylblends.notes-desktop', '--registry', big, '-y'],
+        folder.io,
+      ),
+      folder.err(),
+    ).toBe(0)
+    expect(existsSync(join(scratch, 'grown', 'src', 'app.ts'))).toBe(true)
+    expect(existsSync(join(scratch, 'grown', 'f0.txt'))).toBe(false)
+
+    const tgz = join(scratch, `grown-${counter++}.tgz`)
+    execFileSync('tar', ['-czf', tgz, '-C', scratch, big.slice(scratch.length + 1)])
+    const github = fakeIo({ download: async () => readFileSync(tgz) })
+    expect(
+      await runCreate(['grown-gh', '--from', 'acrylblends.notes-desktop', '-y'], github.io),
+      github.err(),
+    ).toBe(0)
+    expect(existsSync(join(scratch, 'grown-gh', 'src', 'app.ts'))).toBe(true)
+    // Writing, copying and packing a registry over 50 MB takes seconds, not the default five.
+  }, 120_000)
+
+  it('still refuses a starter that is itself larger than a template may be; nothing is created', async () => {
+    const root = registry('site')
+    const entry = join(root, 'registry', 'blends', 'acrylblends.notes-desktop')
+    for (let i = 0; i <= 5000; i += 1) writeFileSync(join(entry, `f${i}.txt`), `${i}\n`)
+    const s = fakeIo()
+    expect(
+      await runCreate(
+        ['too-big', '--from', 'acrylblends.notes-desktop', '--registry', root, '-y'],
+        s.io,
+      ),
+    ).toBe(1)
+    expect(s.err()).toContain('the template has more than 5000 files')
+    expect(existsSync(join(scratch, 'too-big'))).toBe(false)
+  })
+
+  describe('a hosted registry, which publishes each entry as an archive', () => {
+    const PUBLIC = 'https://acrylblends.github.io/registry/'
+    const REPOSITORY = 'https://codeload.github.com/acrylblends/acrylblends.github.io/tar.gz/HEAD'
+    const ID = 'acrylblends.notes-desktop'
+
+    /** A registry as a site deploys it: its archives written and named in its index. */
+    function published(): string {
+      const root = registry()
+      writeArchives(root)
+      return root
+    }
+
+    /** A static host serving `root` at `base`, recording what is asked; `repository` answers the fallback to the registry's repository. */
+    function host(root: string, base = PUBLIC, repository?: () => Uint8Array) {
+      const asked: string[] = []
+      const download = async (url: string) => {
+        asked.push(url)
+        if (url === REPOSITORY && repository) return repository()
+        const file = url.startsWith(base) ? join(root, url.slice(base.length)) : ''
+        if (file === '' || !existsSync(file)) throw new Error(`${url} answered 404`)
+        return new Uint8Array(readFileSync(file))
+      }
+      return { asked, download }
+    }
+
+    /** The registry's repository, as GitHub serves it: everything under one top folder. */
+    function repositoryOf(root: string): () => Uint8Array {
+      return () => {
+        const tgz = join(scratch, `repository-${counter++}.tgz`)
+        execFileSync('tar', ['-czf', tgz, '-C', join(root, '..'), root.slice(scratch.length + 1)])
+        return readFileSync(tgz)
+      }
+    }
+
+    const editIndex = (root: string, edit: (entry: Record<string, unknown>) => void) => {
+      const file = join(root, 'index.json')
+      const index = JSON.parse(readFileSync(file, 'utf8')) as { entries: Record<string, unknown>[] }
+      for (const entry of index.entries) if (entry.id === ID) edit(entry)
+      writeFileSync(file, JSON.stringify(index))
+    }
+
+    it('downloads the index and that one archive, nothing else, and makes the app', async () => {
+      const { asked, download } = host(published())
+      const s = fakeIo({ download })
+      expect(await runCreate(['hosted', '--from', ID, '-y'], s.io), s.err()).toBe(0)
+      expect(asked).toEqual([`${PUBLIC}index.json`, `${PUBLIC}blends/${ID}.tgz`])
+      expect(readFileSync(join(scratch, 'hosted', 'src', 'app.ts'), 'utf8')).toContain('hosted')
+    })
+
+    it('refuses an archive that does not match its integrity, without trying anything else; nothing is created', async () => {
+      const root = published()
+      writeFileSync(join(root, 'blends', `${ID}.tgz`), 'not what the index promised')
+      const { asked, download } = host(root, PUBLIC, repositoryOf(registry()))
+      const s = fakeIo({ download })
+      expect(await runCreate(['tampered', '--from', ID, '-y'], s.io)).toBe(1)
+      expect(s.err()).toContain(`the archive of ${ID} does not match its integrity`)
+      expect(asked).not.toContain(REPOSITORY)
+      expect(existsSync(join(scratch, 'tampered'))).toBe(false)
+    })
+
+    it('reads the repository instead when the index names no archive', async () => {
+      const { asked, download } = host(registry(), PUBLIC, repositoryOf(registry()))
+      const s = fakeIo({ download })
+      expect(await runCreate(['no-archive', '--from', ID, '-y'], s.io), s.err()).toBe(0)
+      expect(asked).toEqual([`${PUBLIC}index.json`, REPOSITORY])
+    })
+
+    it('reads the repository instead when the host is down, or the archive cannot be downloaded', async () => {
+      const down = fakeIo({
+        download: async (url) => {
+          if (url === REPOSITORY) return repositoryOf(registry())()
+          throw new TypeError('fetch failed')
+        },
+      })
+      expect(await runCreate(['host-down', '--from', ID, '-y'], down.io), down.err()).toBe(0)
+      const root = published()
+      rmSync(join(root, 'blends', `${ID}.tgz`))
+      const { asked, download } = host(root, PUBLIC, repositoryOf(registry()))
+      const missing = fakeIo({ download })
+      expect(await runCreate(['no-file', '--from', ID, '-y'], missing.io), missing.err()).toBe(0)
+      expect(asked.at(-1)).toBe(REPOSITORY)
+    })
+
+    it('holds an archive to the template limits; nothing is created', async () => {
+      const root = registry()
+      for (let i = 0; i <= 5000; i += 1)
+        writeFileSync(join(root, 'blends', ID, `f${i}.txt`), `${i}\n`)
+      writeArchives(root)
+      const { asked, download } = host(root, PUBLIC, repositoryOf(registry()))
+      const s = fakeIo({ download })
+      expect(await runCreate(['big-archive', '--from', ID, '-y'], s.io)).toBe(1)
+      expect(s.err()).toContain('the template has more than 5000 files')
+      expect(asked).not.toContain(REPOSITORY)
+      expect(existsSync(join(scratch, 'big-archive'))).toBe(false)
+    }, 60_000)
+
+    it('refuses an index whose archive leaves the registry, or has no integrity', async () => {
+      const outside = published()
+      editIndex(outside, (entry) => {
+        entry.archive = '../../secret.tgz'
+      })
+      const first = fakeIo({ download: host(outside).download })
+      expect(await runCreate(['outside', '--from', ID, '--registry', PUBLIC, '-y'], first.io)).toBe(
+        1,
+      )
+      expect(first.err()).toContain(`registry entry ${ID} has no valid archive`)
+      const bare = published()
+      editIndex(bare, (entry) => {
+        delete entry.integrity
+      })
+      const second = fakeIo({ download: host(bare).download })
+      expect(
+        await runCreate(['bare-integrity', '--from', ID, '--registry', PUBLIC, '-y'], second.io),
+      ).toBe(1)
+      expect(second.err()).toContain(`registry entry ${ID} has no valid archive`)
+    })
+
+    it('takes any https address as --registry, and says so in one line when it has no archive for the entry', async () => {
+      const base = 'https://registry.example.org/blends-registry/'
+      const ok = fakeIo({ download: host(published(), base).download })
+      expect(
+        await runCreate(['other-host', '--from', ID, '--registry', base.slice(0, -1), '-y'], ok.io),
+        ok.err(),
+      ).toBe(0)
+      const none = fakeIo({ download: host(registry(), base).download })
+      expect(await runCreate(['other-none', '--from', ID, '--registry', base, '-y'], none.io)).toBe(
+        1,
+      )
+      expect(none.err()).toContain(`${base} publishes no archive for ${ID}`)
+      expect(existsSync(join(scratch, 'other-none'))).toBe(false)
+    })
+  })
+
+  it('reads a registry folder in place and copies only the entry: what another entry holds does not matter', async () => {
+    const root = registry()
+    const other = join(root, 'blends', 'acrylblends.other')
+    mkdirSync(other, { recursive: true })
+    symlinkSync('/etc/passwd', join(other, 'link'))
+    const s = fakeIo()
+    expect(
+      await runCreate(
+        ['only-entry', '--from', 'acrylblends.notes-desktop', '--registry', root, '-y'],
+        s.io,
+      ),
+      s.err(),
+    ).toBe(0)
+    expect(existsSync(join(scratch, 'only-entry', 'src', 'app.ts'))).toBe(true)
   })
 
   it('takes a template folder as a source, and refuses a folder that holds a link', async () => {

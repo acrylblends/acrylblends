@@ -39,6 +39,9 @@ spec:
         steps: "{{parameters.steps}}"
     - id: router
       name: acryl-router
+    # The home page's widgets: a plugin puts its UI on the home page with ctx.home.widget (one pulled from someone else's app too), and it leaves with the plugin.
+    - id: home
+      name: home
     - id: state
       name: acryl-state
     - id: sandbox
@@ -49,6 +52,8 @@ spec:
         approval: "{{parameters.approval}}"
     - id: builder
       name: builder
+    - id: plugin-share
+      name: plugin-share
     - id: save
       name: save
     # The panel: a chat button on every page in development (the app's own agent, or Codex, Claude or pi started in this folder). It starts nothing in production.

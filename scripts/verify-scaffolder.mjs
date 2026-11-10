@@ -179,6 +179,8 @@ try {
       'typescript',
       '@webboxes/app-persistence',
       '@webboxes/blends-core',
+      // The builder packs a plugin and plugin-share pulls and publishes one; both are development rows, and the app's lists are one list.
+      '@webboxes/plugin-hub',
       // The state plugin follows keys in a page over a WebSocket (1.1.0); a production app has it.
       'ws',
       'yaml',
@@ -697,17 +699,12 @@ spec:
   // The desktop shell (spec 018): `init --desktop` adds electron as a development dependency and a script, the app's own code never imports electron, the whole app type-checks
   // against electron's types, and the app's server starts and stops with no Electron involved (the project's own tests). The window itself is verify-desktop.mjs.
   const desktop = join(scratch, 'desktop')
-  capture(process.execPath, [
-    cli,
-    'init',
-    desktop,
-    '--name',
-    'verify-desktop',
-    '--yes',
-    '--template',
-    'todo',
-    '--desktop',
-  ])
+  // The shell on the framework alone: the frame a desktop app installs by default is the frame gates' (verify-ide-template, verify-desktop-door).
+  capture(
+    process.execPath,
+    [cli, 'init', desktop, '--name', 'verify-desktop', '--yes', '--template', 'todo', '--desktop'],
+    { env: { ...process.env, ACRYLBLENDS_FRAME_PACKAGES: 'none' } },
+  )
   const desktopPackage = JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8'))
   if (
     desktopPackage.devDependencies?.electron === undefined ||
@@ -823,7 +820,9 @@ spec:
         env: { ...process.env, NODE_ENV: 'production', ACRYL_PRODUCTION_KEEP: 'chat' },
       },
     )
-    if (!/^200 .*javascript/.test(production.trim()))
+    // The probe prints its answer last: the app's plugins may log as they start (extensions says what it found).
+    const served = production.trim().split('\n').at(-1) ?? ''
+    if (!/^200 .*javascript/.test(served))
       fail(`${kind}: production serving of dist/client answered ${production}`)
     // The door: the running app writes `.acryl/bin/acryl` and answers `brief`; for notes a real browser is opened and the signed-in page is read through `look`.
     {

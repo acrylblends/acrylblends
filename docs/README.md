@@ -58,6 +58,7 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [IDE port, slice 3: chat, models and sessions](plans/ide-slice3-chat.md) - the connect-a-model card, where the key goes, the gate that proves the chat uses it and that a session survives a restart, and the frame numbers
 - [IDE port, slice 4: files, the editor, Changes and Review](plans/ide-slice4-panels.md) - the four new comparison views, the committed git fixture both surfaces open, and the numbers
 - [IDE port, slice 5: account sign-in](plans/ide-slice5-signin.md) - acryl-sign-in ported and mounted in Settings > Models, the account join that keeps the API-key card away, the token boundary and its test, and the comparison
+- [Sharing a plugin between people](plans/plugin-share.md) - the plugin-share mini-design: the order of a pull and why no refusal has anything to undo, the plan a person says yes to, and what the app remembers
 - [Workshop outline v2](plans/workshop-outline-v2.md) - the refocused workshop: a visual app built and driven by the agent inside it, with the capability each block depends on
 - [Extending a running app](agent/extending-apps.md) - extensions, the builder, durable tasks; how an agent writes a plugin
 - [The app manifest](blends/manifest.md) - `blend.yaml`: the app as data, parameters, diagnostics, the lock
@@ -72,6 +73,17 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 1.0.9](release-notes/1.0.9.md) - a message typed as the page loads is no longer dropped; a look after a navigate waits for the page; window places
 - [Release notes 1.0.10](release-notes/1.0.10.md) - a production install no longer carries vitest (the optional peer for the conformance suites is gone)
 - [Release notes 1.1.0](release-notes/1.1.0.md) - a page follows its state over one WebSocket (`watch` of `/api/state/client.js`), so windows no longer use up the browser's six connections
+- [Release notes 1.2.0](release-notes/1.2.0.md) - a new app is a repository of plugin folders with snapshots; `create --from` makes a blueprint your own (name, lock, first commit); `init --desktop` installs the ACRYL frame from npm, one framework copy
+- [Release notes acrylblends 1.4.0](release-notes/acrylblends-1.4.0.md) - a group's app: `plugin pull --from <list>` pulls everyone's plugins in one command, each refused one named while the others run; `add showcase` shows who made what; the agent template's home page shows widgets
+- [Release notes acrylblends 1.3.2](release-notes/acrylblends-1.3.2.md) - `upgrade` works again on an untouched app made by 1.2.0, 1.3.0 or 1.3.1, and the gate fails when a release is missing from what it knows
+- [Release notes acrylblends 1.3.1](release-notes/acrylblends-1.3.1.md) - plugins from several people in one app: a taken route or widget is refused naming its plugin, the list says who released each one, and every template that installs live can pull; in the frame a pull no longer restarts the app
+- [Release notes acrylblends 1.3.0](release-notes/acrylblends-1.3.0.md) - share a plugin between people: `plugin pull` and `plugin publish`, `npm run acryl`, and upgrade moves a dependency forward
+- [Release notes create-acrylblends 1.4.2](release-notes/create-1.4.2.md) - a new app has `pull --from`, the showcase and the agent home page (it asks for acrylblends 1.4.0)
+- [Release notes create-acrylblends 1.4.1](release-notes/create-1.4.1.md) - a new app has plugin list, remove and route removal in the frame (it asks for acrylblends 1.3.1)
+- [Release notes create-acrylblends 1.4.0](release-notes/create-1.4.0.md) - `--desktop` puts the new app inside the ACRYL frame
+- [Release notes 1.3.0](release-notes/1.3.0.md) - `create --from` downloads only the app you asked for, checked against its sha512
+- [Release notes 1.2.1](release-notes/1.2.1.md) - `create --from` works on a registry larger than one template (it failed past 5000 files)
+- [The 1.2.0 release checklist](plans/release-1.2.0.md) - the frame's 16 packages, then acrylblends and create-acrylblends 1.2.0, the tags and the npm-release approval, with the owner's steps marked
 - [Release notes 1.0.4](release-notes/1.0.4.md) - act reload and navigate, the page script on every page, runs that outlive the page
 - [Release notes 1.0.3](release-notes/1.0.3.md) - Node 26, relative paths in manifest rows, a pasted GitHub address as a source
 - [Release notes 1.0.2](release-notes/1.0.2.md) - the chat template closed in production, create-acrylblends --from, the newcomer-path fixes

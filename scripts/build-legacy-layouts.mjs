@@ -57,24 +57,86 @@ function scaffoldFiles(template) {
 
 /** The published versions of the CLI: the tags are release commits, and a tag that never reached npm cannot have made an app in someone's hands. */
 function publishedVersions() {
-  return new Set(
-    JSON.parse(
-      execFileSync('npm', ['view', 'acrylblends', 'versions', '--json'], { encoding: 'utf8' }),
-    ),
-  )
+  let listed
+  try {
+    listed = execFileSync('npm', ['view', 'acrylblends', 'versions', '--json'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    // The check is the gate's guard that every published release is recorded: offline a local run says what it did not check, and CI never skips it.
+    if (check && !process.env.CI) {
+      log(
+        'SKIPPED: no network, so the fixtures were not compared with the published releases (npm view acrylblends failed)',
+      )
+      process.exit(0)
+    }
+    throw error
+  }
+  return new Set(JSON.parse(listed))
+}
+
+/**
+ * Published versions whose record is the committed fixtures, not a tag: their tags are not in this repository's history (an older lineage, or a name
+ * placeholder), so a clean clone cannot regenerate them. Each is listed in packages/cli/legacy/frozen.json with why; whatever layouts.json holds for one
+ * (and its fixture files) is carried over as committed, on every machine, whether or not a local clone happens to have its tag.
+ */
+const FROZEN_FILE = join(legacyRoot, 'frozen.json')
+const frozenText = existsSync(FROZEN_FILE) ? readFileSync(FROZEN_FILE, 'utf8') : undefined
+if (frozenText === undefined) fail(`${relative(root, FROZEN_FILE)} is missing`)
+const frozen = new Map(Object.entries(JSON.parse(frozenText).releases ?? {}))
+
+/** A frozen release's layouts as committed: its layouts.json entry and the fixture files it names. */
+function frozenRelease(version) {
+  const indexFile = join(legacyRoot, 'layouts.json')
+  const committed = existsSync(indexFile) ? JSON.parse(readFileSync(indexFile, 'utf8')) : undefined
+  const entry = committed?.releases.find((release) => release.version === version)
+  if (entry === undefined) return undefined
+  const layouts = {}
+  for (const [template, hash] of Object.entries(entry.layouts)) {
+    const files = {}
+    for (const file of committed.templates[template]?.[hash] ?? []) {
+      const path = join(legacyRoot, template, hash, file)
+      if (!existsSync(path))
+        fail(
+          `the frozen release ${version} names ${template}/${hash}/${file}, which is not committed`,
+        )
+      files[file] = readFileSync(path, 'utf8')
+    }
+    layouts[template] = files
+  }
+  return { version, layouts }
 }
 
 /** Every release with templates: version, and for each template the scaffold file contents (or undefined when that release had no such template). */
 function releases() {
   const published = publishedVersions()
+  for (const version of frozen.keys())
+    if (!published.has(version))
+      fail(
+        `${relative(root, FROZEN_FILE)} names ${version}, which npm does not list for acrylblends`,
+      )
   const tags = execFileSync('git', ['tag', '--list', 'v*'], { cwd: root, encoding: 'utf8' })
     .trim()
     .split('\n')
     .filter(Boolean)
+  // Every published release is either regenerated from its tag or frozen: a checkout without the tags (a shallow clone), or a new release nobody
+  // recorded, fails here instead of passing on fewer releases.
+  const untagged = [...published].filter(
+    (version) => !tags.includes(`v${version}`) && !frozen.has(version),
+  )
+  if (untagged.length > 0)
+    fail(
+      `no tag for the published release${untagged.length === 1 ? '' : 's'} ${untagged.join(', ')}: fetch the tags (git fetch --tags) and run again; a release whose tag is not in this repository's history goes in ${relative(root, FROZEN_FILE)} with why`,
+    )
   const out = []
+  for (const version of frozen.keys()) {
+    const release = frozenRelease(version)
+    if (release !== undefined) out.push(release)
+  }
   for (const tag of tags) {
     const version = tag.slice(1)
-    if (!published.has(version)) continue
+    if (!published.has(version) || frozen.has(version)) continue
     let manifest
     try {
       manifest = execFileSync('git', ['show', `${tag}:packages/cli/package.json`], {
@@ -94,10 +156,8 @@ function releases() {
           files[file] = execFileSync(
             'git',
             ['show', `${tag}:packages/cli/templates/${template}/${file}`],
-            {
-              cwd: root,
-              encoding: 'utf8',
-            },
+            // A file the tag does not have is an expected answer here (the template is incomplete in that release), so git's message is not shown.
+            { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
           )
         } catch {
           complete = false
@@ -161,6 +221,9 @@ to the layouts it shipped.
 \`acrylblends upgrade\` compares an app's scaffold files with these bytes: a file the app has not edited is brought up to date, an edited one is refused (or
 replaced with --force after a backup). Releases before 0.7.8 wrote src/main.ts importing './plugins/...', which cannot start; their layouts are kept so the
 upgrade can say so precisely instead of writing a frame such a release's app cannot run.
+
+\`frozen.json\` lists the published versions whose tag is not in this repository's history, with why: their record is what is committed here, since no
+clone can regenerate them. Every other published version must have its tag, or \`verify:legacy-layouts\` fails.
 `
 const indexText = `${JSON.stringify(index, null, 2)}\n`
 if (check) {
@@ -176,6 +239,7 @@ if (check) {
   if (existsSync(legacyRoot)) walk(legacyRoot)
   onDisk.delete('layouts.json')
   onDisk.delete('README.md')
+  onDisk.delete('frozen.json')
   for (const [file, text] of onDisk)
     if (!fixtures.has(file)) problems.push(`unexpected file ${file}`)
     else if (fixtures.get(file) !== text) problems.push(`different bytes ${file}`)
@@ -202,6 +266,7 @@ if (check) {
   }
   writeFileSync(join(legacyRoot, 'layouts.json'), indexText)
   writeFileSync(join(legacyRoot, 'README.md'), readme)
+  writeFileSync(FROZEN_FILE, frozenText)
   log(
     `wrote ${String(all.length)} releases and ${String(new Set(Object.values(index.templates).flatMap(Object.keys)).size)} distinct layouts from ${join('packages', 'cli', 'legacy')}`,
   )

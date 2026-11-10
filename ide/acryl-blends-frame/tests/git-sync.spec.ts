@@ -181,6 +181,9 @@ describe('the remote state as the Git tab reads it', () => {
     expect(remoteAddress('git@github.com:ana/notes.git')).toBe('github.com/ana/notes')
     expect(remoteAddress('ssh://git@gitlab.example:2222/team/app.git')).toBe('gitlab.example:2222/team/app')
     expect(remoteAddress('/Users/ana/remotes/notes.git')).toBe('/Users/ana/remotes/notes.git')
+    // A Windows folder is not a URL whose scheme is the drive letter.
+    expect(remoteAddress('C:\\Users\\ana\\remotes\\notes.git')).toBe('C:\\Users\\ana\\remotes\\notes.git')
+    expect(remoteAddress('D:/remotes/notes.git')).toBe('D:/remotes/notes.git')
     expect(remoteAddress('file:///srv/git/notes.git')).toBe('/srv/git/notes.git')
   })
 

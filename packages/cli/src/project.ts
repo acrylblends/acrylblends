@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { VERSION } from './version'
+import { compareVersions, VERSION } from './version'
 
 /** Thrown when the target directory exists and is not empty. Nothing has been written. */
 export class TargetNotEmptyError extends Error {
@@ -115,8 +115,21 @@ export function readTemplatePlugins(templateDir: string): string[] {
   return plugins ?? []
 }
 
+/** A version a plugin's pin can be compared with: an exact one or a caret or tilde range. A tag, a path or a URL is the app's own choice. */
+function comparableVersion(spec: string): string | undefined {
+  return /^[\^~]?\d+\.\d+\.\d+(?:-[\w.]+)?$/u.test(spec) ? spec.replace(/^[\^~]/u, '') : undefined
+}
+
+/** Whether a plugin's pin asks for more than what the app has: the plugin's code was written against that version. */
+function asksForNewer(wanted: string, current: string): boolean {
+  const a = comparableVersion(wanted)
+  const b = comparableVersion(current)
+  return a !== undefined && b !== undefined && compareVersions(a, b) > 0
+}
+
 /**
- * Add run-time dependencies to an app's package.json, keeping what is there and sorting the keys. Returns the names added. A package the app lists as a development
+ * Add run-time dependencies to an app's package.json and sort the keys. Returns the names to install: those added, and those moved because a plugin asks for a newer
+ * version than the app lists (the plugin's new code needs it). A version the app lists that is the same or newer stays. A package the app lists as a development
  * dependency too is taken out of that list: npm lets the development entry win, so `npm install --omit=dev` would leave a run-time dependency out.
  */
 export function mergeDependencies(
@@ -130,7 +143,10 @@ export function mergeDependencies(
   }
   const current = manifest.dependencies ?? {}
   const added = Object.keys(dependencies).filter((name) => !(name in current))
-  const merged = { ...dependencies, ...current }
+  const moved = Object.entries(dependencies).filter(
+    ([name, wanted]) => current[name] !== undefined && asksForNewer(wanted, current[name]),
+  )
+  const merged = { ...dependencies, ...current, ...Object.fromEntries(moved) }
   manifest.dependencies = Object.fromEntries(
     Object.entries(merged).sort(([a], [b]) => a.localeCompare(b)),
   )
@@ -139,7 +155,7 @@ export function mergeDependencies(
       Object.entries(manifest.devDependencies).filter(([name]) => !(name in merged)),
     )
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)
-  return added
+  return [...added, ...moved.map(([name]) => name)]
 }
 
 /** Add `package.json` "imports" entries (`#acryl-kv`: `./plugins/acryl-kv/src/index.ts`); an entry the app already has is kept. Returns the names added. */

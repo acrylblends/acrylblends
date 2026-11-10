@@ -6,7 +6,7 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
-import { Door, type ExtensionsPort } from '../../src/host/door.ts'
+import { Door, type ExtensionsPort, type PluginSharePort } from '../../src/host/door.ts'
 import { UiChannel, type PageStream } from '../../src/host/channel.ts'
 import type { AuditLog } from '../../src/host/audit.ts'
 import type { ChannelToPage, UiResult } from '../../src/page/protocol.ts'
@@ -40,12 +40,13 @@ function browser(channel: UiChannel, options: { answers?: boolean; backAfterMs?:
   return { calls }
 }
 
-function door(channel: UiChannel, extra: { extensions?: ExtensionsPort; reloadOnChange?: boolean; pageBackMs?: number } = {}): Door {
+function door(channel: UiChannel, extra: { extensions?: ExtensionsPort; pluginShare?: PluginSharePort; reloadOnChange?: boolean; pageBackMs?: number } = {}): Door {
   return new Door({
     channel,
     audit,
     app: { name: 'demo', root: '/tmp/demo' },
     extensions: () => extra.extensions,
+    pluginShare: () => extra.pluginShare,
     tools: () => undefined,
     expose: [],
     ...(extra.reloadOnChange === undefined ? {} : { reloadOnChange: extra.reloadOnChange }),
@@ -179,5 +180,101 @@ describe('act navigate says what the app answered at the path', () => {
     } finally {
       await new Promise((resolve) => server.close(resolve))
     }
+  })
+
+  it('after a pull that changed the app, not after a refusal or a pull of what is already there, and the verb needs a source and the row', async () => {
+    const pulling = (answer: { ok: boolean; action?: string; reason?: string; next?: string }): PluginSharePort => ({
+      list: () => [],
+      remove: async () => ({ ok: true }),
+      pull: async () => answer,
+      pullList: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
+      planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
+      publish: async () => ({ ok: false }),
+    })
+    const channel = new UiChannel()
+    const page = browser(channel, { backAfterMs: 20 })
+    await expect(
+      door(channel, { pluginShare: pulling({ ok: false, reason: 'these are different bytes', next: 'ask who gave you the digest' }) }).run('plugin-pull', { source: 'github:a/b' }, never),
+    ).rejects.toMatchObject({ code: 'refused', message: 'these are different bytes. ask who gave you the digest.' })
+    await door(channel, { pluginShare: pulling({ ok: true, action: 'unchanged' }) }).run('plugin-pull', { source: 'github:a/b' }, never)
+    expect(page.calls).toEqual([])
+    const answer = await door(channel, { pluginShare: pulling({ ok: true, action: 'installed' }) }).run('plugin-pull', { source: 'github:a/b' }, never)
+    expect(answer.value).toEqual({ ok: true, action: 'installed' })
+    expect(page.calls.filter((call) => call.request.op === 'reload')).toHaveLength(1)
+    await expect(door(channel, { pluginShare: pulling({ ok: true }) }).run('plugin-pull', {}, never)).rejects.toThrow(/needs a source/)
+    await expect(door(channel).run('plugin-pull', { source: 'github:a/b' }, never)).rejects.toThrow(/npx acrylblends add plugin-share/)
+  })
+
+  it('plugin pull --from pulls a group list: a refused source is named with its reason, the others come in, and the page reloads once', async () => {
+    const asked: string[] = []
+    const listing = (answer: Awaited<ReturnType<PluginSharePort['pullList']>>): PluginSharePort => ({
+      list: () => [],
+      remove: async () => ({ ok: true }),
+      pull: async () => ({ ok: true }),
+      pullList: async (from) => { asked.push(from); return answer },
+      planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
+      publish: async () => ({ ok: false }),
+    })
+    const channel = new UiChannel()
+    const page = browser(channel, { backAfterMs: 20 })
+    const mixed = listing({
+      ok: true,
+      from: 'group.txt',
+      entries: [
+        { line: 1, source: 'github:a/hello@0.1.0', result: { ok: true, action: 'installed', name: 'hello' } },
+        { line: 3, source: 'github:b/echo@0.1.0', result: { ok: false, reason: 'echo claims the route /hello, which hello already serves', next: 'ask its author to rename the route.' } },
+        { line: 4, source: 'github:c/greet@0.1.0', result: { ok: true, action: 'installed', name: 'greet' } },
+      ],
+    })
+    const refused = door(channel, { pluginShare: mixed }).run('plugin-pull', { from: 'group.txt' }, never)
+    await expect(refused).rejects.toMatchObject({ code: 'refused' })
+    await expect(refused).rejects.toThrow(/2 of 3 from group\.txt pulled; 1 refused, the others are in and running\.\ngithub:a\/hello@0\.1\.0: installed hello\ngithub:b\/echo@0\.1\.0: refused: echo claims the route \/hello, which hello already serves\. ask its author to rename the route\.\ngithub:c\/greet@0\.1\.0: installed greet/)
+    expect(asked).toEqual(['group.txt'])
+    expect(page.calls.filter((call) => call.request.op === 'reload')).toHaveLength(1)
+    const clean = await door(channel, { pluginShare: listing({ ok: true, from: 'https://x.test/g.txt', entries: [{ line: 1, source: 'github:a/hello', result: { ok: true, action: 'unchanged', name: 'hello' } }] }) }).run('plugin-pull', { from: 'https://x.test/g.txt' }, never)
+    expect(clean.text).toBe('1 of 1 from https://x.test/g.txt pulled.\ngithub:a/hello: unchanged hello')
+    expect(page.calls.filter((call) => call.request.op === 'reload')).toHaveLength(1)
+    await expect(door(channel, { pluginShare: listing({ ok: false, reason: 'group.txt: line 2 holds more than one word', next: 'fix the list; nothing was pulled' }) }).run('plugin-pull', { from: 'group.txt' }, never))
+      .rejects.toMatchObject({ code: 'refused', message: 'group.txt: line 2 holds more than one word. fix the list; nothing was pulled.' })
+    await expect(door(channel, { pluginShare: mixed }).run('plugin-pull', { from: 'group.txt', source: 'github:a/b' }, never)).rejects.toThrow(/not both/)
+    await expect(door(channel, { pluginShare: mixed }).run('plugin-pull', { from: '' }, never)).rejects.toThrow(/needs a list/)
+  })
+
+  it('plugin list and remove go through plugin-share where the app has it, as in the frame, where the door reaches no extensions', async () => {
+    const removed: string[] = []
+    const share: PluginSharePort = {
+      list: () => [{ name: 'pomodoro', version: '0.1.0', state: 'active', pulledFrom: 'github:inboxxobni/acrylblends-pomodoro@0.1.0', author: 'inboxxobni' }],
+      remove: async (name) => { removed.push(name); return { ok: true, name, folder: 'deleted' } },
+      pull: async () => ({ ok: true }),
+      pullList: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
+      planPublish: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
+      publish: async () => ({ ok: false }),
+    }
+    const d = door(new UiChannel(), { pluginShare: share, reloadOnChange: false })
+    expect((await d.run('plugin-list', {}, never)).value).toEqual(share.list())
+    expect((await d.run('plugin-remove', { name: 'pomodoro' }, never)).value).toEqual({ ok: true, name: 'pomodoro', folder: 'deleted' })
+    expect(removed).toEqual(['pomodoro'])
+  })
+
+  it('plugin publish answers a plan and cannot publish, whatever its arguments say', async () => {
+    const plan = { owner: 'inboxxobni', repo: 'hello', version: '0.1.0', visibility: 'public', license: 'MIT', createsRepository: true, files: ['index.ts'], digest: 'd', pullLine: 'npm run acryl -- plugin pull github:inboxxobni/hello@0.1.0@sha256:d' }
+    const published: unknown[] = []
+    const share: PluginSharePort = {
+      list: () => [],
+      remove: async () => ({ ok: true }),
+      pull: async () => ({ ok: true }),
+      pullList: async () => ({ ok: false, reason: 'unused', next: 'unused' }),
+      planPublish: async () => plan,
+      publish: async (...args) => { published.push(args); return { ok: true } },
+    }
+    const d = door(new UiChannel(), { pluginShare: share })
+    const answer = await d.run('plugin-publish', { name: 'hello', confirm: plan, yes: true }, never)
+    expect(answer.value).toEqual(plan)
+    expect(answer.text).toContain('Publish to inboxxobni/hello (a new repository), public, version 0.1.0, license MIT.')
+    expect(answer.text).toContain('Only a person can say yes')
+    expect(answer.text).toContain(plan.pullLine)
+    expect(published).toEqual([])
+    await d.publishConfirmed('hello', plan, { owner: 'inboxxobni' })
+    expect(published).toEqual([['hello', plan, { owner: 'inboxxobni' }]])
   })
 })

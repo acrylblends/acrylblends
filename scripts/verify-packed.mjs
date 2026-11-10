@@ -4,7 +4,7 @@
 // repository's own command line; this one runs the installed one, so a file the package leaves out, or an import that is only right inside the repository, fails here.
 //
 //   node scripts/verify-packed.mjs
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -20,6 +20,19 @@ import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const log = (message) => console.log(`verify-packed: ${message}`)
+/** The line a person copies from a plugin's page, in an app that is not running: it must reach the app's door command and say to start the app. */
+const assertAcrylLine = (app) => {
+  const answered = spawnSync('npm run acryl -- plugin pull github:someone/some-plugin@0.1.0', {
+    cwd: app,
+    encoding: 'utf8',
+    shell: true,
+  })
+  if (answered.status !== 3 || !answered.stderr.includes('start it (npm run dev)'))
+    throw new Error(
+      `npm run acryl in ${app} did not say to start the app (exit ${answered.status}):\n${answered.stdout}${answered.stderr}`,
+    )
+}
+
 const run = (command, args, cwd, env = {}) =>
   execFileSync(command, args, {
     cwd,
@@ -123,6 +136,7 @@ console.log('ws-check: ok')
   run(bin('acrylblends'), ['add', 'driver-pty'], agentApp)
   run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], agentApp)
   run('npm', ['run', 'check'], agentApp)
+  assertAcrylLine(agentApp)
   log(
     'agent: agent-panel and driver-pty added by the installed command, installed and type-checked',
   )
@@ -237,9 +251,10 @@ console.log('ws-check: ok')
       'import * as nodeServer from',
       "import * as dbSqlite from '../plugins/acryl-db-sqlite/src/index.ts'\nimport * as nodeServer from",
     )
+    // The registry literal may sit on one line or span several: the entry goes right after its opening brace.
     .replace(
-      'export const registry = { ',
-      "export const registry = { 'acryl-db-sqlite': dbSqlite, ",
+      /export const registry = \{\s*/u,
+      (opening) => `${opening}'acryl-db-sqlite': dbSqlite, `,
     )
   if (
     !registered.includes("'acryl-db-sqlite': dbSqlite") ||
@@ -251,15 +266,7 @@ console.log('ws-check: ok')
   writeFileSync(appFile, registered)
   run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], dbApp)
   run('npm', ['run', 'check'], dbApp)
-  // The template's own test lists the rows of its manifest; the app now has one more, as its author would update it.
-  const rowsTest = join(dbApp, 'test', 'app.test.ts')
-  const listed = readFileSync(rowsTest, 'utf8').replace(
-    "['router', 'routes', 'server']",
-    "['router', 'db', 'routes', 'server']",
-  )
-  if (listed === readFileSync(rowsTest, 'utf8'))
-    throw new Error('the blank template no longer lists its rows where this gate expects them')
-  writeFileSync(rowsTest, listed)
+  // The template's own test checks its rows in their order and lets a feature's row sit between them, so the added db row needs no edit to it.
   run('npm', ['test'], dbApp, { ACRYL_DOOR: 'off' })
   if (!existsSync(join(dbApp, 'data', 'app.sqlite')))
     throw new Error(
@@ -289,6 +296,7 @@ console.log('ws-check: ok')
       throw new Error(`upgrade of the ${old} app did nothing:\n${upgraded}`)
     run('npm', ['install', '--no-audit', '--no-fund'], oldApp)
     run('npm', ['run', 'check'], oldApp)
+    assertAcrylLine(oldApp)
     run('npm', ['test'], oldApp, { ACRYL_DOOR: 'off' })
     if (
       !run(bin('acrylblends'), ['upgrade', '--dry-run'], oldApp).includes(

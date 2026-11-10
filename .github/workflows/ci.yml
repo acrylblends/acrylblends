@@ -35,7 +35,10 @@ jobs:
     env:
       ACRYL_ROUTER_TRACE: '1'
     steps:
+      # The release tags: verify:legacy-layouts reads every published release's scaffold from its tag, so `upgrade` knows each app a release made.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

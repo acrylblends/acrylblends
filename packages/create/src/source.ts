@@ -22,6 +22,9 @@ export type Source =
   | { kind: 'tarball'; path: string }
   | { kind: 'folder'; path: string }
 
+/** Where a registry can be read from: any source, or a static host that serves its `index.json` and each entry's archive under `base` (which ends in `/`). */
+export type RegistrySource = Source | { kind: 'hosted'; base: string }
+
 /** What a template says about itself in `acryl.template.json`. */
 export interface Manifest {
   name: string
@@ -37,7 +40,21 @@ export class SourceError extends Error {
 
 export const SOURCE_FORMS = `github:owner/repo[#ref] (or the https://github.com/owner/repo address), @scope/name[@version], a packed .tgz file, or a folder (./path)`
 
-const LIMITS = { files: 5000, bytes: 50 * 1024 * 1024 }
+/** How much a source may hold, and what its refusal calls it. */
+interface Limits {
+  readonly what: string
+  readonly files: number
+  readonly bytes: number
+}
+
+/** A template is copied whole into the person's new app, so it is held to the size of an app's source. */
+const TEMPLATE_LIMITS: Limits = { what: 'template', files: 5000, bytes: 50 * 1024 * 1024 }
+
+/**
+ * A registry is read for its index and one entry, and grows with every entry it publishes (100 blueprints are about 33,000 files and 200 MB), so its bound
+ * only stops a runaway download; the entry taken from it is a template and is held to the template's limits.
+ */
+const REGISTRY_LIMITS: Limits = { what: 'registry', files: 200_000, bytes: 2 * 1024 * 1024 * 1024 }
 
 /** Recognise a source argument, or return `undefined` when it is not one (so the caller can report a usage error). */
 export function parseSource(text: string, cwd: string): Source | undefined {
@@ -69,12 +86,13 @@ export function parseSource(text: string, cwd: string): Source | undefined {
 }
 
 /**
- * A registry, as `--registry` names it: a source, or a folder written as a bare path (`my-registry`, `run/registry`). A registry is never a template name, so a
- * path that is an existing folder is taken as one without the `./` a template source needs.
+ * A registry, as `--registry` names it: a source, an https address, or a folder written as a bare path (`my-registry`, `run/registry`). A registry is never a template
+ * name, so a path that is an existing folder is taken as one without the `./` a template source needs.
  */
-export function parseRegistrySource(text: string, cwd: string): Source | undefined {
+export function parseRegistrySource(text: string, cwd: string): RegistrySource | undefined {
   const source = parseSource(text, cwd)
   if (source !== undefined) return source
+  if (text.startsWith('https://')) return { kind: 'hosted', base: text.replace(/\/*$/, '/') }
   const path = resolve(cwd, text)
   return existsSync(path) && lstatSync(path).isDirectory() ? { kind: 'folder', path } : undefined
 }
@@ -89,7 +107,11 @@ export interface Fetchers {
 
 export const realFetchers: Fetchers = {
   async download(url) {
-    const response = await fetch(url, { redirect: 'follow' })
+    const response = await fetch(url, { redirect: 'follow' }).catch((cause: unknown) => {
+      throw new SourceError(
+        `could not reach ${url}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+    })
     if (!response.ok) throw new SourceError(`${url} answered ${response.status}`)
     return new Uint8Array(await response.arrayBuffer())
   },
@@ -113,16 +135,16 @@ export const realFetchers: Fetchers = {
   },
 }
 
-/** Unpack a tarball into `dir`, dropping its single top folder; refuses links, paths that leave the folder, and archives that are too big. */
-function extract(tarball: string, dir: string): void {
+/** Unpack a tarball into `dir`, dropping its single top folder; refuses links, paths that leave the folder, and archives over `limits`. */
+function extract(tarball: string, dir: string, limits: Limits): void {
   const list = spawnSync('tar', ['-tzf', tarball], {
     encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
+    maxBuffer: 256 * 1024 * 1024,
   })
   if (list.status !== 0) throw new SourceError(`${tarball} is not a readable tar.gz archive`)
   const entries = list.stdout.split('\n').filter(Boolean)
-  if (entries.length > LIMITS.files)
-    throw new SourceError(`the template has more than ${LIMITS.files} files`)
+  if (entries.length > limits.files)
+    throw new SourceError(`the ${limits.what} has more than ${limits.files} files`)
   for (const entry of entries)
     if (entry.startsWith('/') || entry.split('/').includes('..'))
       throw new SourceError(`the archive holds a path that leaves its folder: ${entry}`)
@@ -131,11 +153,11 @@ function extract(tarball: string, dir: string): void {
     encoding: 'utf8',
   })
   if (run.status !== 0) throw new SourceError(`could not unpack ${tarball}: ${run.stderr.trim()}`)
-  checkTree(dir)
+  checkTree(dir, limits)
 }
 
-/** Refuse a tree that holds a link, or is larger than the limits; the same check for an unpacked archive and a copied folder. */
-export function checkTree(dir: string): void {
+/** Refuse a tree that holds a link, or is larger than `limits`; the same check for an unpacked archive and a copied folder. */
+function checkTree(dir: string, limits: Limits): void {
   let bytes = 0
   let count = 0
   const walk = (folder: string) => {
@@ -144,7 +166,7 @@ export function checkTree(dir: string): void {
       const info = lstatSync(path)
       if (info.isSymbolicLink())
         throw new SourceError(
-          `the template holds a symbolic link (${path.slice(dir.length + 1)}); links are not allowed`,
+          `the ${limits.what} holds a symbolic link (${path.slice(dir.length + 1)}); links are not allowed`,
         )
       if (info.isDirectory()) walk(path)
       else {
@@ -154,18 +176,26 @@ export function checkTree(dir: string): void {
     }
   }
   walk(dir)
-  if (count > LIMITS.files)
-    throw new SourceError(`the template has more than ${LIMITS.files} files`)
-  if (bytes > LIMITS.bytes)
-    throw new SourceError(`the template is larger than ${LIMITS.bytes / 1024 / 1024} MB`)
+  if (count > limits.files)
+    throw new SourceError(`the ${limits.what} has more than ${limits.files} files`)
+  if (bytes > limits.bytes)
+    throw new SourceError(`the ${limits.what} is larger than ${limits.bytes / 1024 / 1024} MB`)
 }
 
-/** Download or pack a source and unpack it into `dir` (which must not exist yet). Nothing in it is run. */
-export async function fetchSource(
+/** Download or pack a template and unpack it into `dir` (which must not exist yet). Nothing in it is run. */
+export const fetchTemplate = (source: Source, dir: string, scratch: string, fetchers: Fetchers) =>
+  fetchSource(source, dir, scratch, fetchers, TEMPLATE_LIMITS)
+
+/** Download or copy a registry into `dir` (which must not exist yet), to read its index and take one entry from it. Nothing in it is run. */
+export const fetchRegistry = (source: Source, dir: string, scratch: string, fetchers: Fetchers) =>
+  fetchSource(source, dir, scratch, fetchers, REGISTRY_LIMITS)
+
+async function fetchSource(
   source: Source,
   dir: string,
   scratch: string,
   fetchers: Fetchers,
+  limits: Limits,
 ): Promise<void> {
   mkdirSync(scratch, { recursive: true })
   if (source.kind === 'folder') {
@@ -173,7 +203,7 @@ export async function fetchSource(
       recursive: true,
       filter: (path) => !/[\\/](\.git|node_modules)([\\/]|$)/.test(path.slice(source.path.length)),
     })
-    checkTree(dir)
+    checkTree(dir, limits)
     return
   }
   let tarball: string
@@ -188,7 +218,7 @@ export async function fetchSource(
       ),
     )
   }
-  extract(tarball, dir)
+  extract(tarball, dir, limits)
 }
 
 /** Read and check `acryl.template.json`; a source without it is not a template. */
@@ -221,6 +251,8 @@ export function readManifest(dir: string): Manifest {
 }
 
 const SKIP = new Set(['.git', 'node_modules', TEMPLATE_MANIFEST])
+const GIT_ATTRIBUTES =
+  '# Every checkout has the same line endings, on every OS.\n* text=auto eol=lf\n'
 /** Lifecycle scripts npm runs on `npm install` in the app's own folder. */
 export const LIFECYCLE = [
   'preinstall',
@@ -261,6 +293,12 @@ export function writeTemplate(
     }
   }
   walk(from, target, '')
+  // An app's plugins are identified by every byte, so a CRLF checkout would make them different plugins. An entry made before make-entry wrote this file
+  // has none; one that has its own keeps it.
+  if (!existsSync(join(target, '.gitattributes'))) {
+    writeFileSync(join(target, '.gitattributes'), GIT_ATTRIBUTES)
+    files.push('.gitattributes')
+  }
   const lifecycle: Record<string, string> = {}
   const pkgFile = join(target, 'package.json')
   if (existsSync(pkgFile)) {

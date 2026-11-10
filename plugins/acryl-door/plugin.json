@@ -11,6 +11,9 @@
   "devDependencies": {
     "ws": "8.21.3"
   },
+  "scripts": {
+    "acryl": "node plugins/acryl-door/src/cli/acryl.ts"
+  },
   "mount": "mount it after acryl-node-server and extensions in development builds: root.plugin(door); add <script type=\"module\" src=\"/api/acryl-door/page.js\"></script> to the pages; the command is .acryl/bin/acryl",
   "gitignore": [".acryl/"],
   "omit": ["**/*.test.*", "**/*.spec.*", "**/*.case.ts"],

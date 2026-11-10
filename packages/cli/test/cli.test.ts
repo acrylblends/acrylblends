@@ -106,6 +106,27 @@ describe('what an app needs at run time is not also a development dependency', (
     expect(manifestIn(dir).devDependencies).toEqual({ vitest: '4' })
   })
 
+  it('a plugin that asks for a newer version moves the app forward, because its code was written against that version', () => {
+    const dir = appWith('older-pin', { dependencies: { core: '0.4.0', caret: '^1.2.0' } })
+    expect(mergeDependencies(dir, { core: '0.5.0', caret: '1.3.0' })).toEqual(['core', 'caret'])
+    expect(manifestIn(dir).dependencies).toEqual({ caret: '1.3.0', core: '0.5.0' })
+  })
+
+  it('a plugin never moves the app back, and leaves a tag or a path alone', () => {
+    const dir = appWith('newer-pin', {
+      dependencies: { core: '0.6.0', same: '1.0.0', tagged: 'latest', local: 'file:../x' },
+    })
+    expect(
+      mergeDependencies(dir, { core: '0.5.0', same: '1.0.0', tagged: '9.0.0', local: '9.0.0' }),
+    ).toEqual([])
+    expect(manifestIn(dir).dependencies).toEqual({
+      core: '0.6.0',
+      local: 'file:../x',
+      same: '1.0.0',
+      tagged: 'latest',
+    })
+  })
+
   it('a development dependency of a package the app already needs at run time is not added', () => {
     const dir = appWith('runtime-first', { dependencies: { ws: '8.21.3' } })
     expect(
@@ -214,6 +235,7 @@ describe('library', () => {
       '@deepseek-ai/schemastery',
       '@webboxes/app-persistence',
       '@webboxes/blends-core',
+      '@webboxes/plugin-hub',
       'node-pty',
       'ws',
       'yaml',
@@ -374,12 +396,14 @@ describe('init', () => {
     expect(existsSync(join(dir, 'plugins/acryl-router/package.json'))).toBe(false)
     expect(existsSync(join(dir, 'plugins/acryl-router/src/index.ts'))).toBe(true)
     expect(existsSync(join(dir, '.gitignore'))).toBe(true)
+    expect(readFileSync(join(dir, '.gitattributes'), 'utf8')).toMatch(/^\* text=auto eol=lf$/mu)
     expect(existsSync(join(dir, 'template.json'))).toBe(false)
     expect(manifest(dir).dependencies).toEqual({
       '@deepseek-ai/cordis': '4.0.4',
       '@deepseek-ai/schemastery': '3.18.4',
       '@webboxes/app-persistence': '0.1.1',
-      '@webboxes/blends-core': '0.4.0',
+      '@webboxes/blends-core': '0.5.0',
+      '@webboxes/plugin-hub': '0.2.0',
       typescript: '6.0.3',
       yaml: '2.9.0',
     })

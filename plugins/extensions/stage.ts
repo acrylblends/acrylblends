@@ -7,10 +7,9 @@
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import { digestFolder, FOLDER_DIGEST_SKIPPED } from '@webboxes/blends-core'
-
-/** A short content digest of a folder, so an unchanged source keeps its version. */
-export const hashFolder = (dir: string, length = 12): string => digestFolder(dir, length)
+import { FOLDER_DIGEST_SKIPPED } from '@webboxes/blends-core'
+import { type PluginStore, pluginVersion } from './plugin-store.ts'
+import { resolveFromApp, routerAliases } from './resolve.ts'
 
 /**
  * Whether `node --watch` runs this process. It watches every module the process has imported, and keeps watching the paths of the runs before; a staged copy that is deleted
@@ -40,7 +39,7 @@ export function stage(
   stageRoot: string,
   name: string,
 ): { dir: string; version: string } {
-  const version = hashFolder(source)
+  const version = pluginVersion(source)
   const existing = staged(stageRoot, name, version)
   if (existing !== undefined) return { dir: existing, version }
   const stamp = String(Date.now()).padStart(15, '0')
@@ -68,5 +67,16 @@ export function prune(stageRoot: string, name: string, keep: readonly string[]):
   for (const entry of readdirSync(folder)) {
     const path = join(folder, entry)
     if (!keep.includes(path)) rmSync(path, { recursive: true, force: true })
+  }
+}
+
+/** The plugin store of an app: its versions as staged copies under `stageRoot`. */
+export function folderPluginStore(stageRoot: string): PluginStore {
+  return {
+    put: (name, source) => stage(source, stageRoot, name),
+    holds: ({ dir }) => existsSync(dir),
+    discard: ({ dir }) => discard(dir),
+    keepOnly: (name, plugin) => prune(stageRoot, name, plugin ? [plugin.dir] : []),
+    resolveImportsFrom: (appRoot) => resolveFromApp(stageRoot, appRoot, routerAliases()),
   }
 }

@@ -10,6 +10,7 @@ import { agent, memory, model, scripted, tools } from '../plugins/agent/index.ts
 import * as panel from '../plugins/agent-panel/index.ts'
 import { builder } from '../plugins/builder/index.ts'
 import { extensions } from '../plugins/extensions/index.ts'
+import * as home from '../plugins/home/index.ts'
 import { type AppInstance, instance } from '../plugins/instance/index.ts'
 import {
   appPluginNames,
@@ -20,6 +21,7 @@ import {
   type ParameterValue,
 } from '../plugins/manifest/index.ts'
 import { ASSISTANT_PROMPT, type OpenAIConfig, openai } from '../plugins/openai/index.ts'
+import { pluginShare } from '../plugins/plugin-share/index.ts'
 import { sandboxPlugin } from '../plugins/sandbox/index.ts'
 import { save } from '../plugins/save/index.ts'
 import { tasks } from '../plugins/tasks/index.ts'
@@ -33,9 +35,11 @@ export const registry = {
   memory,
   agent,
   'acryl-router': router,
+  home,
   'acryl-state': state,
   extensions,
   builder,
+  'plugin-share': pluginShare,
   save,
   sandbox: sandboxPlugin,
   routes,
@@ -77,6 +81,7 @@ export interface App {
 const DEVELOPMENT_ROWS: Record<string, string> = {
   agent: 'POST /ask runs the agent, which spends the model key and calls its tools',
   builder: 'the agent can write plugin source into plugins/',
+  'plugin-share': 'a plugin pulled from a release runs in this process',
   extensions:
     'a plugin installed live runs in this process, and POST /extensions/approve decides installs',
 }
@@ -213,8 +218,11 @@ export async function composeInto(
             ...(legacy ? [{ dir: legacyDir, trust: 'install' as const }] : []),
           ],
           rows: ownRows,
+          // Messages name a route as the plugin wrote it, not under the frame's canvas prefix.
+          ...(options.host === true ? { routePrefix: FRAME_MOUNT_PREFIX } : {}),
         },
         builder: { dir: extensionsDir },
+        'plugin-share': { dir: extensionsDir },
         ...(assistant
           ? {
               // Every answer comes right after a look, so it says what the visitor's page shows now.

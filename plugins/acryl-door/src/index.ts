@@ -19,7 +19,7 @@ import { auditPath, AuditLog } from './host/audit.ts'
 import { UiChannel } from './host/channel.ts'
 import { registerChatTools } from './host/chat-tools.ts'
 import { PAGE_VERBS, VERBS } from './host/verbs.ts'
-import { Door, type ExtensionsPort, type ToolsPort } from './host/door.ts'
+import { Door, type ExtensionsPort, type PluginSharePort, type ToolsPort } from './host/door.ts'
 import { assertDoorIsFree, newSecret, removeDoorFile, stateDir, writeDoorFile } from './host/door-file.ts'
 import { DOOR_PREFIX, privateApi } from './host/http.ts'
 import { mcpRoutes } from './host/mcp-routes.ts'
@@ -182,6 +182,7 @@ export function apply(ctx: Context, rawConfig: Config = {}): void {
     app: { name: app.name, root: app.root, get url() { return address.url } },
     ...(appBase === '' ? {} : { appBase }),
     extensions: () => ctx.get('extensions') as unknown as ExtensionsPort | undefined,
+    pluginShare: () => ctx.get('pluginShare') as unknown as PluginSharePort | undefined,
     tools: () => ctx.get('tools') as unknown as ToolsPort | undefined,
     expose: config.tools?.expose ?? [],
     reloadOnChange: config.reloadOnChange !== false,

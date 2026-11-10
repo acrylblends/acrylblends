@@ -9,7 +9,7 @@ import { MAX_SNAPSHOT_NODES, MAX_WAIT_MS } from '../page/protocol.ts'
 /** The verbs that only use the page: what a page-only door (a production assistant) offers. */
 export const PAGE_VERBS = ['look', 'act'] as const satisfies readonly Verb[]
 
-export const VERBS = ['brief', 'look', 'act', 'plugin-list', 'plugin-add', 'plugin-remove', 'plugin-reload', 'tool-list', 'tool-call', 'window-list', 'window-open', 'window-focus', 'window-close', 'window-resize', 'menu-list', 'menu-click'] as const
+export const VERBS = ['brief', 'look', 'act', 'plugin-list', 'plugin-add', 'plugin-pull', 'plugin-publish', 'plugin-remove', 'plugin-reload', 'tool-list', 'tool-call', 'window-list', 'window-open', 'window-focus', 'window-close', 'window-resize', 'menu-list', 'menu-click'] as const
 export type Verb = (typeof VERBS)[number]
 
 /** The JSON Schema of a verb's arguments, as MCP lists it. */
@@ -85,6 +85,16 @@ export const VERB_SPECS: Readonly<Record<Verb, VerbSpec>> = {
     usage: 'plugin add <folder>: check, install and start a plugin folder, live',
     description: 'Check, install and start a plugin folder inside the app, without a restart.',
     arguments: { type: 'object', properties: { folder: { type: 'string', description: 'a folder inside the app, e.g. plugins/pomodoro' } }, required: ['folder'], additionalProperties: false },
+  },
+  'plugin-pull': {
+    usage: 'plugin pull <source> | --from <list>: fetch a plugin someone released (github:<owner>/<repo>[@<version>][@sha256:<digest>], or a .tgz), or every plugin of a group\'s list, check each and start it, live',
+    description: 'Fetch a plugin someone released, without running anything; check its digest, that it works on every OS and that this app has the services it needs; then install and start it without a restart. A refusal says why and changes nothing. With from instead of source, pull every source of a group\'s list (one per line, # comments); each is pulled on its own, so a refused one is named with its reason and the others still come in.',
+    arguments: { type: 'object', properties: { source: { type: 'string', description: 'github:<owner>/<repo>[@<version>][@sha256:<digest>], or a .tgz path or https address' }, from: { type: 'string', description: 'instead of source: a list of sources, a file in the app (e.g. group.txt) or an https address' } }, additionalProperties: false },
+  },
+  'plugin-publish': {
+    usage: 'plugin publish <name> [--owner <account>] [--license <id>]: show what publishing this plugin would send; in a person\'s own terminal, ask them',
+    description: 'Show what publishing a plugin would send: the account, repository, version, license, files and the line a friend pulls it with. Sends nothing. Only a person can say yes, in their own terminal or with Share in the frame; tell them the plan and how.',
+    arguments: { type: 'object', properties: { name: { type: 'string', description: 'a plugin of plugins/' }, owner: { type: 'string', description: 'the GitHub account or organization; the signed-in one when absent' }, license: { type: 'string', description: 'an SPDX license id; MIT when absent' } }, required: ['name'], additionalProperties: false },
   },
   'plugin-remove': {
     usage: 'plugin remove <name>: stop and remove an installed plugin',

@@ -188,8 +188,11 @@ importers:
         specifier: 0.1.1
         version: 0.1.1
       '@webboxes/blends-core':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 0.5.0
+        version: 0.5.0
+      '@webboxes/plugin-hub':
+        specifier: 0.2.0
+        version: 0.2.0
       '@whatwg-node/fetch':
         specifier: 0.9.23
         version: 0.9.23
@@ -305,9 +308,12 @@ importers:
 
   ide/acryl-blends-frame:
     dependencies:
+      '@webboxes/blends-core':
+        specifier: 0.5.0
+        version: 0.5.0
       '@webboxes/plugin-hub':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.2.0
+        version: 0.2.0
       acryl-app-shell:
         specifier: workspace:*
         version: link:../acryl-app-shell
@@ -320,6 +326,9 @@ importers:
       acryl-workspace:
         specifier: workspace:*
         version: link:../acryl-workspace
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
     devDependencies:
       '@acryl/ui':
         specifier: workspace:*
@@ -3095,23 +3104,18 @@ packages:
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
 
-  '@webboxes/app-persistence@0.1.0':
-    resolution: {integrity: sha512-O2ivsZ2W3hvnGizeXkTULbeY6B7xhPuHUmfTY7DjnC5sKbl9nZ/D2ac+ZCesoXPllXCI/VtHWVlpcL19sUB74g==}
-    engines: {node: ^22.19.0 || >=24.0.0}
-    hasBin: true
-
   '@webboxes/app-persistence@0.1.1':
     resolution: {integrity: sha512-evbzvtxDsd0mfaj/KboAT1sNjA9xl0VIWTrKxjVmKvWAYYD1LiYoZDFcFeA6g1tXNK2fGjTjGuKxGFwg69XEMw==}
     engines: {node: ^22.19.0 || >=24.0.0}
     hasBin: true
 
-  '@webboxes/blends-core@0.4.0':
-    resolution: {integrity: sha512-gL6PnxafWh/siXyo2e1bq7U7/eKBkuqJ9nd4B5KKFMd9gyvr63cAO96VtS/DSn9+8vrUidGkVbSLPZXJ7GkwMw==}
+  '@webboxes/blends-core@0.5.0':
+    resolution: {integrity: sha512-wPmmBmhEUdRQ8ydh14KN/7BfaSgng4YBN3q2FLtghwUXsbjrWx938U/WPjxLvpXhgGDY5Wm8AwduUf5DTbn/8g==}
     engines: {node: ^22.19.0 || >=24.0.0}
     hasBin: true
 
-  '@webboxes/plugin-hub@0.1.0':
-    resolution: {integrity: sha512-liYeLpFXXcvgLC3YsuE2cQPITqSLzkbGrE8nSB4DhrA3q7F5+KVAtOkc9Fut1hPHDAanmg0F8Y9BOVkp32c0wg==}
+  '@webboxes/plugin-hub@0.2.0':
+    resolution: {integrity: sha512-CFKjx/nc0eyGd8lwujmrILiOG23CSv1irnLl7leLN2A9hJmBIQEZmMqqlpgMwx3ceLdJ8Cy7Y5M9/WksYfOf3g==}
     engines: {node: ^22.19.0 || >=24.0.0}
 
   '@whatwg-node/fetch@0.9.23':
@@ -6203,22 +6207,18 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.2.0
 
-  '@webboxes/app-persistence@0.1.0':
-    dependencies:
-      yaml: 2.9.0
-
   '@webboxes/app-persistence@0.1.1':
     dependencies:
       yaml: 2.9.0
 
-  '@webboxes/blends-core@0.4.0':
+  '@webboxes/blends-core@0.5.0':
     dependencies:
       ajv: 8.20.0
       yaml: 2.9.0
 
-  '@webboxes/plugin-hub@0.1.0':
+  '@webboxes/plugin-hub@0.2.0':
     dependencies:
-      '@webboxes/app-persistence': 0.1.0
+      '@webboxes/app-persistence': 0.1.1
 
   '@whatwg-node/fetch@0.9.23':
     dependencies:

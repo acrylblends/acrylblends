@@ -17,9 +17,9 @@ import {
   withRegistrations,
 } from './app-registration.ts'
 import { diffStat, unifiedDiff } from './diff'
+import { frameProfileForApp, frameProfileInput } from './frame-release'
 import { APP_PLUGINS_FILE, appFrameRows } from './frame-rows'
 import {
-  frameProfileForApp,
   GENERATED_MARKER,
   type IdeProfileInput,
   type IdeProfileWritePlan,
@@ -123,6 +123,9 @@ function carriedCopies(dir: string): string[] {
 /** The plugins the frame's host layer mounts by path: any framed app carries them, and an app made before the frame gets them here. */
 const HOST_PLUGINS = ['acryl-web-server', 'acryl-page'] as const
 
+/** A library plugin a scaffold file imports: `from '../plugins/<name>/...'`. */
+const PLUGIN_IMPORT = /from '\.\.\/plugins\/([^/']+)\//gu
+
 /** The profile script the DSH-profile layout used; the host launcher replaced it, so an app upgraded from that layout drops it. */
 const OLD_PROFILE_SCRIPT = 'scripts/ide-profile.mjs'
 
@@ -133,8 +136,14 @@ interface FrameFileWrite {
   readonly state: 'add' | 'same' | 'update' | 'conflict'
 }
 
-/** Scaffold files the app owns from its first edit: the release's copy is only the starting point, and the upgrade never writes or refuses over it. */
+/**
+ * Scaffold files the app owns from its first edit: the release's copy is only the starting point, so an edited (or removed) one is never written, refused
+ * over or backed up. A copy the app never edited is still the release's and is updated like any other scaffold file.
+ */
 export const KEPT_BY_THE_APP = new Set(['src/routes.ts'])
+
+/** What the frame row of every template imports from `src/routes.ts`: an app-owned copy without it cannot be shown in the frame. */
+const FRAME_PREFIX_EXPORT = /\bexport const FRAME_MOUNT_PREFIX\b/u
 
 /** What `upgrade` does about the frame for one app: nothing (and why), or a plan computed before anything is written. */
 export type FrameStep =
@@ -150,8 +159,13 @@ export type FrameStep =
       readonly profile: IdeProfileWritePlan
       /** The app's scaffold, its frame row and the generated composition row. */
       readonly files: readonly FrameFileWrite[]
-      /** Frame plugins the app does not carry yet. */
-      readonly hostPlugins: readonly string[]
+      /** App-owned scaffold files left exactly as the app has them (edited or removed), each with whether the frame can mount it. */
+      readonly kept: readonly { readonly file: string; readonly mountable: boolean }[]
+      /**
+       * Library plugins the app does not carry yet and gets: the frame's host plugins, and every plugin the scaffold files written here import (with what
+       * they require), so a release whose template mounts a new plugin (the agent template's `home`) leaves an app that starts.
+       */
+      readonly addedPlugins: readonly string[]
       /** The DSH-profile script of the older layout, removed when it is acrylblends' own. */
       readonly removeProfileScript: boolean
       /** Paths the app edited; refused without `--force`. */
@@ -190,10 +204,19 @@ export function planFrameStep(
   const specs = frameProfileForApp(appDir)
   if (specs === undefined) return { kind: 'unavailable', template }
   const released = readLegacy(appDir, template, name)
-  // src/routes.ts is the app's own from its first edit: it is never taken as the template's, never refused over, and never overwritten with
-  // --force (the backup list takes its files from this list too).
+  // src/routes.ts is the app's own from its first edit: an edited or removed one is never taken as the template's, never refused over, and never
+  // overwritten with --force (the backup list takes its files from this list too). An untouched released copy is updated: the frame row needs the new one.
+  const ownedByTheApp = (file: { file: string; state: FrameFileWrite['state'] }) =>
+    KEPT_BY_THE_APP.has(file.file) && (file.state === 'conflict' || file.state === 'add')
+  const kept = released.files.filter(ownedByTheApp).map((file) => {
+    const path = join(appDir, file.file)
+    return {
+      file: file.file,
+      mountable: existsSync(path) && FRAME_PREFIX_EXPORT.test(readText(path)),
+    }
+  })
   const files: FrameFileWrite[] = released.files
-    .filter((file) => !KEPT_BY_THE_APP.has(file.file))
+    .filter((file) => !ownedByTheApp(file))
     .map((file) => ({
       file: file.file,
       text: file.text,
@@ -236,20 +259,19 @@ export function planFrameStep(
       state: generatedState(existsSync(path) ? readText(path) : undefined, rows.appPlugins),
     })
   }
-  const hostPlugins = HOST_PLUGINS.filter(
-    (plugin) => library.has(plugin) && !existsSync(join(appDir, 'plugins', plugin)),
+  const imported = files
+    .filter((file) => file.file.endsWith('.ts'))
+    .flatMap((file) => [...file.text.matchAll(PLUGIN_IMPORT)].map((match) => match[1] as string))
+  const addedPlugins = closure(
+    [...new Set([...HOST_PLUGINS, ...imported])].filter((plugin) => library.has(plugin)),
+    library,
   )
+    .map((plugin) => plugin.name)
+    .filter((plugin) => !existsSync(join(appDir, 'plugins', plugin)))
   const oldScript = join(appDir, OLD_PROFILE_SCRIPT)
   const removeProfileScript =
     existsSync(oldScript) && GENERATED_MARKER.test(readText(oldScript).split('\n', 1)[0] ?? '')
-  const input: IdeProfileInput = {
-    appName: name,
-    dshVersion: specs.dshVersion,
-    frameworkVersion: specs.frameworkVersion,
-    spec: (packageName) => specs.packages[packageName],
-    dependencies: specs.packages,
-    rows: rows.rows,
-  }
+  const input: IdeProfileInput = frameProfileInput(specs, name, rows.rows)
   const profile = planIdeProfileWrite(appDir, input)
   const conflicts = [
     ...files.filter((file) => file.state === 'conflict').map((file) => file.file),
@@ -259,7 +281,7 @@ export function planFrameStep(
     files.some((file) => file.state !== 'same') ||
     profile.manifestChanged ||
     profile.files.some((file) => file.state !== 'same') ||
-    hostPlugins.length > 0 ||
+    addedPlugins.length > 0 ||
     removeProfileScript
   return {
     kind: 'planned',
@@ -267,7 +289,8 @@ export function planFrameStep(
     input,
     profile,
     files,
-    hostPlugins,
+    kept,
+    addedPlugins,
     removeProfileScript,
     conflicts,
     ...(conflictLines === undefined ? {} : { conflictLines }),
@@ -284,7 +307,7 @@ export function frameReport(frame: FrameStep): string {
   if (frame.kind === 'no-frame-template')
     return `the ${frame.template} template has no src/frame.ts yet: left standalone`
   if (frame.kind === 'unavailable')
-    return 'no frame packages to install: set ACRYLBLENDS_FRAME_PACKAGES while they are unpublished'
+    return 'left on the framework alone: not a desktop app (`acrylblends add desktop` makes it one), or ACRYLBLENDS_FRAME_PACKAGES is none'
   const parts: string[] = []
   for (const file of frame.files)
     if (file.state !== 'same')
@@ -296,10 +319,15 @@ export function frameReport(frame: FrameStep): string {
     parts.push(
       `scripts/ide-host.mjs client rows added (${frame.profile.clientRowsAdded.join(', ')})`,
     )
-  for (const plugin of frame.hostPlugins) parts.push(`plugins/${plugin} added`)
+  for (const plugin of frame.addedPlugins) parts.push(`plugins/${plugin} added`)
   if (frame.removeProfileScript) parts.push(`${OLD_PROFILE_SCRIPT} removed`)
   if (frame.profile.manifestChanged)
     parts.push('package.json merged (dev runs scripts/ide-host.mjs)')
+  for (const { file, mountable } of frame.kept)
+    if (!mountable)
+      parts.push(
+        `${file} kept as the app's (edited): it does not export FRAME_MOUNT_PREFIX, so the frame cannot show the app until it does (a fresh app's ${file} shows how)`,
+      )
   return parts.length === 0 ? 'up to date' : parts.join(', ')
 }
 
@@ -544,7 +572,7 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
         cpSync(join(appDir, file.file), join(backup, file.file))
         frameBackups += 1
       }
-      for (const plugin of frame.hostPlugins) {
+      for (const plugin of frame.addedPlugins) {
         const known = library.get(plugin)
         if (known === undefined) continue
         copyPlugin(known, appDir)
@@ -575,7 +603,7 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
         `the ${conflicts + frameBackups} edited file(s) replaced by --force are saved in ${posix(relative(appDir, backup))}/\n`,
       )
     io.stdout.write(
-      `acrylblends is now ^${VERSION} in package.json${addedDependencies.length > 0 ? `; new dependencies: ${[...new Set(addedDependencies)].join(', ')}` : ''}: run npm install, then npm run check and npm test\n`,
+      `acrylblends is now ^${VERSION} in package.json${addedDependencies.length > 0 ? `; dependencies to install: ${[...new Set(addedDependencies)].join(', ')}` : ''}: run npm install, then npm run check and npm test\n`,
     )
     return 0
   } finally {

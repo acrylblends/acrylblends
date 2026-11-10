@@ -154,7 +154,7 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
   }
   io.stdout.write(`added ${toCopy.map((plugin) => plugin.name).join(', ')} to ${appDir}\n`)
   if (addedDependencies.length > 0)
-    io.stdout.write(`new dependencies: ${addedDependencies.join(', ')} (run npm install)\n`)
+    io.stdout.write(`dependencies to install: ${addedDependencies.join(', ')} (run npm install)\n`)
   for (const plugin of toCopy.filter((plugin) => names.includes(plugin.name))) {
     const mounted = MOUNTED.find((candidate) => candidate.name === plugin.name)
     const result = mounted ? mount(appDir, mounted) : undefined

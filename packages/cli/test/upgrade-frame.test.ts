@@ -74,6 +74,17 @@ async function preFrameApp(
   rmSync(join(root, 'frame'), { recursive: true, force: true })
   for (const plugin of ['acryl-page', 'acryl-web-server'])
     rmSync(join(root, 'plugins', plugin), { recursive: true, force: true })
+  // No released agent app carried the home page's widgets (the agent template mounts `home` since 1.3.2): neither the plugin nor its row.
+  if (template === 'agent') {
+    rmSync(join(root, 'plugins', 'home'), { recursive: true, force: true })
+    const blend = join(root, 'blend.yaml')
+    const withoutHome = readFileSync(blend, 'utf8').replace(
+      /^ *# The home page's widgets[^\n]*\n *- id: home\n *name: home\n/mu,
+      '',
+    )
+    expect(withoutHome).not.toContain('name: home')
+    writeFileSync(blend, withoutHome)
+  }
   expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
   return root
 }
@@ -102,8 +113,6 @@ describe('upgrading a pre-frame app to the host layout', () => {
   it('writes the launcher, the overlay, the runtime row and the frame row, and prints each change', async () => {
     const root = await preFrameApp('framed-later')
     const blendBefore = read(root, 'blend.yaml')
-    // src/routes.ts is the app's own from its first edit: the upgrade must leave it exactly as it was.
-    const routesBefore = read(root, 'src/routes.ts')
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { code, out } = await runUpgrade(root)
     expect(code).toBe(0)
@@ -131,15 +140,30 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(manifest.dependencies['acryl-app-shell']).toBe('file:/checkout/ide/acryl-app-shell')
     // The app's own configuration is untouched.
     expect(read(root, 'blend.yaml')).toBe(blendBefore)
-    expect(read(root, 'src/routes.ts')).toBe(routesBefore)
+    // The 1.1.0 src/routes.ts the app never edited is still the release's: it becomes the one the frame row mounts (FRAME_MOUNT_PREFIX).
+    expect(read(root, 'src/routes.ts')).toContain("export const FRAME_MOUNT_PREFIX = '/app'")
     const report = out()
     expect(report).toMatch(/frame\s+.*src\/frame\.ts added/u)
-    // Never written, never reported, never backed up: the app owns that file from its first edit.
-    expect(report).not.toMatch(/src\/routes\.ts/u)
+    expect(report).toMatch(/src\/routes\.ts updated/u)
     expect(report).toMatch(/scripts\/ide-host\.mjs added/u)
     expect(report).toMatch(/cordis\.patch\.yml added/u)
     expect(report).toMatch(/plugins\/acryl-page added/u)
     expect(report).toMatch(/package\.json merged/u)
+  })
+
+  it('keeps an edited src/routes.ts exactly, never refuses over it, and says when the frame cannot mount it', async () => {
+    // A blank app's only scaffold file is src/routes.ts, so an edited one leaves it unidentified; nodejs also ships src/app.ts.
+    const root = await preFrameApp('routes-edited', 'nodejs')
+    const edited = `${read(root, 'src/routes.ts')}// The owner's own line.\n`
+    writeFileSync(join(root, 'src', 'routes.ts'), edited)
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    expect(read(root, 'src/routes.ts')).toBe(edited)
+    expect(existsSync(join(root, '.acrylblends', 'upgrade-backup', 'src', 'routes.ts'))).toBe(false)
+    expect(out()).toMatch(
+      /src\/routes\.ts kept as the app's \(edited\): it does not export FRAME_MOUNT_PREFIX, so the frame cannot show the app until it does/u,
+    )
   })
 
   it('gives the agent template the composition row with its entry isolate and the mount config', async () => {
@@ -151,6 +175,8 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(overlay).toContain('- id: app-plugins')
     expect(overlay).toContain('name: ./frame/app-plugins.mjs')
     expect(overlay).toMatch(/isolate: \{[^}]*"agent":true/u)
+    // The door and the frame call plugin-share from the host's side.
+    expect(overlay).not.toContain('"pluginShare"')
     expect(overlay).toContain('- id: app-routes')
     expect(existsSync(join(root, 'frame', 'app-plugins.mjs'))).toBe(true)
     expect(read(root, 'frame/app-plugins.mjs')).toContain(
@@ -160,6 +186,13 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(appTs).toContain('export async function composeInto')
     expect(appTs).toContain("'agent-panel': { mount: FRAME_MOUNT_PREFIX }")
     expect(out()).toMatch(/src\/app\.ts updated/u)
+    // The new scaffold registers the home page's widgets: the plugin it imports comes with it, so the upgraded app starts. Its blend.yaml is the
+    // person's and stays as it is, without a home row; the routes run without one (the widgets appear once a `home` row is added).
+    expect(appTs).toContain("import * as home from '../plugins/home/index.ts'")
+    expect(existsSync(join(root, 'plugins', 'home', 'index.ts'))).toBe(true)
+    expect(out()).toMatch(/plugins\/home added/u)
+    expect(read(root, 'blend.yaml')).not.toContain('name: home')
+    expect(read(root, 'src/routes.ts')).toContain("inject: ['router'],")
   })
 
   it('is idempotent: a second run changes no bytes and says everything is up to date', async () => {
@@ -234,7 +267,9 @@ describe('upgrading a pre-frame app to the host layout', () => {
 
   it('leaves an app whose scaffold is not the previous release (edited, or another version) alone', async () => {
     const root = await preFrameApp('custom-scaffold')
+    // Both files of the blank scaffold are the app's own: with an untouched src/app.ts the app is still the blank template's, and only routes.ts is kept.
     writeFileSync(join(root, 'src', 'routes.ts'), '// my own routes\nexport const routes = {}\n')
+    writeFileSync(join(root, 'src', 'app.ts'), '// my own composition root\nexport {}\n')
     process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
     const { code, out } = await runUpgrade(root)
     expect(code).toBe(0)

@@ -104,9 +104,17 @@ reads the tool descriptions; the offline scripted model knows these commands:
 
 A plugin the agent builds lives in the app's own `plugins/` (internal). To share it, ask the agent to package it
 (`package_plugin { name }`, or the scripted command `package plugin <name>`): it becomes a standalone package in
-`plugin-packages/<name>/`, with `@deepseek-ai/cordis` as a peer dependency (never a second installed copy). Any app takes an
-external plugin in with `acrylblends add <folder>`, which copies it into that app's `plugins/`, where it installs at the
-next start through the same checks.
+`plugin-packages/<name>/` and its release file `plugin-packages/<name>-<version>.tgz`, with `@deepseek-ai/cordis` as a peer
+dependency (never a second installed copy) and the same bytes on every OS. Any app takes an external plugin in with
+`acrylblends add <folder>`, which copies it into that app's `plugins/`, where it installs at the next start through the same
+checks. A plugin someone released comes in live with `plugin pull github:<owner>/<repo>[@<version>][@sha256:<digest>]`.
+A group's plugins come in together with `plugin pull --from <list>`: the list is a file in the app (e.g. `group.txt`) or an
+https address of one (a gist's raw link), one source per line, `#` starts a comment. Each source is pulled on its own, so one
+that is refused (a route or name another plugin already has, a wrong digest) is named with its reason while the others come in
+and keep running; the command then fails, so a script sees it.
+`npx acrylblends add showcase` gives the group's app a page at `/showcase`: a card for every plugin (name, author's GitHub
+login, version, where it came from, state, and links to its pages, its home widget and its tool), updated live as plugins are
+pulled and removed. `GET /showcase/plugins` answers the same cards as JSON.
 
 ## What to look at
 

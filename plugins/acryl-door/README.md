@@ -58,6 +58,8 @@ The ACRYL Host's `acryl control ...` forms are accepted too.
 - A file left by a process that is gone is replaced. If another live process already serves the folder's door, the row fails and the
   file is left alone.
 - `plugin add` takes only a folder inside the app.
+- `plugin pull <source>` fetches a plugin someone released (`github:<owner>/<repo>[@<version>][@sha256:<digest>]` or a `.tgz`) with the `plugin-share` row. A refusal says why and changes nothing; it runs nothing of the plugin before its checks pass.
+- `plugin publish <name>` shows what publishing would send and sends nothing. In a person's own terminal it then asks them to type yes; no verb, MCP tool or chat tool can publish. The confirm route takes this run's secret, so this keeps honest agents from publishing by accident; it is not a wall against code on this machine.
 - Every look and act is written to `.acryl/audit/ui-control.jsonl`, without the text that was typed.
 
 ## One verb list: CLI, MCP and the built-in chat

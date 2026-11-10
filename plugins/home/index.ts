@@ -50,7 +50,9 @@ export function createHome(): Home {
           `a widget id is a plugin name (lowercase letters, digits and dashes), not "${widget.id}"`,
         )
       if (registered.has(widget.id))
-        throw new Error(`the home page already has a widget "${widget.id}"`)
+        throw new Error(
+          `the home page already has a widget "${widget.id}", the plugin ${widget.id}'s; a widget's id is the name of the plugin that puts it there`,
+        )
       registered.set(widget.id, widget)
       return () => {
         if (registered.get(widget.id) === widget) registered.delete(widget.id)

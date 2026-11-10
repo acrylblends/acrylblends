@@ -25,7 +25,8 @@ import { ghRepositoryCheck, githubSharePorts, planAppPluginShare, readAppPlugins
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
-import { AppReloader, watchFolder, watchFolders, type AppRow } from './app-reload.ts'
+import { AppReloader, type AppRow } from './app-reload.ts'
+import { pulledDigestOf, watchAppFiles } from './applied-live.ts'
 import { AutoSave, SaveStore, type SessionEventLike } from './auto-save.ts'
 import { guardOutwardCommands, type OutwardEvents } from './outward-guard.ts'
 import { guardToolCalls, type HostIdentity, type ToolCallEvents } from './tool-call-guard.ts'
@@ -842,14 +843,10 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     const generation = appGeneration()
     const appReload = generation === undefined ? undefined : new AppReloader({ generation, rows: () => appRowsOf(ctx.get('loader')), appRoot: realpathSync(root), report })
     // The app is its blend.yaml (which plugins run, in which order, which are off), its src/ and its plugins/: an agent adding a row, editing a plugin
-    // or writing a route sees it live, with no reason to restart the host.
-    const reloadApp = (): void => { void appReload?.reload() }
-    const stopWatchingCode = appReload === undefined ? () => {} : watchFolders([join(root, 'src'), join(root, 'plugins')], reloadApp, { report })
-    const stopWatchingBlend = appReload === undefined ? () => {} : watchFolder(root, reloadApp, { report, only: ['blend.yaml'] })
-    const stopWatching = (): void => {
-      stopWatchingCode()
-      stopWatchingBlend()
-    }
+    // or writing a route sees it live, with no reason to restart the host. A plugin the app pulled and installs live is not loaded again (./applied-live.ts).
+    // The app's pluginShare is reached from the host (its service is not isolated): it knows the digest of a pull from a local file, too.
+    const pulledDigest = pulledDigestOf(() => ctx.get('pluginShare'))
+    const stopWatching = appReload === undefined ? () => {} : watchAppFiles(root, () => { void appReload.reload() }, { report, pulledDigest })
     /** git's own line as the message a person reads: the runner keeps it as the failure's detail. */
     const gitReason = (cause: unknown, fallback: string): Error => {
       const detail = (cause as { detail?: unknown }).detail

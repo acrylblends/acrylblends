@@ -1,6 +1,6 @@
 {
   "name": "acryl-blends-frame",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ACRYL Blends frame: the workbench around an app being built - a top bar, the branches and versions on the left, the app alone in the centre, and the agents on the right - as one Cordis plugin with a Host and a client half",
   "license": "MIT",
   "repository": {
@@ -59,11 +59,13 @@
     "prepack": "pnpm run check"
   },
   "dependencies": {
-    "@webboxes/plugin-hub": "0.1.0",
+    "@webboxes/blends-core": "0.5.0",
+    "@webboxes/plugin-hub": "0.2.0",
     "acryl-app-shell": "workspace:*",
     "acryl-loopback-http": "workspace:*",
     "acryl-versions": "workspace:*",
-    "acryl-workspace": "workspace:*"
+    "acryl-workspace": "workspace:*",
+    "yaml": "2.9.0"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-llm": "0.2.0-rc.2",

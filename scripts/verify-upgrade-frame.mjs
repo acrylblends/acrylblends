@@ -34,12 +34,8 @@ const fail = (message) => {
 }
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 const DSH_VERSION = process.env.IDE_PROFILE_DSH_VERSION ?? '0.2.0-rc.2'
-const cliVersion = JSON.parse(
-  readFileSync(join(root, 'packages', 'cli', 'package.json'), 'utf8'),
-).version
-const frameworkVersion = `^${cliVersion}`
 const frameEnv = {
-  ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, { dshVersion: DSH_VERSION, frameworkVersion }),
+  ACRYLBLENDS_FRAME_PACKAGES: frameSpecsEnv(root, { dshVersion: DSH_VERSION }),
 }
 if (!existsSync(join(root, 'packages', 'cli', 'dist', 'index.js')))
   fail('the CLI is not built (run pnpm run build)')

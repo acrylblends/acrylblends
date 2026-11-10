@@ -43,6 +43,24 @@ async function failureOf(call: Promise<unknown>): Promise<VersionsGitError> {
 
 const versions = (): Versions => new Versions(new GitRunner())
 
+
+describe('a log that fails', () => {
+  it('answers only after every git call it started has finished, so nothing still runs in the folder', async () => {
+    // On Windows a folder a git process still runs in cannot be removed: answering at the first failure left two running.
+    let slowFinished = false
+    const runner = {
+      resolveDirectory: async (path: string) => path,
+      run: async (args: readonly string[]) => {
+        if (args[0] !== 'log') throw new VersionsGitError('not a git repository', 'not-repo')
+        await new Promise(done => setTimeout(done, 50))
+        slowFinished = true
+        return { stdout: '', truncated: false }
+      },
+    } as unknown as GitRunner
+    await expect(new Versions(runner).log('/plain')).rejects.toThrow('not a git repository')
+    expect(slowFinished).toBe(true)
+  })
+})
 describe('versions log', () => {
   it('lists the branch commits newest first with their full shape', async () => {
     const repo = repository()

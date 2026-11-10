@@ -2,14 +2,34 @@
  * Starters from a registry: `npm create acrylblends@latest my-app -- --from acryl.example`. A registry is a git repository (or a folder) with an `index.json` and one folder per
  * starter under `blends/<id>/`. Its CI says in the index which runtime an entry is for: only `runtime: acrylblends` entries are apps this package can make (the folder is the
  * app, with an `acryl.template.json`); the others are ACRYL app starters and are refused with one line. Nothing is run: the entry is downloaded, unpacked and copied.
+ *
+ * A registry grows with every entry and one starter is all that is wanted, so `openRegistry` reads as little as the registry allows. A folder is read in place. A static host
+ * serves the index and one archive per entry (`archive`, `integrity`, written when the site deploys: workshop-registry/scripts/registry-archives.mjs). A repository holds no
+ * archives, so it is downloaded whole. The public registry is a host with its repository behind it, for when the host cannot give the entry.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { SourceError } from './source'
+import {
+  type Fetchers,
+  fetchRegistry,
+  fetchTemplate,
+  type RegistrySource,
+  type Source,
+  SourceError,
+} from './source'
 
-/** The public registry, read from its repository (the same files the site lists). */
+/** The public registry's repository (the same files the site lists). */
 export const DEFAULT_REGISTRY = 'github:acrylblends/acrylblends.github.io'
+const DEFAULT_REPOSITORY: Source = {
+  kind: 'github',
+  owner: 'acrylblends',
+  repo: 'acrylblends.github.io',
+  ref: undefined,
+}
+
+/** The public registry as its site serves it, with an archive per entry. */
+const PUBLIC_REGISTRY = 'https://acrylblends.github.io/registry/'
 
 /** Where ACRYL app starters are opened. */
 export const ACRYL_APP = 'https://acryl.dev'
@@ -26,7 +46,31 @@ export interface RegistryEntry {
   /** `acrylblends` (an app this package makes) or `acryl` (an ACRYL app starter). An index written before the field existed has none: those entries are ACRYL's. */
   readonly runtime: 'acrylblends' | 'acryl'
   readonly description?: string
+  /** Where a host publishes the entry on its own; a repository's index has none. */
+  readonly archive?: EntryArchive
 }
+
+/** An entry published as one file: its path in the registry and the integrity of its bytes (`sha512-<base64>`). */
+export interface EntryArchive {
+  readonly path: string
+  readonly integrity: string
+}
+
+/** A registry that can be read: what it offers, and one entry's files on request. */
+export interface OpenRegistry {
+  readonly entries: readonly RegistryEntry[]
+  /** Put the entry's files into `dir` (which must not exist yet), held to a template's limits. Nothing of them is run. */
+  takeEntry(entry: RegistryEntry, dir: string): Promise<void>
+}
+
+/** Where a registry's reading may keep what it downloads, and how it downloads. */
+export interface RegistryReading {
+  readonly scratch: string
+  readonly fetchers: Fetchers
+}
+
+/** A host cannot give this entry, which is not a judgement on the entry: the public registry reads its repository instead. */
+class EntryUnavailable extends SourceError {}
 
 /** The folder of an unpacked registry that holds `index.json`: the root, or its `registry/` folder (the public registry lives in its site's repository). */
 /** @param label - the registry as the person named it (a folder's path, `github:owner/repo`), for the one line when it has no index. */
@@ -38,15 +82,26 @@ export function registryRoot(unpacked: string, label = 'this registry'): string 
   )
 }
 
-/** Read the index of an unpacked registry. */
-export function readRegistry(
-  unpacked: string,
-  label?: string,
-): { root: string; entries: RegistryEntry[] } {
-  const root = registryRoot(unpacked, label)
+/** An entry's archive as its index names it: both fields or neither, and a path that stays beside the entries. */
+function parseArchive(item: Record<string, unknown>): EntryArchive | undefined {
+  if (item.archive === undefined && item.integrity === undefined) return undefined
+  const { archive, integrity } = item
+  if (
+    typeof archive !== 'string' ||
+    !/^blends\/[^/\\]+\.tgz$/.test(archive) ||
+    archive.includes('..') ||
+    typeof integrity !== 'string' ||
+    !/^sha512-[A-Za-z0-9+/]+=*$/.test(integrity)
+  )
+    throw new SourceError(`registry entry ${String(item.id)} has no valid archive`)
+  return { path: archive, integrity }
+}
+
+/** The entries of an `index.json`, from its text. */
+function parseIndex(text: string): RegistryEntry[] {
   let data: unknown
   try {
-    data = JSON.parse(readFileSync(join(root, 'index.json'), 'utf8'))
+    data = JSON.parse(text)
   } catch {
     throw new SourceError('the registry index.json is not valid JSON')
   }
@@ -57,6 +112,7 @@ export function readRegistry(
     if (typeof item.id !== 'string' || typeof item.path !== 'string') continue
     if (!/^blends\/[^/\\]+$/.test(item.path))
       throw new SourceError(`registry entry ${item.id} has no valid path`)
+    const archive = parseArchive(item)
     entries.push({
       id: item.id,
       name: typeof item.name === 'string' ? item.name : item.id,
@@ -64,9 +120,107 @@ export function readRegistry(
       path: item.path,
       runtime: item.runtime === 'acrylblends' ? 'acrylblends' : 'acryl',
       ...(typeof item.description === 'string' ? { description: item.description } : {}),
+      ...(archive ? { archive } : {}),
     })
   }
-  return { root, entries }
+  return entries
+}
+
+/** A registry in a folder, read in place: only the entry that is taken is copied. */
+function openFolder(unpacked: string, label: string, reading: RegistryReading): OpenRegistry {
+  const root = registryRoot(unpacked, label)
+  return {
+    entries: parseIndex(readFileSync(join(root, 'index.json'), 'utf8')),
+    takeEntry: (entry, dir) =>
+      fetchTemplate(
+        { kind: 'folder', path: join(root, entry.path) },
+        dir,
+        join(reading.scratch, 'download'),
+        reading.fetchers,
+      ),
+  }
+}
+
+/** A registry that holds no archives, downloaded whole and then read as a folder. */
+async function openUnpacked(
+  source: Source,
+  label: string,
+  reading: RegistryReading,
+): Promise<OpenRegistry> {
+  const unpacked = join(reading.scratch, 'registry')
+  await fetchRegistry(source, unpacked, join(reading.scratch, 'download'), reading.fetchers)
+  return openFolder(unpacked, label, reading)
+}
+
+/** A registry on a static host: its index, then only the archive of the entry that is taken. */
+async function openHosted(base: string, reading: RegistryReading): Promise<OpenRegistry> {
+  const index = await reading.fetchers.download(`${base}index.json`)
+  return {
+    entries: parseIndex(Buffer.from(index).toString('utf8')),
+    async takeEntry(entry, dir) {
+      if (entry.archive === undefined)
+        throw new EntryUnavailable(`${base} publishes no archive for ${entry.id}`)
+      const bytes = await downloadArchive(`${base}${entry.archive.path}`, entry.id, reading)
+      const digest = createHash('sha512').update(bytes).digest('base64')
+      if (`sha512-${digest}` !== entry.archive.integrity)
+        throw new SourceError(`the archive of ${entry.id} does not match its integrity`)
+      const download = join(reading.scratch, 'download')
+      mkdirSync(download, { recursive: true })
+      const path = join(download, 'entry.tgz')
+      writeFileSync(path, bytes)
+      await fetchTemplate({ kind: 'tarball', path }, dir, download, reading.fetchers)
+    },
+  }
+}
+
+async function downloadArchive(
+  url: string,
+  id: string,
+  reading: RegistryReading,
+): Promise<Uint8Array> {
+  try {
+    return await reading.fetchers.download(url)
+  } catch (cause) {
+    throw new EntryUnavailable(
+      `could not download the archive of ${id}: ${cause instanceof Error ? cause.message : String(cause)}`,
+    )
+  }
+}
+
+/** Open a registry the person named, reading as little of it as it allows. */
+export async function openRegistry(
+  source: RegistrySource,
+  label: string,
+  reading: RegistryReading,
+): Promise<OpenRegistry> {
+  if (source.kind === 'folder') return openFolder(source.path, source.path, reading)
+  if (source.kind === 'hosted') return openHosted(source.base, reading)
+  return openUnpacked(source, label, reading)
+}
+
+/**
+ * Open the public registry: its site, or its repository when the site cannot answer. An entry the site cannot give is taken from the repository too. An archive that
+ * came and does not match, or that breaks a template's limits, is refused: only a missing archive is a reason to look elsewhere.
+ */
+export async function openPublicRegistry(reading: RegistryReading): Promise<OpenRegistry> {
+  let site: OpenRegistry
+  try {
+    site = await openHosted(PUBLIC_REGISTRY, reading)
+  } catch {
+    return openUnpacked(DEFAULT_REPOSITORY, DEFAULT_REGISTRY, reading)
+  }
+  return {
+    entries: site.entries,
+    async takeEntry(entry, dir) {
+      try {
+        await site.takeEntry(entry, dir)
+      } catch (cause) {
+        if (!(cause instanceof EntryUnavailable)) throw cause
+        const repository = await openUnpacked(DEFAULT_REPOSITORY, DEFAULT_REGISTRY, reading)
+        await repository.takeEntry(entry, dir)
+      }
+    },
+  }
 }
 
 /** The entry for an id. An ACRYL app starter is refused in one line; an unknown id lists the starters this package can make. */
@@ -147,6 +301,25 @@ export function profileNameFor(appName: string): string {
     .replaceAll(/[^a-z0-9]+/gu, '-')
     .replaceAll(/^-+|-+$/gu, '')
   return `acrylblends-${slug === '' ? 'app' : slug}`
+}
+
+/**
+ * The name the scaffold wrote into a starter where an app names itself: its manifest's one-word `metadata.name`, or else its `package.json` name, which
+ * `init` set to the same name. A curated starter's manifest carries a display name ("Productivity Hub"), which the scaffold never wrote.
+ */
+export function starterName(
+  manifestText: string,
+  packageText: string | undefined,
+): string | undefined {
+  const fromManifest = manifestName(manifestText)
+  if (fromManifest !== undefined || packageText === undefined) return fromManifest
+  let name: unknown
+  try {
+    name = (JSON.parse(packageText) as { name?: unknown }).name
+  } catch {
+    return undefined
+  }
+  return typeof name === 'string' && name !== '' ? name : undefined
 }
 
 /** The app's name as a starter's `blend.yaml` gives it (`metadata.name`), or undefined. */

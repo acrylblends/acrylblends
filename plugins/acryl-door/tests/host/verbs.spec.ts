@@ -64,6 +64,8 @@ const CLI_FORMS: Readonly<Record<Verb, readonly string[]>> = {
   'act': ['act', 'click', '--ref', '1.1'],
   'plugin-list': ['plugin', 'list'],
   'plugin-add': ['plugin', 'add', 'plugins/pomodoro'],
+  'plugin-pull': ['plugin', 'pull', 'github:someone/pomodoro@0.1.0'],
+  'plugin-publish': ['plugin', 'publish', 'pomodoro', '--owner', 'inboxxobni'],
   'plugin-remove': ['plugin', 'remove', 'pomodoro'],
   'plugin-reload': ['plugin', 'reload'],
   'tool-list': ['tool', 'list'],
@@ -164,5 +166,16 @@ describe('the MCP route', () => {
     expect(await unknown.json()).toMatchObject({ id: 3, error: { code: -32602, message: expect.stringContaining('brief, look, act') as string } })
     const batch = await mcp(running, [{ jsonrpc: '2.0', id: 4, method: 'ping' }, { jsonrpc: '2.0', id: 5, method: 'nope' }])
     expect(await batch.json()).toMatchObject([{ id: 4, result: {} }, { id: 5, error: { code: -32601 } }])
+  })
+})
+
+describe('plugin pull on the command line', () => {
+  it('takes one source, or a list with --from, never both', () => {
+    expect(parseInvocation(['plugin', 'pull', 'github:a/b@0.1.0']).args).toEqual({ source: 'github:a/b@0.1.0' })
+    expect(parseInvocation(['plugin', 'pull', '--from', 'group.txt']).args).toEqual({ from: 'group.txt' })
+    expect(parseInvocation(['plugin', 'pull', '--from', 'https://gist.githubusercontent.com/a/b/raw/group.txt'])).toMatchObject({ verb: 'plugin-pull', args: { from: 'https://gist.githubusercontent.com/a/b/raw/group.txt' } })
+    expect(() => parseInvocation(['plugin', 'pull', 'github:a/b', '--from', 'group.txt'])).toThrow(/not both/)
+    expect(() => parseInvocation(['plugin', 'pull'])).toThrow(/needs a source.*--from <list>/)
+    expect(() => parseInvocation(['plugin', 'pull', '--from'])).toThrow(/--from needs a value/)
   })
 })

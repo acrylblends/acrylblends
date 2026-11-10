@@ -24,6 +24,9 @@ spec:
     # Read-only when NODE_ENV=production.
     - id: extensions
       name: extensions
+    # Sharing: `npm run acryl -- plugin pull github:<owner>/<repo>@<version>` installs a plugin someone released (development only).
+    - id: plugin-share
+      name: plugin-share
     - id: server
       name: acryl-node-server
       config:
