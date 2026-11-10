@@ -144,7 +144,7 @@ describe('sharing a local plugin', () => {
   it('asks a question naming the repository, whether it is created, the version and who can see it', () => {
     expect(shareQuestion(plan)).toBe('Create repository tester/hello-share on GitHub and publish v0.1.0? It will be private.')
     expect(shareQuestion({ ...plan, createsRepository: false, version: '0.1.1', released: '0.1.0', visibility: 'public' }))
-      .toBe('Publish v0.1.1 to tester/hello-share on GitHub? v0.1.0 is released there, so this is the next version. It will be public.')
+      .toBe('Publish v0.1.1 to tester/hello-share on GitHub? v0.1.0 is released there, so this is the next version. It will be public: anyone can read it and pull it into their own app.')
     expect(parseSharePlan(JSON.parse(JSON.stringify(plan)))).toEqual(plan)
     expect(() => parseSharePlan({ ...plan, owner: '../x' })).toThrow('repository')
     expect(() => parseSharePlan(undefined)).toThrow('not a plan')
