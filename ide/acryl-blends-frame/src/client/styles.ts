@@ -263,7 +263,7 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsShared:hover { text-decoration: underline; }
 .acrylBlendsSharedGone { color: var(--bf-dim); text-decoration: line-through; }
 .acrylBlendsShareAsk { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; color: var(--bf-warn); }
-.acrylBlendsShareConfirm, .acrylBlendsShareCancel { padding: 1px 7px; border: 1px solid #34343a; border-radius: 5px; background: var(--bf-surface-2); color: #cfcfd6; font: inherit; font-size: 11px; cursor: pointer; }
+.acrylBlendsShareConfirm, .acrylBlendsShareCancel, .acrylBlendsShareVisibility { padding: 1px 7px; border: 1px solid #34343a; border-radius: 5px; background: var(--bf-surface-2); color: #cfcfd6; font: inherit; font-size: 11px; cursor: pointer; }
 .acrylBlendsShareConfirm { border-color: var(--bf-accent); color: #fff; background: var(--bf-accent-dim); }
 .acrylBlendsShareConfirm:disabled { opacity: .5; cursor: default; }
 .acrylBlendsTog { grid-row: 1 / span 2; grid-column: 3; width: 30px; height: 17px; border: 0; padding: 0; border-radius: 99px; background: #3a3a40; position: relative; cursor: pointer; }

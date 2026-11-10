@@ -4,11 +4,11 @@
  * chosen; the Host then starts the app's plugins again, and the canvas loads the app page again.
  */
 
-import { FRAME_PLUGINS_PATH, FRAME_PLUGINS_SHARE_PATH, FRAME_PLUGINS_SHARE_PLAN_PATH, FRAME_PLUGINS_SWITCH_PATH, parseAppPluginsView, parseSharePlan, type AppPluginKind, type AppPluginsView, type AppPluginView, type FramePluginView, type SharedPluginView, type SharePlan } from '../contract.ts'
+import { FRAME_PLUGINS_PATH, FRAME_PLUGINS_SHARE_PATH, FRAME_PLUGINS_SHARE_PLAN_PATH, FRAME_PLUGINS_SWITCH_PATH, parseAppPluginsView, parseSharePlan, type AppPluginKind, type AppPluginsView, type AppPluginView, type FramePluginView, type ShareVisibility, type SharedPluginView, type SharePlan } from '../contract.ts'
 
 /** Sharing a local plugin: first what it would do, then, on the person's yes, exactly that. */
 export interface PluginShare {
-  plan(): Promise<SharePlan>
+  plan(visibility?: ShareVisibility): Promise<SharePlan>
   publish(confirmed: SharePlan): Promise<SharedPluginView>
 }
 
@@ -19,7 +19,8 @@ export function shareQuestion(plan: SharePlan): string {
     ? `Create repository ${where} on GitHub and publish v${plan.version}?`
     : `Publish v${plan.version} to ${where} on GitHub?`
   const released = plan.released === undefined ? '' : ` v${plan.released} is released there, so this is the next version.`
-  return `${what}${released} It will be ${plan.visibility}.`
+  const who = plan.visibility === 'public' ? 'public: anyone can read it and pull it into their own app' : 'private'
+  return `${what}${released} It will be ${who}.`
 }
 
 /** Which filter chip a plugin falls under. */
@@ -104,8 +105,8 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export interface AppPluginsApi {
   read(): Promise<AppPluginsView>
   switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
-  /** What sharing one local plugin would do; nothing is sent. */
-  planShare(name: string): Promise<SharePlan>
+  /** What sharing one local plugin would do (private unless `visibility` says public); nothing is sent. */
+  planShare(name: string, visibility?: ShareVisibility): Promise<SharePlan>
   /** Share one local plugin as the person confirmed it; answers where it went. */
   share(name: string, confirmed: SharePlan): Promise<SharedPluginView>
 }
@@ -136,12 +137,12 @@ export function createAppPluginsApi(fetcher: FetchLike = (input, init) => fetch(
       })
       if (!response.ok) throw new Error(await errorOf(response))
     },
-    async planShare(name) {
+    async planShare(name, visibility) {
       const response = await fetcher(FRAME_PLUGINS_SHARE_PLAN_PATH, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(visibility === undefined ? { name } : { name, visibility }),
       })
       if (!response.ok) throw new Error(await errorOf(response))
       return parseSharePlan(await response.json())

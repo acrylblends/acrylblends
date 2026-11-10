@@ -13,7 +13,7 @@ import { createRequire } from 'node:module'
 import { promisify } from 'node:util'
 import { dirname } from 'node:path'
 import { bumpVersion, gitCli, githubCli, parseVersion, PluginStore, sharePlugin, storeRootOf, type PublishGitPort, type RepositoryHostPort } from '@webboxes/plugin-hub'
-import { samePlan, type AppPluginView, type FramePluginState, type FramePluginView, type SharedPluginView, type SharePlan } from './contract.ts'
+import { samePlan, type AppPluginView, type FramePluginState, type FramePluginView, type ShareVisibility, type SharedPluginView, type SharePlan } from './contract.ts'
 
 /** One row of `blend.yaml`'s `spec.rows`: where its block starts and ends (line indexes, end exclusive). */
 export interface BlendRow {
@@ -453,16 +453,17 @@ export type ShareAppPluginResult = SharedPluginView & { readonly owner: string; 
 /**
  * What sharing one local plugin would do, read without sending anything: it packages the plugin under the app's home and asks the host who is
  * signed in, whether the repository exists and whether this version is released there (then the plan releases the next patch).
- * @param options - the repository owner (the signed-in account when absent).
+ * @param options - the repository owner (the signed-in account when absent) and the visibility the person asked for (private when absent: a share is
+ *   public only when the person chose it, because anyone can then read and pull it).
  */
-export async function planAppPluginShare(root: string, home: string, name: string, options: { readonly owner?: string }, ports: SharePorts): Promise<SharePlan> {
+export async function planAppPluginShare(root: string, home: string, name: string, options: { readonly owner?: string; readonly visibility?: ShareVisibility }, ports: SharePorts): Promise<SharePlan> {
   const dir = await packageAppPlugin(root, name, pluginPackagesOf(home))
   const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as { version?: unknown; acryl?: { visibility?: unknown } }
   const current = typeof manifest.version === 'string' && parseVersion(manifest.version) !== undefined ? manifest.version : undefined
   if (current === undefined) throw new Error(`${name}: its package has no semantic version`)
   const owner = options.owner ?? ports.host.login()
   const repo = name
-  const visibility = manifest.acryl?.visibility === 'public' ? 'public' : 'private'
+  const visibility = options.visibility ?? (manifest.acryl?.visibility === 'public' ? 'public' : 'private')
   const existing = ports.host.repository(owner, repo)
   const released = existing !== undefined && ports.host.releaseExists(owner, repo, `v${current}`)
   return {
@@ -491,7 +492,8 @@ export async function shareAppPlugin(
   options: { readonly owner?: string },
   ports: SharePorts,
 ): Promise<ShareAppPluginResult> {
-  const plan = await planAppPluginShare(root, home, name, options, ports)
+  // The visibility is the one the person confirmed: the plan is made again with it, and a change since then still refuses below.
+  const plan = await planAppPluginShare(root, home, name, { ...options, visibility: confirmed.visibility }, ports)
   if (!samePlan(plan, confirmed)) throw new Error(`The share changed since you confirmed it (${plan.owner}/${plan.repo} v${plan.version}); nothing was sent. Look at it again.`)
   const dir = join(pluginPackagesOf(home), name)
   // A version is released once: the confirmed plan names the next patch, written now.

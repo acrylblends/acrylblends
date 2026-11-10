@@ -255,6 +255,21 @@ describe('sharing a local plugin', () => {
     }
   })
 
+  it('is private unless the person chose public, and publishes with the visibility they confirmed', async () => {
+    const { root, home } = appWithPlugin()
+    try {
+      const { ports, did } = standIn({})
+      expect((await planAppPluginShare(root, home, 'hello-share', { owner: 'inboxxobni' }, ports)).visibility).toBe('private')
+      const open = await planAppPluginShare(root, home, 'hello-share', { owner: 'inboxxobni', visibility: 'public' }, ports)
+      expect(open.visibility).toBe('public')
+      // A plan confirmed as private is not published as public, and the other way round.
+      await expect(shareAppPlugin(root, home, 'hello-share', { ...open, visibility: 'private' }, { owner: 'inboxxobni' }, ports)).resolves.toBeDefined()
+      expect(did.some(step => step.includes('public'))).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('asks the Host for the plan, then posts the share with the confirmed plan', async () => {
     const calls: Array<{ url: string; body: string }> = []
     const api = createAppPluginsApi(async (url, init) => {

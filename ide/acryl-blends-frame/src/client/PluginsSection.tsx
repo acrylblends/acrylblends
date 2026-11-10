@@ -1,7 +1,7 @@
 /** The Plugins page of Settings: search, the groups as chips, and one row per plugin with who made it, its state and its switch. */
 
 import { useEffect, useMemo, useState } from 'react'
-import type { SharePlan } from '../contract.ts'
+import type { SharePlan, ShareVisibility } from '../contract.ts'
 import { filterPlugins, shareQuestion, type NavigatorPlugin, type PluginGroup } from './plugins-navigator.ts'
 
 export interface PluginsSectionInjected {
@@ -67,14 +67,14 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
     }
   }
 
-  const askShare = async (plugin: NavigatorPlugin) => {
+  const askShare = async (plugin: NavigatorPlugin, visibility?: ShareVisibility) => {
     if (plugin.share === undefined || busy !== undefined) return
     setBusy(plugin.key)
     setSharing('planning')
     setFailure(undefined)
     setAsking(undefined)
     try {
-      setAsking({ key: plugin.key, plan: await plugin.share.plan() })
+      setAsking({ key: plugin.key, plan: await plugin.share.plan(visibility) })
     } catch (cause) {
       setFailure(`${plugin.name}: ${cause instanceof Error ? cause.message : String(cause)}`)
     }
@@ -173,6 +173,9 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
                   {shareQuestion(asking.plan)}
                   {/* Cancel is the default: Enter or a stray click sends nothing. */}
                   <button type="button" className="acrylBlendsShareCancel" autoFocus onClick={() => { setAsking(undefined) }}>Cancel</button>
+                  <button type="button" className="acrylBlendsShareVisibility" disabled={busy !== undefined} onClick={() => { void askShare(plugin, asking.plan.visibility === 'public' ? 'private' : 'public') }}>
+                    {asking.plan.visibility === 'public' ? 'Keep it private' : 'Make it public'}
+                  </button>
                   <button type="button" className="acrylBlendsShareConfirm" disabled={busy !== undefined} onClick={() => { void publish(plugin, asking.plan) }}>
                     {asking.plan.createsRepository ? 'Create and publish' : `Publish v${asking.plan.version}`}
                   </button>
