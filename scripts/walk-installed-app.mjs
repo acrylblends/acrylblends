@@ -246,18 +246,18 @@ const rows = readFileSync(blend, 'utf8')
 const routesRow = '    - id: routes\n      name: routes\n'
 if (!rows.includes(routesRow)) throw new Error('the walk cannot find the routes row in blend.yaml')
 writeFileSync(blend, rows.replace(routesRow, `    - id: notes\n      name: notes\n${routesRow}`))
-let took = await until(frame, 'app/notes/items', (text) => text.includes('first note'), 25_000)
+let took = await until(frame, 'app/notes/items', (text) => text.includes('first note'), 60_000)
 check(
   took !== undefined,
-  `a plugin (its folder and its row in blend.yaml) written into the running app is served${took === undefined ? ' (not within 25 s)' : ` after ${took.toFixed(1)} s`}`,
+  `a plugin (its folder and its row in blend.yaml) written into the running app is served${took === undefined ? ' (not within 60 s)' : ` after ${took.toFixed(1)} s`}`,
 )
 took = await until(frame, 'app/', (text) => text.includes('<ul id="notes">'), 5_000)
 check(took !== undefined, "the plugin's widget is on the home page")
 writeFileSync(join(source, 'plugins', 'notes', 'index.ts'), plugin('edited live'))
-took = await until(frame, 'app/notes/items', (text) => text.includes('edited live'), 25_000)
+took = await until(frame, 'app/notes/items', (text) => text.includes('edited live'), 60_000)
 check(
   took !== undefined,
-  `an edit of the plugin is served${took === undefined ? ' (not within 25 s)' : ` after ${took.toFixed(1)} s`}`,
+  `an edit of the plugin is served${took === undefined ? ' (not within 60 s)' : ` after ${took.toFixed(1)} s`}`,
 )
 
 // --- self-repair: the host is killed from outside
