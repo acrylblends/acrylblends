@@ -24,7 +24,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { basename, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { type Context, type Fiber, Service } from '@deepseek-ai/cordis'
@@ -216,6 +216,22 @@ const inside = (path: string, folder: string) => {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
 }
 
+/**
+ * A path as `extensions.json` stores it: relative to `base` (with `/`) when it is inside it, so the record survives a moved app folder (`base` the app's
+ * folder for a source, the app's data home for a staged copy); an absolute path stays absolute.
+ */
+export function storedPath(path: string, base: string): string {
+  const relativePath = relative(base, path)
+  return relativePath !== '' && !relativePath.startsWith('..') && !isAbsolute(relativePath)
+    ? relativePath.split(sep).join('/')
+    : path
+}
+
+/** The inverse of {@link storedPath}: a relative path is read from `base`. */
+export function restoredPath(stored: string, base: string): string {
+  return isAbsolute(stored) ? stored : resolve(base, stored)
+}
+
 function injected(module: PluginModule): string[] {
   const inject = module.inject
   if (Array.isArray(inject))
@@ -259,6 +275,9 @@ export class Extensions extends Service {
   private readonly owner: Context
   private readonly store: PluginStore
   private readonly routePrefix: string
+  /** The app's folder and its data home: what the record's relative paths are read from. */
+  private readonly appRoot: string
+  private readonly dataHome: string
 
   constructor(ctx: Context, config: ExtensionsConfig, store: PluginStore) {
     super(ctx, 'extensions')
@@ -270,6 +289,8 @@ export class Extensions extends Service {
     this.rows = new Set(config.rows ?? [])
     this.say = config.log ?? ((line) => console.log(line))
     const { home, root } = ctx.appInstance
+    this.appRoot = root
+    this.dataHome = home
     this.sources = (config.sources ?? [{ dir: join(home, 'extensions'), trust: 'install' }]).map(
       (source) => ({
         dir: resolve(source.dir),
@@ -660,7 +681,11 @@ export class Extensions extends Service {
   private saveState(): void {
     const records: Record<string, Record_> = {}
     for (const entry of this.installed.values())
-      records[entry.name] = { source: entry.source, version: entry.version, dir: entry.dir }
+      records[entry.name] = {
+        source: storedPath(entry.source, this.appRoot),
+        version: entry.version,
+        dir: storedPath(entry.dir, this.dataHome),
+      }
     mkdirSync(join(this.stateFile, '..'), { recursive: true })
     const temporary = `${this.stateFile}.${String(process.pid)}.tmp`
     writeFileSync(temporary, `${JSON.stringify(records, null, 2)}\n`)
@@ -857,6 +882,19 @@ export class Extensions extends Service {
     return summary
   }
 
+  /**
+   * A record with its paths made absolute: relative ones are read from this app's folder and data home, so a moved app finds its plugins. A record an older
+   * version wrote with an absolute source that is gone (the app was moved) finds the folder of the same name in one of the sources.
+   */
+  private resolved(name: string, stored: Record_): Record_ {
+    let source = restoredPath(stored.source, this.appRoot)
+    if (!existsSync(source)) {
+      const moved = this.sources.map((entry) => join(entry.dir, name)).find((path) => existsSync(path))
+      if (moved !== undefined) source = moved
+    }
+    return { source, version: stored.version, dir: restoredPath(stored.dir, this.dataHome) }
+  }
+
   private async startup(): Promise<StartupSummary> {
     if (this.readOnly) return this.startupReadOnly()
     const summary: StartupSummary = { installed: [], pending: [], stale: [], failed: [] }
@@ -867,11 +905,12 @@ export class Extensions extends Service {
     } catch (error) {
       summary.failed.push({ name: 'extensions.json', error: message(error) })
     }
-    for (const [name, record] of Object.entries(records)) {
+    for (const [name, stored] of Object.entries(records)) {
       // Switched off: not started, and dropped from the record; switched on again, its folder is found and installed as new.
       if (this.off.has(name)) continue
       // Now a row of blend.yaml: the app starts it, and the record of its install is dropped.
       if (this.rows.has(name)) continue
+      const record = this.resolved(name, stored)
       try {
         // What was installed before was approved then: an unchanged source starts again without asking.
         this.approved.set(name, record.version)

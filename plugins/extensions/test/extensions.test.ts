@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
@@ -17,11 +17,11 @@ afterEach(async () => {
 })
 
 async function boot(
-  options: { home?: string; sources?: (home: string) => ExtensionSource[] } = {},
+  options: { home?: string; root?: string; sources?: (home: string) => ExtensionSource[] } = {},
 ) {
   const home = options.home ?? mkdtempSync(join(tmpdir(), 'extensions-test-'))
   const root = new Context()
-  const chosen = pinnedInstance(home, { root: appRoot })
+  const chosen = pinnedInstance(home, { root: options.root ?? appRoot })
   const fibers = [
     root.plugin(instance, chosen),
     root.plugin(extensions, options.sources ? { sources: options.sources(home) } : {}),
@@ -184,6 +184,49 @@ test('a restart mounts what was installed; a trusted source installs new folders
   assert.deepEqual(summary.installed, ['greeter'])
   assert.deepEqual(summary.pending, ['later'])
   assert.equal(second.root.get('greeting'), 'hello')
+})
+
+test('the record names a plugin by its place in the app, so a moved app finds it again', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'extensions-test-'))
+  cleanup.unshift(() => rmSync(home, { recursive: true, force: true }))
+  const before = join(home, 'where-it-was')
+  const dir = join(before, 'plugins', 'hello')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    join(dir, 'index.ts'),
+    "export const name = 'hello'\nexport function apply(ctx: any) { ctx.provide('greeting', 'hi') }\n",
+  )
+  const sources = (root: string) => () => [{ dir: join(root, 'plugins'), trust: 'install' as const }]
+  const first = await boot({ home, root: before, sources: sources(before) })
+  await first.root.extensions.ready
+  assert.equal(first.root.get('greeting'), 'hi')
+  await first.stop()
+  // What was written names the folder inside the app and the staged copy inside the data home, with no absolute path of either.
+  const record = JSON.parse(readFileSync(join(home, 'extensions.json'), 'utf8')) as Record<
+    string,
+    { source: string; dir: string }
+  >
+  assert.equal(record.hello?.source, 'plugins/hello')
+  assert.equal(existsSync(join(home, record.hello?.dir ?? 'missing')), true)
+
+  // The app folder moves; its data home stays. The plugin starts from its folder at the new place, not from the old path or a stale copy.
+  const after = join(home, 'where-it-is')
+  renameSync(before, after)
+  const second = await boot({ home, root: after, sources: sources(after) })
+  const summary = await second.root.extensions.ready
+  assert.deepEqual([summary.installed, summary.stale], [['hello'], []])
+  assert.equal(second.root.extensions.list()[0]?.source, join(after, 'plugins', 'hello'))
+  await second.stop()
+
+  // A record an older version wrote (an absolute source that is gone) still finds the folder of the same name in the sources.
+  const written = JSON.parse(readFileSync(join(home, 'extensions.json'), 'utf8')) as Record<string, { source: string }>
+  writeFileSync(
+    join(home, 'extensions.json'),
+    JSON.stringify({ hello: { ...written.hello, source: join(before, 'plugins', 'hello') } }),
+  )
+  const third = await boot({ home, root: after, sources: sources(after) })
+  const old = await third.root.extensions.ready
+  assert.deepEqual([old.installed, old.stale], [['hello'], []])
 })
 
 test('disposing the plugin disposes every extension it mounted', async () => {
