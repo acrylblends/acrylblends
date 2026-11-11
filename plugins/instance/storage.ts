@@ -13,7 +13,6 @@
  * There is no per-OS rule: `acrylRoot` is `<home>/.acryl` everywhere, so what a person is told, types and finds is one thing. Nothing else in the product
  * reads the home folder or asks Electron for a path (scripts/lib/bulkhead.test.mjs). No file written here holds an absolute path: the root and the bundle can move.
  */
-import { randomBytes } from 'node:crypto'
 import {
   type Dirent,
   existsSync,
@@ -24,94 +23,30 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { lstat, readdir } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { join, posix, win32 } from 'node:path'
+import { join } from 'node:path'
 import { archiveName, exportArchive, importArchive } from './archive.ts'
-import { type AppInstance, AppInstanceError, productInstance } from './index.ts'
+import {
+  APPS_DIR,
+  AppInstanceError,
+  acrylRoot,
+  hasControlCharacter,
+  isAppId,
+  isPortableName,
+  newAppId,
+  pathOf,
+  personHome,
+} from './home.ts'
+import { type AppInstance, productInstance } from './index.ts'
+
+// The rule for where things are lives in home.ts; these are re-exported so the product code and its tests keep one import.
+export { APPS_DIR, acrylRoot, isAppId, isPortableName, newAppId, personHome }
 
 /** The layout this build writes and reads. A root with a lower one is migrated on open (a later slice); a higher one is refused. */
 export const LAYOUT_VERSION = 1
 export const LAYOUT_FILE = 'layout.json'
 export const REGISTRY_FILE = 'apps.json'
-export const APPS_DIR = 'apps'
 export const TRASH_DIR = 'trash'
 export const ELECTRON_DIR = 'electron'
-
-/** The person's home folder: the one place the product asks the OS for it. `HOME` (or `USERPROFILE` on Windows) wins, so an isolated run moves it. */
-export function personHome(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-  platform: NodeJS.Platform = process.platform,
-): string {
-  const fromEnv = (platform === 'win32' ? env.USERPROFILE : env.HOME)?.trim()
-  return fromEnv !== undefined && fromEnv !== '' ? fromEnv : homedir()
-}
-
-/** The path module of a platform, so a root computed for Windows on a Mac is a Windows path. */
-const pathOf = (platform: NodeJS.Platform) => (platform === 'win32' ? win32 : posix)
-
-/**
- * The root of everything ACRYL keeps for one person: `<home>/.acryl`, one short, predictable folder on every OS, as DeepSeek Harness keeps `<home>/.dsh`.
- * It is deliberately not the OS's application-data folder (Library/Application Support, AppData, .local/share): those differ per OS, hide the work, and
- * are not what a person types or finds. `ACRYL_HOME`, when it is an absolute path, moves the root (an isolated run, a test), as it moves ACRYL's own home.
- */
-export function acrylRoot(
-  platform: NodeJS.Platform,
-  env: Readonly<Record<string, string | undefined>>,
-  home: string,
-): string {
-  const path = pathOf(platform)
-  const pinned = env.ACRYL_HOME?.trim()
-  return pinned !== undefined && path.isAbsolute(pinned)
-    ? path.normalize(pinned)
-    : path.join(home, '.acryl')
-}
-
-/** Windows refuses these as a file or folder name, whatever the case and whatever follows a dot. */
-const RESERVED = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(\..*)?$/iu
-
-/** A control character (U+0000 to U+001F): never in a file name on Windows, never in a one-line label. */
-const hasControlCharacter = (text: string): boolean =>
-  [...text].some((character) => (character.codePointAt(0) ?? 0) < 0x20)
-
-/** A name every OS accepts as one path segment: no separators or characters Windows forbids, no trailing dot or space, not reserved, not too long. */
-export function isPortableName(name: string, maxLength: number): boolean {
-  return (
-    name.length > 0 &&
-    name.length <= maxLength &&
-    name.trim() === name &&
-    !name.endsWith('.') &&
-    !/[<>:"/\\|?*]/u.test(name) &&
-    !hasControlCharacter(name) &&
-    !RESERVED.test(name)
-  )
-}
-
-/** An app id: lower-case ASCII letters, digits and single dashes, 40 characters at most, never reserved. Compared as is (always lower-case). */
-export function isAppId(id: string): boolean {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id) && isPortableName(id, 40)
-}
-
-/**
- * A new app's id: the name, folded to ASCII lower-case and dashes, cut to 30 characters, then 4 random hex digits (`my-notes-3f2a`). The name stays a label;
- * renaming the app never moves its folder.
- */
-export function newAppId(
-  name: string,
-  random: () => string = () => randomBytes(2).toString('hex'),
-): string {
-  const base =
-    name
-      .normalize('NFKD')
-      .replace(/[̀-ͯ]/gu, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/gu, '-')
-      .slice(0, 30)
-      .replace(/^-+|-+$/gu, '') || 'app'
-  const id = `${base}-${random()}`
-  if (!isAppId(id))
-    throw new AppInstanceError(`could not make an app id from "${name}" (got "${id}")`)
-  return id
-}
 
 /** One app's folders. `logs` is inside `data` because the engine writes its logs to `<home>/logs`. */
 export interface ProductAppFolders {

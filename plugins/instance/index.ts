@@ -10,6 +10,9 @@
 import { createHash } from 'node:crypto'
 import { basename, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import { AppInstanceError, appHomes, personHome } from './home.ts'
+
+export { AppInstanceError }
 
 /** How the instance was chosen: from the project folder, a home the caller pinned, or an app of a desktop product's root (`storage.ts`). */
 export type AppInstanceKind = 'project' | 'pinned' | 'product'
@@ -42,7 +45,6 @@ export interface AppInstance {
   readonly runLockFile: string
 }
 
-export const HOME_DIR_NAME = '.acrylblends'
 export const RUN_LOCK_FILE = 'instance.json'
 export const PORT_BASE = 3100
 export const PORT_SPAN = 900
@@ -52,10 +54,6 @@ export const HOST_ENV = 'ACRYLBLENDS_HOST'
 /** The names hosting platforms set: used when `ACRYLBLENDS_PORT` and `ACRYLBLENDS_HOST` are not. */
 export const PLATFORM_PORT_ENV = 'PORT'
 export const PLATFORM_HOST_ENV = 'HOST'
-
-export class AppInstanceError extends Error {
-  override name = 'AppInstanceError'
-}
 
 /** FNV-1a over the id: stable across runs and platforms, spread over the app port range, so two apps rarely start on the same port. */
 export function stablePort(id: string): number {
@@ -95,18 +93,26 @@ function family(input: {
   })
 }
 
-/** The default: the project folder owns its data in `<project>/.acrylblends`. Two folders with one name get different ids. */
-export function projectInstance(projectRoot: string): AppInstance {
+/**
+ * The default: a folder made by `acryl new`. Its code is the folder; its data is `~/.acryl/apps/<id>/data` (`home.ts`, the one place that says so), with the
+ * id kept in the folder's own `.acryl/app.json`, so the data follows the app when the folder is moved and is not shared with a clone of it.
+ * The first call on a folder writes that file, so the folder must exist and be writable; tests pass `env` with `ACRYL_HOME` and `HOME` pointing at a scratch folder.
+ */
+export function projectInstance(
+  projectRoot: string,
+  env: Readonly<Record<string, string | undefined>> = {},
+  platform: NodeJS.Platform = process.platform,
+): AppInstance {
   const root = resolve(projectRoot)
   const name = plainName(root)
-  const id = `${name}-${digest(root, 4)}`
+  const folders = appHomes(root, platform, env, personHome(env, platform))
   return family({
     kind: 'project',
-    id,
+    id: folders.id,
     name,
     root,
-    home: join(root, HOME_DIR_NAME),
-    port: { start: stablePort(id), scan: true },
+    home: folders.data,
+    port: { start: stablePort(folders.id), scan: true },
   })
 }
 
@@ -171,7 +177,7 @@ export function selectInstance(options: {
   const pinned = env[HOME_ENV]?.trim()
   let instance = pinned
     ? pinnedInstance(pinned, { name: plainName(options.projectRoot), root: options.projectRoot })
-    : projectInstance(options.projectRoot)
+    : projectInstance(options.projectRoot, env)
   const port = env[PORT_ENV]?.trim() || env[PLATFORM_PORT_ENV]?.trim()
   if (port) instance = withPort(instance, Number(port))
   const host = env[HOST_ENV]?.trim() || env[PLATFORM_HOST_ENV]?.trim()
