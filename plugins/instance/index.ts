@@ -122,9 +122,14 @@ export function projectInstance(
     )
   else if (moved.status === 'refused') process.stderr.write(`acrylblends: ${moved.reason}\n`)
   // The folder was moved or renamed since the last start: its chats (filed by the folder they work in) are brought along, once.
-  const followed = followFolder(folders.data, root)
-  if (followed !== undefined && (followed.sessions || followed.workspaces > 0 || followed.branchChats))
-    process.stderr.write(`acrylblends: this app's folder moved, so its chats were attached to ${root}\n`)
+  // Never stops the app: chats that could not be attached are left as they were, and the app starts.
+  try {
+    const followed = followFolder(folders.data, root)
+    if (followed !== undefined && (followed.sessions || followed.workspaces > 0 || followed.branchChats))
+      process.stderr.write(`acrylblends: this app's folder moved, so its chats were attached to ${root}\n`)
+  } catch (cause) {
+    process.stderr.write(`acrylblends: could not attach this app's chats to ${root}: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+  }
   return family({
     kind: 'project',
     id: folders.id,
