@@ -4,11 +4,15 @@
  * chosen; the Host then starts the app's plugins again, and the canvas loads the app page again.
  */
 
+import { failureOf } from './plain-failure.ts'
 import { FRAME_PLUGINS_PATH, FRAME_PLUGINS_SAVE_PATH, FRAME_PLUGINS_SHARE_PATH, FRAME_PLUGINS_SHARE_PLAN_PATH, FRAME_PLUGINS_SWITCH_PATH, parseAppPluginsView, parseSavedPlugin, parseSharePlan, type AppPluginKind, type AppPluginsView, type AppPluginView, type FramePluginView, type SavedPluginResult, type SavedPluginView, type ShareVisibility, type SharedPluginView, type SharePlan } from '../contract.ts'
+
+/** Where a share goes: a private repository (the team), a public one (everyone), or a public one the registry lists. */
+export type ShareTarget = ShareVisibility | 'registry'
 
 /** Sharing a local plugin: first what it would do, then, on the person's yes, exactly that. */
 export interface PluginShare {
-  plan(visibility?: ShareVisibility): Promise<SharePlan>
+  plan(target?: ShareTarget): Promise<SharePlan>
   publish(confirmed: SharePlan): Promise<SharedPluginView>
 }
 
@@ -26,15 +30,52 @@ export function pullCommand(shared: SharedPluginView): string | undefined {
   return where === null ? undefined : `npm run acryl -- plugin pull github:${where[1] ?? ''}/${where[2] ?? ''}@${shared.version}`
 }
 
-/** The question a share asks before anything is sent: the repository, whether it is created, the version and who can see it. */
+/** What to send a colleague so they can add a shared plugin: the address the Registry tab's "Add by address" takes. */
+export function colleagueAddress(shared: SharedPluginView): string | undefined {
+  const where = /^https:\/\/github\.com\/([^/]+)\/([^/#?]+)/u.exec(shared.url)
+  return where === null ? undefined : `github:${where[1] ?? ''}/${where[2] ?? ''}@${shared.version}`
+}
+
+/**
+ * The question a share asks before anything is sent, in plain words: who will be able to use the plugin, and (for a repeated share) that this is the next
+ * version. Nothing technical: the repository, license and labels are in {@link shareDetails}.
+ */
 export function shareQuestion(plan: SharePlan): string {
+  const name = plan.repo
+  const who = plan.registry === true
+    ? `List ${name} in the public registry? Anyone can search for it and add it with one click.`
+    : plan.visibility === 'public'
+      ? `Share ${name} with everyone? Anyone can find it and add it to their own app.`
+      : `Share ${name} with your team? Only people you invite can add it.`
+  const next = plan.released === undefined ? '' : ` This sends version ${plan.version}, because ${plan.released} was already shared.`
+  return `${who} It is kept on your GitHub account, ${plan.owner}.${next}`
+}
+
+/** The words on the one big button that confirms a share. */
+export function shareButton(plan: SharePlan): string {
+  return plan.registry === true ? 'List in the registry' : plan.visibility === 'public' ? 'Share with everyone' : 'Share with my team'
+}
+
+/** The exact sentence of what a share does, for the "Details" of the confirmation: the repository, whether it is created, the version and who can see it. */
+export function shareSentence(plan: SharePlan): string {
   const where = `${plan.owner}/${plan.repo}`
   const what = plan.createsRepository
     ? `Create repository ${where} on GitHub and publish v${plan.version}?`
     : `Publish v${plan.version} to ${where} on GitHub?`
   const released = plan.released === undefined ? '' : ` v${plan.released} is released there, so this is the next version.`
   const who = plan.visibility === 'public' ? `public, under the ${plan.license ?? 'MIT'} license: anyone can read it and pull it into their own app` : 'private'
-  return `${what}${released} It will be ${who}.`
+  const listed = plan.registry === true ? ' It will be listed in the public Cordis plugin registry.' : ''
+  return `${what}${released} It will be ${who}.${listed}`
+}
+
+/** What a developer wants to see behind "Details": where it goes and under what terms. One short line each. */
+export function shareDetails(plan: SharePlan): string[] {
+  return [
+    shareSentence(plan),
+    `Repository: ${plan.owner}/${plan.repo} on GitHub (${plan.createsRepository ? 'a new one' : 'it exists'}), ${plan.visibility}`,
+    ...(plan.license === undefined ? [] : [`License: ${plan.license}`]),
+    ...(plan.registry === true ? ['Topic: cordis-plugin, which cordisplugins.github.io lists within about an hour'] : []),
+  ]
 }
 
 /** Which filter chip a plugin falls under. */
@@ -131,28 +172,20 @@ export interface AppPluginsApi {
   read(): Promise<AppPluginsView>
   switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
   /** What sharing one local plugin would do (private unless `visibility` says public); nothing is sent. */
-  planShare(name: string, visibility?: ShareVisibility): Promise<SharePlan>
+  planShare(name: string, target?: ShareTarget): Promise<SharePlan>
   /** Share one local plugin as the person confirmed it; answers where it went. */
   share(name: string, confirmed: SharePlan): Promise<SharedPluginView>
   /** Keep a packed copy of one local plugin on this machine. */
   save(name: string): Promise<SavedPluginResult>
 }
 
-async function errorOf(response: Response): Promise<string> {
-  try {
-    const body = await response.json() as { error?: unknown }
-    if (typeof body.error === 'string') return body.error
-  } catch {
-    // Not JSON: the status says it.
-  }
-  return `the request failed (HTTP ${String(response.status)})`
-}
+const errorOf = async (response: Response): Promise<never> => { throw await failureOf(response) }
 
 export function createAppPluginsApi(fetcher: FetchLike = (input, init) => fetch(input, init)): AppPluginsApi {
   return {
     async read() {
       const response = await fetcher(FRAME_PLUGINS_PATH, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
-      if (!response.ok) throw new Error(await errorOf(response))
+      if (!response.ok) return errorOf(response)
       return parseAppPluginsView(await response.json())
     },
     async switch(kind, name, on) {
@@ -162,16 +195,16 @@ export function createAppPluginsApi(fetcher: FetchLike = (input, init) => fetch(
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ kind, name, on }),
       })
-      if (!response.ok) throw new Error(await errorOf(response))
+      if (!response.ok) return errorOf(response)
     },
-    async planShare(name, visibility) {
+    async planShare(name, target) {
       const response = await fetcher(FRAME_PLUGINS_SHARE_PLAN_PATH, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(visibility === undefined ? { name } : { name, visibility }),
+        body: JSON.stringify(target === undefined ? { name } : target === 'registry' ? { name, registry: true } : { name, visibility: target }),
       })
-      if (!response.ok) throw new Error(await errorOf(response))
+      if (!response.ok) return errorOf(response)
       return parseSharePlan(await response.json())
     },
     async save(name) {
@@ -181,7 +214,7 @@ export function createAppPluginsApi(fetcher: FetchLike = (input, init) => fetch(
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ name }),
       })
-      if (!response.ok) throw new Error(await errorOf(response))
+      if (!response.ok) return errorOf(response)
       return parseSavedPlugin(await response.json())
     },
     async share(name, confirmed) {
@@ -191,7 +224,7 @@ export function createAppPluginsApi(fetcher: FetchLike = (input, init) => fetch(
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ name, confirm: confirmed }),
       })
-      if (!response.ok) throw new Error(await errorOf(response))
+      if (!response.ok) return errorOf(response)
       const body = await response.json() as Record<string, unknown>
       if (typeof body['url'] === 'string' && typeof body['version'] === 'string') return { url: body['url'], version: body['version'] }
       throw new Error('the share answered without its repository')

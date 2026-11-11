@@ -24,6 +24,8 @@ import * as workspaceHost from 'acryl-workspace'
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import { ghRepositoryCheck, githubSharePorts, planAppPluginShare, readAppPlugins, readFramePlugins, saveAppPlugin, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
+import { githubReadiness, PlainError, plainPullRefusal, plainShareProblem, type Plain } from './plain.ts'
+import { bareName, createRegistryReader, pluginShareOf, readRegistryView, repoOfSource, type RegistryMarks } from './registry.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
 import { AppReloader, type AppRow } from './app-reload.ts'
@@ -51,7 +53,10 @@ import {
   FRAME_GIT_PUSH_PLAN_PATH,
   FRAME_GIT_REMOTE_PATH,
   FRAME_SNAPSHOT_CAPTURE_PATH,
+  FRAME_PLUGINS_GITHUB_PATH,
   FRAME_PLUGINS_PATH,
+  FRAME_PLUGINS_PULL_PATH,
+  FRAME_PLUGINS_REGISTRY_PATH,
   FRAME_PLUGINS_SAVE_PATH,
   FRAME_PLUGINS_SHARE_PATH,
   FRAME_PLUGINS_SHARE_PLAN_PATH,
@@ -66,12 +71,15 @@ import {
   parseFeedbackNotes,
   parsePushPlan,
   parseSharePlan,
+  type PulledPluginView,
   type PushPlan,
+  type RegistryView,
   type SavedPluginResult,
   type SharePlan,
   type ShareVisibility,
   type FrameBranch,
   type FrameState,
+  type GithubReadiness,
   type GitRemoteState,
   type GitSyncResult,
 } from './contract.ts'
@@ -224,11 +232,25 @@ export interface PluginsPort {
   read(): Promise<AppPluginsView>
   switch(kind: AppPluginKind, name: string, on: boolean): Promise<void>
   /** What sharing one local plugin would do (repository, version, visibility); nothing is sent. */
-  planShare(name: string, visibility?: ShareVisibility): Promise<SharePlan>
+  planShare(name: string, visibility?: ShareVisibility, registry?: boolean): Promise<SharePlan>
   /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path: only the plan the person confirmed. */
   share(name: string, confirmed: SharePlan): Promise<ShareAppPluginResult>
   /** Keep a packed copy of one local plugin on this machine (the app's plugin store); nothing leaves the machine. */
   save(name: string): Promise<SavedPluginResult>
+  /** The public registry (cordisplugins.github.io), each entry marked with what this app has. Unreadable is an answer, not a failure. */
+  registry(): Promise<RegistryView>
+  /** Add one released plugin (`github:<owner>/<repo>@<version>`) to the running app, through the app's plugin-share checks. @throws PlainError when it is refused. */
+  pull(source: string): Promise<PulledPluginView>
+  /** Whether this computer can share to GitHub now; read before the person is asked anything. */
+  github(): Promise<GithubReadiness>
+}
+
+/** The only address a page may ask to add: a released plugin of a GitHub account, by version (never a local file or another URL). */
+const REGISTRY_SOURCE = /^github:[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9][A-Za-z0-9._-]*@[0-9][0-9A-Za-z.+-]*$/u
+
+/** What a failed route answers: the plain sentence, and for a developer the tool's own text (the page shows it behind "Details"). */
+function plainBody(plain: Plain): { error: string; details?: string } {
+  return { ...error(plain.say), ...(plain.details === undefined ? {} : { details: plain.details }) }
 }
 
 function parseSwitch(body: unknown): { kind: AppPluginKind; name: string; on: boolean } | undefined {
@@ -571,10 +593,11 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
       if (name === undefined) return c.json(error('name one local plugin'), 400)
       try {
         const asked = (body as Record<string, unknown>).visibility
-        return c.json(await plugins.planShare(name, asked === 'public' || asked === 'private' ? asked : undefined))
+        const listed = (body as Record<string, unknown>).registry === true
+        return c.json(await plugins.planShare(name, listed ? 'public' : asked === 'public' || asked === 'private' ? asked : undefined, listed))
       } catch (cause) {
         report(cause)
-        return c.json(error(cause instanceof Error ? cause.message : 'the share could not be planned'), 409)
+        return c.json(plainBody(plainShareProblem(cause)), 409)
       }
     })
     // A save stays on this machine, so it needs no confirmation beyond the click.
@@ -586,7 +609,7 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(await plugins.save(name))
       } catch (cause) {
         report(cause)
-        return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be saved'), 409)
+        return c.json(plainBody({ say: 'The plugin could not be kept on this computer. Nothing was changed.', details: cause instanceof Error ? cause.message : String(cause) }), 409)
       }
     })
     // A share leaves the machine under the person's name: it publishes only a plan they confirmed, never on a bare request.
@@ -605,7 +628,36 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(await plugins.share(name, confirmed))
       } catch (cause) {
         report(cause)
-        return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be shared'), 409)
+        return c.json(plainBody(plainShareProblem(cause)), 409)
+      }
+    })
+    app.get(FRAME_PLUGINS_GITHUB_PATH, ownPage, async (c) => {
+      try {
+        return c.json(await plugins.github())
+      } catch (cause) {
+        report(cause)
+        return c.json(error('GitHub could not be checked'), 500)
+      }
+    })
+    app.get(FRAME_PLUGINS_REGISTRY_PATH, ownPage, async (c) => {
+      try {
+        return c.json(await plugins.registry())
+      } catch (cause) {
+        report(cause)
+        return c.json(error('The registry could not be read.'), 500)
+      }
+    })
+    // Adding a plugin runs another person's code in the app: the page asks only after the person said yes, and only for a released plugin by address.
+    app.post(FRAME_PLUGINS_PULL_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const source = body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : (body as Record<string, unknown>).source
+      if (typeof source !== 'string' || !REGISTRY_SOURCE.test(source)) return c.json(error('That address is not one this app can add a plugin from.'), 400)
+      try {
+        return c.json(await plugins.pull(source))
+      } catch (cause) {
+        if (cause instanceof PlainError) return c.json(plainBody(cause.plain), 409)
+        report(cause)
+        return c.json(plainBody({ say: 'The plugin could not be added. Nothing was changed.', details: cause instanceof Error ? cause.message : String(cause) }), 409)
       }
     })
   }
@@ -829,9 +881,34 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       },
       // A local plugin goes to GitHub through the plugin-hub path: the same pack, secret check, repository, release and local store an
       // ACRYL plugin share uses, with the user's own gh and git doing the publishing.
-      planShare: async (name, visibility) => planAppPluginShare(root, ctx.appInstance.home, name, { ...shareTo, ...(visibility === undefined ? {} : { visibility }) }, githubSharePorts()),
+      planShare: async (name, visibility, registry) => planAppPluginShare(root, ctx.appInstance.home, name, { ...shareTo, ...(visibility === undefined ? {} : { visibility }), ...(registry === true ? { registry } : {}) }, githubSharePorts()),
       share: async (name, confirmed) => shareAppPlugin(root, ctx.appInstance.home, name, confirmed, shareTo, githubSharePorts()),
       save: async (name) => saveAppPlugin(root, ctx.appInstance.home, name),
+      github: async () => githubReadiness(() => githubSharePorts().host.login()),
+      registry: async () => readRegistryView(registryRead, async () => registryMarks()),
+      pull: async (source) => {
+        const share = pluginShareOf(() => ctx.get('pluginShare'))
+        if (share === undefined) throw new PlainError({ say: "This app cannot add plugins: its plugin sharing part is switched off. Switch it on in Settings > Plugins, then try again." })
+        const answer = await share.pull(source)
+        if (!answer.ok) throw new PlainError(plainPullRefusal(answer.refusal, answer.reason, answer.next))
+        return { name: answer.name, version: answer.version, action: answer.action, state: answer.state }
+      },
+    }
+    // The registry's index, read once in a while by this Host; what the app already has and who the person is mark the rows.
+    const registryRead = createRegistryReader((input, init) => fetch(input, init))
+    let signedIn: { readonly at: number; readonly account: string | undefined } | undefined
+    const registryMarks = async (): Promise<RegistryMarks> => {
+      const share = pluginShareOf(() => ctx.get('pluginShare'))
+      const listed = share?.list() ?? []
+      const names = new Set<string>([...frameRows().map(row => bareName(row.name)), ...listed.map(info => bareName(info.name))])
+      const repos = new Set<string>(listed.flatMap(info => (info.pulledFrom === undefined ? [] : [repoOfSource(info.pulledFrom) ?? ''])).filter(repo => repo !== ''))
+      // Who the person is on GitHub: the share account, else the one signed in (asked at most once a minute; no one signed in is no account).
+      if (signedIn === undefined || Date.now() - signedIn.at > 60_000) {
+        const ready = githubReadiness(() => githubSharePorts().host.login())
+        signedIn = { at: Date.now(), account: ready.status === 'ready' ? ready.account : undefined }
+      }
+      const accounts = new Set<string>([...(shareOwner === undefined ? [] : [shareOwner.toLowerCase()]), ...(signedIn.account === undefined ? [] : [signedIn.account.toLowerCase()])])
+      return { names, repos, accounts }
     }
     // The chat's agent finished a turn that changed files: save a version by itself (./auto-save.ts), and remember which turn it was.
     const store = new SaveStore(join(ctx.appInstance.dshHome, 'chat-saves.json'), report)

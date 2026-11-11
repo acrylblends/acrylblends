@@ -291,6 +291,27 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsShareChooser li button:disabled { opacity: .5; cursor: default; }
 .acrylBlendsShareLater { margin: 0 0 8px; color: var(--bf-faint); font-size: 11px; }
 
+.acrylBlendsShareAsk p { margin: 0; color: var(--bf-warn); font-size: 12px; }
+.acrylBlendsShareRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.acrylBlendsShareDetails { margin: 6px 0 0; padding-left: 16px; color: var(--bf-dim); font-size: 11px; }
+.acrylBlendsShareChooser .acrylBlendsShareAsk { display: block; margin-top: 0; }
+.acrylBlendsShareChooser .acrylBlendsNote[data-warn] { color: var(--bf-warn); }
+.acrylBlendsDetailsText { margin: 4px 0 0; padding: 6px 8px; border-radius: 5px; background: rgb(127 127 127 / 12%); color: var(--bf-text-2); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.acrylBlendsPluginsTabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 1px solid var(--bf-border); }
+.acrylBlendsPluginsTabs button { padding: 5px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--bf-dim); font: inherit; font-size: 12.5px; cursor: pointer; }
+.acrylBlendsPluginsTabs button[aria-selected="true"] { color: var(--bf-strong); border-bottom-color: var(--bf-accent); }
+.acrylBlendsRegRow { display: grid; gap: 3px; padding: 9px 10px; border: 1px solid var(--bf-border); border-radius: 8px; margin-bottom: 6px; }
+.acrylBlendsRegRow[data-installed] { opacity: .8; }
+.acrylBlendsRegHead { display: flex; align-items: center; gap: 8px; }
+.acrylBlendsRegHead b { color: var(--bf-strong); font-weight: 600; font-size: 12.5px; margin-right: auto; }
+.acrylBlendsRegRow small, .acrylBlendsRegByAddress small { color: var(--bf-dim); font-size: 11.5px; overflow-wrap: anywhere; }
+.acrylBlendsRegDetails code { font-size: 11px; color: var(--bf-text-2); user-select: all; }
+.acrylBlendsRegAdd { padding: 3px 10px; border: 1px solid var(--bf-accent); border-radius: 5px; background: var(--bf-accent-dim); color: var(--bf-strong); font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.acrylBlendsRegAdd:disabled { opacity: .5; cursor: default; }
+.acrylBlendsRegAdded { color: var(--bf-ok); font-size: 11.5px; }
+.acrylBlendsRegAll { color: var(--bf-text-2); font-size: 11.5px; display: inline-flex; align-items: center; cursor: pointer; }
+.acrylBlendsRegByAddress { display: grid; gap: 3px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--bf-border); }
+.acrylBlendsRegByAddress b { color: var(--bf-strong); font-size: 12px; }
 .acrylBlendsTog { grid-row: 1 / span 2; grid-column: 3; width: 30px; height: 17px; border: 0; padding: 0; border-radius: 99px; background: var(--bf-toggle-off); position: relative; cursor: pointer; }
 .acrylBlendsTog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: left .12s ease; }
 .acrylBlendsTog[aria-checked="true"] { background: var(--bf-accent); }

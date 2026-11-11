@@ -31,6 +31,7 @@ import { attachDraft, draftInChat } from './chat-draft.ts'
 import type { FeedbackPort } from './LeftPanel.tsx'
 import { appPluginRow, createAppPluginsApi, framePluginRow, type NavigatorPlugin } from './plugins-navigator.ts'
 import { PluginsSection } from './PluginsSection.tsx'
+import { createRegistryApi } from './registry-api.ts'
 import { SelectionChip, type SelectionChipInjected } from './SelectionChip.tsx'
 import { SelectionStore, carriesSelection, handOffSelection } from './selection.ts'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
@@ -316,6 +317,7 @@ export function apply(ctx: ClientContext): void {
 
   // Settings → Plugins: the app's plugins, each with its switch, and the frame's own; the Host starts the app's plugins again after a switch.
   const appPlugins = createAppPluginsApi()
+  const registry = createRegistryApi()
   // View source: the plugin's main file opens as a tab of the right panel's Files tool, which is shown if it was hidden.
   const sourceAction = (main: string | undefined): (() => void) | undefined => main === undefined ? undefined : () => {
     view.showRight()
@@ -332,7 +334,7 @@ export function apply(ctx: ClientContext): void {
             await appPlugins.switch(plugin.kind, plugin.name, on)
             canvas.reload()
           },
-          plugin.kind === 'made' ? { plan: visibility => appPlugins.planShare(plugin.name, visibility), publish: confirmed => appPlugins.share(plugin.name, confirmed) } : undefined,
+          plugin.kind === 'made' ? { plan: target => appPlugins.planShare(plugin.name, target), publish: confirmed => appPlugins.share(plugin.name, confirmed) } : undefined,
           undefined,
           {
             ...(plugin.kind === 'made' ? { save: () => appPlugins.save(plugin.name) } : {}),
@@ -359,7 +361,7 @@ export function apply(ctx: ClientContext): void {
         order: 45,
         label: () => t('plugins'),
         locale: LOCALE_NAMESPACE,
-        inject: () => ({ loadPlugins }),
+        inject: () => ({ loadPlugins, registry }),
       }, PluginsSection))
     },
   })
