@@ -24,6 +24,8 @@ import * as workspaceHost from 'acryl-workspace'
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import { ghRepositoryCheck, githubSharePorts, planAppPluginShare, readAppPlugins, readFramePlugins, saveAppPlugin, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
+import { FRAME_GRAPH_EVENTS_PATH, FRAME_GRAPH_PATH } from './graph-contract.ts'
+import { createGraphPort, type GraphPort } from './plugin-graph.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
 import { AppReloader, type AppRow } from './app-reload.ts'
@@ -357,6 +359,8 @@ export interface FrameRoutesDeps {
   readonly state: () => Promise<FrameState>
   readonly report?: (cause: unknown) => void
   readonly plugins?: PluginsPort
+  /** The Host's plugin graph and the changes of its fibers (Settings > Plugins > Graph). */
+  readonly graph?: GraphPort
   readonly feedback?: FeedbackPort
   readonly branches?: BranchesPort
   readonly branchChats?: BranchChatsPort
@@ -373,7 +377,7 @@ export interface FrameRoutesDeps {
   readonly selection?: SelectionInbox
 }
 
-export function frameRoutes({ state, report = () => {}, plugins, feedback, branches, branchChats, chatSaves, shared, realChats, gitSync, snapshot, appReload, selection }: FrameRoutesDeps): Acryl {
+export function frameRoutes({ state, report = () => {}, plugins, graph, feedback, branches, branchChats, chatSaves, shared, realChats, gitSync, snapshot, appReload, selection }: FrameRoutesDeps): Acryl {
   const app = new Acryl()
   if (appReload !== undefined) {
     app.get(FRAME_APP_PATH, ownPage, async (c) => {
@@ -541,6 +545,22 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         report(cause)
         return c.json(error('the screenshot could not be read'), 500)
       }
+    })
+  }
+  if (graph !== undefined) {
+    app.get(FRAME_GRAPH_PATH, ownPage, async (c) => {
+      try {
+        return c.json(graph.read())
+      } catch (cause) {
+        report(cause)
+        return c.json(error('the plugin graph could not be read'), 500)
+      }
+    })
+    // Waits for the next fiber change when there is none after `after`: a change reaches the browser as it happens, with no timer asking in between.
+    app.get(FRAME_GRAPH_EVENTS_PATH, ownPage, async (c) => {
+      const after = Number(c.req.query('after') ?? '0')
+      if (!Number.isInteger(after) || after < 0) return c.json(error('name the last event number you have'), 400)
+      return c.json(await graph.events(after, c.req.raw.signal))
     })
   }
   if (plugins !== undefined) {
@@ -809,6 +829,8 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       const [appName, branches, worktree, upstream] = await Promise.all([readAppName(root), readBranches(git, root), readWorktree(git, root), upstreamHead(git, root)])
       return { appName, appRoot: root, ...(appPage === undefined ? {} : { appPage }), branches, ...worktree, ...(upstream === undefined ? {} : { upstreamHead: upstream }) }
     }
+    // The plugin graph of this Host's context, and the recording of its fibers' changes that the browser waits on.
+    const graph = createGraphPort(ctx, root)
     const frameRows = (): FrameRow[] => {
       const loader = ctx.get('loader')
       if (loader === undefined) return []
@@ -890,6 +912,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
         ctx.logger.error(`acryl-blends-frame: request failed: ${cause instanceof Error ? cause.message : String(cause)}`)
       },
       plugins,
+      graph: graph.port,
       // The app's feedback service may be isolated to its own composition (the template isolates it under the app-plugins row); read it from that
       // row's scope first, then from the frame's own, so both an isolated and an unisolated app answer.
       feedback: feedbackPort(() => {
@@ -938,6 +961,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     // The snapshot verbs for the agent's tools (acryl-app-context), on the same git runner and queue as the left panel's buttons.
     const stopSnapshot = ctx.reflect.provide('appSnapshot', snapshot)
     return () => {
+      graph.stop()
       void stopSnapshot()
       stopListening()
       stopGuard()

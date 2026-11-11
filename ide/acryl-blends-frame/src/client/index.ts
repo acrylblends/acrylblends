@@ -35,6 +35,9 @@ import { SelectionChip, type SelectionChipInjected } from './SelectionChip.tsx'
 import { SelectionStore, carriesSelection, handOffSelection } from './selection.ts'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
+import { inspectCordisContext } from '../graph-inspect.ts'
+import { createGraphApi } from './graph-api.ts'
+import type { GraphViewInjected } from './GraphView.tsx'
 import { FILES_TAB, fileTab, FrameTabs, tabOfTerminal } from './tabs.ts'
 import { SwitchRequests } from './switch-request.ts'
 import { createFrameTools, installXtermStyles } from './tools.ts'
@@ -346,6 +349,27 @@ export function apply(ctx: ClientContext): void {
       }),
     ]
   }
+  // Settings → Plugins → Graph: the Host's plugins (the app's and the frame's) from the Host's routes, the browser's own from this context. Opening a plugin's
+  // code is a tab of the Files tool, shown if it was hidden; the path is from the app's folder.
+  const graph: GraphViewInjected = {
+    api: createGraphApi(),
+    client: {
+      inspect: () => inspectCordisContext(ctx, 'client'),
+      subscribe: (listener) => {
+        const phase = ['pending', 'loading', 'active', 'failed', 'disposed', 'unloading'] as const
+        const named = (fiber: { readonly name: string }): string => fiber.name
+        const offPlugin = ctx.root.on('internal/plugin', (fiber) => { listener({ uid: fiber.uid ?? 0, name: named(fiber), kind: fiber.uid === null ? 'removed' : 'created' }) })
+        const offStatus = ctx.root.on('internal/status', (fiber, before) => {
+          listener({ uid: fiber.uid ?? 0, name: named(fiber), kind: 'status', from: phase[before] ?? 'pending', to: phase[fiber.state] ?? 'pending' })
+        })
+        return () => { offPlugin(); offStatus() }
+      },
+    },
+    openSource: (path) => {
+      view.showRight()
+      tabs.open(fileTab(path))
+    },
+  }
   ctx.plugin({
     name: 'acryl-blends-frame-plugins-settings',
     inject: ['slots', 'locale'],
@@ -359,7 +383,7 @@ export function apply(ctx: ClientContext): void {
         order: 45,
         label: () => t('plugins'),
         locale: LOCALE_NAMESPACE,
-        inject: () => ({ loadPlugins }),
+        inject: () => ({ loadPlugins, graph }),
       }, PluginsSection))
     },
   })

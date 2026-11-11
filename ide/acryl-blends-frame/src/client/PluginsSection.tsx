@@ -2,11 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { SharePlan, ShareVisibility } from '../contract.ts'
+import { GraphView, type GraphViewInjected } from './GraphView.tsx'
+import { installGraphStyles } from './graph-styles.ts'
 import { filterPlugins, pullCommand, shareQuestion, type NavigatorPlugin, type PluginGroup } from './plugins-navigator.ts'
 
 export interface PluginsSectionInjected {
   /** Every plugin of the app and the frame, read fresh. */
   readonly loadPlugins: () => Promise<readonly NavigatorPlugin[]>
+  /** What the Graph view reads and does; absent, the page is the list alone. */
+  readonly graph?: GraphViewInjected
 }
 
 /** What the Settings shell hands a section: `close` leaves Settings (View source shows the file in the frame, behind the dialog). */
@@ -36,7 +40,9 @@ type Load =
   | { readonly status: 'ready'; readonly plugins: readonly NavigatorPlugin[] }
   | { readonly status: 'error'; readonly message: string }
 
-export function PluginsSection({ loadPlugins, close }: PluginsSectionInjected & PluginsSectionOwner) {
+export function PluginsSection({ loadPlugins, graph, close }: PluginsSectionInjected & PluginsSectionOwner) {
+  const [view, setView] = useState<'list' | 'graph'>('list')
+  useEffect(() => (graph === undefined ? undefined : installGraphStyles()), [graph !== undefined])
   const [load, setLoad] = useState<Load>({ status: 'loading' })
   const [query, setQuery] = useState('')
   const [group, setGroup] = useState<PluginGroup | 'all'>('all')
@@ -153,6 +159,13 @@ export function PluginsSection({ loadPlugins, close }: PluginsSectionInjected & 
     <div className="acrylBlendsPlugins">
       <h3>Plugins</h3>
       <p className="acrylBlendsPluginsSub">Everything this app is made of. Agents add features as Cordis plugins; each one can be switched off or replaced.</p>
+      {graph !== undefined && (
+        <div className="acrylBlendsPluginsViews" role="group" aria-label="How to see the plugins">
+          <button type="button" className="acrylBlendsChip" aria-pressed={view === 'list'} onClick={() => { setView('list') }}>List</button>
+          <button type="button" className="acrylBlendsChip" aria-pressed={view === 'graph'} onClick={() => { setView('graph') }}>Graph</button>
+        </div>
+      )}
+      {graph !== undefined && view === 'graph' ? <GraphView {...graph} /> : <>
       <div className="acrylBlendsPluginsTools">
         <input className="acrylBlendsSearch" aria-label="Search plugins" placeholder="Search plugins" value={query} onChange={(event) => { setQuery(event.target.value) }} />
         {CHIPS.map(chip => (
@@ -281,6 +294,7 @@ export function PluginsSection({ loadPlugins, close }: PluginsSectionInjected & 
           </div>
         )
       })}
+      </>}
     </div>
   )
 }
