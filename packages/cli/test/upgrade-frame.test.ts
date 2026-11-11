@@ -160,7 +160,7 @@ describe('upgrading a pre-frame app to the host layout', () => {
     const { code, out } = await runUpgrade(root)
     expect(code).toBe(0)
     expect(read(root, 'src/routes.ts')).toBe(edited)
-    expect(existsSync(join(root, '.acrylblends', 'upgrade-backup', 'src', 'routes.ts'))).toBe(false)
+    expect(existsSync(join(root, '.acryl', 'upgrade-backup', 'src', 'routes.ts'))).toBe(false)
     expect(out()).toMatch(
       /src\/routes\.ts kept as the app's \(edited\): it does not export FRAME_MOUNT_PREFIX, so the frame cannot show the app until it does/u,
     )
@@ -246,8 +246,8 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(forced.code).toBe(0)
     expect(read(root, 'src/app.ts')).not.toContain('// mine')
     expect(read(root, 'src/app.ts')).toContain('export async function composeInto')
-    expect(forced.out()).toMatch(/saved in \.acrylblends\/upgrade-backup\//u)
-    const backups = join(root, '.acrylblends', 'upgrade-backup')
+    expect(forced.out()).toMatch(/saved in \.acryl\/upgrade-backup\//u)
+    const backups = join(root, '.acryl', 'upgrade-backup')
     expect(existsSync(backups)).toBe(true)
   })
 
