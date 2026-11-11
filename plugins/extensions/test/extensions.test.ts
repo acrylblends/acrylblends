@@ -290,6 +290,8 @@ test('a plugin installed live gets its row in blend.yaml, so the app is blend.ya
   assert.deepEqual(second.root.extensions.list(), [])
   assert.deepEqual(JSON.parse(readFileSync(join(home, 'data', 'extensions.json'), 'utf8')), {})
   await second.stop()
+})
+
 test('a restart after a refused update runs the version that worked, from its staged copy', async () => {
   const home = mkdtempSync(join(tmpdir(), 'extensions-test-'))
   cleanup.unshift(() => rmSync(home, { recursive: true, force: true }))
