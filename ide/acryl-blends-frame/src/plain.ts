@@ -31,7 +31,7 @@ export const GITHUB_MISSING: GithubReadiness = {
 
 export const GITHUB_SIGNED_OUT: GithubReadiness = {
   status: 'signed-out',
-  say: `Sign in to GitHub once: open the Terminal and run the line below, then come back here. ${KEEP_HERE}`,
+  say: `Sign in to GitHub once: open the Terminal and run the command below, then come back here. ${KEEP_HERE}`,
   command: 'gh auth login',
 }
 

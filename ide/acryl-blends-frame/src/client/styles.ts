@@ -296,6 +296,8 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsShareDetails { margin: 6px 0 0; padding-left: 16px; color: var(--bf-dim); font-size: 11px; }
 .acrylBlendsShareChooser .acrylBlendsShareAsk { display: block; margin-top: 0; }
 .acrylBlendsShareChooser .acrylBlendsNote[data-warn] { color: var(--bf-warn); }
+.acrylBlendsCommand { display: block; margin-top: 4px; }
+.acrylBlendsCommand code { padding: 1px 6px; border-radius: 4px; background: rgb(127 127 127 / 16%); color: var(--bf-strong); user-select: all; }
 .acrylBlendsDetailsText { margin: 4px 0 0; padding: 6px 8px; border-radius: 5px; background: rgb(127 127 127 / 12%); color: var(--bf-text-2); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .acrylBlendsPluginsTabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 1px solid var(--bf-border); }
 .acrylBlendsPluginsTabs button { padding: 5px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--bf-dim); font: inherit; font-size: 12.5px; cursor: pointer; }

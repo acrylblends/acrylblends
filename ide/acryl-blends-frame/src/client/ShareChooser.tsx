@@ -175,9 +175,10 @@ function GithubNote({ github, copy }: { readonly github: Github; readonly copy: 
       {github.say}
       {github.status === 'signed-out' && (
         <>
-          {' '}
-          <code>{github.command}</code>{' '}
-          <button type="button" className="acrylBlendsShareButton" onClick={() => { void copy(github.command).then(setCopied) }}>{copied ? 'Copied' : 'Copy'}</button>
+          <span className="acrylBlendsCommand">
+            <code>{github.command}</code>{' '}
+            <button type="button" className="acrylBlendsShareButton" onClick={() => { void copy(github.command).then(setCopied) }}>{copied ? 'Copied' : 'Copy'}</button>
+          </span>
         </>
       )}
       {github.status === 'missing' && (
