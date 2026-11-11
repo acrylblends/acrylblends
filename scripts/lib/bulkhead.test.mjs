@@ -24,10 +24,6 @@ const ALLOWED = {
   // remove it. The second test fails once a file no longer needs its line, so the list only shrinks.
   'plugins/desktop/frame.ts':
     "frameHome repeats selectInstance's ACRYLBLENDS_HOME rule; slice 2 takes the home from the AppInstance",
-  'packages/cli/src/frame-url.ts':
-    "repeats selectInstance's ACRYLBLENDS_HOME rule to find a running frame; slice 2",
-  'packages/cli/src/ide-profile.ts':
-    "the generated host and app-instance row repeat selectInstance's home rule inside the app; slice 3 loads the host from the bundle with the family",
 }
 
 const AMBIENT = [

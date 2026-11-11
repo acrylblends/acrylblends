@@ -50,14 +50,14 @@ const homePage = (name: string, widgets: string): string => `<!doctype html>
  * The app's own pages and routes, mountable at any prefix: the standalone server mounts it at the root, the frame host at {@link FRAME_MOUNT_PREFIX}.
  * The first screen shows the widgets of the app's plugins (`ctx.home`), read at each request, so a plugin switched on or off shows at the next load.
  */
-export function makeApp(home: Home): Acryl {
+export function makeApp(home: Home, name: () => string = () => APP_NAME): Acryl {
   return (
     new Acryl()
       // A browser gets the first screen; an API client gets the JSON hello.
       .get('/', async (c) =>
         (c.req.header('accept') ?? '').includes('text/html')
-          ? c.html(homePage(APP_NAME, await renderWidgets(home)))
-          : c.json({ app: APP_NAME, ok: true }),
+          ? c.html(homePage(name(), await renderWidgets(home)))
+          : c.json({ app: name(), ok: true }),
       )
       .get('/health', (c) => c.json({ ok: true }))
       .get('/about', (c) => c.html(aboutPage()))
@@ -70,6 +70,10 @@ export const routes = {
   inject: ['router', 'home'],
   apply(ctx: Context, options: { readonly prefix?: string } = {}) {
     const prefix = options.prefix ?? ''
-    ctx.router.route(prefix === '' ? '/' : prefix, makeApp(ctx.home))
+    // The name the app has now (Settings > App renames it), else the one the scaffold was made with.
+    ctx.router.route(
+      prefix === '' ? '/' : prefix,
+      makeApp(ctx.home, () => ctx.get('appInstance')?.name ?? APP_NAME),
+    )
   },
 }

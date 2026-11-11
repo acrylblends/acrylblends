@@ -10,6 +10,7 @@ import {
   hostCommand,
   isFrameApp,
   navigation,
+  packagedHostArgs,
   runningFrame,
   startFrameHost,
   withoutToken,
@@ -213,4 +214,67 @@ test('a host that cannot start at all rejects instead of hanging', async () => {
   )
   await assert.rejects(host.ready, /ended before it served the frame/u)
   await host.stop()
+})
+
+test("a packaged product watches the person's files and serves the Program from its bundle", () => {
+  const args = packagedHostArgs(join('/bundle'), join('/person/source'))
+  assert.equal(args[0], '--watch')
+  assert.equal(args.filter((arg) => arg === '--import').length, 2)
+  assert.match(args.at(-1) ?? '', /ide-host\.mjs$/u)
+  // The Program in the app folder itself has no overlay to load.
+  assert.equal(packagedHostArgs('/app', '/app').filter((arg) => arg === '--import').length, 1)
+})
+
+test("a packaged host watches the person's src, plugins and blend.yaml whole, so a new plugin folder is seen, and never .git or data", () => {
+  const source = join('/person/source')
+  const args = packagedHostArgs('/bundle', source, () => true)
+  assert.deepEqual(
+    args.filter((arg) => arg.startsWith('--watch-path=')),
+    [
+      `--watch-path=${join(source, 'src')}`,
+      `--watch-path=${join(source, 'plugins')}`,
+      `--watch-path=${join(source, 'blend.yaml')}`,
+    ],
+  )
+  assert.equal(
+    args.some((arg) => arg.includes('.git')),
+    false,
+  )
+  // A path the app does not have is not named: node refuses to watch what is not there.
+  assert.equal(
+    packagedHostArgs('/bundle', source, (path) => path.endsWith('plugins')).filter((arg) =>
+      arg.startsWith('--watch-path='),
+    ).length,
+    1,
+  )
+})
+
+test('a host that dies after it served the frame is reported with its exit and its last output; a stop the window asked for is not a death', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'desktop-host-'))
+  try {
+    const dies = fakeNpm(
+      dir,
+      `console.log('acrylblends host: http://127.0.0.1:3999/?token=abc')
+setTimeout(() => { console.error('TypeError: boom'); process.exit(7) }, 200)
+`,
+    )
+    const host = startFrameHost(dir, { ...process.env, ...dies }, () => {})
+    await host.ready
+    const end = await host.ended
+    assert.deepEqual([end.code, end.signal, end.requested], [7, null, false])
+    assert.match(end.tail, /TypeError: boom/u)
+
+    const holds = fakeNpm(
+      dir,
+      `console.log('acrylblends host: http://127.0.0.1:3998/?token=abc')
+setInterval(() => {}, 1000)
+`,
+    )
+    const stopped = startFrameHost(dir, { ...process.env, ...holds }, () => {})
+    await stopped.ready
+    await stopped.stop()
+    assert.equal((await stopped.ended).requested, true)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

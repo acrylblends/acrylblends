@@ -29,6 +29,7 @@ import { pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { type Context, type Fiber, Service } from '@deepseek-ai/cordis'
 import type {} from '../instance/index.ts'
+import { LOCK_FILE, writeLock } from '../manifest/lock.ts'
 import { addOwnRows } from '../manifest/snapshot.ts'
 import type { Sandbox } from '../sandbox/index.ts'
 import { appendLedger, type LedgerEntry, readLedger } from './ledger.ts'
@@ -685,11 +686,15 @@ export class Extensions extends Service {
    * when the app has a `blend.yaml` to write. What cannot be written is said and changes nothing else: the plugin still runs from its folder.
    */
   private recordRow(): void {
-    if (!this.sources.some((source) => resolve(source.dir) === resolve(this.appRoot, 'plugins'))) return
+    if (!this.sources.some((source) => resolve(source.dir) === resolve(this.appRoot, 'plugins')))
+      return
     if (!existsSync(join(this.appRoot, 'blend.yaml'))) return
     try {
       const added = addOwnRows(this.appRoot)
-      if (added.length > 0) this.say(`extensions: blend.yaml has a row for ${added.join(', ')} now`)
+      if (added.length === 0) return
+      // The lock records blend.yaml's digest: written again when the app has one, so the two still match (as plugin-share does for a pull).
+      if (existsSync(join(this.appRoot, LOCK_FILE))) writeLock(this.appRoot)
+      this.say(`extensions: blend.yaml has a row for ${added.join(', ')} now`)
     } catch (error) {
       this.say(`extensions: could not add the row to blend.yaml: ${message(error)}`)
     }
@@ -907,7 +912,9 @@ export class Extensions extends Service {
   private resolved(name: string, stored: Record_): Record_ {
     let source = restoredPath(stored.source, this.appRoot)
     if (!existsSync(source)) {
-      const moved = this.sources.map((entry) => join(entry.dir, name)).find((path) => existsSync(path))
+      const moved = this.sources
+        .map((entry) => join(entry.dir, name))
+        .find((path) => existsSync(path))
       if (moved !== undefined) source = moved
     }
     return { source, version: stored.version, dir: restoredPath(stored.dir, this.dataHome) }

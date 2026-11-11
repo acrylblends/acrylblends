@@ -488,7 +488,7 @@ describe('the desktop shell', () => {
 })
 
 describe('the desktop shell in a plain Acryl app', () => {
-  it('add desktop picks desktop-web for an app without the Blend plugins, adds the script, electron and the gitignore line, and needs no instance plugin', async () => {
+  it('add desktop picks desktop-web for an app without the Blend plugins, adds the script, electron, the gitignore line and the instance plugin that decides where its data lives', async () => {
     const dir = join(scratch, 'plain-acryl')
     mkdirSync(join(dir, 'src'), { recursive: true })
     writeFileSync(
@@ -506,7 +506,8 @@ describe('the desktop shell in a plain Acryl app', () => {
     expect(pkg.scripts).toEqual({ desktop: 'node plugins/desktop-web/launch.ts', dev: 'x' })
     expect(pkg.devDependencies.electron).toBe('44.9.3')
     expect(existsSync(join(dir, 'plugins/desktop-web/main.ts'))).toBe(true)
-    expect(existsSync(join(dir, 'plugins/instance'))).toBe(false)
+    // The instance plugin comes with it: it alone decides where the app's data lives (~/.acryl/apps/<id>/data).
+    expect(existsSync(join(dir, 'plugins/instance/index.ts'))).toBe(true)
     expect(existsSync(join(dir, 'plugins/desktop'))).toBe(false)
     expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toBe('node_modules/\n.acrylblends/\n')
     // Adding it again changes nothing and is refused.

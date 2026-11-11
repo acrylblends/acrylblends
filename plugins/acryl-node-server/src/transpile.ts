@@ -36,13 +36,32 @@ const importSources = new Map<string, string>()
  * @returns the compiler.
  * @throws MissingTypeScriptError when the app has no `typescript`.
  */
-function compilerFor(file: string, what: string): Compiler {
-  // Only the app's own node_modules chain counts: Node's global folders (NODE_PATH, which a package manager's shims may set) are not the app.
-  let owner: string | undefined
-  for (let dir = dirname(file); owner === undefined; dir = dirname(dir)) {
-    if (existsSync(join(dir, 'node_modules', 'typescript', 'package.json'))) owner = dir
-    else if (dirname(dir) === dir) throw new MissingTypeScriptError(file, what)
+/** The nearest folder from `start` up whose node_modules has `typescript`, or undefined. */
+function typescriptOwner(start: string): string | undefined {
+  for (let dir = start; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, 'node_modules', 'typescript', 'package.json'))) return dir
+    if (dirname(dir) === dir) return undefined
   }
+}
+
+/** The Program's folder when this process is a desktop product's frame host: the person's source has no packages, the bundle has them. */
+let programPackages: string | undefined
+
+/**
+ * In a desktop product's frame host, compile with the Program's packages when a file's own chain has none (`register.ts` calls this once it finds the
+ * product's app tree, plugins/instance/bundle.ts). Nowhere else: an app without `typescript` is told so.
+ */
+export function usePackagesOfProgram(dir: string): void {
+  programPackages = dir
+}
+
+function compilerFor(file: string, what: string): Compiler {
+  // Only the app's own node_modules chain counts: Node's global folders (NODE_PATH, which a package manager's shims may set) are not the app. In a
+  // desktop product the app is the person's source with the Program's packages.
+  const owner =
+    typescriptOwner(dirname(file)) ??
+    (programPackages === undefined ? undefined : typescriptOwner(programPackages))
+  if (owner === undefined) throw new MissingTypeScriptError(file, what)
   const path = createRequire(join(owner, 'package.json')).resolve('typescript')
   let compiler = compilers.get(path)
   if (compiler === undefined) {

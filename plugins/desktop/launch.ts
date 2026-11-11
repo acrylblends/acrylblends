@@ -82,12 +82,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const projectRoot = fileURLToPath(new URL('../..', import.meta.url))
   const branded = brandedElectron({
     binary: electron,
-    folder: join(acrylRoot(process.platform, process.env, personHome(process.env, process.platform)), 'electron'),
+    folder: join(
+      acrylRoot(process.platform, process.env, personHome(process.env, process.platform)),
+      'electron',
+    ),
     id: appIdOf(projectRoot),
     name: appTitle(projectRoot),
     icon: iconFile(projectRoot),
   })
-  if (branded.problem !== undefined) console.warn(`desktop: the Dock shows Electron's own name and icon (${branded.problem})`)
+  if (branded.problem !== undefined)
+    console.warn(`desktop: the Dock shows Electron's own name and icon (${branded.problem})`)
   runElectron(
     branded.binary,
     electronArgs(join(import.meta.dirname, 'main.ts'), blocked, process.argv.slice(2)),

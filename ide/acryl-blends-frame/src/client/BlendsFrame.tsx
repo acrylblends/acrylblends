@@ -24,6 +24,7 @@ import { RightPanel, type SidebarPort } from './RightPanel.tsx'
 import type { FrameTabs } from './tabs.ts'
 import type { SwitchRequests } from './switch-request.ts'
 import type { FrameTools } from './tools.ts'
+import type { DesktopApp } from './desktop-app.ts'
 import { clampPanelWidth, resolvePanelWidths, type PanelSide } from './panel-resize.ts'
 import type { ThemeSwitch } from './theme-switch.ts'
 
@@ -51,9 +52,14 @@ export interface BlendsFrameInjected {
   readonly branchChats: BranchChatsPort
   /** A chat of another branch asked for from the chat's History: the left panel offers the switch. */
   readonly switchRequests: SwitchRequests
+  /** A desktop product's app (`./desktop-app.ts`): the bar shows the name the person gave it. */
+  readonly desktop?: DesktopApp
 }
 
 export type BlendsFrameProps = PropsRuntime<'root'> & PropsRenderSlots<'main' | 'rightbar' | 'shell.overlay' | 'sidebar.settings'> & BlendsFrameInjected
+
+/** Outside a desktop product the bar names the app as its package does. */
+const NO_DESKTOP: Pick<DesktopApp, 'getSnapshot' | 'subscribe'> = { getSnapshot: () => undefined, subscribe: () => () => {} }
 
 function useStore<T>(store: { getSnapshot(): T; subscribe(listener: () => void): () => void }): T {
   const subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store])
@@ -97,8 +103,9 @@ const SelectIcon = () => (
   </svg>
 )
 
-export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, appReload, view, themeSwitch, chats, versions, gitSync, tabs, tools, feedback, branches, branchChats, switchRequests, renderSlot }: BlendsFrameProps) {
+export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, appReload, view, themeSwitch, chats, versions, gitSync, tabs, tools, feedback, branches, branchChats, switchRequests, desktop, renderSlot }: BlendsFrameProps) {
   const state = useStore(frameState)
+  const label = useStore(desktop ?? NO_DESKTOP)?.name
   const appError = useStore(appReload).error
   const frameView = useStore(view)
   const scheme = useStore(themeSwitch)
@@ -130,7 +137,7 @@ export function BlendsFrame({ layout, sidebar, canvas, selection, frameState, ap
   const switchRequest = useStore(switchRequests)
   useEffect(() => { if (switchRequest !== undefined) view.showLeft() }, [switchRequest, view])
 
-  const appName = state.status === 'ready' ? state.state.appName : ''
+  const appName = label ?? (state.status === 'ready' ? state.state.appName : '')
   const saved = state.status === 'ready' ? savedLabel(state.state.unsaved) : undefined
   const barLabel = [versionLabel, saved].filter((part): part is string => part !== undefined).join(' · ')
   const preview = frameView.mode === 'preview'

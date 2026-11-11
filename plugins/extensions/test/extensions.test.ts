@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
@@ -204,7 +212,9 @@ test('the record names a plugin by its place in the app, so a moved app finds it
     join(dir, 'index.ts'),
     "export const name = 'hello'\nexport function apply(ctx: any) { ctx.provide('greeting', 'hi') }\n",
   )
-  const sources = (root: string) => () => [{ dir: join(root, 'plugins'), trust: 'install' as const }]
+  const sources = (root: string) => () => [
+    { dir: join(root, 'plugins'), trust: 'install' as const },
+  ]
   const first = await boot({ home, root: before, sources: sources(before) })
   await first.root.extensions.ready
   assert.equal(first.root.get('greeting'), 'hi')
@@ -227,7 +237,10 @@ test('the record names a plugin by its place in the app, so a moved app finds it
   await second.stop()
 
   // A record an older version wrote (an absolute source that is gone) still finds the folder of the same name in the sources.
-  const written = JSON.parse(readFileSync(join(home, 'extensions.json'), 'utf8')) as Record<string, { source: string }>
+  const written = JSON.parse(readFileSync(join(home, 'extensions.json'), 'utf8')) as Record<
+    string,
+    { source: string }
+  >
   writeFileSync(
     join(home, 'extensions.json'),
     JSON.stringify({ hello: { ...written.hello, source: join(before, 'plugins', 'hello') } }),
@@ -259,7 +272,10 @@ test('a plugin installed live gets its row in blend.yaml, so the app is blend.ya
   await first.root.extensions.ready
   assert.equal(first.root.get('greeting'), 'hi')
   const text = readFileSync(join(app, 'blend.yaml'), 'utf8')
-  assert.match(text, /- id: hello\s+name: hello\s+- id: extensions # starts the folders with no row/u)
+  assert.match(
+    text,
+    /- id: hello\s+name: hello\s+- id: extensions # starts the folders with no row/u,
+  )
   assert.match(text, /^# the app/u)
   await first.stop()
 

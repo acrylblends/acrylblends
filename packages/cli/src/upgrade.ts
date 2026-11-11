@@ -373,7 +373,7 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
         ? ''
         : `\n  src/app.ts keeps the framework's plugin registrations; the app's own lines are ${own.map((line) => `line ${String(line.line)} (${JSON.stringify(line.text)})`).join(', ')}`
     io.stderr.write(
-      `error: ${frame.conflicts.join(', ')} in ${appDir} ${frame.conflicts.length === 1 ? 'is' : 'are'} not the previous release's scaffold and acrylblends did not write ${frame.conflicts.length === 1 ? 'it' : 'them'}; nothing was changed.${detail} Move the app's version aside (or merge it into the template's) and run again, or run again with --force (the app's versions are saved under .acrylblends/upgrade-backup/ first)\n`,
+      `error: ${frame.conflicts.join(', ')} in ${appDir} ${frame.conflicts.length === 1 ? 'is' : 'are'} not the previous release's scaffold and acrylblends did not write ${frame.conflicts.length === 1 ? 'it' : 'them'}; nothing was changed.${detail} Move the app's version aside (or merge it into the template's) and run again, or run again with --force (the app's versions are saved under .acryl/upgrade-backup/ first)\n`,
     )
     return 1
   }
@@ -499,7 +499,7 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
     }
     if (conflicts > 0 && !options.force) {
       io.stderr.write(
-        `\nerror: ${conflicts} file(s) were edited in this app and the upgrade would replace them; nothing was changed. Review the diffs above, move your changes out of the plugin (a plugin of your own in plugins/<name>/), or run again with --force (the edited versions are saved under .acrylblends/upgrade-backup/)\n`,
+        `\nerror: ${conflicts} file(s) were edited in this app and the upgrade would replace them; nothing was changed. Review the diffs above, move your changes out of the plugin (a plugin of your own in plugins/<name>/), or run again with --force (the edited versions are saved under .acryl/upgrade-backup/)\n`,
       )
       return 1
     }

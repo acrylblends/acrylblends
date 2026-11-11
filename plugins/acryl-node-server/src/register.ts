@@ -10,7 +10,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { compileModule } from './transpile.ts'
+import { compileModule, usePackagesOfProgram } from './transpile.ts'
 
 /** The JSX runtime the docs set up; an app's tsconfig.json (or a file's own `@jsxImportSource` pragma) chooses another. */
 const DEFAULT_IMPORT_SOURCE = 'acrylblends/jsx'
@@ -36,6 +36,15 @@ registerHooks({
  */
 const plugins = new URL('../../', import.meta.url)
 const appRoot = new URL('../', plugins).href
+// A desktop product's frame host runs the Program from the bundle on an app's source, which holds only the person's files: their JSX compiles with the
+// Program's `typescript` (the instance family says whether this is such a host; a published framework has no family beside it).
+const family = new URL('instance/bundle.ts', plugins)
+if (existsSync(fileURLToPath(family))) {
+  const { appTree } = (await import(family.href)) as {
+    appTree(env: NodeJS.ProcessEnv, bundle: string): unknown
+  }
+  if (appTree(process.env, fileURLToPath(appRoot)) !== undefined) usePackagesOfProgram(fileURLToPath(appRoot))
+}
 const resolver = new URL('extensions/resolve.ts', plugins)
 if (existsSync(fileURLToPath(new URL('acryl-router/src/index.ts', plugins))) && existsSync(fileURLToPath(resolver))) {
   const { routerAliases } = (await import(resolver.href)) as { routerAliases(): Record<string, string> }

@@ -57,7 +57,14 @@ export const RUN_LOCK_FILE = 'instance.json'
 export const PORT_BASE = 3100
 export const PORT_SPAN = 900
 export const HOME_ENV = 'ACRYLBLENDS_HOME'
+/**
+ * The app's source folder, when the process runs from another folder: a desktop product's frame host runs the Program from the bundle on an app's
+ * `source` (storage.ts), so its own location is not the app. Set by `instanceEnv`, never by hand.
+ */
+export const ROOT_ENV = 'ACRYLBLENDS_ROOT'
 export const PORT_ENV = 'ACRYLBLENDS_PORT'
+/** The app's name, for a process that runs from the bundle on the app's `source` folder: the folder's own name says nothing (`source`). Set by `instanceEnv`. */
+export const NAME_ENV = 'ACRYLBLENDS_NAME'
 export const HOST_ENV = 'ACRYLBLENDS_HOST'
 /** The names hosting platforms set: used when `ACRYLBLENDS_PORT` and `ACRYLBLENDS_HOST` are not. */
 export const PLATFORM_PORT_ENV = 'PORT'
@@ -125,10 +132,17 @@ export function projectInstance(
   // Never stops the app: chats that could not be attached are left as they were, and the app starts.
   try {
     const followed = followFolder(folders.data, root)
-    if (followed !== undefined && (followed.sessions || followed.workspaces > 0 || followed.branchChats))
-      process.stderr.write(`acrylblends: this app's folder moved, so its chats were attached to ${root}\n`)
+    if (
+      followed !== undefined &&
+      (followed.sessions || followed.workspaces > 0 || followed.branchChats)
+    )
+      process.stderr.write(
+        `acrylblends: this app's folder moved, so its chats were attached to ${root}\n`,
+      )
   } catch (cause) {
-    process.stderr.write(`acrylblends: could not attach this app's chats to ${root}: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+    process.stderr.write(
+      `acrylblends: could not attach this app's chats to ${root}: ${cause instanceof Error ? cause.message : String(cause)}\n`,
+    )
   }
   return family({
     kind: 'project',
@@ -190,31 +204,52 @@ export function withPort(instance: AppInstance, start: number): AppInstance {
 }
 
 /**
- * Choose the instance. The only place that reads the environment: `ACRYLBLENDS_HOME` pins the home, `ACRYLBLENDS_PORT` sets the start port, `ACRYLBLENDS_HOST` the interface;
- * hosting platforms set `PORT` and `HOST` instead, and those are read when the `ACRYLBLENDS_` ones are not; otherwise the project folder decides.
+ * Choose the instance. The only place that reads the environment: `ACRYLBLENDS_ROOT` names the app's folder when the process runs from another one,
+ * `ACRYLBLENDS_HOME` pins the home, `ACRYLBLENDS_PORT` sets the start port, `ACRYLBLENDS_HOST` the interface; hosting platforms set `PORT` and `HOST`
+ * instead, and those are read when the `ACRYLBLENDS_` ones are not; otherwise the project folder decides.
  */
 export function selectInstance(options: {
   projectRoot: string
   env?: Record<string, string | undefined>
 }): AppInstance {
   const env = options.env ?? {}
+  const projectRoot = env[ROOT_ENV]?.trim() || options.projectRoot
   const pinned = env[HOME_ENV]?.trim()
-  let instance = pinned
-    ? pinnedInstance(pinned, { name: plainName(options.projectRoot), root: options.projectRoot })
-    : projectInstance(options.projectRoot, env)
+  return withRunEnv(
+    pinned
+      ? pinnedInstance(pinned, {
+          name: env[NAME_ENV]?.trim() || plainName(projectRoot),
+          root: projectRoot,
+        })
+      : projectInstance(projectRoot, env),
+    env,
+  )
+}
+
+/**
+ * Where an instance listens, as the environment says, whichever way it was chosen (a desktop product's app too): `ACRYLBLENDS_PORT` (else a hosting
+ * platform's `PORT`) the start port, `ACRYLBLENDS_HOST` (else `HOST`) the interface.
+ */
+export function withRunEnv(
+  instance: AppInstance,
+  env: Record<string, string | undefined> = {},
+): AppInstance {
+  let chosen = instance
   const port = env[PORT_ENV]?.trim() || env[PLATFORM_PORT_ENV]?.trim()
-  if (port) instance = withPort(instance, Number(port))
+  if (port) chosen = withPort(chosen, Number(port))
   const host = env[HOST_ENV]?.trim() || env[PLATFORM_HOST_ENV]?.trim()
-  if (host) instance = Object.freeze({ ...instance, host })
-  return instance
+  if (host) chosen = Object.freeze({ ...chosen, host })
+  return chosen
 }
 
 /**
  * What a child process started for this instance (the frame host) needs in its environment so that its own `selectInstance` chooses the same home and
- * the same start port. The parent decides once; the child never derives a second answer from the folder it runs in.
+ * the same start port, on the same app folder. The parent decides once; the child never derives a second answer from the folder it runs in.
  */
 export function instanceEnv(instance: AppInstance): Record<string, string> {
   return {
+    [ROOT_ENV]: instance.root,
+    [NAME_ENV]: instance.name,
     [HOME_ENV]: instance.home,
     [PORT_ENV]: String(instance.port.start),
     ...(instance.host === undefined ? {} : { [HOST_ENV]: instance.host }),

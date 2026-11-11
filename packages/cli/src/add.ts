@@ -77,7 +77,11 @@ export async function add(options: AddOptions, io: Io): Promise<number> {
     if (code !== 0) return code
   }
   // The desktop shell has two forms: the Blend app (it needs the `instance` plugin) and a plain Acryl app (`export default app`); `desktop` means the one that fits.
-  const plain = !existsSync(join(pluginsFolder(appDir).dir, 'instance'))
+  // A Blend app has a blend.yaml (an older one at least its instance plugin). A plain app may have the instance plugin too, when desktop-web brought it.
+  const folder = pluginsFolder(appDir).dir
+  const plain =
+    !existsSync(join(appDir, 'blend.yaml')) &&
+    (!existsSync(join(folder, 'instance')) || existsSync(join(folder, 'desktop-web')))
   if (plain && options.names.includes('db')) {
     io.stderr.write(
       'error: "db" is the Cordis plugin for a Blend app. A plain Acryl app opens its database with openDb from "acrylblends/db/sqlite" (see docs/framework/guides/data.md)\n',

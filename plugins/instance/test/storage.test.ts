@@ -194,14 +194,18 @@ test('a product app is an AppInstance: source is its root, data its home and the
   assert.ok(Object.isFrozen(chosen))
 })
 
-test('a child started with instanceEnv chooses the same home and start port, whatever folder it runs in', () => {
+test('a child started with instanceEnv chooses the same app, name, home and start port, whatever folder it runs in', () => {
   const chosen = productInstance(appFolders('/root', 'shop-3f2a'), 'Shop')
   const child = selectInstance({ projectRoot: chosen.root, env: instanceEnv(chosen) })
   assert.equal(child.home, chosen.home)
   assert.equal(child.dshHome, chosen.dshHome)
   assert.equal(child.port.start, chosen.port.start)
+  assert.equal(child.root, chosen.root)
+  assert.equal(child.name, chosen.name)
   assert.deepEqual(Object.keys(instanceEnv(chosen)).sort(), [
     'ACRYLBLENDS_HOME',
+    'ACRYLBLENDS_NAME',
     'ACRYLBLENDS_PORT',
+    'ACRYLBLENDS_ROOT',
   ])
 })

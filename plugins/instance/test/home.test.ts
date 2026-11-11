@@ -7,7 +7,6 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -19,8 +18,8 @@ import {
   appDataHome,
   appHomes,
   appIdOf,
-  followFolder,
   chatKeyOf,
+  followFolder,
   migrateOldHome,
   moveChats,
   readAppId,
@@ -178,7 +177,11 @@ test('chats: filed under the folder the app was in, they stay where the engine f
   write(join(data, 'sessions', chatKeyOf(from), 'session-1', 'log.jsonl'), '{}\n')
   write(
     join(data, 'storages', 'workspace.json'),
-    JSON.stringify({ tables: { workspaces: { w1: { path: from, sessionIds: ['session-1'] }, w2: { path: '/elsewhere' } } } }),
+    JSON.stringify({
+      tables: {
+        workspaces: { w1: { path: from, sessionIds: ['session-1'] }, w2: { path: '/elsewhere' } },
+      },
+    }),
   )
   write(
     join(data, 'frame', 'branch-chats.json'),
@@ -190,12 +193,20 @@ test('chats: filed under the folder the app was in, they stay where the engine f
   assert.equal(lstatSync(join(data, 'sessions', chatKeyOf(to))).isSymbolicLink(), true)
   assert.equal(existsSync(join(data, 'sessions', chatKeyOf(from), 'session-1', 'log.jsonl')), true)
   assert.equal(existsSync(join(data, 'sessions', chatKeyOf(to), 'session-1', 'log.jsonl')), true)
-  const workspaces = JSON.parse(readFileSync(join(data, 'storages', 'workspace.json'), 'utf8')).tables.workspaces
-  assert.deepEqual([workspaces.w1.path, workspaces.w1.sessionIds, workspaces.w2.path], [to, ['session-1'], '/elsewhere'])
+  const workspaces = JSON.parse(readFileSync(join(data, 'storages', 'workspace.json'), 'utf8'))
+    .tables.workspaces
+  assert.deepEqual(
+    [workspaces.w1.path, workspaces.w1.sessionIds, workspaces.w2.path],
+    [to, ['session-1'], '/elsewhere'],
+  )
   const chats = JSON.parse(readFileSync(join(data, 'frame', 'branch-chats.json'), 'utf8'))
   assert.deepEqual([Object.keys(chats.roots), Object.keys(chats.open)], [[to], [to]])
   // A second run finds nothing under the old folder and changes nothing.
-  assert.deepEqual(moveChats(data, from, to), { sessions: false, workspaces: 0, branchChats: false })
+  assert.deepEqual(moveChats(data, from, to), {
+    sessions: false,
+    workspaces: 0,
+    branchChats: false,
+  })
 })
 
 test('chats: the folder name is the one DSH gives (separators become one dash, other characters ~XXXX)', () => {
@@ -210,7 +221,10 @@ test('chats: an app started in another folder than last time brings its chats al
   assert.equal(followFolder(data, before), undefined)
   assert.equal(JSON.parse(readFileSync(join(data, 'app-folder.json'), 'utf8')).root, before)
   write(join(data, 'sessions', chatKeyOf(before), 'session-1', 'log.jsonl'), '{}\n')
-  write(join(data, 'storages', 'workspace.json'), JSON.stringify({ tables: { workspaces: { w1: { path: before } } } }))
+  write(
+    join(data, 'storages', 'workspace.json'),
+    JSON.stringify({ tables: { workspaces: { w1: { path: before } } } }),
+  )
   assert.equal(followFolder(data, before), undefined)
   assert.deepEqual(followFolder(data, after), { sessions: true, workspaces: 1, branchChats: false })
   assert.equal(existsSync(join(data, 'sessions', chatKeyOf(after), 'session-1', 'log.jsonl')), true)

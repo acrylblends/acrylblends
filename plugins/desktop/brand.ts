@@ -7,8 +7,8 @@
  * The icon is the app's own `assets/icon.png` when it has one, else the ACRYL Blends logo that ships beside this file.
  */
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 
 /** The logo an app without an icon of its own shows. */
@@ -17,8 +17,11 @@ export const DEFAULT_ICON = join(import.meta.dirname, 'assets', 'acrylblends-log
 /** The app's name as a person knows it: the package's name (the frame's header says the same), else the folder's. */
 export function appTitle(projectRoot: string): string {
   try {
-    const manifest = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8')) as { name?: unknown }
-    if (typeof manifest.name === 'string' && manifest.name.trim() !== '') return manifest.name.trim()
+    const manifest = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8')) as {
+      name?: unknown
+    }
+    if (typeof manifest.name === 'string' && manifest.name.trim() !== '')
+      return manifest.name.trim()
   } catch {
     // No manifest, or not JSON: the folder names the app.
   }
@@ -26,7 +29,10 @@ export function appTitle(projectRoot: string): string {
 }
 
 /** The icon file: the app's `assets/icon.png`, else the logo of ACRYL Blends. */
-export function iconFile(projectRoot: string, exists: (path: string) => boolean = existsSync): string {
+export function iconFile(
+  projectRoot: string,
+  exists: (path: string) => boolean = existsSync,
+): string {
   const own = join(projectRoot, 'assets', 'icon.png')
   return exists(own) ? own : DEFAULT_ICON
 }
@@ -48,7 +54,10 @@ export function bundleOf(binary: string): string | undefined {
 
 /** What the copy was made from: when this changes (a new name, a new icon, a new Electron), the copy is made again. */
 export function stampOf(name: string, id: string, icon: Uint8Array, electron: string): string {
-  return createHash('sha256').update(JSON.stringify([name, id, electron])).update(icon).digest('hex')
+  return createHash('sha256')
+    .update(JSON.stringify([name, id, electron]))
+    .update(icon)
+    .digest('hex')
 }
 
 /** The iconset sizes macOS reads, as [file, pixels]. */
@@ -91,7 +100,11 @@ export function brandedElectron(options: {
   const target = join(options.folder, `${options.id}.app`)
   const binary = join(target, 'Contents', 'MacOS', basename(options.binary))
   try {
-    const version = execFileSync('plutil', ['-extract', 'CFBundleVersion', 'raw', '-o', '-', join(source, 'Contents', 'Info.plist')], { encoding: 'utf8' }).trim()
+    const version = execFileSync(
+      'plutil',
+      ['-extract', 'CFBundleVersion', 'raw', '-o', '-', join(source, 'Contents', 'Info.plist')],
+      { encoding: 'utf8' },
+    ).trim()
     const stamp = stampOf(options.name, options.id, readFileSync(options.icon), version)
     const stampFile = join(options.folder, `${options.id}.stamp`)
     if (existsSync(binary) && readStamp(stampFile) === stamp) return { binary }
@@ -108,7 +121,10 @@ export function brandedElectron(options: {
     writeFileSync(stampFile, stamp)
     return { binary }
   } catch (cause) {
-    return { binary: options.binary, problem: cause instanceof Error ? cause.message : String(cause) }
+    return {
+      binary: options.binary,
+      problem: cause instanceof Error ? cause.message : String(cause),
+    }
   }
 }
 
@@ -136,7 +152,11 @@ function makeIcns(png: string, icns: string, iconset: string): void {
   mkdirSync(iconset, { recursive: true })
   try {
     for (const [file, pixels] of ICONSET)
-      execFileSync('sips', ['-z', String(pixels), String(pixels), png, '--out', join(iconset, file)], { stdio: 'ignore' })
+      execFileSync(
+        'sips',
+        ['-z', String(pixels), String(pixels), png, '--out', join(iconset, file)],
+        { stdio: 'ignore' },
+      )
     execFileSync('iconutil', ['-c', 'icns', iconset, '-o', icns])
   } finally {
     rmSync(iconset, { recursive: true, force: true })

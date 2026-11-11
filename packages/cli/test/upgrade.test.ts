@@ -134,13 +134,13 @@ describe.each(['0.9.1', '0.10.0'])('upgrading an app made by acrylblends %s', (v
     const forced = session(app)
     expect(await runCli(['upgrade', '--force'], forced.io), forced.err()).toBe(0)
     expect(readFileSync(edited, 'utf8')).not.toContain('export const mine = 1')
-    const backups = readdirSync(join(app, '.acrylblends', 'upgrade-backup'))
+    const backups = readdirSync(join(app, '.acryl', 'upgrade-backup'))
     expect(backups).toHaveLength(1)
     expect(
       readFileSync(
         join(
           app,
-          '.acrylblends',
+          '.acryl',
           'upgrade-backup',
           backups[0] as string,
           'acryl-router',
