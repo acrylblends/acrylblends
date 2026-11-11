@@ -29,6 +29,7 @@ import { pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { type Context, type Fiber, Service } from '@deepseek-ai/cordis'
 import type {} from '../instance/index.ts'
+import { addOwnRows } from '../manifest/snapshot.ts'
 import type { Sandbox } from '../sandbox/index.ts'
 import { appendLedger, type LedgerEntry, readLedger } from './ledger.ts'
 import { type PluginStore, pluginVersion } from './plugin-store.ts'
@@ -678,6 +679,22 @@ export class Extensions extends Service {
     appendLedger(this.ledgerFile, entry)
   }
 
+  /**
+   * The app's own plugin folders get their rows in `blend.yaml` (before the `extensions` row), so the app is its `blend.yaml` plus `plugins/` and not
+   * its data folder. Only for folders of the app's own `plugins/` (a plugin of another source, or a library copy, has no row of this kind), and only
+   * when the app has a `blend.yaml` to write. What cannot be written is said and changes nothing else: the plugin still runs from its folder.
+   */
+  private recordRow(): void {
+    if (!this.sources.some((source) => resolve(source.dir) === resolve(this.appRoot, 'plugins'))) return
+    if (!existsSync(join(this.appRoot, 'blend.yaml'))) return
+    try {
+      const added = addOwnRows(this.appRoot)
+      if (added.length > 0) this.say(`extensions: blend.yaml has a row for ${added.join(', ')} now`)
+    } catch (error) {
+      this.say(`extensions: could not add the row to blend.yaml: ${message(error)}`)
+    }
+  }
+
   private saveState(): void {
     const records: Record<string, Record_> = {}
     for (const entry of this.installed.values())
@@ -799,6 +816,7 @@ export class Extensions extends Service {
     })
     this.stale.delete(name)
     this.saveState()
+    this.recordRow()
     this.store.keepOnly(name, staged)
     this.record({ kind: action, name, version: staged.version })
     this.ctx.emit('extensions/changed', name, action)
@@ -960,6 +978,8 @@ export class Extensions extends Service {
       }
     }
     if (Object.keys(records).length > 0 || summary.installed.length > 0) this.saveState()
+    // An app that only had its plugin in the record (installed before the row was written): the row is added once, and the next start mounts it as a row.
+    if (summary.installed.length > 0) this.recordRow()
     return summary
   }
 }

@@ -90,29 +90,38 @@ function rowNames(text: string): Set<string> {
 }
 
 /**
- * Record the app as it runs: a row for every plugin folder of its own that has none (before the `extensions` row, else before the server, else
- * last), then `blend.lock.json`. Idempotent: a second capture with nothing new changes nothing in `blend.yaml`.
+ * Give every plugin folder of the app's own that has no row one (before the `extensions` row, else before the server, else last): `blend.yaml` plus
+ * `plugins/` is then the whole app. The names added, none when there is nothing to add; the file is not touched then. Comments and the person's
+ * formatting stay (the document is edited, not rewritten).
  */
-export function captureApp(appRoot: string): CaptureResult {
+export function addOwnRows(appRoot: string): string[] {
   const file = join(appRoot, MANIFEST)
   const text = readFileSync(file, 'utf8')
   const named = rowNames(text)
   const missing = appPluginNames(join(appRoot, 'plugins')).filter((name) => !named.has(name))
-  if (missing.length > 0) {
-    const document = parseDocument(text)
-    const rows = document.getIn(['spec', 'rows'])
-    if (!isSeq(rows)) throw new Error(`${file} has no spec.rows list; it is not an app definition`)
-    const names = rows.items.map((row) =>
-      String((row as { get?: (key: string) => unknown }).get?.('name')),
-    )
-    const before =
-      names.indexOf('extensions') >= 0
-        ? names.indexOf('extensions')
-        : names.indexOf('acryl-node-server')
-    const at = before >= 0 ? before : rows.items.length
-    rows.items.splice(at, 0, ...missing.map((name) => document.createNode({ id: name, name })))
-    writeAtomic(file, String(document))
-  }
+  if (missing.length === 0) return []
+  const document = parseDocument(text)
+  const rows = document.getIn(['spec', 'rows'])
+  if (!isSeq(rows)) throw new Error(`${file} has no spec.rows list; it is not an app definition`)
+  const names = rows.items.map((row) =>
+    String((row as { get?: (key: string) => unknown }).get?.('name')),
+  )
+  const before =
+    names.indexOf('extensions') >= 0
+      ? names.indexOf('extensions')
+      : names.indexOf('acryl-node-server')
+  const at = before >= 0 ? before : rows.items.length
+  rows.items.splice(at, 0, ...missing.map((name) => document.createNode({ id: name, name })))
+  writeAtomic(file, String(document))
+  return missing
+}
+
+/**
+ * Record the app as it runs: a row for every plugin folder of its own that has none ({@link addOwnRows}), then `blend.lock.json`. Idempotent: a second
+ * capture with nothing new changes nothing in `blend.yaml`.
+ */
+export function captureApp(appRoot: string): CaptureResult {
+  const missing = addOwnRows(appRoot)
   const lock = writeLock(appRoot)
   return { addedRows: missing, modules: lock.modules.length }
 }
