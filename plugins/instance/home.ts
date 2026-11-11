@@ -351,9 +351,11 @@ function rewriteJson(file: string, change: (value: unknown) => boolean): boolean
 }
 
 /**
- * Make the chats an app filed under one folder belong to another, once: the session folder is renamed, the workspace the engine registered keeps its id and its
- * chats under the new path, and the frame's branch chats move to the new key. For an app whose chats were filed under its own folder (before `chatFolder`).
- * Nothing is overwritten: a session folder already at the new key is left alone, and an app with no chat under `from` changes nothing. Run before the engine starts.
+ * Make the chats an app filed under one folder belong to another, once: the engine's folder for the new place becomes a link to the folder the chats are in, the
+ * workspace the engine registered keeps its id and its chats under the new path, and the frame's branch chats move to the new key. For an app whose chats were
+ * filed under its own folder (before `chatFolder`). The chats stay where they are: the engine checks that a chat's log is at the place its own header names
+ * (its working folder then), so a renamed folder is refused as corrupt and takes the whole workspace down with it. A chat made later is filed under the new place,
+ * in the same folder. Nothing is overwritten: a folder already at the new key is left alone, and an app with no chat under `from` changes nothing. Run before the engine starts.
  */
 export function moveChats(dataHome: string, from: string, to: string): ChatMove {
   const none: ChatMove = { sessions: false, workspaces: 0, branchChats: false }
@@ -361,8 +363,13 @@ export function moveChats(dataHome: string, from: string, to: string): ChatMove 
   let sessions = false
   const oldKey = join(dataHome, 'sessions', chatKeyOf(from))
   const newKey = join(dataHome, 'sessions', chatKeyOf(to))
-  if (existsSync(oldKey) && !existsSync(newKey)) {
-    renameSync(oldKey, newKey)
+  if (existsSync(oldKey) && !isLink(oldKey) && !existsSync(newKey) && !isLink(newKey)) {
+    // A junction (Windows, no privilege needed) wants an absolute target; elsewhere the link is relative, so a moved data root keeps it.
+    symlinkSync(
+      process.platform === 'win32' ? oldKey : chatKeyOf(from),
+      newKey,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    )
     sessions = true
   }
   let workspaces = 0

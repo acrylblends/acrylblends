@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -196,7 +197,7 @@ test('chats: an installed app, whose source is already the folder under its id, 
   assert.equal(chatFolder(source, 'linux', env, env.HOME), source)
 })
 
-test('chats: filed under the app folder before, they are renamed to the chat folder once, with their workspace and branch chats', () => {
+test('chats: filed under the app folder before, they stay where the engine finds them and the chat folder leads to them, with their workspace and branch chats', () => {
   const data = join(scratch, 'data-of-old-app')
   const from = '/Users/a/_projects/shop'
   const to = '/Users/a/.acryl/apps/shop-1ec5/source'
@@ -210,7 +211,10 @@ test('chats: filed under the app folder before, they are renamed to the chat fol
     JSON.stringify({ roots: { [from]: { 'session-1': 'main' } }, open: { [from]: ['session-1'] } }),
   )
   assert.deepEqual(moveChats(data, from, to), { sessions: true, workspaces: 1, branchChats: true })
-  assert.equal(existsSync(join(data, 'sessions', chatKeyOf(from))), false)
+  // The engine refuses a chat whose log is not where its header's folder puts it: the old folder stays, and the new one is a link to it.
+  assert.equal(lstatSync(join(data, 'sessions', chatKeyOf(from))).isDirectory(), true)
+  assert.equal(lstatSync(join(data, 'sessions', chatKeyOf(to))).isSymbolicLink(), true)
+  assert.equal(existsSync(join(data, 'sessions', chatKeyOf(from), 'session-1', 'log.jsonl')), true)
   assert.equal(existsSync(join(data, 'sessions', chatKeyOf(to), 'session-1', 'log.jsonl')), true)
   const workspaces = JSON.parse(readFileSync(join(data, 'storages', 'workspace.json'), 'utf8')).tables.workspaces
   assert.deepEqual([workspaces.w1.path, workspaces.w1.sessionIds, workspaces.w2.path], [to, ['session-1'], '/elsewhere'])
