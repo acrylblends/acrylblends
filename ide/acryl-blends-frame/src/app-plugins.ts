@@ -8,12 +8,12 @@
 import { execFile } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
 import { createRequire } from 'node:module'
 import { promisify } from 'node:util'
 import { dirname } from 'node:path'
-import { bumpVersion, gitCli, githubCli, parseVersion, PluginStore, sharePlugin, storeRootOf, type PublishGitPort, type RepositoryHostPort } from '@webboxes/plugin-hub'
-import { samePlan, type AppPluginView, type FramePluginState, type FramePluginView, type ShareVisibility, type SharedPluginView, type SharePlan } from './contract.ts'
+import { bumpVersion, gitCli, githubCli, parseVersion, PluginStore, savePlugin, sharePlugin, StoreConflictError, storeRootOf, type PublishGitPort, type RepositoryHostPort } from '@webboxes/plugin-hub'
+import { samePlan, type AppPluginView, type FramePluginState, type FramePluginView, type SavedPluginResult, type SavedPluginView, type ShareVisibility, type SharedPluginView, type SharePlan } from './contract.ts'
 
 /** One row of `blend.yaml`'s `spec.rows`: where its block starts and ends (line indexes, end exclusive). */
 export interface BlendRow {
@@ -241,7 +241,50 @@ export async function checkedShares(records: Readonly<Record<string, SharedPlugi
   return Object.fromEntries(entries)
 }
 
-export async function readAppPlugins(root: string, git: GitPort, sharedFile?: string, check?: RepositoryCheck): Promise<AppPluginView[]> {
+/** Where a plugin's code is: its folder (absolute) and its main file relative to the app's folder (absent when the file is outside the app). */
+export interface PluginLocation {
+  readonly folder: string
+  readonly main?: string
+}
+
+/** A path inside `root` as a relative path with forward slashes, or undefined when it is outside. */
+export function insideApp(root: string, file: string): string | undefined {
+  const rel = relative(root, file)
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return undefined
+  return rel.split('\\').join('/')
+}
+
+/** The plugin's own folder in `plugins/` with its entry file, else undefined. */
+function ownLocation(root: string, name: string): PluginLocation | undefined {
+  const folder = join(root, 'plugins', name)
+  if (!existsSync(folder)) return undefined
+  const entry = ENTRIES.find(file => existsSync(join(folder, file)))
+  return { folder, ...(entry === undefined ? {} : { main: `plugins/${name}/${entry}` }) }
+}
+
+/** Where a plugin of `blend.yaml` or the frame has its code: a folder of the app's `plugins/`, else the package the app installed (read-only). */
+export async function pluginLocation(root: string, name: string): Promise<PluginLocation | undefined> {
+  const own = ownLocation(root, name)
+  if (own !== undefined) return own
+  const found = await modulePackage(root, name)
+  if (found?.dir === undefined) return undefined
+  const main = found.main === undefined ? undefined : insideApp(root, found.main)
+  return { folder: found.dir, ...(main === undefined ? {} : { main }) }
+}
+
+/** The newest packed copy of each plugin kept in the app's plugin store, by name. An unreadable store lists nothing. */
+export function savedCopies(storeRoot: string | undefined): ReadonlyMap<string, SavedPluginView> {
+  const copies = new Map<string, SavedPluginView>()
+  if (storeRoot === undefined) return copies
+  try {
+    for (const stored of new PluginStore(storeRoot).list()) if (!copies.has(stored.name)) copies.set(stored.name, { version: stored.version, path: stored.path })
+  } catch {
+    // No store, or one that cannot be read: nothing is shown as saved.
+  }
+  return copies
+}
+
+export async function readAppPlugins(root: string, git: GitPort, sharedFile?: string, check?: RepositoryCheck, storeRoot?: string): Promise<AppPluginView[]> {
   const text = await readFile(join(root, 'blend.yaml'), 'utf8')
   const off = new Set(extensionsOff(text))
   const versions = await libraryVersions(root)
@@ -249,15 +292,20 @@ export async function readAppPlugins(root: string, git: GitPort, sharedFile?: st
   const shareRecords = check === undefined ? recorded : await checkedShares(recorded, check)
   const blendRows = parseBlendRows(text)
   const own = await madePlugins(root)
+  const copies = savedCopies(storeRoot)
   const made = await Promise.all(own.map(async (name): Promise<AppPluginView> => {
     const [description, first] = await Promise.all([packageDescription(join(root, 'plugins', name)), firstCommit(git, root, `plugins/${name}`)])
     const shared = shareRecords[name]
+    const saved = copies.get(name)
+    const where = ownLocation(root, name)
     const row = blendRows.find(entry => entry.name === name)
     return {
       name,
       kind: 'made',
       ...(first === undefined ? { unsaved: true } : { by: first.by, at: first.at }),
       ...(shared === undefined ? {} : { shared }),
+      ...(saved === undefined ? {} : { saved }),
+      ...(where === undefined ? {} : { folder: where.folder, ...(where.main === undefined ? {} : { main: where.main }) }),
       description,
       on: row === undefined ? !off.has(name) : !row.disabled,
     }
@@ -265,7 +313,15 @@ export async function readAppPlugins(root: string, git: GitPort, sharedFile?: st
   const rows = await Promise.all(blendRows.filter(row => !own.includes(row.name)).map(async (row): Promise<AppPluginView> => {
     const description = row.comment !== '' ? firstSentence(row.comment) : await packageDescription(join(root, 'plugins', row.name))
     const version = versions.get(row.name)
-    return { name: row.name, kind: 'row', ...(version === undefined ? {} : { version }), description, on: !row.disabled }
+    const where = await pluginLocation(root, row.name)
+    return {
+      name: row.name,
+      kind: 'row',
+      ...(version === undefined ? {} : { version }),
+      ...(where === undefined ? {} : { folder: where.folder, ...(where.main === undefined ? {} : { main: where.main }) }),
+      description,
+      on: !row.disabled,
+    }
   }))
   return [...made, ...rows]
 }
@@ -312,7 +368,7 @@ export function frameRowState(row: FrameRow): FramePluginState {
 }
 
 /** A module's package.json, found from the app folder. */
-async function modulePackage(root: string, name: string): Promise<{ version?: string; description?: string } | undefined> {
+async function modulePackage(root: string, name: string): Promise<{ version?: string; description?: string; dir?: string; main?: string } | undefined> {
   let file: string
   try {
     file = createRequire(join(root, 'package.json')).resolve(name)
@@ -324,6 +380,8 @@ async function modulePackage(root: string, name: string): Promise<{ version?: st
       const parsed = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as { name?: unknown; version?: unknown; description?: unknown }
       if (parsed.name !== name) continue
       return {
+        dir,
+        main: file,
         ...(typeof parsed.version === 'string' ? { version: parsed.version } : {}),
         ...(typeof parsed.description === 'string' ? { description: parsed.description } : {}),
       }
@@ -338,12 +396,15 @@ async function modulePackage(root: string, name: string): Promise<{ version?: st
 export async function readFramePlugins(root: string, rows: readonly FrameRow[]): Promise<FramePluginView[]> {
   return Promise.all(rows.filter(row => isFramePlugin(row.name, row.id)).map(async (row): Promise<FramePluginView> => {
     const manifest = await modulePackage(root, row.name)
+    const main = manifest?.main === undefined ? undefined : insideApp(root, manifest.main)
     return {
       id: row.id,
       name: row.name,
       ...(manifest?.version === undefined ? {} : { version: manifest.version }),
       description: manifest?.description ?? '',
       state: frameRowState(row),
+      ...(manifest?.dir === undefined ? {} : { folder: manifest.dir }),
+      ...(main === undefined ? {} : { main }),
     }
   }))
 }
@@ -438,6 +499,25 @@ export async function bumpPackageVersion(dir: string): Promise<string> {
   manifest['version'] = next
   await writeFile(join(dir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
   return next
+}
+
+/**
+ * Keep a packed copy of one local plugin on this machine: the plugin is packaged under the app's home as a share does, then put in the app's plugin
+ * store with its checksum. A version is stored once: when this version is already saved with other content, the version is raised (patch) and saved
+ * again, so a changed plugin never overwrites an earlier copy. Nothing leaves the machine.
+ */
+export async function saveAppPlugin(root: string, home: string, name: string): Promise<SavedPluginResult> {
+  const dir = await packageAppPlugin(root, name, pluginPackagesOf(home))
+  const store = new PluginStore(storeRootOf(home))
+  try {
+    const { stored, added } = savePlugin(dir, store)
+    return { version: stored.version, path: stored.path, added, bumped: false }
+  } catch (cause) {
+    if (!(cause instanceof StoreConflictError)) throw cause
+  }
+  await bumpPackageVersion(dir)
+  const { stored, added } = savePlugin(dir, store)
+  return { version: stored.version, path: stored.path, added, bumped: true }
 }
 
 /** Where a share goes through: the user's own `gh` (the repository host) and `git`; a test passes stand-ins, so no test publishes. */

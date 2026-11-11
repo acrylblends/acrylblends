@@ -254,6 +254,21 @@ export const FRAME_PLUGINS_SWITCH_PATH = `${FRAME_API_PREFIX}/plugins/switch`
 export const FRAME_PLUGINS_SHARE_PLAN_PATH = `${FRAME_API_PREFIX}/plugins/share-plan`
 /** POST `{ name, confirm }`: publish it, only when `confirm` is the plan the person said yes to and it still holds. */
 export const FRAME_PLUGINS_SHARE_PATH = `${FRAME_API_PREFIX}/plugins/share`
+/** POST `{ name }`: keep a packed copy of this local plugin on this machine (the app's plugin store); nothing leaves the machine. */
+export const FRAME_PLUGINS_SAVE_PATH = `${FRAME_API_PREFIX}/plugins/save`
+
+/** A packed copy of a plugin kept on this machine: its version and where the tarball is. */
+export interface SavedPluginView {
+  readonly version: string
+  /** Absolute path of the packed copy (the store's `.tgz`). */
+  readonly path: string
+}
+
+/** What a save did: the copy, whether it is new, and whether the version was raised because that version was already saved with other content. */
+export interface SavedPluginResult extends SavedPluginView {
+  readonly added: boolean
+  readonly bumped: boolean
+}
 
 /** Where a shared plugin went: its GitHub repository and the released version other apps install. */
 export interface SharedPluginView {
@@ -295,6 +310,13 @@ export function parseSharePlan(value: unknown): SharePlan {
   return { owner, repo, version, visibility, createsRepository, ...(released === undefined ? {} : { released }), ...(license === undefined ? {} : { license }) }
 }
 
+/** @throws when the value is not what a save answers. */
+export function parseSavedPlugin(value: unknown): SavedPluginResult {
+  if (!isRecord(value) || typeof value.version !== 'string' || value.version === '' || typeof value.path !== 'string' || value.path === ''
+    || typeof value.added !== 'boolean' || typeof value.bumped !== 'boolean') throw new Error('save: not a saved plugin')
+  return { version: value.version, path: value.path, added: value.added, bumped: value.bumped }
+}
+
 /** The same plan: what the person confirmed is what would be published now. */
 export function samePlan(a: SharePlan, b: SharePlan): boolean {
   return a.owner === b.owner && a.repo === b.repo && a.version === b.version && a.visibility === b.visibility
@@ -321,6 +343,12 @@ export interface AppPluginView {
   readonly version?: string
   /** A local plugin this app shared: where it went (a GitHub repository) and the version it released. */
   readonly shared?: SharedPluginView
+  /** The newest packed copy of it kept on this machine (the app's plugin store). */
+  readonly saved?: SavedPluginView
+  /** Absolute path of the plugin's folder, where its code is. */
+  readonly folder?: string
+  /** The plugin's main file, relative to the app's folder: absent when that file is outside the app (a package of `node_modules` elsewhere). */
+  readonly main?: string
   readonly description: string
   readonly on: boolean
 }
@@ -335,6 +363,10 @@ export interface FramePluginView {
   readonly version?: string
   readonly description: string
   readonly state: FramePluginState
+  /** Absolute path of the package folder, where its code is. */
+  readonly folder?: string
+  /** The package's main file relative to the app's folder; absent when it is outside the app. */
+  readonly main?: string
 }
 
 export interface AppPluginsView {
@@ -361,6 +393,11 @@ export function parseAppPluginsView(value: unknown): AppPluginsView {
         ...(isRecord(entry.shared) && typeof entry.shared.url === 'string' && typeof entry.shared.version === 'string'
           ? { shared: { url: entry.shared.url, version: entry.shared.version, ...(entry.shared.gone === true ? { gone: true } : {}) } }
           : {}),
+        ...(isRecord(entry.saved) && typeof entry.saved.version === 'string' && typeof entry.saved.path === 'string'
+          ? { saved: { version: entry.saved.version, path: entry.saved.path } }
+          : {}),
+        ...(typeof entry.folder === 'string' ? { folder: entry.folder } : {}),
+        ...(typeof entry.main === 'string' ? { main: entry.main } : {}),
         description: entry.description,
         on: entry.on,
       }
@@ -374,6 +411,8 @@ export function parseAppPluginsView(value: unknown): AppPluginsView {
         ...(typeof entry.version === 'string' ? { version: entry.version } : {}),
         description: entry.description,
         state: entry.state as FramePluginState,
+        ...(typeof entry.folder === 'string' ? { folder: entry.folder } : {}),
+        ...(typeof entry.main === 'string' ? { main: entry.main } : {}),
       }
     }),
   }

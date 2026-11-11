@@ -17,11 +17,12 @@ import type {} from 'acrylblends/cordis/router-http'
 import { Acryl } from 'acrylblends'
 import { error } from 'acryl-loopback-http'
 import { INVALID_JSON, jsonBody, ownPage, privateApi, readJson } from 'acryl-loopback-http/router'
+import { storeRootOf } from '@webboxes/plugin-hub'
 import { GitRunner, Versions } from 'acryl-versions'
 import * as workspaceHost from 'acryl-workspace'
 // `ctx.loader`: the frame lists its Loader rows and starts the app's plugins again after a switch.
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
-import { ghRepositoryCheck, githubSharePorts, planAppPluginShare, readAppPlugins, readFramePlugins, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
+import { ghRepositoryCheck, githubSharePorts, planAppPluginShare, readAppPlugins, readFramePlugins, saveAppPlugin, shareAppPlugin, switchAppPlugin, type FrameRow, type ShareAppPluginResult } from './app-plugins.ts'
 import { appFallbackTarget, appNavigationTarget } from './app-urls.ts'
 import { lookAtLog, RealChats } from './real-chats.ts'
 import { appGeneration } from './app-generation.ts'
@@ -51,6 +52,7 @@ import {
   FRAME_GIT_REMOTE_PATH,
   FRAME_SNAPSHOT_CAPTURE_PATH,
   FRAME_PLUGINS_PATH,
+  FRAME_PLUGINS_SAVE_PATH,
   FRAME_PLUGINS_SHARE_PATH,
   FRAME_PLUGINS_SHARE_PLAN_PATH,
   FRAME_PLUGINS_SWITCH_PATH,
@@ -65,6 +67,7 @@ import {
   parsePushPlan,
   parseSharePlan,
   type PushPlan,
+  type SavedPluginResult,
   type SharePlan,
   type ShareVisibility,
   type FrameBranch,
@@ -224,6 +227,8 @@ export interface PluginsPort {
   planShare(name: string, visibility?: ShareVisibility): Promise<SharePlan>
   /** Publish one local plugin to its GitHub repository and release, through the plugin-hub path: only the plan the person confirmed. */
   share(name: string, confirmed: SharePlan): Promise<ShareAppPluginResult>
+  /** Keep a packed copy of one local plugin on this machine (the app's plugin store); nothing leaves the machine. */
+  save(name: string): Promise<SavedPluginResult>
 }
 
 function parseSwitch(body: unknown): { kind: AppPluginKind; name: string; on: boolean } | undefined {
@@ -572,6 +577,18 @@ export function frameRoutes({ state, report = () => {}, plugins, feedback, branc
         return c.json(error(cause instanceof Error ? cause.message : 'the share could not be planned'), 409)
       }
     })
+    // A save stays on this machine, so it needs no confirmation beyond the click.
+    app.post(FRAME_PLUGINS_SAVE_PATH, ownPage, jsonBody(), async (c) => {
+      const body = await readJson(c)
+      const name = pluginName(body === INVALID_JSON || body === null || typeof body !== 'object' ? undefined : body as Record<string, unknown>)
+      if (name === undefined) return c.json(error('name one local plugin'), 400)
+      try {
+        return c.json(await plugins.save(name))
+      } catch (cause) {
+        report(cause)
+        return c.json(error(cause instanceof Error ? cause.message : 'the plugin could not be saved'), 409)
+      }
+    })
     // A share leaves the machine under the person's name: it publishes only a plan they confirmed, never on a bare request.
     app.post(FRAME_PLUGINS_SHARE_PATH, ownPage, jsonBody(), async (c) => {
       const body = await readJson(c)
@@ -799,7 +816,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     }
     const plugins: PluginsPort = {
       read: async () => {
-        const [app, frame] = await Promise.all([readAppPlugins(root, git, join(ctx.appInstance.home, 'shared-plugins.json'), ghRepositoryCheck), readFramePlugins(root, frameRows())])
+        const [app, frame] = await Promise.all([readAppPlugins(root, git, join(ctx.appInstance.home, 'shared-plugins.json'), ghRepositoryCheck, storeRootOf(ctx.appInstance.home)), readFramePlugins(root, frameRows())])
         return { plugins: app, frame }
       },
       switch: async (kind, name, on) => {
@@ -814,6 +831,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       // ACRYL plugin share uses, with the user's own gh and git doing the publishing.
       planShare: async (name, visibility) => planAppPluginShare(root, ctx.appInstance.home, name, { ...shareTo, ...(visibility === undefined ? {} : { visibility }) }, githubSharePorts()),
       share: async (name, confirmed) => shareAppPlugin(root, ctx.appInstance.home, name, confirmed, shareTo, githubSharePorts()),
+      save: async (name) => saveAppPlugin(root, ctx.appInstance.home, name),
     }
     // The chat's agent finished a turn that changed files: save a version by itself (./auto-save.ts), and remember which turn it was.
     const store = new SaveStore(join(ctx.appInstance.dshHome, 'chat-saves.json'), report)

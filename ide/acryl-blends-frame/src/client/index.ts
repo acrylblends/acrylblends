@@ -35,7 +35,7 @@ import { SelectionChip, type SelectionChipInjected } from './SelectionChip.tsx'
 import { SelectionStore, carriesSelection, handOffSelection } from './selection.ts'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
-import { FILES_TAB, FrameTabs, tabOfTerminal } from './tabs.ts'
+import { FILES_TAB, fileTab, FrameTabs, tabOfTerminal } from './tabs.ts'
 import { SwitchRequests } from './switch-request.ts'
 import { createFrameTools, installXtermStyles } from './tools.ts'
 import { createSharedVersionsApi } from './versions.ts'
@@ -316,18 +316,34 @@ export function apply(ctx: ClientContext): void {
 
   // Settings → Plugins: the app's plugins, each with its switch, and the frame's own; the Host starts the app's plugins again after a switch.
   const appPlugins = createAppPluginsApi()
+  // View source: the plugin's main file opens as a tab of the right panel's Files tool, which is shown if it was hidden.
+  const sourceAction = (main: string | undefined): (() => void) | undefined => main === undefined ? undefined : () => {
+    view.showRight()
+    tabs.open(fileTab(main))
+  }
   const loadPlugins = async (): Promise<readonly NavigatorPlugin[]> => {
-    const view = await appPlugins.read()
+    const listed = await appPlugins.read()
     return [
-      ...view.plugins.map(plugin => appPluginRow(
-        plugin,
-        async (on) => {
-          await appPlugins.switch(plugin.kind, plugin.name, on)
-          canvas.reload()
-        },
-        plugin.kind === 'made' ? { plan: visibility => appPlugins.planShare(plugin.name, visibility), publish: confirmed => appPlugins.share(plugin.name, confirmed) } : undefined,
-      )),
-      ...view.frame.map(framePluginRow),
+      ...listed.plugins.map(plugin => {
+        const viewSource = sourceAction(plugin.main)
+        return appPluginRow(
+          plugin,
+          async (on) => {
+            await appPlugins.switch(plugin.kind, plugin.name, on)
+            canvas.reload()
+          },
+          plugin.kind === 'made' ? { plan: visibility => appPlugins.planShare(plugin.name, visibility), publish: confirmed => appPlugins.share(plugin.name, confirmed) } : undefined,
+          undefined,
+          {
+            ...(plugin.kind === 'made' ? { save: () => appPlugins.save(plugin.name) } : {}),
+            ...(viewSource === undefined ? {} : { viewSource }),
+          },
+        )
+      }),
+      ...listed.frame.map(plugin => {
+        const viewSource = sourceAction(plugin.main)
+        return framePluginRow(plugin, viewSource === undefined ? undefined : { viewSource })
+      }),
     ]
   }
   ctx.plugin({

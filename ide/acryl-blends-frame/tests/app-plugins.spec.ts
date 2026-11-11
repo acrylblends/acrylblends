@@ -4,10 +4,10 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   bumpPackageVersion, checkedShares, commitMaker, docSummary, extensionsOff, frameRowState, isFramePlugin, packageAppPlugin, parseBlendRows, planAppPluginShare,
-  pluginPackageManifest, pluginPackagesOf, readAppPlugins, readSharedRecords, recordShare, setMadeOn, setRowOn, shareAppPlugin, switchAppPlugin,
+  insideApp, pluginPackageManifest, pluginPackagesOf, readAppPlugins, readSharedRecords, recordShare, saveAppPlugin, setMadeOn, setRowOn, shareAppPlugin, switchAppPlugin,
   type SharePorts,
 } from '../src/app-plugins.ts'
-import { appPluginRow, createAppPluginsApi, filterPlugins, framePluginRow, madeWhen, shareQuestion } from '../src/client/plugins-navigator.ts'
+import { appPluginRow, createAppPluginsApi, filterPlugins, framePluginRow, madeWhen, pullCommand, shareQuestion } from '../src/client/plugins-navigator.ts'
 import { feedbackPlace, feedbackTask } from '../src/client/feedback.ts'
 import { frameRoutes } from '../src/index.ts'
 import { parseAppPluginsView, parseFeedbackView, parseSharePlan, type SharePlan } from '../src/contract.ts'
@@ -300,6 +300,7 @@ describe('sharing a local plugin', () => {
         switch: () => Promise.reject(new Error('not asked')),
         planShare: async () => plan,
         share: async (_name, confirmed) => { shares.push(confirmed); return { ...where, owner: 'tester', repo: 'hello-share', tag: 'v0.1.0' } },
+        save: () => Promise.reject(new Error('not asked')),
       },
     })
     const post = (path: string, body: unknown) => app.fetch(new Request(`http://127.0.0.1:43120${path}`, {
@@ -349,6 +350,82 @@ describe('sharing a local plugin', () => {
       frame: [],
     })
     expect(view.plugins[0]?.shared).toEqual(where)
+  })
+})
+
+describe('seeing a plugin\'s code and keeping it on this machine', () => {
+  const noGit = { run: () => Promise.reject(new Error('not a repository')) }
+
+  it('tells where each plugin\'s code is: its folder, and its main file when that is inside the app', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'frame-where-'))
+    try {
+      mkdirSync(join(root, 'plugins', 'cart'), { recursive: true })
+      writeFileSync(join(root, 'plugins', 'cart', 'index.ts'), '/** The cart. */\nexport function apply() {}\n')
+      mkdirSync(join(root, 'plugins', 'home'), { recursive: true })
+      writeFileSync(join(root, 'plugins', 'home', 'index.ts'), '/** The home page. */\nexport function apply() {}\n')
+      writeFileSync(join(root, 'plugins', 'library.json'), '{"plugins":["home"]}\n')
+      writeFileSync(join(root, 'blend.yaml'), 'spec:\n  rows:\n    - id: home\n      name: home\n    - id: cart\n      name: cart\n    - id: gone\n      name: not-installed\n')
+      const listed = await readAppPlugins(root, noGit)
+      const by = (name: string) => listed.find(plugin => plugin.name === name)
+      expect(by('cart')).toMatchObject({ kind: 'made', folder: join(root, 'plugins', 'cart'), main: 'plugins/cart/index.ts' })
+      expect(by('home')).toMatchObject({ kind: 'row', folder: join(root, 'plugins', 'home'), main: 'plugins/home/index.ts' })
+      // A row whose package is not installed has no code to show, and says nothing rather than guess.
+      expect(by('not-installed')?.folder).toBeUndefined()
+      expect(insideApp(root, join(root, 'plugins', 'cart', 'index.ts'))).toBe('plugins/cart/index.ts')
+      expect(insideApp(root, join(tmpdir(), 'elsewhere', 'index.ts'))).toBeUndefined()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a packed copy on this machine once, and gives a changed plugin the next version instead of overwriting', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'frame-save-'))
+    try {
+      mkdirSync(join(root, 'plugins', 'cart'), { recursive: true })
+      writeFileSync(join(root, 'plugins', 'cart', 'index.ts'), '/** The cart. */\nexport function apply() {}\n')
+      writeFileSync(join(root, 'plugins', 'library.json'), '{"plugins":[]}\n')
+      writeFileSync(join(root, 'blend.yaml'), 'spec:\n  rows:\n    - id: cart\n      name: cart\n')
+      const home = join(root, 'home')
+      const first = await saveAppPlugin(root, home, 'cart')
+      expect(first).toMatchObject({ version: '0.1.0', added: true, bumped: false })
+      expect(existsSync(first.path)).toBe(true)
+      expect(first.path.startsWith(home)).toBe(true)
+      // The same plugin again is the same copy, not a second one.
+      expect(await saveAppPlugin(root, home, 'cart')).toMatchObject({ version: '0.1.0', added: false, bumped: false })
+      // The card reads what is saved from the store.
+      const store = join(home, 'plugins', '.store')
+      expect((await readAppPlugins(root, noGit, undefined, undefined, store)).find(plugin => plugin.name === 'cart')?.saved).toEqual({ version: '0.1.0', path: first.path })
+      // A changed plugin cannot take over version 0.1.0: it is saved as the next version and the first copy stays.
+      writeFileSync(join(root, 'plugins', 'cart', 'index.ts'), '/** The cart, now with a total. */\nexport function apply() { return 1 }\n')
+      const next = await saveAppPlugin(root, home, 'cart')
+      expect(next).toMatchObject({ version: '0.1.1', added: true, bumped: true })
+      expect(existsSync(first.path)).toBe(true)
+      expect(next.path).not.toBe(first.path)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('gives the card its actions, and the pull command of a shared plugin', () => {
+    const plugin = { name: 'cart', kind: 'made' as const, description: 'Cart', on: true, folder: '/app/plugins/cart', main: 'plugins/cart/index.ts', saved: { version: '0.1.0', path: '/home/x.tgz' } }
+    const viewSource = () => {}
+    const row = appPluginRow(plugin, () => Promise.resolve(), undefined, undefined, { viewSource })
+    expect(row).toMatchObject({ folder: '/app/plugins/cart', saved: { version: '0.1.0' } })
+    expect(row.actions?.viewSource).toBe(viewSource)
+    expect(framePluginRow({ id: 'x', name: 'acryl-x', description: '', state: 'active', folder: '/app/node_modules/acryl-x' }, { viewSource }).folder).toBe('/app/node_modules/acryl-x')
+    expect(pullCommand({ url: 'https://github.com/musichen/cart', version: '0.1.0' })).toBe('npm run acryl -- plugin pull github:musichen/cart@0.1.0')
+    expect(pullCommand({ url: 'https://example.com/x', version: '0.1.0' })).toBeUndefined()
+  })
+
+  it('asks the Host to save, and shows the Host\'s reason when it cannot', async () => {
+    const api = createAppPluginsApi(async (url, init) => {
+      expect(url).toBe('/api/acryl-blends-frame/plugins/save')
+      expect(JSON.parse(String(init?.body))).toEqual({ name: 'cart' })
+      return new Response(JSON.stringify({ version: '0.1.0', path: '/home/cart-0.1.0.tgz', added: true, bumped: false }), { status: 200 })
+    })
+    expect(await api.save('cart')).toEqual({ version: '0.1.0', path: '/home/cart-0.1.0.tgz', added: true, bumped: false })
+    const failed = createAppPluginsApi(async () => new Response(JSON.stringify({ error: 'it could not be saved' }), { status: 409 }))
+    await expect(failed.save('cart')).rejects.toThrow('it could not be saved')
   })
 })
 

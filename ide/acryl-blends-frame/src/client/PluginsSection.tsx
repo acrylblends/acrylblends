@@ -2,11 +2,26 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { SharePlan, ShareVisibility } from '../contract.ts'
-import { filterPlugins, shareQuestion, type NavigatorPlugin, type PluginGroup } from './plugins-navigator.ts'
+import { filterPlugins, pullCommand, shareQuestion, type NavigatorPlugin, type PluginGroup } from './plugins-navigator.ts'
 
 export interface PluginsSectionInjected {
   /** Every plugin of the app and the frame, read fresh. */
   readonly loadPlugins: () => Promise<readonly NavigatorPlugin[]>
+}
+
+/** What the Settings shell hands a section: `close` leaves Settings (View source shows the file in the frame, behind the dialog). */
+export interface PluginsSectionOwner {
+  readonly close?: () => void
+}
+
+/** Copy a text to the clipboard; false when the browser refuses (a copy the person can still make by hand from the shown text). */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
 }
 
 const CHIPS: readonly { readonly group: PluginGroup | 'all'; readonly label: string }[] = [
@@ -21,7 +36,7 @@ type Load =
   | { readonly status: 'ready'; readonly plugins: readonly NavigatorPlugin[] }
   | { readonly status: 'error'; readonly message: string }
 
-export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
+export function PluginsSection({ loadPlugins, close }: PluginsSectionInjected & PluginsSectionOwner) {
   const [load, setLoad] = useState<Load>({ status: 'loading' })
   const [query, setQuery] = useState('')
   const [group, setGroup] = useState<PluginGroup | 'all'>('all')
@@ -30,6 +45,9 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
   // A share sends the plugin to GitHub under the person's name: it says what it will create and waits for their yes.
   const [asking, setAsking] = useState<{ readonly key: string; readonly plan: SharePlan } | undefined>(undefined)
   const [sharing, setSharing] = useState<'planning' | 'publishing' | undefined>(undefined)
+  // The plugin whose "Share" list is open, and what the last save or copy said about it.
+  const [choosing, setChoosing] = useState<string | undefined>(undefined)
+  const [said, setSaid] = useState<{ readonly key: string; readonly text: string } | undefined>(undefined)
 
   const [reads, setReads] = useState(0)
   useEffect(() => {
@@ -73,6 +91,7 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
     setSharing('planning')
     setFailure(undefined)
     setAsking(undefined)
+    setChoosing(undefined)
     try {
       setAsking({ key: plugin.key, plan: await plugin.share.plan(visibility) })
     } catch (cause) {
@@ -80,6 +99,35 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
     }
     setBusy(undefined)
     setSharing(undefined)
+  }
+
+  const saveHere = async (plugin: NavigatorPlugin) => {
+    if (plugin.actions?.save === undefined || busy !== undefined) return
+    setBusy(plugin.key)
+    setFailure(undefined)
+    setSaid(undefined)
+    try {
+      const saved = await plugin.actions.save()
+      const text = saved.bumped
+        ? `Saved on this machine as v${saved.version}: the earlier version was already saved with other content, so this one got the next number.`
+        : saved.added ? `Saved on this machine as v${saved.version}.` : `v${saved.version} was already saved here with this same content.`
+      setSaid({ key: plugin.key, text })
+      setLoad(current => current.status === 'ready'
+        ? { status: 'ready', plugins: current.plugins.map(row => row.key === plugin.key ? { ...row, saved: { version: saved.version, path: saved.path } } : row) }
+        : current)
+    } catch (cause) {
+      setFailure(`${plugin.name}: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
+    setBusy(undefined)
+  }
+
+  const copy = async (plugin: NavigatorPlugin, text: string, what: string) => {
+    setSaid({ key: plugin.key, text: (await copyText(text)) ? `Copied ${what}.` : `Your browser did not allow copying; select it here: ${text}` })
+  }
+
+  const viewSource = (plugin: NavigatorPlugin) => {
+    close?.()
+    plugin.actions?.viewSource?.()
   }
 
   const publish = async (plugin: NavigatorPlugin, plan: SharePlan) => {
@@ -139,20 +187,10 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
             <small>
               {plugin.description}{plugin.description === '' ? '' : ' · '}
               <span className="acrylBlendsPlugState" data-state={plugin.state === 'active' ? 'ok' : plugin.state === 'off' ? 'off' : 'warn'}>{plugin.state}</span>
-              {plugin.shared !== undefined && (
+              {plugin.actions?.viewSource !== undefined && (
                 <>
                   {' · '}
-                  {plugin.shared.gone === true
-                    ? (
-                      <span className="acrylBlendsSharedGone" title="GitHub says this repository no longer exists; Share publishes it again">
-                        {plugin.shared.url.replace(/^https:\/\//u, '')} is gone
-                      </span>
-                    )
-                    : (
-                      <a className="acrylBlendsShared" href={plugin.shared.url} target="_blank" rel="noreferrer">
-                        {plugin.shared.url.replace(/^https:\/\//u, '')} · v{plugin.shared.version}
-                      </a>
-                    )}
+                  <button type="button" className="acrylBlendsShareButton" title="Open this plugin's code in the Files tab" onClick={() => { viewSource(plugin) }}>View source</button>
                 </>
               )}
               {plugin.share !== undefined && (
@@ -161,27 +199,81 @@ export function PluginsSection({ loadPlugins }: PluginsSectionInjected) {
                   <button
                     type="button"
                     className="acrylBlendsShareButton"
+                    aria-expanded={choosing === plugin.key}
                     disabled={busy !== undefined}
-                    onClick={() => { void askShare(plugin) }}
+                    onClick={() => { setSaid(undefined); setChoosing(current => (current === plugin.key ? undefined : plugin.key)) }}
                   >
-                    {busy === plugin.key && sharing !== undefined ? (sharing === 'planning' ? 'Checking…' : 'Sharing…') : plugin.shared === undefined || plugin.shared.gone === true ? 'Share' : 'Share again'}
+                    {busy === plugin.key && sharing !== undefined ? (sharing === 'planning' ? 'Checking…' : 'Sharing…') : 'Share…'}
                   </button>
                 </>
               )}
-              {asking?.key === plugin.key && (
-                <span className="acrylBlendsShareAsk" role="group" aria-label={`Share ${plugin.name}`}>
-                  {shareQuestion(asking.plan)}
-                  {/* Cancel is the default: Enter or a stray click sends nothing. */}
-                  <button type="button" className="acrylBlendsShareCancel" autoFocus onClick={() => { setAsking(undefined) }}>Cancel</button>
-                  <button type="button" className="acrylBlendsShareVisibility" disabled={busy !== undefined} onClick={() => { void askShare(plugin, asking.plan.visibility === 'public' ? 'private' : 'public') }}>
-                    {asking.plan.visibility === 'public' ? 'Keep it private' : 'Make it public'}
-                  </button>
-                  <button type="button" className="acrylBlendsShareConfirm" disabled={busy !== undefined} onClick={() => { void publish(plugin, asking.plan) }}>
-                    {asking.plan.createsRepository ? 'Create and publish' : `Publish v${asking.plan.version}`}
-                  </button>
-                </span>
-              )}
             </small>
+            {plugin.folder !== undefined && (
+              <small className="acrylBlendsPlugPath">
+                <code title="Where this plugin's code is">{plugin.folder}</code>
+                {' '}
+                <button type="button" className="acrylBlendsShareButton" onClick={() => { void copy(plugin, plugin.folder ?? '', 'the folder path') }}>Copy path</button>
+                {plugin.actions?.viewSource === undefined && ' · its files are outside this app, so they are not in the Files tab'}
+              </small>
+            )}
+            {(plugin.saved !== undefined || plugin.shared !== undefined) && (
+              <small className="acrylBlendsPlugWhere">
+                {plugin.saved !== undefined && <span>Saved on this machine: v{plugin.saved.version}</span>}
+                {plugin.saved !== undefined && plugin.shared !== undefined && ' · '}
+                {plugin.shared !== undefined && (plugin.shared.gone === true
+                  ? (
+                    <span className="acrylBlendsSharedGone" title="GitHub says this repository no longer exists; Share publishes it again">
+                      {plugin.shared.url.replace(/^https:\/\//u, '')} is gone
+                    </span>
+                  )
+                  : (
+                    <>
+                      Shared on GitHub:{' '}
+                      <a className="acrylBlendsShared" href={plugin.shared.url} target="_blank" rel="noreferrer">
+                        {plugin.shared.url.replace(/^https:\/\//u, '')} · v{plugin.shared.version}
+                      </a>
+                      {pullCommand(plugin.shared) !== undefined && (
+                        <>
+                          {' · '}
+                          <button type="button" className="acrylBlendsShareButton" title={pullCommand(plugin.shared)} onClick={() => { void copy(plugin, pullCommand(plugin.shared as NonNullable<typeof plugin.shared>) ?? '', 'the pull command') }}>Copy pull command</button>
+                        </>
+                      )}
+                    </>
+                  ))}
+              </small>
+            )}
+            {said?.key === plugin.key && <small className="acrylBlendsPlugSaid" role="status">{said.text}</small>}
+            {choosing === plugin.key && plugin.share !== undefined && (
+              <div className="acrylBlendsShareChooser" role="group" aria-label={`Share ${plugin.name}`}>
+                <p className="acrylBlendsShareHead">Where should {plugin.name} go?</p>
+                <ul>
+                  <li>
+                    <span><b>This machine</b>Keeps a packed copy on this computer only, in your ~/.acryl folder. Only you can see it. Nothing is sent anywhere.</span>
+                    <button type="button" disabled={busy !== undefined || plugin.actions?.save === undefined} onClick={() => { void saveHere(plugin) }}>Save here</button>
+                  </li>
+                  <li>
+                    <span><b>My GitHub, private</b>Creates a repository on your GitHub account and releases the plugin there. Only you, and people you add on GitHub, can see it.</span>
+                    <button type="button" disabled={busy !== undefined} onClick={() => { void askShare(plugin, 'private') }}>Share privately</button>
+                  </li>
+                  <li>
+                    <span><b>My GitHub, public</b>The same, but anyone can read it and pull it into their own app. It is released under the MIT license.</span>
+                    <button type="button" disabled={busy !== undefined} onClick={() => { void askShare(plugin, 'public') }}>Share publicly</button>
+                  </li>
+                </ul>
+                <p className="acrylBlendsShareLater">Not available yet: npm, a private registry, and public catalogs (planned in the plugin sharing spec).</p>
+                <button type="button" className="acrylBlendsShareCancel" onClick={() => { setChoosing(undefined) }}>Close</button>
+              </div>
+            )}
+            {asking?.key === plugin.key && (
+              <span className="acrylBlendsShareAsk" role="group" aria-label={`Share ${plugin.name}`}>
+                {shareQuestion(asking.plan)}
+                {/* Cancel is the default: Enter or a stray click sends nothing. */}
+                <button type="button" className="acrylBlendsShareCancel" autoFocus onClick={() => { setAsking(undefined) }}>Cancel</button>
+                <button type="button" className="acrylBlendsShareConfirm" disabled={busy !== undefined} onClick={() => { void publish(plugin, asking.plan) }}>
+                  {asking.plan.createsRepository ? 'Create and publish' : `Publish v${asking.plan.version}`}
+                </button>
+              </span>
+            )}
           </div>
         )
       })}

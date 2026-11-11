@@ -4,12 +4,26 @@
  * chosen; the Host then starts the app's plugins again, and the canvas loads the app page again.
  */
 
-import { FRAME_PLUGINS_PATH, FRAME_PLUGINS_SHARE_PATH, FRAME_PLUGINS_SHARE_PLAN_PATH, FRAME_PLUGINS_SWITCH_PATH, parseAppPluginsView, parseSharePlan, type AppPluginKind, type AppPluginsView, type AppPluginView, type FramePluginView, type ShareVisibility, type SharedPluginView, type SharePlan } from '../contract.ts'
+import { FRAME_PLUGINS_PATH, FRAME_PLUGINS_SAVE_PATH, FRAME_PLUGINS_SHARE_PATH, FRAME_PLUGINS_SHARE_PLAN_PATH, FRAME_PLUGINS_SWITCH_PATH, parseAppPluginsView, parseSavedPlugin, parseSharePlan, type AppPluginKind, type AppPluginsView, type AppPluginView, type FramePluginView, type SavedPluginResult, type SavedPluginView, type ShareVisibility, type SharedPluginView, type SharePlan } from '../contract.ts'
 
 /** Sharing a local plugin: first what it would do, then, on the person's yes, exactly that. */
 export interface PluginShare {
   plan(visibility?: ShareVisibility): Promise<SharePlan>
   publish(confirmed: SharePlan): Promise<SharedPluginView>
+}
+
+/** What the person can do with one local plugin besides sharing it: keep a packed copy on this machine, and look at its code. */
+export interface PluginActions {
+  /** Keep a packed copy in this app's plugin store; nothing leaves the machine. */
+  readonly save?: () => Promise<SavedPluginResult>
+  /** Open the plugin's main file in the Files tab. Absent when the file is outside the app. */
+  readonly viewSource?: () => void
+}
+
+/** The command another app runs to take a shared plugin, from its repository address and version. */
+export function pullCommand(shared: SharedPluginView): string | undefined {
+  const where = /^https:\/\/github\.com\/([^/]+)\/([^/#?]+)/u.exec(shared.url)
+  return where === null ? undefined : `npm run acryl -- plugin pull github:${where[1] ?? ''}/${where[2] ?? ''}@${shared.version}`
 }
 
 /** The question a share asks before anything is sent: the repository, whether it is created, the version and who can see it. */
@@ -39,6 +53,12 @@ export interface NavigatorPlugin {
   readonly state: string
   /** Where a local plugin was shared: its repository and released version. */
   readonly shared?: SharedPluginView
+  /** The newest packed copy kept on this machine. */
+  readonly saved?: SavedPluginView
+  /** Absolute path of the plugin's folder, shown small on the card. */
+  readonly folder?: string
+  /** What the person can do with it besides share it (save here, view the code). */
+  readonly actions?: PluginActions
   /** Publish this local plugin so another app can install it, after the person confirms its plan. Absent when the row cannot be shared here. */
   readonly share?: PluginShare
   /** Absent when the plugin cannot be switched here (the frame's protected rows). */
@@ -59,7 +79,7 @@ export function madeWhen(at: string, now: Date = new Date()): string {
   return when.toLocaleDateString('en', { day: 'numeric', month: 'short' })
 }
 
-export function appPluginRow(plugin: AppPluginView, toggle: (on: boolean) => Promise<void>, share?: PluginShare, now?: Date): NavigatorPlugin {
+export function appPluginRow(plugin: AppPluginView, toggle: (on: boolean) => Promise<void>, share?: PluginShare, now?: Date, actions?: PluginActions): NavigatorPlugin {
   const made = plugin.kind === 'made'
   const by = made
     ? plugin.by === undefined ? 'not saved yet' : [plugin.by, plugin.at === undefined ? '' : madeWhen(plugin.at, now)].filter(part => part !== '').join(' · ')
@@ -73,6 +93,9 @@ export function appPluginRow(plugin: AppPluginView, toggle: (on: boolean) => Pro
     on: plugin.on,
     state: plugin.on ? 'active' : 'off',
     ...(plugin.shared === undefined ? {} : { shared: plugin.shared }),
+    ...(plugin.saved === undefined ? {} : { saved: plugin.saved }),
+    ...(plugin.folder === undefined ? {} : { folder: plugin.folder }),
+    ...(actions === undefined ? {} : { actions }),
     ...(made && share !== undefined ? { share } : {}),
     toggle,
   }
@@ -81,7 +104,7 @@ export function appPluginRow(plugin: AppPluginView, toggle: (on: boolean) => Pro
 const FRAME_STATE_LABEL: Record<FramePluginView['state'], string> = { active: 'active', waiting: 'waiting for a service', failed: 'failed', off: 'off' }
 
 /** One of the frame's own plugins: shown with its state, switched only by changing the frame. */
-export function framePluginRow(plugin: FramePluginView): NavigatorPlugin {
+export function framePluginRow(plugin: FramePluginView, actions?: PluginActions): NavigatorPlugin {
   return {
     key: `frame:${plugin.id}`,
     name: plugin.name,
@@ -90,6 +113,8 @@ export function framePluginRow(plugin: FramePluginView): NavigatorPlugin {
     description: plugin.description,
     on: plugin.state !== 'off',
     state: FRAME_STATE_LABEL[plugin.state],
+    ...(plugin.folder === undefined ? {} : { folder: plugin.folder }),
+    ...(actions === undefined ? {} : { actions }),
   }
 }
 
@@ -109,6 +134,8 @@ export interface AppPluginsApi {
   planShare(name: string, visibility?: ShareVisibility): Promise<SharePlan>
   /** Share one local plugin as the person confirmed it; answers where it went. */
   share(name: string, confirmed: SharePlan): Promise<SharedPluginView>
+  /** Keep a packed copy of one local plugin on this machine. */
+  save(name: string): Promise<SavedPluginResult>
 }
 
 async function errorOf(response: Response): Promise<string> {
@@ -146,6 +173,16 @@ export function createAppPluginsApi(fetcher: FetchLike = (input, init) => fetch(
       })
       if (!response.ok) throw new Error(await errorOf(response))
       return parseSharePlan(await response.json())
+    },
+    async save(name) {
+      const response = await fetcher(FRAME_PLUGINS_SAVE_PATH, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (!response.ok) throw new Error(await errorOf(response))
+      return parseSavedPlugin(await response.json())
     },
     async share(name, confirmed) {
       const response = await fetcher(FRAME_PLUGINS_SHARE_PATH, {

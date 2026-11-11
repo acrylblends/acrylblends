@@ -278,6 +278,19 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsShareConfirm, .acrylBlendsShareCancel, .acrylBlendsShareVisibility { padding: 1px 7px; border: 1px solid var(--bf-border-2); border-radius: 5px; background: var(--bf-surface-2); color: var(--bf-text-2); font: inherit; font-size: 11px; cursor: pointer; }
 .acrylBlendsShareConfirm { border-color: var(--bf-accent); color: var(--bf-strong); background: var(--bf-accent-dim); }
 .acrylBlendsShareConfirm:disabled { opacity: .5; cursor: default; }
+.acrylBlendsShareAsk { grid-column: 1 / -1; }
+.acrylBlendsPlugPath code { font-size: 11px; color: var(--bf-text-2); overflow-wrap: anywhere; user-select: all; }
+.acrylBlendsPlugWhere, .acrylBlendsPlugSaid { overflow-wrap: anywhere; }
+.acrylBlendsPlugSaid { color: var(--bf-ok); }
+.acrylBlendsShareChooser { grid-column: 1 / -1; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--bf-border-2); border-radius: 8px; background: var(--bf-surface-2); }
+.acrylBlendsShareHead { margin: 0 0 8px; color: var(--bf-strong); font-weight: 600; font-size: 12.5px; }
+.acrylBlendsShareChooser ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.acrylBlendsShareChooser li { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; align-items: center; font-size: 11.5px; color: var(--bf-dim); }
+.acrylBlendsShareChooser li b { display: block; color: var(--bf-strong); font-size: 12px; font-weight: 600; margin-bottom: 1px; }
+.acrylBlendsShareChooser li button { padding: 3px 10px; border: 1px solid var(--bf-accent); border-radius: 5px; background: var(--bf-accent-dim); color: var(--bf-strong); font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.acrylBlendsShareChooser li button:disabled { opacity: .5; cursor: default; }
+.acrylBlendsShareLater { margin: 0 0 8px; color: var(--bf-faint); font-size: 11px; }
+
 .acrylBlendsTog { grid-row: 1 / span 2; grid-column: 3; width: 30px; height: 17px; border: 0; padding: 0; border-radius: 99px; background: var(--bf-toggle-off); position: relative; cursor: pointer; }
 .acrylBlendsTog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: left .12s ease; }
 .acrylBlendsTog[aria-checked="true"] { background: var(--bf-accent); }
