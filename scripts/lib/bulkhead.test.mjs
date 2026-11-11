@@ -14,8 +14,8 @@ const ROOTS = ['plugins', 'ide', 'packages/cli/src', 'packages/create/src']
 
 /** The only files allowed to, each with its reason. Anything else is a hidden global. */
 const ALLOWED = {
-  'plugins/instance/storage.ts':
-    'the AppInstance family: the one place a product asks for the home folder and the platform data folder',
+  'plugins/instance/home.ts':
+    "the one owner of the rule (T026): the person's home folder and ~/.acryl, where every app's data lives",
   'ide/acryl-workspace/src/pty/service.ts':
     "a terminal starts in the person's own home folder when its cwd is gone; not app state (as in ACRYL)",
   'packages/cli/src/preflight.ts':

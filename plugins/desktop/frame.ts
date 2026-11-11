@@ -1,12 +1,13 @@
 /**
  * The desktop window on the ACRYL frame (docs/plans/ide-host-inversion.md, section 27). An app with `scripts/ide-host.mjs` runs inside the frame on `npm run dev`;
- * `npm run desktop` shows that same frame: it attaches to a host that already runs (the host's address record, `.acrylblends/frame-url.json`), or starts the host
+ * `npm run desktop` shows that same frame: it attaches to a host that already runs (the host's address record, `frame-url.json` in the app's data folder), or starts the host
  * the way `npm run dev` does and loads the address it prints. Nothing here imports electron: `main.ts` decides with these functions and owns the window.
  */
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { join, resolve } from 'node:path'
+import { appDataHome } from '../instance/index.ts'
 
 /** The launcher every frame app has; without it the app runs on its own server (made before the frame). */
 export const HOST_SCRIPT = join('scripts', 'ide-host.mjs')
@@ -23,11 +24,11 @@ export function isFrameApp(root: string, exists: (path: string) => boolean = exi
   return exists(join(root, HOST_SCRIPT))
 }
 
-/** The app home the host uses: `ACRYLBLENDS_HOME` when set, else `<app>/.acrylblends` (the launcher's own rule). */
+/** The app home the host uses: `ACRYLBLENDS_HOME` when set, else the app's data folder under ~/.acryl (`appDataHome`, the one place that decides it). */
 export function frameHome(root: string, env: Record<string, string | undefined>): string {
   const pinned = env.ACRYLBLENDS_HOME?.trim()
   return pinned === undefined || pinned === ''
-    ? join(resolve(root), '.acrylblends')
+    ? appDataHome(resolve(root), process.platform, env)
     : resolve(pinned)
 }
 

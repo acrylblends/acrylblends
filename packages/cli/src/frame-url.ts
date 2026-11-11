@@ -2,7 +2,7 @@
  * The running frame's address, kept where the app's own data lives.
  *
  * The generated launcher prints the frame's URL with the launch token in it, and that token is the only way into a frame whose browser session ended.
- * So the address is written where the app keeps its data - `.acrylblends/`, which every scaffold's `.gitignore` already covers - at mint time,
+ * So the address is written where the app keeps its data - its folder under `~/.acryl`, outside the repository - at mint time,
  * owner-only (0600 here; a restricted ACL on Windows), and atomically (a temp file in the same folder renamed over it, so a reader never sees half a
  * record). On every later boot the launcher reuses the stored token instead of minting a new one, so the address - and an open page - survives a
  * restart; `acrylblends open` prints it, and `acrylblends open --new` rotates it (the running host replaces the token in place through
@@ -25,6 +25,7 @@ import {
 } from 'node:fs'
 import { connect } from 'node:net'
 import { join, resolve } from 'node:path'
+import { appDataHome } from '../../../plugins/instance/home'
 import type { Io } from './io'
 
 /** The record's file name inside the app home. */
@@ -42,14 +43,14 @@ export interface FrameUrlRecord {
   readonly writtenAt: string
 }
 
-/** The app home the frame uses: `ACRYLBLENDS_HOME` when set, else `<app>/.acrylblends` (the launcher's own rule). */
+/** The app home the frame uses: `ACRYLBLENDS_HOME` when set, else the app's data folder under ~/.acryl (`appDataHome`, the one place that decides it). */
 export function frameHome(
   appRoot: string,
   env: Record<string, string | undefined> = process.env,
 ): string {
   const pinned = env.ACRYLBLENDS_HOME?.trim()
   return pinned === undefined || pinned === ''
-    ? join(resolve(appRoot), '.acrylblends')
+    ? appDataHome(resolve(appRoot), process.platform, env)
     : resolve(pinned)
 }
 

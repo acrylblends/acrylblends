@@ -10,9 +10,9 @@
 import { createHash } from 'node:crypto'
 import { basename, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { AppInstanceError, appHomes, personHome } from './home.ts'
+import { AppInstanceError, appDataHome, appHomes, migrateOldHome, personHome } from './home.ts'
 
-export { AppInstanceError }
+export { AppInstanceError, appDataHome, appHomes, migrateOldHome }
 
 /** How the instance was chosen: from the project folder, a home the caller pinned, or an app of a desktop product's root (`storage.ts`). */
 export type AppInstanceKind = 'project' | 'pinned' | 'product'
@@ -106,6 +106,13 @@ export function projectInstance(
   const root = resolve(projectRoot)
   const name = plainName(root)
   const folders = appHomes(root, platform, env, personHome(env, platform))
+  // An app made before the data moved still has `<app>/.acrylblends`: it is moved once, here, at start. A move that fails stops the app with the old folder intact.
+  const moved = migrateOldHome(root, folders.data)
+  if (moved.status === 'moved')
+    process.stderr.write(
+      `acrylblends: moved this app's data to ${folders.data} (${String(moved.files)} files); the old folder is kept as ${moved.kept}\n`,
+    )
+  else if (moved.status === 'refused') process.stderr.write(`acrylblends: ${moved.reason}\n`)
   return family({
     kind: 'project',
     id: folders.id,

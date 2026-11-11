@@ -5,7 +5,7 @@ Cordis plugin.
 
 ```sh
 npm install
-npm run dev        # prints its URL; data lives in .acrylblends/
+npm run dev        # prints its URL; data lives in ~/.acryl/apps/<id>/data/
 npm test
 npm run check      # type-check
 ```

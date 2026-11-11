@@ -133,7 +133,7 @@ test('the frame router reads /app/ as /app, so the app root answers with or with
 test("the overlay keeps the first chat's workspace in the app's own data home", () => {
   assert.match(
     ideProfilePlan(input).overlay,
-    /- id: workspace-controller\n {2}config:\n {4}documentsDirectory: !!js process\.env\.ACRYLBLENDS_HOME \?\? process\.cwd\(\) \+ '\/\.acrylblends'/u,
+    /- id: workspace-controller\n {2}config:\n {4}documentsDirectory: !!js process\.env\.DSH_HOME/u,
   )
 })
 
@@ -164,7 +164,7 @@ test("the launcher listens on the app's own stable port, so a restart keeps the 
   const plan = ideProfilePlan(input)
   assert.match(
     plan.hostScript,
-    /selectInstance\(\{ projectRoot: appRoot, env: process\.env \}\)\.port\.start/u,
+    /selectInstance\(\{ projectRoot: appRoot, env: process\.env \}\)[\s\S]*instance\.port\.start/u,
   )
   assert.doesNotMatch(plan.hostScript, /ACRYLBLENDS_PORT \?\? '0'/u)
 })

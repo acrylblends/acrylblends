@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { serve } from 'acrylblends/node-server'
 import { app, BrowserWindow, shell } from 'electron'
 import 'acrylblends/node-server/register'
+import { appHomes } from '../instance/index.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
 import { windowOptions } from './window.ts'
@@ -23,9 +24,9 @@ const manifest = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf
   acrylblends?: { desktopPath?: string }
 }
 
-/** Electron's user-data folder: an explicit DSH_DESKTOP_USER_DATA, else a folder inside the app's own folder. */
+/** Electron's user-data folder: an explicit DSH_DESKTOP_USER_DATA, else the app's cache folder under ~/.acryl (what Chromium keeps can be rebuilt). */
 const userData =
-  resolveDesktopUserDataOverride(process.env) ?? join(projectRoot, '.acrylblends', 'electron')
+  resolveDesktopUserDataOverride(process.env) ?? join(appHomes(projectRoot).cache, 'electron')
 mkdirSync(userData, { recursive: true, mode: 0o700 })
 app.setPath('userData', userData)
 app.setName(manifest.name ?? 'acryl-app')

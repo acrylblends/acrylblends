@@ -26,15 +26,26 @@ test('a frame app is one with the frame launcher', () => {
   )
 })
 
-test('the frame home is ACRYLBLENDS_HOME when set, else the app folder', () => {
-  assert.equal(frameHome('/app', {}).replaceAll('\\', '/').endsWith('/app/.acrylblends'), true)
-  assert.equal(frameHome('/app', { ACRYLBLENDS_HOME: '  ' }).endsWith('.acrylblends'), true)
-  assert.equal(
-    frameHome('/app', { ACRYLBLENDS_HOME: '/elsewhere' })
-      .replaceAll('\\', '/')
-      .endsWith('/elsewhere'),
-    true,
-  )
+test('the frame home is ACRYLBLENDS_HOME when set, else the app data folder under ACRYL_HOME', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'acrylblends-frame-home-'))
+  try {
+    const app = join(scratch, 'my-app')
+    const root = join(scratch, 'acryl-root')
+    const home = frameHome(app, { ACRYL_HOME: root }).replaceAll('\\', '/')
+    assert.match(home, /\/acryl-root\/apps\/my-app-[0-9a-f]{4}\/data$/u)
+    assert.equal(
+      frameHome(app, { ACRYL_HOME: root, ACRYLBLENDS_HOME: '  ' }).replaceAll('\\', '/'),
+      home,
+    )
+    assert.equal(
+      frameHome(app, { ACRYLBLENDS_HOME: '/elsewhere' })
+        .replaceAll('\\', '/')
+        .endsWith('/elsewhere'),
+      true,
+    )
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
 })
 
 test('the host address is read from its printed line, token included', () => {

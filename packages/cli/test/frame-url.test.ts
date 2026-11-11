@@ -28,11 +28,17 @@ import type { Io } from '../src/io'
 
 // `open` reads the frame home from the environment (the launcher's own rule); the tests decide it themselves and must not inherit a shell's.
 const savedFrameHome = process.env.ACRYLBLENDS_HOME
+const savedRoot = process.env.ACRYL_HOME
+const root = mkdtempSync(join(tmpdir(), 'acrylblends-frame-url-root-'))
 beforeAll(() => {
   delete process.env.ACRYLBLENDS_HOME
+  process.env.ACRYL_HOME = root
 })
 afterAll(() => {
   if (savedFrameHome !== undefined) process.env.ACRYLBLENDS_HOME = savedFrameHome
+  if (savedRoot === undefined) delete process.env.ACRYL_HOME
+  else process.env.ACRYL_HOME = savedRoot
+  rmSync(root, { recursive: true, force: true })
 })
 
 const scratch: string[] = []
@@ -101,7 +107,10 @@ describe('the frame address record', () => {
 
   it('follows ACRYLBLENDS_HOME, the same rule the launcher uses', () => {
     const app = folder()
-    assert.equal(frameHome(app, {}), join(app, '.acrylblends'))
+    assert.match(
+      frameHome(app, { ACRYL_HOME: root }).replaceAll('\\', '/'),
+      /\/apps\/acrylblends-frame-url-[a-z0-9]+-[0-9a-f]{4}\/data$/u,
+    )
     const pinned = folder()
     assert.equal(frameHome(app, { ACRYLBLENDS_HOME: pinned }), pinned)
   })
@@ -122,7 +131,7 @@ describe('the frame address record', () => {
 describe('acrylblends open', () => {
   it('prints the address of the running frame, and only the address', async () => {
     const app = folder()
-    const home = join(app, '.acrylblends')
+    const home = frameHome(app, process.env)
     const server = createNetServer()
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
     const address = server.address()
@@ -141,7 +150,7 @@ describe('acrylblends open', () => {
 
   it('explains a stopped frame instead of handing out a dead token', async () => {
     const app = folder()
-    const home = join(app, '.acrylblends')
+    const home = frameHome(app, process.env)
     const port = await closedPort()
     writeFrameUrl(home, `http://127.0.0.1:${String(port)}/?token=gone`)
     const { io, out, err } = fakeIo(app)
@@ -162,7 +171,7 @@ describe('acrylblends open', () => {
 
   it('--new rotates the token in the running host and keeps the new address', async () => {
     const app = folder()
-    const home = join(app, '.acrylblends')
+    const home = frameHome(app, process.env)
     let current = 'stored-token'
     const seen: string[] = []
     const server = createServer((request, response) => {
@@ -202,7 +211,7 @@ describe('acrylblends open', () => {
 
   it('--new with nothing running forgets the address, and the next start mints a new one', async () => {
     const app = folder()
-    const home = join(app, '.acrylblends')
+    const home = frameHome(app, process.env)
     const port = await closedPort()
     writeFrameUrl(home, `http://127.0.0.1:${String(port)}/?token=gone`)
     const { io, out, err } = fakeIo(app)

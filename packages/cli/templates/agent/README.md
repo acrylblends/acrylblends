@@ -5,7 +5,7 @@ Cordis plugin.
 
 ```sh
 npm install
-npm run dev        # prints its URL; data lives in .acrylblends/; it restarts when a file changes (a new port if ACRYLBLENDS_PORT=0)
+npm run dev        # prints its URL; data lives in ~/.acryl/apps/<id>/data/; it restarts when a file changes (a new port if ACRYLBLENDS_PORT=0)
 npm test
 npm run check      # type-check
 

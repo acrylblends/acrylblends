@@ -334,7 +334,7 @@ export function frameReport(frame: FrameStep): string {
 /**
  * `acrylblends upgrade`: bring the library plugins an app carries (the router, the server, the door, `extensions`, ...) up to the version of this package. Each file is compared with what
  * the app was given: an untouched file is replaced, a file the app edited stops the upgrade (it is shown as a diff and nothing changes) unless `--force`, which saves the edited version
- * under `.acrylblends/upgrade-backup/` first. Returns the exit code: 0 done or nothing to do, 1 refused or failed.
+ * under `.acryl/upgrade-backup/` first. Returns the exit code: 0 done or nothing to do, 1 refused or failed.
  */
 export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> {
   const appDir = resolve(io.cwd, options.directory ?? '.')
@@ -387,8 +387,8 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
     return 0
   }
 
-  // What the current library would copy, into a scratch folder inside the app (`.acrylblends/` is ignored by git).
-  const scratch = join(appDir, '.acrylblends', `upgrade-${process.pid}-${Date.now()}`)
+  // What the current library would copy, into a scratch folder inside the app (`.acryl/`, the app's own state folder, is ignored by git).
+  const scratch = join(appDir, '.acryl', `upgrade-${process.pid}-${Date.now()}`)
   const lock = readLock(folder.dir)
   const history = readHistory()
   const plans: PluginPlan[] = []
@@ -517,7 +517,7 @@ export async function upgrade(options: UpgradeOptions, io: Io): Promise<number> 
     // Apply.
     const backup = join(
       appDir,
-      '.acrylblends',
+      '.acryl',
       'upgrade-backup',
       new Date().toISOString().replace(/[:.]/gu, '-'),
     )
