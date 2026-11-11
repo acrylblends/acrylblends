@@ -33,6 +33,7 @@ describe('acryl-page', () => {
     const html = await response.text()
     expect(html.startsWith('<!doctype html>')).toBe(true)
     expect(html).toContain('<title>Test App</title>')
+    expect(html).toContain('<meta name="application-name" content="Test App" />')
     expect(html).toContain('<div id="root"></div>')
     expect(html).toContain('window.__TEST_BOOT__ = 1')
     expect(html).toContain('/assets/')
@@ -45,7 +46,7 @@ describe('acryl-page', () => {
     expect(html).not.toContain('<title>DeepSeek Harness</title>')
   })
 
-  it('answers every icon request with the ACRYL mark, never the frontend package\'s DeepSeek whale', async () => {
+  it('answers every icon request with the ACRYL Blends logo, never the frontend package\'s DeepSeek whale', async () => {
     const ctx = await boot()
     const html = await (await fetch(ctx.nodeServer.url)).text()
     expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg" />')
@@ -53,10 +54,19 @@ describe('acryl-page', () => {
     for (const icon of icons) {
       expect(icon.status).toBe(200)
       expect(icon.headers.get('content-type')).toBe('image/svg+xml')
-      expect(await icon.text()).toContain('aria-label="ACRYL"')
+      const svg = await icon.text()
+      // The ACRYL Blends logo as a PNG inside the SVG, not the DeepSeek whale and not the wordmark.
+      expect(svg).toContain('aria-label="ACRYL Blends"')
+      expect(svg).toMatch(/xlink:href="data:image\/png;base64,iVBORw0KGgo/u)
     }
     const manifest = await (await fetch(ctx.nodeServer.url + '/manifest.webmanifest')).json() as { name: string }
     expect(manifest.name).toBe('Test App')
+  })
+
+  it('writes an app name as text, never as markup', () => {
+    const html = page.pageDocument('', '<b onload="x">shop</b>', (document) => document)
+    expect(html).not.toContain('<b onload')
+    expect(html).toContain('<title>&#60;b onload=&#34;x&#34;&#62;shop&#60;/b&#62;</title>')
   })
 
   it('closes the entry script it copies, so the tags after it parse', () => {

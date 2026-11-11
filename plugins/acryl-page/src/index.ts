@@ -65,12 +65,15 @@ export function clientAssetTags(indexHtml: string): string {
 
 /** Our document: minimal on purpose; the frame renders into `#root`, and the taps add the boot wire before `</head>`. */
 export function pageDocument(tags: string, title: string, taps: (html: string) => string): string {
+  // The title is an app's name, typed by a person: markup in it is text, never the page's.
+  const text = title.replace(/[&<>"']/gu, (character) => `&#${String(character.charCodeAt(0))};`)
   const document = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title}</title>
+    <title>${text}</title>
+    <meta name="application-name" content="${text}" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
     ${tags}
