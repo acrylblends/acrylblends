@@ -296,6 +296,14 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsShareDetails { margin: 6px 0 0; padding-left: 16px; color: var(--bf-dim); font-size: 11px; }
 .acrylBlendsShareChooser .acrylBlendsShareAsk { display: block; margin-top: 0; }
 .acrylBlendsShareChooser .acrylBlendsNote[data-warn] { color: var(--bf-warn); }
+.acrylBlendsConnect { display: grid; gap: 6px; }
+.acrylBlendsConnect p { margin: 0; }
+.acrylBlendsConnectButton { padding: 5px 14px; border: 1px solid var(--bf-accent); border-radius: 6px; background: var(--bf-accent); color: var(--bf-on-accent, #fff); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.acrylBlendsConnectButton:disabled { opacity: .6; cursor: default; }
+.acrylBlendsConnectCode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.acrylBlendsConnectCode code { padding: 4px 10px; border: 1px solid var(--bf-border-2); border-radius: 6px; background: var(--bf-surface); color: var(--bf-strong); font-size: 18px; font-weight: 600; letter-spacing: .12em; }
+.acrylBlendsConnectOpen { padding: 4px 12px; border-radius: 6px; background: var(--bf-accent); color: var(--bf-on-accent, #fff); font-size: 12px; font-weight: 600; text-decoration: none; }
+.acrylBlendsConnectAlt { color: var(--bf-dim); font-size: 11px; }
 .acrylBlendsCommand { display: block; margin-top: 4px; }
 .acrylBlendsCommand code { padding: 1px 6px; border-radius: 4px; background: rgb(127 127 127 / 16%); color: var(--bf-strong); user-select: all; }
 .acrylBlendsDetailsText { margin: 4px 0 0; padding: 6px 8px; border-radius: 5px; background: rgb(127 127 127 / 12%); color: var(--bf-text-2); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }

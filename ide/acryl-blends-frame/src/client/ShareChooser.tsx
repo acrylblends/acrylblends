@@ -5,14 +5,17 @@
  */
 
 import { useEffect, useState } from 'react'
-import type { GithubReadiness, SavedPluginResult, SharedPluginView, SharePlan } from '../contract.ts'
+import type { GithubConnectState, GithubReadiness, SavedPluginResult, SharedPluginView, SharePlan } from '../contract.ts'
 import { colleagueAddress, shareButton, shareDetails, shareQuestion, type NavigatorPlugin, type ShareTarget } from './plugins-navigator.ts'
 import { PlainFailure } from './plain-failure.ts'
+import type { GithubConnectApi } from './registry-api.ts'
 
 export interface ShareChooserProps {
   readonly plugin: NavigatorPlugin
   /** Whether this computer can share to GitHub; read once when the chooser opens. */
   readonly readGithub: () => Promise<GithubReadiness>
+  /** Connect GitHub from here (GitHub's browser sign-in); without it the note shows the Terminal command only. */
+  readonly connectGithub?: GithubConnectApi
   /** Copy a text; false when the browser refuses. */
   readonly copy: (text: string) => Promise<boolean>
   readonly onSaved: (saved: SavedPluginResult) => void
@@ -37,7 +40,7 @@ const SAVED = (saved: SavedPluginResult): string => saved.bumped
   ? `Saved on this computer as v${saved.version}. An older v${saved.version} was already saved with different content, so this one got the next number.`
   : saved.added ? `Saved on this computer as v${saved.version}. Nothing was sent anywhere.` : `This is already saved on this computer (v${saved.version}). Nothing changed.`
 
-export function ShareChooser({ plugin, readGithub, copy, onSaved, onShared, onClose }: ShareChooserProps) {
+export function ShareChooser({ plugin, readGithub, connectGithub, copy, onSaved, onShared, onClose }: ShareChooserProps) {
   const [state, setState] = useState<Step>({ step: 'choose' })
   const [github, setGithub] = useState<Github>({ status: 'checking' })
   const [details, setDetails] = useState(false)
@@ -135,7 +138,9 @@ export function ShareChooser({ plugin, readGithub, copy, onSaved, onShared, onCl
             ))}
           </ul>
         )}
-      {state.step === 'confirm' || state.step === 'working' ? null : <GithubNote github={github} copy={copy} />}
+      {state.step === 'confirm' || state.step === 'working' ? null : (
+        <GithubNote github={github} copy={copy} connect={connectGithub} onConnected={() => { void readGithub().then(setGithub, () => {}) }} />
+      )}
       {state.step === 'working' && <p className="acrylBlendsNote" role="status">{state.what}</p>}
       {state.step === 'done' && (
         <p className="acrylBlendsPlugSaid" role="status">
@@ -166,27 +171,85 @@ export function ShareChooser({ plugin, readGithub, copy, onSaved, onShared, onCl
   )
 }
 
-/** Why the three GitHub choices are greyed out, and the one thing to do about it. */
-function GithubNote({ github, copy }: { readonly github: Github; readonly copy: (text: string) => Promise<boolean> }) {
-  const [copied, setCopied] = useState(false)
+/** How often the page asks whether the person finished on github.com. */
+const CONNECT_POLL_MS = 2_000
+
+/** Why the three GitHub choices are greyed out, and the one thing to do about it: Connect GitHub (or, without it, the Terminal command). */
+function GithubNote({ github, copy, connect, onConnected }: {
+  readonly github: Github
+  readonly copy: (text: string) => Promise<boolean>
+  readonly connect: GithubConnectApi | undefined
+  readonly onConnected: () => void
+}) {
+  const [copied, setCopied] = useState<string | undefined>(undefined)
+  const [connecting, setConnecting] = useState<GithubConnectState>({ status: 'idle' })
+  const waiting = connecting.status === 'starting' || connecting.status === 'code'
+
+  useEffect(() => {
+    if (connect === undefined || !waiting) return
+    let live = true
+    const timer = setInterval(() => {
+      connect.state().then(
+        (now) => {
+          if (!live) return
+          setConnecting(now)
+          if (now.status === 'connected') onConnected()
+        },
+        () => {},
+      )
+    }, CONNECT_POLL_MS)
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
+  }, [connect, waiting, onConnected])
+
   if (github.status === 'checking' || github.status === 'ready') return null
+  const start = (): void => {
+    if (connect === undefined) return
+    setConnecting({ status: 'starting' })
+    connect.start().then(setConnecting, (cause: unknown) => {
+      setConnecting({ status: 'failed', say: cause instanceof PlainFailure ? cause.message : 'GitHub could not be reached. Check your internet connection and try again.' })
+    })
+  }
+  const copyText = (text: string, said: string): void => {
+    void copy(text).then(ok => { setCopied(ok ? said : undefined) })
+  }
   return (
-    <p className="acrylBlendsNote" role="status" data-warn>
-      {github.say}
-      {github.status === 'signed-out' && (
+    <div className="acrylBlendsNote acrylBlendsConnect" role="status" data-warn={connecting.status === 'code' ? undefined : ''}>
+      {connecting.status === 'code' ? (
         <>
-          <span className="acrylBlendsCommand">
-            <code>{github.command}</code>{' '}
-            <button type="button" className="acrylBlendsShareButton" onClick={() => { void copy(github.command).then(setCopied) }}>{copied ? 'Copied' : 'Copy'}</button>
-          </span>
+          <p>Enter this code on GitHub, then press Authorize. This window updates by itself.</p>
+          <p className="acrylBlendsConnectCode">
+            <code aria-label="One-time code">{connecting.code}</code>
+            <button type="button" className="acrylBlendsShareButton" onClick={() => { copyText(connecting.code, 'code') }}>{copied === 'code' ? 'Copied' : 'Copy code'}</button>
+            <a className="acrylBlendsConnectOpen" href={connecting.url} target="_blank" rel="noreferrer">Open GitHub</a>
+          </p>
+        </>
+      ) : connecting.status === 'connected' ? (
+        <p>GitHub is connected. Checking your account...</p>
+      ) : (
+        <>
+          <p>{connecting.status === 'failed' ? connecting.say : github.say}</p>
+          {github.status === 'signed-out' && connect !== undefined && (
+            <p>
+              <button type="button" className="acrylBlendsConnectButton" disabled={connecting.status === 'starting'} onClick={start}>
+                {connecting.status === 'starting' ? 'Connecting...' : 'Connect GitHub'}
+              </button>
+            </p>
+          )}
+          {github.status === 'signed-out' && (
+            <p className="acrylBlendsConnectAlt">
+              {connect === undefined ? 'Open the Terminal and run:' : 'Or in the Terminal:'}{' '}
+              <code>{github.command}</code>{' '}
+              <button type="button" className="acrylBlendsShareButton" onClick={() => { copyText(github.command, 'command') }}>{copied === 'command' ? 'Copied' : 'Copy'}</button>
+            </p>
+          )}
+          {github.status === 'missing' && (
+            <p><a className="acrylBlendsShared" href={github.link} target="_blank" rel="noreferrer">cli.github.com</a></p>
+          )}
         </>
       )}
-      {github.status === 'missing' && (
-        <>
-          {' '}
-          <a className="acrylBlendsShared" href={github.link} target="_blank" rel="noreferrer">cli.github.com</a>
-        </>
-      )}
-    </p>
+    </div>
   )
 }

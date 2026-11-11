@@ -221,6 +221,7 @@ export function PluginsSection({ loadPlugins, graph, registry, close }: PluginsS
               <ShareChooser
                 plugin={plugin}
                 readGithub={registry.github}
+                connectGithub={registry.connect}
                 copy={copyText}
                 onSaved={saved => { mark(plugin.key, { saved: { version: saved.version, path: saved.path } }) }}
                 onShared={shared => { mark(plugin.key, { shared }) }}

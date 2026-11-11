@@ -260,6 +260,8 @@ export const FRAME_PLUGINS_SAVE_PATH = `${FRAME_API_PREFIX}/plugins/save`
 export const FRAME_PLUGINS_REGISTRY_PATH = `${FRAME_API_PREFIX}/plugins/registry`
 /** GET: whether this computer can share to GitHub (the helper program is installed and signed in), read before the person is asked anything. */
 export const FRAME_PLUGINS_GITHUB_PATH = `${FRAME_API_PREFIX}/plugins/github`
+/** POST: start GitHub's browser sign-in (a one-time code for github.com/login/device); GET: where it is; DELETE: stop one still waiting. */
+export const FRAME_PLUGINS_GITHUB_CONNECT_PATH = `${FRAME_API_PREFIX}/plugins/github/connect`
 /** POST `{ source }`: pull one released plugin (`github:<owner>/<repo>@<version>`) into the running app, through the app's plugin-share checks. */
 export const FRAME_PLUGINS_PULL_PATH = `${FRAME_API_PREFIX}/plugins/pull`
 
@@ -633,6 +635,27 @@ export type GithubReadiness =
   | { readonly status: 'signed-out'; readonly say: string; readonly command: string }
   | { readonly status: 'missing'; readonly say: string; readonly link: string }
   | { readonly status: 'unavailable'; readonly say: string }
+
+/** Where connecting GitHub from the app is (`./github-connect.ts`). */
+export type GithubConnectState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'starting' }
+  | { readonly status: 'code'; readonly code: string; readonly url: string }
+  | { readonly status: 'connected' }
+  | { readonly status: 'failed'; readonly say: string; readonly details?: string }
+
+/** @throws when the value is not a connect state. */
+export function parseGithubConnectState(value: unknown): GithubConnectState {
+  if (!isRecord(value)) throw new Error('github connect: not a state')
+  if (value.status === 'idle' || value.status === 'starting' || value.status === 'connected') return { status: value.status }
+  if (value.status === 'code' && typeof value.code === 'string' && typeof value.url === 'string' && value.url.startsWith('https://github.com/')) {
+    return { status: 'code', code: value.code, url: value.url }
+  }
+  if (value.status === 'failed' && typeof value.say === 'string') {
+    return { status: 'failed', say: value.say, ...(typeof value.details === 'string' ? { details: value.details } : {}) }
+  }
+  throw new Error('github connect: not a state')
+}
 
 /** @throws when the value is not a GitHub readiness. */
 export function parseGithubReadiness(value: unknown): GithubReadiness {

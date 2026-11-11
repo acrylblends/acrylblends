@@ -227,6 +227,7 @@ describe('the Host routes of the registry', () => {
     planShare: () => Promise.reject(rejects('plan')),
     share: () => Promise.reject(rejects('share')),
     save: () => Promise.reject(rejects('save')),
+    connect: { start: () => Promise.reject(rejects('connect')), state: () => ({ status: 'idle' as const }), cancel: () => {} },
   })
   const routes = (pull: (source: string) => Promise<unknown>) => frameRoutes({
     state: () => Promise.reject(new Error('not asked')),

@@ -296,6 +296,7 @@ describe('sharing a local plugin', () => {
     const app = frameRoutes({
       state: () => Promise.reject(new Error('not asked')),
       plugins: {
+        connect: { start: () => Promise.reject(new Error('not asked')), state: () => ({ status: 'idle' as const }), cancel: () => {} },
         read: () => Promise.reject(new Error('not asked')),
         switch: () => Promise.reject(new Error('not asked')),
         planShare: async () => plan,

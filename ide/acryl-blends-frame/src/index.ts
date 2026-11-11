@@ -55,6 +55,7 @@ import {
   FRAME_GIT_PUSH_PLAN_PATH,
   FRAME_GIT_REMOTE_PATH,
   FRAME_SNAPSHOT_CAPTURE_PATH,
+  FRAME_PLUGINS_GITHUB_CONNECT_PATH,
   FRAME_PLUGINS_GITHUB_PATH,
   FRAME_PLUGINS_PATH,
   FRAME_PLUGINS_PULL_PATH,
@@ -81,11 +82,13 @@ import {
   type ShareVisibility,
   type FrameBranch,
   type FrameState,
+  type GithubConnectState,
   type GithubReadiness,
   type GitRemoteState,
   type GitSyncResult,
 } from './contract.ts'
 import { GitSync, upstreamHead } from './git-sync.ts'
+import { GithubConnect, githubConnectPorts } from './github-connect.ts'
 import { createAppSnapshot, type AppSnapshotService } from './app-snapshot.ts'
 
 /**
@@ -245,6 +248,12 @@ export interface PluginsPort {
   pull(source: string): Promise<PulledPluginView>
   /** Whether this computer can share to GitHub now; read before the person is asked anything. */
   github(): Promise<GithubReadiness>
+  /** Connect GitHub from the app: start (or rejoin) GitHub's browser sign-in, read where it is, or stop it. */
+  readonly connect: {
+    start(): Promise<GithubConnectState>
+    state(): GithubConnectState
+    cancel(): void
+  }
 }
 
 /** The only address a page may ask to add: a released plugin of a GitHub account, by version (never a local file or another URL). */
@@ -659,6 +668,13 @@ export function frameRoutes({ state, report = () => {}, plugins, graph, feedback
         return c.json(error('GitHub could not be checked'), 500)
       }
     })
+    // Connecting GitHub opens GitHub's own sign-in in the person's browser; the app only shows the code GitHub gave and never sees a credential.
+    app.post(FRAME_PLUGINS_GITHUB_CONNECT_PATH, ownPage, async (c) => c.json(await plugins.connect.start()))
+    app.get(FRAME_PLUGINS_GITHUB_CONNECT_PATH, ownPage, (c) => c.json(plugins.connect.state()))
+    app.delete(FRAME_PLUGINS_GITHUB_CONNECT_PATH, ownPage, (c) => {
+      plugins.connect.cancel()
+      return c.json(plugins.connect.state())
+    })
     app.get(FRAME_PLUGINS_REGISTRY_PATH, ownPage, async (c) => {
       try {
         return c.json(await plugins.registry())
@@ -888,6 +904,11 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       if (loader === undefined) return []
       return [...loader.entries()].map(entry => ({ id: entry.options.id, name: entry.options.name, disabled: entry.disabled, fiberState: entry.fiber?.state }))
     }
+    // One GitHub sign-in at a time, owned by this effect: unloading the frame ends one still waiting.
+    const githubConnect = new GithubConnect(githubConnectPorts())
+    ctx.effect(() => () => {
+      githubConnect.dispose()
+    }, 'acryl-blends-frame: connecting GitHub')
     const plugins: PluginsPort = {
       read: async () => {
         const [app, frame] = await Promise.all([readAppPlugins(root, git, join(ctx.appInstance.home, 'shared-plugins.json'), ghRepositoryCheck, storeRootOf(ctx.appInstance.home)), readFramePlugins(root, frameRows())])
@@ -907,6 +928,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
       share: async (name, confirmed) => shareAppPlugin(root, ctx.appInstance.home, name, confirmed, shareTo, githubSharePorts()),
       save: async (name) => saveAppPlugin(root, ctx.appInstance.home, name),
       github: async () => githubReadiness(() => githubSharePorts().host.login()),
+      connect: githubConnect,
       registry: async () => readRegistryView(registryRead, async () => registryMarks()),
       pull: async (source) => {
         const share = pluginShareOf(() => ctx.get('pluginShare'))

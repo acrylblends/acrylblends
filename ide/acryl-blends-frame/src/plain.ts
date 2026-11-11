@@ -31,7 +31,7 @@ export const GITHUB_MISSING: GithubReadiness = {
 
 export const GITHUB_SIGNED_OUT: GithubReadiness = {
   status: 'signed-out',
-  say: `Sign in to GitHub once: open the Terminal and run the command below, then come back here. ${KEEP_HERE}`,
+  say: `To share, connect your GitHub account once. ${KEEP_HERE}`,
   command: 'gh auth login',
 }
 
@@ -65,7 +65,7 @@ export function plainShareProblem(cause: unknown): Plain {
       ? { say: `Sharing needs a free program called git, and it is not installed on this computer. Install it from git-scm.com and try again. ${KEEP_HERE}`, details: message }
       : { say: GITHUB_MISSING.status === 'missing' ? GITHUB_MISSING.say : '', details: message }
   }
-  if (setup === 'signed-out') return { say: 'You are not signed in to GitHub. Open the Terminal, run: gh auth login, then try again. Nothing was sent.', details: message }
+  if (setup === 'signed-out') return { say: 'GitHub is not connected. Press Connect GitHub, then try again. Nothing was sent.', details: message }
   if (/changed since you confirmed/iu.test(message)) return { say: 'Something changed while you were deciding, so nothing was sent. Please try again.', details: message }
   if (/secret|password|token|private key|credential/iu.test(message)) {
     return { say: 'This plugin contains something that looks like a password or a key, so it was not shared. Remove it from the plugin and try again.', details: message }
