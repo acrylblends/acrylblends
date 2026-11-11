@@ -14,13 +14,13 @@ import {
   AppInstanceError,
   appDataHome,
   appHomes,
-  chatFolder,
+  followFolder,
   migrateOldHome,
   moveChats,
   personHome,
 } from './home.ts'
 
-export { AppInstanceError, appDataHome, appHomes, chatFolder, migrateOldHome, moveChats }
+export { AppInstanceError, appDataHome, appHomes, followFolder, migrateOldHome, moveChats }
 
 /** How the instance was chosen: from the project folder, a home the caller pinned, or an app of a desktop product's root (`storage.ts`). */
 export type AppInstanceKind = 'project' | 'pinned' | 'product'
@@ -39,11 +39,6 @@ export interface AppInstance {
   readonly name: string
   /** The project folder: its code and its `node_modules`. */
   readonly root: string
-  /**
-   * The folder the app's chats work in and are filed under (the engine keys a chat by its working folder): for a folder app a link under its id in the data
-   * root (`home.ts`, `chatFolder`), so a moved folder keeps its chats; the project folder itself where there is no such link.
-   */
-  readonly chatRoot: string
   /** The app's own data: settings, installed extensions, the extension ledger. Never shared with another app. */
   readonly home: string
   /**
@@ -91,7 +86,6 @@ function family(input: {
   id: string
   name: string
   root: string
-  chatRoot?: string
   home: string
   port: PortPreference
 }): AppInstance {
@@ -100,7 +94,6 @@ function family(input: {
     id: input.id,
     name: input.name,
     root: input.root,
-    chatRoot: input.chatRoot ?? input.root,
     home: input.home,
     dshHome: input.home,
     port: Object.freeze({ ...input.port }),
@@ -128,19 +121,15 @@ export function projectInstance(
       `acrylblends: moved this app's data to ${folders.data} (${String(moved.files)} files); the old folder is kept as ${moved.kept}\n`,
     )
   else if (moved.status === 'refused') process.stderr.write(`acrylblends: ${moved.reason}\n`)
-  // The chats of an app made before they were filed under the id are renamed to it, once.
-  const chatRoot = chatFolder(root, platform, env, personHome(env, platform))
-  if (chatRoot !== root) {
-    const chats = moveChats(folders.data, root, chatRoot)
-    if (chats.sessions || chats.workspaces > 0 || chats.branchChats)
-      process.stderr.write(`acrylblends: this app's chats are filed under ${chatRoot} now, so they follow the app when its folder moves\n`)
-  }
+  // The folder was moved or renamed since the last start: its chats (filed by the folder they work in) are brought along, once.
+  const followed = followFolder(folders.data, root)
+  if (followed !== undefined && (followed.sessions || followed.workspaces > 0 || followed.branchChats))
+    process.stderr.write(`acrylblends: this app's folder moved, so its chats were attached to ${root}\n`)
   return family({
     kind: 'project',
     id: folders.id,
     name,
     root,
-    chatRoot,
     home: folders.data,
     port: { start: stablePort(folders.id), scan: true },
   })

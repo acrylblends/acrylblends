@@ -16,12 +16,9 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  readlinkSync,
-  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
-  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
@@ -263,39 +260,6 @@ export function migrateOldHome(
   }
 }
 
-/** The folder an app's chats work in and are filed under: `<root>/apps/<id>/source`. */
-export const SOURCE_DIR = 'source'
-
-/**
- * The folder the engine files an app's chats under. The engine keys a chat by the folder it works in (its workspace path, its session folder), so an app whose
- * chats worked in its own folder lost them when the folder moved. A folder app's chats work in `~/.acryl/apps/<id>/source` instead, a link to the folder
- * that is pointed at the folder again at every start: the key is the id, and a moved app keeps its chats. An installed app's source already is that folder.
- * When the link cannot be made (a file of that name, a platform that refuses), the app folder itself is the answer, as before.
- */
-export function chatFolder(
-  appRoot: string,
-  platform: NodeJS.Platform = process.platform,
-  env: Env = process.env,
-  home: string = personHome(env, platform),
-): string {
-  const folder = resolve(appRoot)
-  const link = pathOf(platform).join(appHomes(folder, platform, env, home).data, '..', SOURCE_DIR)
-  const where = pathOf(platform).normalize(link)
-  try {
-    if (existsSync(where) || isLink(where)) {
-      if (isLink(where)) {
-        if (resolve(readlinkSync(where)) === realpathSync(folder)) return where
-        unlinkSync(where)
-      } else return realpathSync(where) === realpathSync(folder) ? where : folder
-    }
-    mkdirSync(pathOf(platform).dirname(where), { recursive: true })
-    symlinkSync(realpathSync(folder), where, platform === 'win32' ? 'junction' : 'dir')
-    return where
-  } catch {
-    return folder
-  }
-}
-
 const isLink = (path: string): boolean => {
   try {
     return lstatSync(path).isSymbolicLink()
@@ -352,10 +316,10 @@ function rewriteJson(file: string, change: (value: unknown) => boolean): boolean
 
 /**
  * Make the chats an app filed under one folder belong to another, once: the engine's folder for the new place becomes a link to the folder the chats are in, the
- * workspace the engine registered keeps its id and its chats under the new path, and the frame's branch chats move to the new key. For an app whose chats were
- * filed under its own folder (before `chatFolder`). The chats stay where they are: the engine checks that a chat's log is at the place its own header names
+ * workspace the engine registered keeps its id and its chats under the new path, and the frame's branch chats move to the new key. For an app that was moved
+ * or renamed ({@link followFolder}). The chats stay where they are: the engine checks that a chat's log is at the place its own header names
  * (its working folder then), so a renamed folder is refused as corrupt and takes the whole workspace down with it. A chat made later is filed under the new place,
- * in the same folder. Nothing is overwritten: a folder already at the new key is left alone, and an app with no chat under `from` changes nothing. Run before the engine starts.
+ * in the same folder. A chat made before the move still has the old folder as its working folder. Nothing is overwritten: a folder already at the new key is left alone, and an app with no chat under `from` changes nothing. Run before the engine starts.
  */
 export function moveChats(dataHome: string, from: string, to: string): ChatMove {
   const none: ChatMove = { sessions: false, workspaces: 0, branchChats: false }
@@ -395,4 +359,28 @@ export function moveChats(dataHome: string, from: string, to: string): ChatMove 
     return changed
   })
   return { sessions, workspaces, branchChats }
+}
+
+/** Where an app's data home records the folder the app was last started in, so a start in another folder is a move. */
+export const APP_FOLDER_FILE = 'app-folder.json'
+
+/**
+ * The app was started in another folder than last time (it was moved or renamed): its chats follow it ({@link moveChats} from the folder it was in to the one it is in).
+ * Records the folder it is in now. The engine files a chat under the folder it works in, so a moved app would otherwise show no chats. Run before the engine starts.
+ * The first start only records. @returns what was changed, none when the folder is the same or unknown.
+ */
+export function followFolder(dataHome: string, appRoot: string): ChatMove | undefined {
+  const file = join(dataHome, APP_FOLDER_FILE)
+  let before: string | undefined
+  try {
+    const recorded = (JSON.parse(readFileSync(file, 'utf8')) as { root?: unknown }).root
+    before = typeof recorded === 'string' && recorded !== '' ? recorded : undefined
+  } catch {
+    before = undefined
+  }
+  if (before === appRoot) return undefined
+  const moved = before === undefined ? undefined : moveChats(dataHome, before, appRoot)
+  mkdirSync(dataHome, { recursive: true })
+  writeFileSync(file, `${JSON.stringify({ root: appRoot }, null, 2)}\n`)
+  return moved
 }

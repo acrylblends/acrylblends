@@ -206,8 +206,6 @@ export interface FrameState {
   readonly appName: string
   /** The app's folder, which the versions calls take as their path. */
   readonly appRoot: string
-  /** The folder the app's chats work in and are filed under; stable when the app's folder moves. Absent from a host that predates it (the app folder then). */
-  readonly chatRoot?: string
   /** Where the app's own page is served, an absolute path on the frame's origin (`/app`); absent when the Host serves no app. */
   readonly appPage?: string
   /** Local branches, the checked-out one marked; empty when the folder is not a git repository. */
@@ -227,10 +225,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** @throws an Error naming the field when the answer is not a frame state. */
 export function parseFrameState(value: unknown): FrameState {
   if (!isRecord(value)) throw new Error('frame state: not an object')
-  const { appName, appRoot, chatRoot, appPage, branches, head, unsaved, upstreamHead } = value
+  const { appName, appRoot, appPage, branches, head, unsaved, upstreamHead } = value
   if (typeof appName !== 'string' || appName === '') throw new Error('frame state: appName')
   if (typeof appRoot !== 'string' || appRoot === '') throw new Error('frame state: appRoot')
-  if (chatRoot !== undefined && (typeof chatRoot !== 'string' || chatRoot === '')) throw new Error('frame state: chatRoot')
   if (appPage !== undefined && (typeof appPage !== 'string' || !appPage.startsWith('/'))) throw new Error('frame state: appPage')
   if (!Array.isArray(branches)) throw new Error('frame state: branches')
   if (head !== undefined && (typeof head !== 'string' || head === '')) throw new Error('frame state: head')
@@ -243,7 +240,6 @@ export function parseFrameState(value: unknown): FrameState {
   return {
     appName,
     appRoot,
-    ...(chatRoot === undefined ? {} : { chatRoot }),
     ...(appPage === undefined ? {} : { appPage }),
     branches: parsed,
     ...(head === undefined ? {} : { head }),

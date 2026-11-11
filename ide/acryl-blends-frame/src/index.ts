@@ -736,9 +736,6 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
   const shareTo = shareOwner === undefined ? {} : { owner: shareOwner }
   const root = (ctx.appInstance as { readonly root?: unknown }).root
   if (typeof root !== 'string') throw new Error('acryl-blends-frame: the app instance has no app folder (root)')
-  // The folder the app's chats work in and are filed under: stable across a move of the app folder (the instance's `chatRoot`); the app folder where it has none.
-  const chatRootOf = (ctx.appInstance as { readonly chatRoot?: unknown }).chatRoot
-  const chatRoot = typeof chatRootOf === 'string' && chatRootOf !== '' ? chatRootOf : root
   const appBase = appPage === undefined ? undefined : appPage.replace(/\/+$/u, '')
   // Development host only: an app page answers under the canvas prefix, but its root-relative links, form actions, images and fetch calls go to the
   // frame's root. A navigation from an app page is sent back under the prefix (307, so a form's method and body survive); a sub-resource or fetch is
@@ -779,7 +776,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
   ctx.inject(['workspaceController'], (child) => {
     const workspaces = (child as unknown as { workspaceController: { create(request: { readonly path: string }): Promise<unknown> } }).workspaceController
     child.effect(() => {
-      workspaces.create({ path: chatRoot }).catch((cause: unknown) => {
+      workspaces.create({ path: root }).catch((cause: unknown) => {
         child.logger.error(`acryl-blends-frame: the app folder could not be made a workspace: ${cause instanceof Error ? cause.message : String(cause)}`)
       })
       return () => {}
@@ -793,7 +790,7 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
     const chatsFile = createBranchChatsStore(branchChatsFile(ctx.appInstance.home))
     const state = async (): Promise<FrameState> => {
       const [appName, branches, worktree, upstream] = await Promise.all([readAppName(root), readBranches(git, root), readWorktree(git, root), upstreamHead(git, root)])
-      return { appName, appRoot: root, chatRoot, ...(appPage === undefined ? {} : { appPage }), branches, ...worktree, ...(upstream === undefined ? {} : { upstreamHead: upstream }) }
+      return { appName, appRoot: root, ...(appPage === undefined ? {} : { appPage }), branches, ...worktree, ...(upstream === undefined ? {} : { upstreamHead: upstream }) }
     }
     const frameRows = (): FrameRow[] => {
       const loader = ctx.get('loader')
@@ -907,10 +904,10 @@ export function apply(ctx: Context, config: FrameConfig = {}): void {
         },
       },
       branchChats: {
-        read: () => chatsFile.read(chatRoot),
-        assign: (id, branch) => chatsFile.assign(chatRoot, id, branch),
-        setOpen: (id, open) => chatsFile.setOpen(chatRoot, id, open),
-        initOpen: async (ids) => { await chatsFile.initOpen(chatRoot, ids) },
+        read: () => chatsFile.read(root),
+        assign: (id, branch) => chatsFile.assign(root, id, branch),
+        setOpen: (id, open) => chatsFile.setOpen(root, id, open),
+        initOpen: async (ids) => { await chatsFile.initOpen(root, ids) },
       },
       chatSaves,
       ...(appReload === undefined ? {} : { appReload }),
