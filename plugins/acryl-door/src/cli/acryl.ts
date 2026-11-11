@@ -196,13 +196,17 @@ export function parseInvocation(argv: readonly string[], env: NodeJS.ProcessEnv 
   }
 }
 
-/** The app folder: `--dir`, or the nearest folder upward from `cwd` that has `.acryl/door.json` (or at least `.acryl/`). */
+/**
+ * The app folder: `--dir`, or the nearest folder upward from `cwd` that has `.acryl/door.json`. When no app is running, the nearest folder that is an app (it
+ * has a `blend.yaml`), so "no running app in <that folder>" names the app. A folder that only has a `.acryl/` is not an app: the person's `~/.acryl` is ACRYL's
+ * own home, and it must never be taken for the app the command was run in.
+ */
 export function findApp(cwd: string, dir: string | undefined): string | undefined {
   if (dir !== undefined) return resolve(cwd, dir)
   let fallback: string | undefined
   for (let at = resolve(cwd); ; at = dirname(at)) {
     if (existsSync(join(at, STATE_DIR, DOOR_FILE))) return at
-    if (fallback === undefined && existsSync(join(at, STATE_DIR))) fallback = at
+    if (fallback === undefined && existsSync(join(at, 'blend.yaml'))) fallback = at
     if (dirname(at) === at) return fallback
   }
 }

@@ -74,7 +74,8 @@ describe('options', () => {
       directory: 'my-app',
       template: 'notes',
       install: true,
-      desktop: false,
+      desktop: true,
+      start: true,
       pm: 'pnpm',
       yes: true,
       source: undefined,
@@ -94,6 +95,31 @@ describe('options', () => {
     expect(() => parseCreateOptions(['a', 'notes', '--template', 'chat'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['a', 'b', 'c'])).toThrow(UsageError)
     expect(() => parseCreateOptions(['--nope'])).toThrow(UsageError)
+  })
+  it('the defaults are the short command: a template is made in the frame, installed and started, and flags only turn steps off', () => {
+    expect(parseCreateOptions(['shop'])).toMatchObject({
+      directory: 'shop',
+      template: undefined,
+      install: true,
+      desktop: true,
+      start: true,
+    })
+    expect(parseCreateOptions(['shop', 'notes'])).toMatchObject({
+      template: 'notes',
+      install: true,
+      desktop: true,
+    })
+    expect(parseCreateOptions(['shop', '--bare']).desktop).toBe(false)
+    expect(parseCreateOptions(['shop', '--no-install']).install).toBe(false)
+    expect(parseCreateOptions(['shop', '--no-start']).start).toBe(false)
+    expect(() => parseCreateOptions(['shop', '--bare', '--desktop'])).toThrow(UsageError)
+    expect(() => parseCreateOptions(['shop', '--no-install', '--install'])).toThrow(UsageError)
+  })
+  it("someone else's template is not installed or put in the frame by default: its scripts run only on --install", () => {
+    const sourced = parseCreateOptions(['shop', 'github:o/r'])
+    expect(sourced).toMatchObject({ install: false, desktop: false })
+    expect(parseCreateOptions(['shop', 'github:o/r', '--install']).install).toBe(true)
+    expect(parseCreateOptions(['shop', '--from', 'acrylblends.notes']).install).toBe(false)
   })
   it('derives a valid name from a directory', () => {
     expect(nameFrom('/x/My App!')).toBe('my-app')
@@ -127,7 +153,7 @@ describe('create', () => {
     async (template) => {
       const s = fakeIo()
       expect(await runCreate([`app-${template}`, '--template', template, '-y'], s.io)).toBe(0)
-      expect(s.runs).toHaveLength(1)
+      expect(s.runs).toHaveLength(2)
       expect(s.runs[0]?.args.slice(1)).toEqual([
         'init',
         join(scratch, `app-${template}`),
@@ -137,7 +163,10 @@ describe('create', () => {
         `app-${template}`,
         '--yes',
         '--no-next',
+        '--desktop',
       ])
+      // Installed by default; no terminal here, so nothing is started and the next step is told.
+      expect(s.runs[1]).toMatchObject({ args: ['install'], cwd: join(scratch, `app-${template}`) })
       expect(s.out()).toContain(`cd app-${template}`)
     },
   )
@@ -155,14 +184,16 @@ describe('create', () => {
       'my-app',
       '--yes',
       '--no-next',
+      '--desktop',
     ])
   })
 
-  it('--desktop asks init for the framed app, and a plain create does not', async () => {
-    const s = fakeIo()
-    expect(await runCreate(['framed', 'agent', '--desktop'], s.io)).toBe(0)
-    expect(s.err()).toBe('')
-    expect(s.runs[0]?.args.slice(1)).toEqual([
+  it('the frame is the default (--desktop is still accepted), and --bare makes the app without it', async () => {
+    const framed = fakeIo()
+    expect(await runCreate(['framed', 'agent', '--desktop', '--no-install'], framed.io)).toBe(0)
+    expect(framed.err()).toBe('')
+    expect(framed.runs).toHaveLength(1)
+    expect(framed.runs[0]?.args.slice(1)).toEqual([
       'init',
       join(scratch, 'framed'),
       '--template',
@@ -173,6 +204,42 @@ describe('create', () => {
       '--no-next',
       '--desktop',
     ])
+    const bare = fakeIo()
+    expect(await runCreate(['plain', 'agent', '--bare', '--no-install'], bare.io)).toBe(0)
+    expect(bare.runs[0]?.args).not.toContain('--desktop')
+  })
+
+  it('a name on the command line asks nothing, even with a terminal; the app is installed and started', async () => {
+    const asked: string[] = []
+    const s = fakeIo([], true)
+    const ask = s.io.ask!
+    s.io.ask = async (question) => {
+      asked.push(question)
+      return ask(question)
+    }
+    expect(await runCreate(['shop'], s.io)).toBe(0)
+    expect(asked).toEqual([])
+    expect(s.runs.map((r) => r.args)).toEqual([
+      expect.arrayContaining(['init']),
+      ['install'],
+      ['run', 'dev'],
+    ])
+    expect(s.runs[2]).toMatchObject({ cwd: join(scratch, 'shop') })
+    expect(s.out()).toContain('Starting it')
+  })
+
+  it('--no-start installs and says what to type; --no-install makes it only; a script without a terminal never starts a server', async () => {
+    const noStart = fakeIo([], true)
+    expect(await runCreate(['shop-a', '--no-start'], noStart.io)).toBe(0)
+    expect(noStart.runs.map((r) => r.args[0])).not.toContain('run')
+    expect(noStart.out()).toContain('cd shop-a')
+    const noInstall = fakeIo([], true)
+    expect(await runCreate(['shop-b', '--no-install'], noInstall.io)).toBe(0)
+    expect(noInstall.runs).toHaveLength(1)
+    expect(noInstall.out()).toContain('npm install')
+    const script = fakeIo()
+    expect(await runCreate(['shop-c'], script.io)).toBe(0)
+    expect(script.runs.map((r) => r.args[0])).not.toContain('run')
   })
 
   it('--desktop is refused with a starter from a source, which decides its own shape', async () => {
@@ -191,15 +258,19 @@ describe('create', () => {
     expect(s.runs).toEqual([])
   })
 
-  it('installs with the chosen package manager, and asks when it can', async () => {
-    const s = fakeIo(['asked-app', 'chat'], true)
-    expect(await runCreate(['--install', '--pm', 'pnpm'], s.io)).toBe(0)
-    expect(s.runs[0]?.args).toContain('chat')
+  it('with no name it asks one question, the app name, and uses the Blank template; installs and starts with the chosen package manager', async () => {
+    const s = fakeIo(['asked-app'], true)
+    expect(await runCreate(['--pm', 'pnpm'], s.io)).toBe(0)
+    expect(s.runs[0]?.args).toContain('blank')
     expect(s.runs[1]).toMatchObject({
       command: 'pnpm',
       args: ['install'],
       cwd: join(scratch, 'asked-app'),
     })
+    expect(s.runs[2]).toMatchObject({ command: 'pnpm', args: ['run', 'dev'] })
+    const empty = fakeIo([''], true)
+    expect(await runCreate(['--no-start'], empty.io)).toBe(0)
+    expect(empty.runs[0]?.args).toContain(join(scratch, 'my-app'))
   })
 
   it('exits 2 with help on a usage error, and prints help and version', async () => {

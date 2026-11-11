@@ -76,28 +76,35 @@ export const VERSION: string = (
 export const HELP = `${CREATE} ${VERSION} - create an ${CLASS} app
 
 Usage:
-  npm create ${PACKAGE}@latest [directory] [template | source] [-- options]
+  npx acryl new [name] [starter]            (the same through npm create ${PACKAGE}@latest [name] [starter])
 
-A source makes the app from someone else's template (it is downloaded and unpacked, nothing in it runs):
+  npx acryl new shop                        the Blank app in the ACRYL frame, installed and started
+  npx acryl new shop notes                  the same from a starter (${TEMPLATES.join(', ')})
+
+The app is made, installed and started with the chat, the panels and Settings; nothing is asked when a name is given. Next time: cd shop && npm run dev.
+Turn a step off:
+  --no-start        make and install it, do not start it
+  --no-install      make it only
+  --bare            the app without the frame
+
+A source makes the app from someone else's template (it is downloaded and unpacked, nothing in it runs unless --install):
   github:owner/repo[#ref]    a GitHub repository, as a tarball (no clone)
   @scope/name[@version]      an npm package (npm pack --ignore-scripts)
   ./template.tgz             a packed template on disk
   ./folder                   a template folder on disk
 A template is a folder with an ${TEMPLATE_MANIFEST} (name, description, plugins).
 
-A starter from the registry is pulled by its id (npm needs the -- before the options):
-  npm create ${PACKAGE}@latest my-app -- --from acrylblends.notes-desktop
+A starter from the registry is pulled by its id:
   --from <id | source>   a registry id such as acrylblends.notes-desktop, or any of the sources above
   --registry <source>    read the starters from this registry instead of the public one (github:owner/repo, an https:// address, or a folder)
 Only starters made for ${CLASS} (runtime: ${PACKAGE}) are apps this command can make; an ACRYL app starter is refused with a line saying so.
 
-Options:
-  --template <name>   one of the templates below (asked when not given); a bare name after the directory means the same
-                      (npm create ${PACKAGE}@latest my-app notes). Every template is a Cordis app: blend.yaml, plugins/
-  --desktop           put the app inside the ACRYL frame: npm run dev opens it with the chat, the panels and Settings
-  --install           install the dependencies after creating the app (the lifecycle scripts it will run are listed first)
+Other options:
+  --template <name>   the same as the word after the name (npm needs a -- before options when you use npm create)
+  --install           install a source's dependencies (the lifecycle scripts it will run are listed first); a template always installs
+  --desktop           the frame (already the default for a template)
   --pm <manager>      ${PACKAGE_MANAGERS.join(', ')} (default: the one that ran this command, else npm)
-  -y, --yes           ask nothing: template nodejs unless --template is given, directory ${PACKAGE}-app
+  -y, --yes           ask nothing, and use the name my-app when none is given
   -h, --help          show this help
 
 Templates (the same list as acrylblends init):
@@ -154,8 +161,10 @@ export interface CreateOptions {
   directory: string | undefined
   template: Template | undefined
   install: boolean
-  /** Put the app inside the ACRYL frame, as `acrylblends init --desktop` does. */
+  /** Put the app inside the ACRYL frame, as `acrylblends init --desktop` does. On for a template, off for `--bare` and for a starter from a source. */
   desktop: boolean
+  /** Start the app when it is created and installed (`<pm> run dev`), only when there is a terminal to show it in. Off with `--no-start`. */
+  start: boolean
   pm: PackageManager | undefined
   yes: boolean
   /** `github:owner/repo[#ref]`, `@scope/name`, a packed `.tgz`, a folder, or a registry id: a template from outside this package. */
@@ -200,6 +209,10 @@ export function parseCreateOptions(argv: readonly string[]): CreateOptions {
   if (values.from !== undefined && values.template !== undefined)
     throw new UsageError('give --from or --template, not both')
   const source = values.from ?? positionalSource
+  if (values.bare === true && values.desktop === true)
+    throw new UsageError('give --bare or --desktop, not both')
+  if (values['no-install'] === true && values.install === true)
+    throw new UsageError('give --no-install or --install, not both')
   if (values.desktop === true && source !== undefined)
     throw new UsageError(
       '--desktop goes with a template; a starter from a source decides its own shape',
@@ -209,8 +222,10 @@ export function parseCreateOptions(argv: readonly string[]): CreateOptions {
   return {
     directory: positionals[0],
     template: bare ?? named,
-    install: values.install === true,
-    desktop: values.desktop === true,
+    // A template is the framework's own: it installs and opens in the frame unless told not to. A source is someone else's: nothing of it runs unless --install.
+    install: values.install === true || (source === undefined && values['no-install'] !== true),
+    desktop: source === undefined && values.bare !== true,
+    start: values['no-start'] !== true,
     pm: values.pm as PackageManager | undefined,
     yes: values.yes === true,
     source,
@@ -228,7 +243,10 @@ const parse = (argv: readonly string[]) =>
       from: { type: 'string' },
       registry: { type: 'string' },
       install: { type: 'boolean' },
+      'no-install': { type: 'boolean' },
       desktop: { type: 'boolean' },
+      bare: { type: 'boolean' },
+      'no-start': { type: 'boolean' },
       pm: { type: 'string' },
       yes: { type: 'boolean', short: 'y' },
     },
@@ -488,30 +506,17 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
       return 0
     }
     const options = parseCreateOptions(argv)
-    const ask = options.yes ? undefined : io.ask
+    // A name on the command line means no questions at all; without one, the only question is the app's name.
+    const askedName = options.directory === undefined && !options.yes && io.ask !== undefined
     const directory =
       options.directory ??
-      (ask
-        ? (await ask(`Project directory (${PACKAGE}-app): `)).trim() || `${PACKAGE}-app`
-        : `${PACKAGE}-app`)
+      (askedName
+        ? (await io.ask!('What is your app called? (my-app): ')).trim() || 'my-app'
+        : 'my-app')
     const target = resolve(io.cwd, directory)
     if (options.source !== undefined) return await createFromSource(options, target, directory, io)
-    const template: Template =
-      options.template ??
-      (ask
-        ? await (async () => {
-            const answer =
-              (
-                await ask(
-                  `Templates:\n${TEMPLATE_LIST}\nWhich template do you want to use? [nodejs]: `,
-                )
-              ).trim() || 'nodejs'
-            const chosen = resolveTemplate(answer)
-            if (chosen === undefined)
-              throw new UsageError(`unknown template "${answer}" (${TEMPLATES.join(', ')})`)
-            return chosen
-          })()
-        : 'nodejs')
+    // The Blank app is what `acryl new my-app` makes; a starter is a word after the name.
+    const template: Template = options.template ?? 'blank'
     if (!isEmpty(target)) {
       io.stderr.write(`error: ${target} is not empty; nothing was changed\n`)
       return 1
@@ -548,6 +553,14 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
       }
     }
     const start = `${pm} run dev`
+    // The app opens by itself when it was made in the frame, installed, and there is a terminal to run it in (a script or CI never starts a server).
+    if (options.start && options.desktop && options.install && io.ask !== undefined) {
+      io.stdout.write(
+        `\n${name} is ready. Starting it (Ctrl+C stops it). Next time: cd ${directory} && ${start}\n\n`,
+      )
+      await io.run(pm, ['run', 'dev'], target)
+      return 0
+    }
     io.stdout.write(
       `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}  ${start}\n`,
     )
