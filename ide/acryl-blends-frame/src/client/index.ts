@@ -42,6 +42,7 @@ import { createSharedVersionsApi } from './versions.ts'
 import { createGitSyncApi, type GitSyncPort } from './git-sync.ts'
 import { createSnapshotApi } from './snapshot.ts'
 import { FrameViewState, type ViewStorage } from './view-state.ts'
+import { ThemeSwitch } from './theme-switch.ts'
 
 // `sidebarRight` on the context: DSH's right sidebar controller, drawn in the right panel's Panel tab.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
@@ -92,6 +93,7 @@ export function apply(ctx: ClientContext): void {
   // The app's code loaded again (a version restored, a file written by anyone): the canvas reloads on it, and the versions and unsaved count are read again.
   const appReload = new AppReloadStore(() => { canvas.reload(); void frameState.refresh() })
   const view = new FrameViewState(pageStorage())
+  const themeSwitch = new ThemeSwitch(ctx.theme)
   // `uiWorkspace` (DSH's navigation) and `workspaces` (its workspace registry) are DSH services this package does not import the types of; the
   // small interfaces in `./chats.ts` describe the calls it makes, so a frame without them composed still works.
   const branchChats = new BranchChatsStore(createBranchChatsApi())
@@ -243,7 +245,10 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => {
     const presenter = new DesktopThemePresenter()
     presenter.apply(ctx.theme.getTheme())
-    const off = ctx.on('theme/change', snapshot => { presenter.apply(snapshot) })
+    const off = ctx.on('theme/change', snapshot => {
+      presenter.apply(snapshot)
+      themeSwitch.refresh()
+    })
     return () => {
       off()
       presenter.dispose()
@@ -443,6 +448,7 @@ export function apply(ctx: ClientContext): void {
       frameState,
       appReload,
       view,
+      themeSwitch,
       chats,
       versions: {
         log: (path: string) => versionsApi.log(path),
