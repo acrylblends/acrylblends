@@ -333,7 +333,8 @@ const DESCRIPTION =
   from === undefined
     ? 'The ACRYL Blends frame around an empty app: make it yours from the chat.'
     : `${PRODUCT}, an ACRYL Blends app (${from}), in the frame: change it from the chat.`
-const FILE_NAME = from === undefined ? 'ACRYL-Blends-Blank' : PRODUCT.replace(/[^A-Za-z0-9]+/gu, '-')
+const FILE_NAME =
+  from === undefined ? 'ACRYL-Blends-Blank' : PRODUCT.replace(/[^A-Za-z0-9]+/gu, '-')
 // Seal the bundle ad hoc, after the builder has laid it out and before the DMG is made. With no signing step the main program keeps Electron's linker
 // signature (identifier `Electron`, no sealed resources, Info.plist not bound), so the bundle was not sealed and `codesign --verify --deep --strict` failed.
 // An ad hoc seal makes every file of the bundle part of the signature: an app that writes into its own bundle shows at once. No hardened runtime: the
