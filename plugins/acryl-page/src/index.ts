@@ -10,6 +10,7 @@ import { dirname, extname, join, normalize, sep } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from 'acryl-web-server'
+import { ACRYL_FAVICON_SVG, pageManifest } from './favicon.ts'
 
 /** Stable Cordis plugin name, equal to the package name and the Loader row id. */
 export const name = 'acryl-page'
@@ -70,6 +71,8 @@ export function pageDocument(tags: string, title: string, taps: (html: string) =
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title}</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     ${tags}
   </head>
   <body>
@@ -143,21 +146,20 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
       await serveFile(assets, pathname.slice('/assets'.length), res, req.method ?? 'GET')
     },
   })
-  // Browsers ask for /favicon.ico unconditionally; the built light icon answers it.
+  // Browsers ask for /favicon.ico unconditionally. The icon is ours (the ACRYL mark), never the frontend package's DeepSeek whale.
+  const sendIcon = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    res.writeHead(200, { 'content-type': 'image/svg+xml', 'content-length': String(Buffer.byteLength(ACRYL_FAVICON_SVG)), 'cache-control': 'no-cache' })
+    res.end(req.method === 'HEAD' ? undefined : ACRYL_FAVICON_SVG)
+  }
+  for (const path of ['/favicon.ico', '/favicon.svg', '/favicon-dark.svg'])
+    ctx.webServer.register({ kind: 'exact', path, handler: sendIcon })
   ctx.webServer.register({
     kind: 'exact',
-    path: '/favicon.ico',
+    path: '/manifest.webmanifest',
     handler: async (req: IncomingMessage, res: ServerResponse) => {
-      await serveFile(dist, 'favicon.svg', res, req.method ?? 'GET')
+      const manifest = pageManifest(title)
+      res.writeHead(200, { 'content-type': 'application/manifest+json', 'content-length': String(Buffer.byteLength(manifest)) })
+      res.end(req.method === 'HEAD' ? undefined : manifest)
     },
   })
-  for (const file of ['favicon.svg', 'favicon-dark.svg', 'manifest.webmanifest']) {
-    ctx.webServer.register({
-      kind: 'exact',
-      path: `/${file}`,
-      handler: async (req: IncomingMessage, res: ServerResponse) => {
-        await serveFile(dist, file, res, req.method ?? 'GET')
-      },
-    })
-  }
 }

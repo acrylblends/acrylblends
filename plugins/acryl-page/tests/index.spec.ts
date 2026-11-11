@@ -45,6 +45,20 @@ describe('acryl-page', () => {
     expect(html).not.toContain('<title>DeepSeek Harness</title>')
   })
 
+  it('answers every icon request with the ACRYL mark, never the frontend package\'s DeepSeek whale', async () => {
+    const ctx = await boot()
+    const html = await (await fetch(ctx.nodeServer.url)).text()
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg" />')
+    const icons = await Promise.all(['/favicon.ico', '/favicon.svg', '/favicon-dark.svg'].map(async path => fetch(ctx.nodeServer.url + path)))
+    for (const icon of icons) {
+      expect(icon.status).toBe(200)
+      expect(icon.headers.get('content-type')).toBe('image/svg+xml')
+      expect(await icon.text()).toContain('aria-label="ACRYL"')
+    }
+    const manifest = await (await fetch(ctx.nodeServer.url + '/manifest.webmanifest')).json() as { name: string }
+    expect(manifest.name).toBe('Test App')
+  })
+
   it('closes the entry script it copies, so the tags after it parse', () => {
     const tags = page.clientAssetTags(
       '<title>x</title><script type="module" crossorigin src="./assets/index-abc.js"></script>' +
