@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { instanceEnv, productInstance, selectInstance, stablePort } from '../index.ts'
 import {
+  acrylRoot,
   appFolders,
   createApp,
   isAppId,
@@ -14,8 +15,6 @@ import {
   newAppId,
   openRoot,
   personHome,
-  platformDataDir,
-  productRoot,
   renameApp,
   touchApp,
 } from '../storage.ts'
@@ -23,57 +22,27 @@ import {
 const scratch = mkdtempSync(join(tmpdir(), 'instance-storage-'))
 after(() => rmSync(scratch, { recursive: true, force: true }))
 
-test('macOS: the per-user application data folder is Library/Application Support, with spaces and non-ASCII in the home kept', () => {
-  assert.equal(
-    platformDataDir('darwin', {}, '/Users/Zoë Smith'),
-    '/Users/Zoë Smith/Library/Application Support',
-  )
-  // macOS ignores the XDG variables.
-  assert.equal(
-    platformDataDir('darwin', { XDG_DATA_HOME: '/elsewhere' }, '/Users/a'),
-    '/Users/a/Library/Application Support',
-  )
+test('the root is <home>/.acryl on every OS: one short folder, with spaces and non-ASCII in the home kept, as Windows paths for Windows', () => {
+  assert.equal(acrylRoot('darwin', {}, '/Users/Zoë Smith'), '/Users/Zoë Smith/.acryl')
+  assert.equal(acrylRoot('linux', {}, '/home/zoë'), '/home/zoë/.acryl')
+  assert.equal(acrylRoot('win32', {}, 'C:\\Users\\Zoë Smith'), 'C:\\Users\\Zoë Smith\\.acryl')
 })
 
-test('Windows: LOCALAPPDATA (never the roaming profile), else <home>\\AppData\\Local, as Windows paths on any OS', () => {
+test('the OS data-folder variables do not move it; only ACRYL_HOME does, and only as an absolute path', () => {
+  const others = { XDG_DATA_HOME: '/data', LOCALAPPDATA: 'C:\\L', APPDATA: 'C:\\R' }
+  assert.equal(acrylRoot('linux', others, '/home/a'), '/home/a/.acryl')
+  assert.equal(acrylRoot('darwin', others, '/Users/a'), '/Users/a/.acryl')
+  assert.equal(acrylRoot('win32', others, 'C:\\Users\\a'), 'C:\\Users\\a\\.acryl')
   assert.equal(
-    platformDataDir(
-      'win32',
-      {
-        LOCALAPPDATA: 'C:\\Users\\Zoë Smith\\AppData\\Local',
-        APPDATA: 'C:\\Users\\Zoë Smith\\AppData\\Roaming',
-      },
-      'C:\\Users\\Zoë Smith',
-    ),
-    'C:\\Users\\Zoë Smith\\AppData\\Local',
-  )
-  assert.equal(platformDataDir('win32', {}, 'C:\\Users\\a'), 'C:\\Users\\a\\AppData\\Local')
-  // A relative LOCALAPPDATA is not a folder of this machine: the home's is used.
-  assert.equal(
-    platformDataDir('win32', { LOCALAPPDATA: 'AppData' }, 'C:\\Users\\a'),
-    'C:\\Users\\a\\AppData\\Local',
+    acrylRoot('darwin', { ACRYL_HOME: '/tmp/iso/.acryl' }, '/Users/a'),
+    '/tmp/iso/.acryl',
   )
   assert.equal(
-    productRoot('ACRYL Blends Blank', 'win32', {}, 'C:\\Users\\a'),
-    'C:\\Users\\a\\AppData\\Local\\ACRYL Blends Blank',
+    acrylRoot('win32', { ACRYL_HOME: 'D:\\iso\\.acryl' }, 'C:\\Users\\a'),
+    'D:\\iso\\.acryl',
   )
-})
-
-test('Linux: an absolute XDG_DATA_HOME, else ~/.local/share; a relative XDG_DATA_HOME is invalid and ignored', () => {
-  assert.equal(platformDataDir('linux', {}, '/home/zoë'), '/home/zoë/.local/share')
-  assert.equal(platformDataDir('linux', { XDG_DATA_HOME: '/data/zoë' }, '/home/zoë'), '/data/zoë')
-  assert.equal(
-    platformDataDir('linux', { XDG_DATA_HOME: 'relative/share' }, '/home/zoë'),
-    '/home/zoë/.local/share',
-  )
-  assert.equal(
-    platformDataDir('linux', { XDG_DATA_HOME: '  ' }, '/home/zoë'),
-    '/home/zoë/.local/share',
-  )
-  assert.equal(
-    productRoot('ACRYL Blends Blank', 'linux', {}, '/home/a'),
-    '/home/a/.local/share/ACRYL Blends Blank',
-  )
+  assert.equal(acrylRoot('linux', { ACRYL_HOME: 'relative' }, '/home/a'), '/home/a/.acryl')
+  assert.equal(acrylRoot('linux', { ACRYL_HOME: '  ' }, '/home/a'), '/home/a/.acryl')
 })
 
 test('the home comes from HOME (USERPROFILE on Windows), so an isolated run that moves it moves everything', () => {
@@ -105,7 +74,6 @@ test('names: a folder name every OS accepts, Windows reserved names refused in a
     assert.equal(isPortableName(bad, 64), false, JSON.stringify(bad))
   for (const good of ['ACRYL Blends Blank', 'console', 'com10', 'notes-3f2a', 'Zoë'])
     assert.equal(isPortableName(good, 64), true, good)
-  assert.throws(() => productRoot('Bad/Name', 'linux', {}, '/home/a'), /cannot be a folder name/)
 })
 
 test('an app id is the name folded to ASCII plus four random hex digits, 40 characters at most, never the name itself', () => {

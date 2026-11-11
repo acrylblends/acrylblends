@@ -17,7 +17,7 @@ import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { parse, stringify } from 'yaml'
 import { DATA_REF, WORKTREE_REF } from '../archive.ts'
-import { appFolders, openProductStorage, productRoot } from '../storage.ts'
+import { acrylRoot, appFolders, openProductStorage } from '../storage.ts'
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'instance-archive-')))
 after(() => rmSync(scratch, { recursive: true, force: true }))
@@ -64,7 +64,6 @@ const refs = (source: string): string =>
 /** A product's storage in a moved home, with an app whose repository has history, a branch, a tag, unsaved work and data. */
 function product(home: string) {
   const storage = openProductStorage({
-    product: 'Zoë Blank',
     writtenBy: '1.0.0',
     env: { HOME: home },
     home,
@@ -86,10 +85,7 @@ function product(home: string) {
     write(join(source, 'src', 'app.ts'), 'export const v = 2\n')
     git(source, 'commit', '-q', '-am', 'second')
   })
-  const folders = appFolders(
-    productRoot('Zoë Blank', process.platform, { HOME: home }, home),
-    app.id,
-  )
+  const folders = appFolders(acrylRoot(process.platform, { HOME: home }, home), app.id)
   // Unsaved: a changed file, a new one, a deleted one, and an ignored package of the person's.
   write(join(folders.source, 'src', 'app.ts'), 'export const v = 3 // not saved\n')
   write(join(folders.source, 'src', 'new page.tsx'), 'export {}\n')
@@ -150,10 +146,7 @@ test('export then import: every branch, tag and version, HEAD on its branch, the
   assert.equal(imported.name, 'My notes')
   assert.equal(imported.named, true)
   assert.notEqual(imported.id, app.id)
-  const copy = appFolders(
-    productRoot('Zoë Blank', process.platform, { HOME: home }, home),
-    imported.id,
-  )
+  const copy = appFolders(acrylRoot(process.platform, { HOME: home }, home), imported.id)
 
   assert.equal(refs(copy.source), before.refs, 'the same branches and tags at the same commits')
   assert.equal(git(copy.source, 'symbolic-ref', 'HEAD'), 'refs/heads/main')
@@ -196,7 +189,7 @@ test('export then import: every branch, tag and version, HEAD on its branch, the
 })
 
 test('an export without data carries the source only; an app with nothing unsaved has no snapshot', () => {
-  const home = join(scratch, 'plain')
+  const home = join(scratch, 'plain home')
   const { storage, app, folders } = product(home)
   git(folders.source, 'add', '-A')
   git(folders.source, 'commit', '-q', '-m', 'saved')
@@ -207,23 +200,20 @@ test('an export without data carries the source only; an app with nothing unsave
   assert.ok(!heads.includes(DATA_REF), heads)
 
   const copy = storage.import(file)
-  const folders2 = appFolders(
-    productRoot('Zoë Blank', process.platform, { HOME: home }, home),
-    copy.id,
-  )
+  const folders2 = appFolders(acrylRoot(process.platform, { HOME: home }, home), copy.id)
   assert.equal(git(folders2.source, 'status', '--porcelain'), '')
   assert.deepEqual(tree(folders2.data), {}, 'no data')
 })
 
 test('a file that is not an archive makes no app and leaves no folder', () => {
-  const home = join(scratch, 'bad')
+  const home = join(scratch, 'bad home')
   const { storage } = product(home)
   const file = join(scratch, 'notes.acrylblend')
   writeFileSync(file, 'not a bundle')
   const before = storage.apps()
   assert.throws(() => storage.import(file), /is not an \.acrylblend archive/)
   assert.deepEqual(storage.apps(), before)
-  const root = productRoot('Zoë Blank', process.platform, { HOME: home }, home)
+  const root = acrylRoot(process.platform, { HOME: home }, home)
   assert.deepEqual(
     readdirSync(join(root, 'apps')),
     before.map((app) => app.id),
@@ -231,10 +221,10 @@ test('a file that is not an archive makes no app and leaves no folder', () => {
 })
 
 test('start over: a fresh app of the same name, the old one in trash with a note of its name, nothing deleted', async () => {
-  const home = join(scratch, 'reset')
+  const home = join(scratch, 'reset home')
   const { storage, app, folders } = product(home)
   storage.rename(app.id, 'Shop')
-  const root = productRoot('Zoë Blank', process.platform, { HOME: home }, home)
+  const root = acrylRoot(process.platform, { HOME: home }, home)
   const size = await storage.size(app.id)
   assert.ok(size.files > 5 && size.bytes > 0, JSON.stringify(size))
 
@@ -264,7 +254,6 @@ test('show in the file manager: the app folder goes to the OS port; a product wi
   const home = join(scratch, 'reveal')
   const shown: string[] = []
   const storage = openProductStorage({
-    product: 'Zoë Blank',
     writtenBy: '1.0.0',
     env: { HOME: home },
     home,
@@ -272,11 +261,8 @@ test('show in the file manager: the app folder goes to the OS port; a product wi
   })
   const app = storage.create('Blank', () => {})
   storage.reveal(app.id)
-  assert.deepEqual(shown, [
-    join(productRoot('Zoë Blank', process.platform, { HOME: home }, home), 'apps', app.id),
-  ])
+  assert.deepEqual(shown, [join(acrylRoot(process.platform, { HOME: home }, home), 'apps', app.id)])
   const without = openProductStorage({
-    product: 'Zoë Blank',
     writtenBy: '1.0.0',
     env: { HOME: home },
     home,

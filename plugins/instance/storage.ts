@@ -1,8 +1,8 @@
 /**
- * Where a desktop product keeps its apps (specs/049-framework-architecture/app-storage.md in ACRYL): one root per product in the OS per-user application
- * data folder, and one sealed folder per app inside it.
+ * Where ACRYL keeps the apps of one person (specs/049-framework-architecture/app-storage.md in ACRYL): one short root, `~/.acryl`, the same on macOS,
+ * Windows and Linux (as DeepSeek Harness keeps `~/.dsh`), and one sealed folder per app inside it.
  *
- *   <root>/layout.json             { "layout": 1, "writtenBy": "<product version>" }
+ *   <root>/layout.json             { "layout": 1, "writtenBy": "<who wrote it and its version>" }
  *   <root>/apps.json               the registry: id, name, created, last opened
  *   <root>/apps/<id>/source/       the person's work: a git repository
  *   <root>/apps/<id>/data/         their settings, sessions and notes; data/logs holds the logs (the engine writes `<home>/logs`)
@@ -10,8 +10,8 @@
  *   <root>/electron/               Chromium's own user data
  *   <root>/trash/                  an app that was started over, moved here, never deleted
  *
- * The per-OS rule is `platformDataDir`, a pure function, so all three platforms are tested on one machine. Nothing else in the product reads the home
- * folder or asks Electron for a path (scripts/lib/bulkhead.test.mjs). No file written here holds an absolute path: the root and the bundle can move.
+ * There is no per-OS rule: `acrylRoot` is `<home>/.acryl` everywhere, so what a person is told, types and finds is one thing. Nothing else in the product
+ * reads the home folder or asks Electron for a path (scripts/lib/bulkhead.test.mjs). No file written here holds an absolute path: the root and the bundle can move.
  */
 import { randomBytes } from 'node:crypto'
 import {
@@ -46,42 +46,24 @@ export function personHome(
   return fromEnv !== undefined && fromEnv !== '' ? fromEnv : homedir()
 }
 
-/**
- * The OS per-user application data folder, without the product's name. macOS: `~/Library/Application Support`. Windows: `%LOCALAPPDATA%` (per machine,
- * never the roaming profile: an app's repository and packages must not sync at logon), else `<home>\AppData\Local`. Linux and the rest:
- * `$XDG_DATA_HOME` when it is absolute (the XDG spec makes a relative one invalid), else `~/.local/share`.
- */
-export function platformDataDir(
-  platform: NodeJS.Platform,
-  env: Readonly<Record<string, string | undefined>>,
-  home: string,
-): string {
-  if (platform === 'darwin') return posix.join(home, 'Library', 'Application Support')
-  if (platform === 'win32') {
-    const local = env.LOCALAPPDATA?.trim()
-    return local !== undefined && win32.isAbsolute(local)
-      ? win32.normalize(local)
-      : win32.join(home, 'AppData', 'Local')
-  }
-  const xdg = env.XDG_DATA_HOME?.trim()
-  return xdg !== undefined && posix.isAbsolute(xdg)
-    ? posix.normalize(xdg)
-    : posix.join(home, '.local', 'share')
-}
-
 /** The path module of a platform, so a root computed for Windows on a Mac is a Windows path. */
 const pathOf = (platform: NodeJS.Platform) => (platform === 'win32' ? win32 : posix)
 
-/** A product's root: its name under the platform's data folder. The name is a folder name the product chose, so it is checked, not cleaned. */
-export function productRoot(
-  product: string,
+/**
+ * The root of everything ACRYL keeps for one person: `<home>/.acryl`, one short, predictable folder on every OS, as DeepSeek Harness keeps `<home>/.dsh`.
+ * It is deliberately not the OS's application-data folder (Library/Application Support, AppData, .local/share): those differ per OS, hide the work, and
+ * are not what a person types or finds. `ACRYL_HOME`, when it is an absolute path, moves the root (an isolated run, a test), as it moves ACRYL's own home.
+ */
+export function acrylRoot(
   platform: NodeJS.Platform,
   env: Readonly<Record<string, string | undefined>>,
   home: string,
 ): string {
-  if (!isPortableName(product, 64))
-    throw new AppInstanceError(`"${product}" cannot be a folder name on every OS`)
-  return pathOf(platform).join(platformDataDir(platform, env, home), product)
+  const path = pathOf(platform)
+  const pinned = env.ACRYL_HOME?.trim()
+  return pinned !== undefined && path.isAbsolute(pinned)
+    ? path.normalize(pinned)
+    : path.join(home, '.acryl')
 }
 
 /** Windows refuses these as a file or folder name, whatever the case and whatever follows a dot. */
@@ -419,14 +401,12 @@ export class NewerLayoutError extends AppInstanceError {
 }
 
 /**
- * The filesystem adapter of `AppStorage`: the product's root in the OS per-user data folder (`productRoot`), opened (created on the first start) and
+ * The filesystem adapter of `AppStorage`: the root `~/.acryl` (`acrylRoot`), opened (created on the first start) and
  * checked before anything is read. A root of a newer layout stops with a message, never a half-read start; the layout is 1, so an older one cannot exist
  * yet (the migration runner comes with layout 2).
  */
 export function openProductStorage(options: {
-  /** The product's name, its root folder's name (`ACRYL Blends Blank`). */
-  readonly product: string
-  /** The product version, written into a new root's layout.json. */
+  /** Who writes the root and its version (`ACRYL Blends 1.5.0`), written into a new root's layout.json and named when a newer one is found. */
   readonly writtenBy: string
   readonly platform?: NodeJS.Platform
   readonly env?: Readonly<Record<string, string | undefined>>
@@ -438,18 +418,13 @@ export function openProductStorage(options: {
 }): AppStorage {
   const platform = options.platform ?? process.platform
   const env = options.env ?? process.env
-  const root = productRoot(
-    options.product,
-    platform,
-    env,
-    options.home ?? personHome(env, platform),
-  )
+  const root = acrylRoot(platform, env, options.home ?? personHome(env, platform))
   const git = options.git ?? 'git'
   const state = openRoot(root, options.writtenBy)
   if (state.kind !== 'current')
     throw new NewerLayoutError(
       state.kind === 'newer'
-        ? `${root} was written by ${options.product} ${state.writtenBy}, which is newer than this one (${options.writtenBy}): install that version or a later one to open it`
+        ? `${root} was written by ${state.writtenBy}, which is newer than this one (${options.writtenBy}): install that version or a later one to open it`
         : `${root} has layout ${String(state.layout)}, which this version cannot migrate`,
     )
   const opened = (app: RegisteredApp): string => app.lastOpened ?? app.created
