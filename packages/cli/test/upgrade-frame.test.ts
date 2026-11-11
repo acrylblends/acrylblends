@@ -277,6 +277,45 @@ describe('upgrading a pre-frame app to the host layout', () => {
     expect(existsSync(join(root, 'cordis.patch.yml'))).toBe(false)
   })
 
+  it('puts an app built on its own (a registry blueprint) that carries the frame row in the frame, and never writes its scaffold', async () => {
+    // A blueprint is made in the frame, then built on: its scaffold is no template's any more, but it keeps the frame row, the mount prefix and composeInto.
+    const { io } = session(scratch)
+    expect(
+      await init(
+        {
+          directory: 'blueprint',
+          template: 'blank',
+          yes: true,
+          name: 'blueprint',
+          install: false,
+          desktop: false,
+          quietNext: true,
+        },
+        io,
+      ),
+    ).toBe(0)
+    const root = join(scratch, 'blueprint')
+    const own = (file: string) => {
+      const path = join(root, 'src', file)
+      writeFileSync(path, `${readFileSync(path, 'utf8')}// the blueprint's own line\n`)
+      return readFileSync(path, 'utf8')
+    }
+    const routes = own('routes.ts')
+    const app = own('app.ts')
+    process.env.ACRYLBLENDS_FRAME_PACKAGES = FRAME_SPECS
+    const step = planFrameStep(root, readLibrary())
+    expect(step.kind).toBe('planned')
+    const { code, out } = await runUpgrade(root)
+    expect(code).toBe(0)
+    expect(out()).toMatch(/cordis\.patch\.yml added/u)
+    expect(existsSync(join(root, 'scripts', 'ide-host.mjs'))).toBe(true)
+    expect(readFileSync(join(root, 'src', 'routes.ts'), 'utf8')).toBe(routes)
+    expect(readFileSync(join(root, 'src', 'app.ts'), 'utf8')).toBe(app)
+    // Without its frame row it stays as it is.
+    rmSync(join(root, 'src', 'frame.ts'))
+    expect(planFrameStep(root, readLibrary()).kind).toBe('unidentified')
+  })
+
   it('reports an app made before 0.7.8 (its entry imports ./plugins) instead of writing a frame the app cannot start', async () => {
     const root = await preFrameApp('broken-era', 'agent', '0.7.7')
     writeFileSync(

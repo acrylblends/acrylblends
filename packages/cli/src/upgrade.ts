@@ -17,8 +17,8 @@ import {
   withRegistrations,
 } from './app-registration.ts'
 import { diffStat, unifiedDiff } from './diff'
-import { frameProfileForApp, frameProfileInput } from './frame-release'
-import { APP_PLUGINS_FILE, appFrameRows } from './frame-rows'
+import { type FrameProfileSpecs, frameProfileForApp, frameProfileInput } from './frame-release'
+import { APP_PLUGINS_FILE, appFrameRows, carriesComposeInto } from './frame-rows'
 import {
   GENERATED_MARKER,
   type IdeProfileInput,
@@ -150,10 +150,11 @@ export type FrameStep =
   | { readonly kind: 'unidentified' }
   | { readonly kind: 'broken-scaffold'; readonly file: string }
   | { readonly kind: 'no-frame-template'; readonly template: Template }
-  | { readonly kind: 'unavailable'; readonly template: Template }
+  | { readonly kind: 'unavailable'; readonly template: Template | undefined }
   | {
       readonly kind: 'planned'
-      readonly template: Template
+      /** The template whose scaffold the app carries; undefined for an app built on its own (a registry blueprint), whose scaffold is never written. */
+      readonly template: Template | undefined
       /** What the overlay's rows and the package.json merge are planned from. */
       readonly input: IdeProfileInput
       readonly profile: IdeProfileWritePlan
@@ -198,7 +199,14 @@ export function planFrameStep(
   const broken = brokenEntry(appDir)
   if (broken !== undefined) return { kind: 'broken-scaffold', file: broken }
   const template = identifyTemplate(appDir, name)
-  if (template === undefined) return { kind: 'unidentified' }
+  if (template === undefined) {
+    // Not a template's scaffold: an app built on its own (a registry blueprint). Its scaffold is its own and never written; when it already carries the
+    // frame row and the composition the frame calls, it gets the rest of the frame (the host's layout, the generated row, the host plugins) all the same.
+    if (!ownsFrameRow(appDir)) return { kind: 'unidentified' }
+    const specs = frameProfileForApp(appDir)
+    if (specs === undefined) return { kind: 'unavailable', template: undefined }
+    return planFrameWrites(appDir, library, name, specs, undefined, [], [], undefined)
+  }
   if (!carriesFrame(template, templateDirFor(template)))
     return { kind: 'no-frame-template', template }
   const specs = frameProfileForApp(appDir)
@@ -243,6 +251,35 @@ export function planFrameStep(
       }
     }
   }
+  return planFrameWrites(appDir, library, name, specs, template, files, kept, conflictLines)
+}
+
+/**
+ * Whether an app built on its own carries what the frame mounts: its routes row (`src/frame.ts`), a `src/routes.ts` that says where the frame shows it, and
+ * the composition the generated row calls (`composeInto` in `src/app.ts`). A registry blueprint made in the frame has all three.
+ */
+function ownsFrameRow(appDir: string): boolean {
+  const at = (file: string) => join(appDir, 'src', file)
+  return (
+    existsSync(at('frame.ts')) &&
+    existsSync(at('routes.ts')) &&
+    FRAME_PREFIX_EXPORT.test(readText(at('routes.ts'))) &&
+    existsSync(at('app.ts')) &&
+    carriesComposeInto(readText(at('app.ts')))
+  )
+}
+
+/** The part of the frame plan every framed app shares: the generated composition row, the host plugins, the launcher and overlay, and what conflicts. */
+function planFrameWrites(
+  appDir: string,
+  library: ReadonlyMap<string, LibraryPlugin>,
+  name: string,
+  specs: FrameProfileSpecs,
+  template: Template | undefined,
+  files: FrameFileWrite[],
+  kept: readonly { readonly file: string; readonly mountable: boolean }[],
+  conflictLines: Record<string, readonly ChangedLine[]> | undefined,
+): FrameStep {
   // The composition root as it will be once the scaffold is written: the plan may be about to replace it.
   const plannedAppTs = files.find((file) => file.file === 'src/app.ts')?.text
   const appTs =

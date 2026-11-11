@@ -4,6 +4,7 @@
  * product, and package it with electron-builder as an unsigned DMG. First run only, for this Mac's CPU.
  *
  *   node scripts/pack-blank-mac.mjs [--out <dir>] [--arch arm64|x64]
+ *   node scripts/pack-blank-mac.mjs --from acrylblends.small-crm [--product "Small CRM"]     a registry blueprint as its own product
  *
  * The DMG carries the app itself: the frame and the Blank app it builds in, with Electron's own Node, so it needs no Node, npm or git. The bundle is
  * read-only; on the first start the packaged app makes the person's first app from it in the product's own folder of the OS per-user data folder
@@ -34,9 +35,15 @@ const option = (name, fallback) => {
   return at === -1 ? fallback : args[at + 1]
 }
 const arch = option('--arch', 'arm64')
-const out = resolve(option('--out', join(root, 'dist', 'blank-mac')))
-const work = join(root, 'dist', 'blank-mac-work')
-const app = join(work, 'app')
+/**
+ * A blueprint from the registry instead of Blank (`--from acrylblends.small-crm`): the product is that app, made as `npm create acrylblends --from` makes it
+ * (in the frame), under its own name (`--product`, else the first heading of its README).
+ */
+const from = option('--from', undefined)
+const slug = from === undefined ? 'blank' : from.replace(/^[^.]+\./u, '')
+const out = resolve(option('--out', join(root, 'dist', `${slug}-mac`)))
+const work = join(root, 'dist', `${slug}-mac-work`)
+const app = join(work, from === undefined ? 'app' : slug)
 const log = (line) => console.log(`pack-blank-mac: ${line}`)
 
 /**
@@ -176,18 +183,21 @@ const { frameSpecsEnv } = await import(join(root, 'scripts/lib/ide-specs.mjs'))
 const cliVersion = JSON.parse(readFileSync(join(root, 'packages/cli/package.json'), 'utf8')).version
 const init = spawnSync(
   process.execPath,
-  [
-    join(root, 'packages/cli/bin/acrylblends.js'),
-    'init',
-    app,
-    '--name',
-    'acryl-blends-blank',
-    '--template',
-    'blank',
-    '--desktop',
-    '--yes',
-    '--no-next',
-  ],
+  from === undefined
+    ? [
+        join(root, 'packages/cli/bin/acrylblends.js'),
+        'init',
+        app,
+        '--name',
+        'acryl-blends-blank',
+        '--template',
+        'blank',
+        '--desktop',
+        '--yes',
+        '--no-next',
+      ]
+    : // The registry blueprint, put in the frame by create itself (add desktop, upgrade); installed in step 2 like Blank.
+      [join(root, 'packages/create/bin/create-acrylblends.js'), app, '--from', from, '--yes'],
   {
     stdio: 'inherit',
     env: {
@@ -310,7 +320,20 @@ log(`declared ${String(Object.keys(declared).length)} installed packages`)
 // 4. The product marker, and what Electron needs to find its main process and the packager its identity.
 // The product is ACRYL Blends; Blank is only the starting app a person's first app is made from. The name is the installed app's, the DMG's and the root
 // folder's in the OS data folder, so every app the person makes (AccountingApp, CRMApp, ...) lives beside the others under one product.
-const PRODUCT = 'ACRYL Blends'
+const readmeTitle = () => {
+  const readme = join(app, 'README.md')
+  const heading = existsSync(readme) ? /^# (.+)$/mu.exec(readFileSync(readme, 'utf8')) : null
+  return heading?.[1]?.trim()
+}
+const PRODUCT =
+  from === undefined ? 'ACRYL Blends' : (option('--product', undefined) ?? readmeTitle() ?? slug)
+/** The app's own name in the product: Blank for ACRYL Blends, the product itself for a blueprint. */
+const APP_NAME = from === undefined ? 'Blank' : PRODUCT
+const DESCRIPTION =
+  from === undefined
+    ? 'The ACRYL Blends frame around an empty app: make it yours from the chat.'
+    : `${PRODUCT}, an ACRYL Blends app (${from}), in the frame: change it from the chat.`
+const FILE_NAME = from === undefined ? 'ACRYL-Blends-Blank' : PRODUCT.replace(/[^A-Za-z0-9]+/gu, '-')
 // Seal the bundle ad hoc, after the builder has laid it out and before the DMG is made. With no signing step the main program keeps Electron's linker
 // signature (identifier `Electron`, no sealed resources, Info.plist not bound), so the bundle was not sealed and `codesign --verify --deep --strict` failed.
 // An ad hoc seal makes every file of the bundle part of the signature: an app that writes into its own bundle shows at once. No hardened runtime: the
@@ -332,9 +355,9 @@ exports.default = async (context) => {
 const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'))
 manifest.main = 'plugins/desktop/main.ts'
 manifest.productName = PRODUCT
-manifest.description = 'The ACRYL Blends frame around an empty app: make it yours from the chat.'
+manifest.description = DESCRIPTION
 manifest.build = {
-  appId: 'dev.acrylblends.blank',
+  appId: `dev.acrylblends.${slug}`,
   productName: PRODUCT,
   asar: false,
   npmRebuild: false,
@@ -373,7 +396,7 @@ const program = [
 ]
 writeFileSync(
   join(app, 'product.json'),
-  `${JSON.stringify({ product: PRODUCT, appName: 'Blank', program }, null, 2)}\n`,
+  `${JSON.stringify({ product: PRODUCT, appName: APP_NAME, program }, null, 2)}\n`,
 )
 log(`the Program: ${program.join(', ')}`)
 
@@ -498,6 +521,6 @@ if (produced.length === 0) throw new Error('electron-builder wrote no .dmg')
 mkdirSync(out, { recursive: true })
 for (const file of readdirSync(out))
   if (file.endsWith('.dmg')) rmSync(join(out, file), { force: true })
-const target = join(out, `ACRYL-Blends-Blank-${arch}.dmg`)
+const target = join(out, `${FILE_NAME}-${arch}.dmg`)
 cpSync(join(app, 'dist', produced[0]), target)
 log(`done: ${target} (${String(Math.round(statSync(target).size / 1024 / 1024))} MB)`)

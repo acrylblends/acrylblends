@@ -102,7 +102,8 @@ Only starters made for ${CLASS} (runtime: ${PACKAGE}) are apps this command can 
 Other options:
   --template <name>   the same as the word after the name (npm needs a -- before options when you use npm create)
   --install           install a source's dependencies (the lifecycle scripts it will run are listed first); a template always installs
-  --desktop           the frame (already the default for a template)
+  --desktop           the frame (already the default for a template and a registry starter); a starter from another source gets it only with this
+  --bare              no frame, for a registry starter too
   --pm <manager>      ${PACKAGE_MANAGERS.join(', ')} (default: the one that ran this command, else npm)
   -y, --yes           ask nothing, and use the name my-app when none is given
   -h, --help          show this help
@@ -161,7 +162,10 @@ export interface CreateOptions {
   directory: string | undefined
   template: Template | undefined
   install: boolean
-  /** Put the app inside the ACRYL frame, as `acrylblends init --desktop` does. On for a template, off for `--bare` and for a starter from a source. */
+  /**
+   * Put the app inside the ACRYL frame, as `acrylblends init --desktop` does. On for a template and a registry blueprint, on for another source only with
+   * `--desktop`, off with `--bare`.
+   */
   desktop: boolean
   /** Start the app when it is created and installed (`<pm> run dev`), only when there is a terminal to show it in. Off with `--no-start`. */
   start: boolean
@@ -213,10 +217,6 @@ export function parseCreateOptions(argv: readonly string[]): CreateOptions {
     throw new UsageError('give --bare or --desktop, not both')
   if (values['no-install'] === true && values.install === true)
     throw new UsageError('give --no-install or --install, not both')
-  if (values.desktop === true && source !== undefined)
-    throw new UsageError(
-      '--desktop goes with a template; a starter from a source decides its own shape',
-    )
   if (values.registry !== undefined && !(source !== undefined && REGISTRY_ID.test(source)))
     throw new UsageError('--registry goes with a registry id: --from <id> --registry <source>')
   return {
@@ -224,7 +224,11 @@ export function parseCreateOptions(argv: readonly string[]): CreateOptions {
     template: bare ?? named,
     // A template is the framework's own: it installs and opens in the frame unless told not to. A source is someone else's: nothing of it runs unless --install.
     install: values.install === true || (source === undefined && values['no-install'] !== true),
-    desktop: source === undefined && values.bare !== true,
+    // The frame (chat, agents, Settings) is the default for a template and for a blueprint from the registry, whose apps are made for it; a starter from
+    // another source gets it when asked (--desktop), since it may not be built for it. --bare keeps either plain.
+    desktop:
+      values.bare !== true &&
+      (values.desktop === true || source === undefined || REGISTRY_ID.test(source)),
     start: values['no-start'] !== true,
     pm: values.pm as PackageManager | undefined,
     yes: values.yes === true,
@@ -445,6 +449,20 @@ async function createFromSource(
     }
     copyDocs(staged)
     cpSync(staged, target, { recursive: true })
+    // In the frame: the framework's own commands do it, as for an app made before the frame. `add desktop` brings the window; `upgrade` brings the starter's
+    // library plugins to this release (its data then lives under ~/.acryl) and writes the frame around the starter's own frame row. Before the first
+    // commit, so the app's first version is the app as made.
+    if (options.desktop) {
+      const framework = (args: string[]) =>
+        io.run(process.execPath, [acrylblendsBin(), ...args, '--dir', target], io.cwd)
+      if ((await framework(['add', 'desktop'])) !== 0 || (await framework(['upgrade'])) !== 0) {
+        io.stderr.write(
+          `error: ${directory} was made, but putting it in the ACRYL frame failed (see above); it runs on its own with ${'`npm start`'}\n`,
+        )
+        startRepository(target)
+        return 1
+      }
+    }
     startRepository(target)
     io.stdout.write(
       `created ${name} from ${entry ? `${entry.id} ${entry.version}` : manifest.name} (${manifest.description}) in ${target}: ${files.length} files, ${CLASS} docs in docs/framework\n`,
@@ -480,7 +498,11 @@ async function createFromSource(
       )
     }
     io.stdout.write(
-      `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}  see the template's README or package.json scripts\n`,
+      `\nNext:\n  cd ${directory}\n${options.install ? '' : `  ${pm} install\n`}${
+        options.desktop
+          ? `  ${pm} run dev        in the ACRYL frame, in the browser\n  ${pm} run desktop    in the ACRYL frame, in its own window\n  ${pm} start          the app on its own\n`
+          : `  see the template's README or package.json scripts\n`
+      }`,
     )
     return 0
   } catch (error) {

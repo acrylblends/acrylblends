@@ -242,11 +242,15 @@ describe('create', () => {
     expect(script.runs.map((r) => r.args[0])).not.toContain('run')
   })
 
-  it('--desktop is refused with a starter from a source, which decides its own shape', async () => {
-    const s = fakeIo()
-    expect(await runCreate(['framed', '--from', 'acrylblends.notes', '--desktop'], s.io)).toBe(2)
-    expect(s.err()).toContain('--desktop goes with a template')
-    expect(s.runs).toEqual([])
+  it('a registry starter is in the frame unless --bare; another source only with --desktop', () => {
+    expect(parseCreateOptions(['crm', '--from', 'acrylblends.small-crm']).desktop).toBe(true)
+    expect(parseCreateOptions(['crm', '--from', 'acrylblends.small-crm', '--bare']).desktop).toBe(
+      false,
+    )
+    expect(parseCreateOptions(['crm', 'github:someone/app']).desktop).toBe(false)
+    expect(parseCreateOptions(['crm', 'github:someone/app', '--desktop']).desktop).toBe(true)
+    // A source still installs only when asked: its code runs then.
+    expect(parseCreateOptions(['crm', '--from', 'acrylblends.small-crm']).install).toBe(false)
   })
 
   it('refuses a folder that is not empty and changes nothing', async () => {

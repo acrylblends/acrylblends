@@ -306,7 +306,20 @@ describe('starters from a registry', () => {
     expect(manifestText).not.toContain('visibility: public')
     expect(manifestText).not.toContain('license:')
     expect(s.out()).toContain('Next:')
-    expect(s.runs).toHaveLength(0)
+    // In the frame by the framework's own commands, on the new app's folder; nothing is installed (a source installs only with --install).
+    expect(s.runs.map((run) => run.args.slice(1))).toEqual([
+      ['add', 'desktop', '--dir', join(scratch, 'mine')],
+      ['upgrade', '--dir', join(scratch, 'mine')],
+    ])
+    expect(s.out()).toContain('npm run desktop')
+    const bare = fakeIo()
+    expect(
+      await runCreate(
+        ['plain', '--from', 'acrylblends.notes-desktop', '--registry', registryFolder, '--bare'],
+        bare.io,
+      ),
+    ).toBe(0)
+    expect(bare.runs).toHaveLength(0)
   })
 
   it('gives an app made from another app its own name and its own repository with one first commit', async () => {
