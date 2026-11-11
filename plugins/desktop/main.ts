@@ -32,6 +32,7 @@ import {
   startFrameHost,
   withoutToken,
 } from './frame.ts'
+import { appTitle, iconFile } from './brand.ts'
 import { hasSettings, settingsPlacement } from './menu.ts'
 import { createDesktopShutdown, installShutdownRequests } from './shutdown.ts'
 import { resolveDesktopUserDataOverride } from './user-data.ts'
@@ -52,7 +53,7 @@ function startPath(): string {
 const userData = resolveDesktopUserDataOverride(process.env) ?? join(chosen.home, 'electron')
 mkdirSync(userData, { recursive: true, mode: 0o700 })
 app.setPath('userData', userData)
-app.setName(chosen.name)
+app.setName(appTitle(projectRoot))
 
 if (!app.requestSingleInstanceLock()) {
   // The same app is already open: its window takes focus (see `second-instance` below) and this process ends.
@@ -89,6 +90,8 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(async () => {
+    // The Dock shows the app's own icon even when the bundle could not be branded (brand.ts); a no-op where there is no Dock.
+    app.dock?.setIcon(iconFile(projectRoot))
     // The hook above is registered before the app's modules are loaded, so the app may have .tsx pages: they are loaded here, not as a static import.
     // A dev server is already running from this folder (`npm run dev`): the door allows one process per folder, so the window opens on that server instead of starting a second one,
     // and closing the window leaves it running.
@@ -156,7 +159,7 @@ if (!app.requestSingleInstanceLock()) {
           .map(([x = 0, y = 0]) => ({ x, y }))
         return cascade(bounds, work, size, taken)
       })()
-      const created = new BrowserWindow(windowOptions({ title: chosen.name, ...size, ...where }))
+      const created = new BrowserWindow(windowOptions({ title: appTitle(projectRoot), ...size, ...where }))
       const address = addressOf(path)
       openedOn.set(created.id, new URL(address).pathname)
       created.webContents.setUserAgent(

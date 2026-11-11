@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { acrylRoot, appIdOf, personHome } from '../instance/home.ts'
+import { appTitle, brandedElectron, iconFile } from './brand.ts'
 
 /** The sysctl that makes the sandbox fail for an Electron without an AppArmor profile; its value, or `undefined` where it does not exist (every system but a recent Ubuntu). */
 export const RESTRICT_USERNS = '/proc/sys/kernel/apparmor_restrict_unprivileged_userns'
@@ -76,8 +78,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const blocked =
     process.env.ACRYLBLENDS_DESKTOP_SANDBOX !== '1' && sandboxBlocked(process.platform)
   if (blocked) console.warn(SANDBOX_NOTICE)
+  // macOS: the Dock and Cmd+Tab name the app and draw its icon only when the bundle says so (brand.ts); a copy that cannot be made leaves the stock Electron, with a note.
+  const projectRoot = fileURLToPath(new URL('../..', import.meta.url))
+  const branded = brandedElectron({
+    binary: electron,
+    folder: join(acrylRoot(process.platform, process.env, personHome(process.env, process.platform)), 'electron'),
+    id: appIdOf(projectRoot),
+    name: appTitle(projectRoot),
+    icon: iconFile(projectRoot),
+  })
+  if (branded.problem !== undefined) console.warn(`desktop: the Dock shows Electron's own name and icon (${branded.problem})`)
   runElectron(
-    electron,
+    branded.binary,
     electronArgs(join(import.meta.dirname, 'main.ts'), blocked, process.argv.slice(2)),
   )
 }
