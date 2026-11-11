@@ -32,7 +32,15 @@ for (const built of [
 const app = resolve(folder)
 const fromRegistry = starter.includes('.')
 const args = fromRegistry
-  ? [join(root, 'packages', 'create', 'bin', 'create-acrylblends.js'), app, '--from', starter]
+  ? // npm, as for a template: started by `pnpm run`, create would otherwise pick pnpm, and the app is an npm project.
+    [
+      join(root, 'packages', 'create', 'bin', 'create-acrylblends.js'),
+      app,
+      '--from',
+      starter,
+      '--pm',
+      'npm',
+    ]
   : [join(root, 'packages', 'cli', 'bin', 'acrylblends.js'), 'init', app, '--template', starter]
 const result = spawnSync(
   process.execPath,
