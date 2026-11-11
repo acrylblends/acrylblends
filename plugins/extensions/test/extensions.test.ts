@@ -25,22 +25,14 @@ afterEach(async () => {
 })
 
 async function boot(
-  options: {
-    home?: string
-    root?: string
-    rows?: string[]
-    sources?: (home: string) => ExtensionSource[]
-  } = {},
+  options: { home?: string; root?: string; sources?: (home: string) => ExtensionSource[] } = {},
 ) {
   const home = options.home ?? mkdtempSync(join(tmpdir(), 'extensions-test-'))
   const root = new Context()
   const chosen = pinnedInstance(home, { root: options.root ?? appRoot })
   const fibers = [
     root.plugin(instance, chosen),
-    root.plugin(extensions, {
-      ...(options.sources ? { sources: options.sources(home) } : {}),
-      ...(options.rows ? { rows: options.rows } : {}),
-    }),
+    root.plugin(extensions, options.sources ? { sources: options.sources(home) } : {}),
   ]
   for (const fiber of fibers) await fiber.await()
   const stop = async () => {
@@ -250,71 +242,6 @@ test('the record names a plugin by its place in the app, so a moved app finds it
   assert.deepEqual([old.installed, old.stale], [['hello'], []])
 })
 
-test('a plugin installed live gets its row in blend.yaml, so the app is blend.yaml plus plugins/ and a restart mounts it as a row', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'extensions-test-'))
-  cleanup.unshift(() => rmSync(home, { recursive: true, force: true }))
-  const app = join(home, 'app')
-  const dir = join(app, 'plugins', 'hello')
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(
-    join(dir, 'index.ts'),
-    "export const name = 'hello'\nexport function apply(ctx: any) { ctx.provide('greeting', 'hi') }\n",
-  )
-  writeFileSync(
-    join(app, 'blend.yaml'),
-    '# the app\nspec:\n  rows:\n    - id: router\n      name: acryl-router\n    - id: extensions # starts the folders with no row\n      name: extensions\n    - id: server\n      name: acryl-node-server\n',
-  )
-  const first = await boot({
-    home: join(home, 'data'),
-    root: app,
-    sources: () => [{ dir: join(app, 'plugins'), trust: 'install' }],
-  })
-  await first.root.extensions.ready
-  assert.equal(first.root.get('greeting'), 'hi')
-  const text = readFileSync(join(app, 'blend.yaml'), 'utf8')
-  assert.match(
-    text,
-    /- id: hello\s+name: hello\s+- id: extensions # starts the folders with no row/u,
-  )
-  assert.match(text, /^# the app/u)
-  await first.stop()
-
-  // The next start mounts it as a row (the app passes `rows`): the extensions service starts nothing and drops the record.
-  const second = await boot({
-    home: join(home, 'data'),
-    root: app,
-    rows: ['hello'],
-    sources: () => [{ dir: join(app, 'plugins'), trust: 'install' }],
-  })
-  await second.root.extensions.ready
-  assert.deepEqual(second.root.extensions.list(), [])
-  assert.deepEqual(JSON.parse(readFileSync(join(home, 'data', 'extensions.json'), 'utf8')), {})
-  await second.stop()
-})
-
-test('a restart after a refused update runs the version that worked, from its staged copy', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'extensions-test-'))
-  cleanup.unshift(() => rmSync(home, { recursive: true, force: true }))
-  const first = await boot({ home })
-  await first.root.extensions.install(writeGreeter(first.folder, 'hello'))
-  const broken = await first.root.extensions.install(
-    writeGreeter(first.folder, 'never', { throws: true }),
-  )
-  assert.equal(!broken.ok && broken.restoredPrevious, true)
-  await first.stop()
-
-  // The broken source is still on disk.
-  const second = await boot({ home })
-  const summary = await second.root.extensions.ready
-  assert.equal(second.root.get('greeting'), 'hello')
-  assert.deepEqual(summary.stale, ['greeter'])
-  assert.match(summary.failed[0]?.error ?? '', /refuses to start/)
-  assert.deepEqual(
-    second.root.extensions.list().map((entry) => [entry.name, entry.state, entry.stale]),
-    [['greeter', 'active', true]],
-  )
-})
-
 test('disposing the plugin disposes every extension it mounted', async () => {
   const { root, folder, stop } = await boot()
   await root.extensions.install(writeGreeter(folder, 'hello'))
@@ -462,4 +389,27 @@ export function apply(ctx: Context) {
   const result = await root.extensions.install(dir)
   assert.equal(result.ok, true, JSON.stringify(result))
   assert.equal(result.state, 'active')
+})
+
+test('a restart after a refused update runs the version that worked, from its staged copy', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'extensions-test-'))
+  cleanup.unshift(() => rmSync(home, { recursive: true, force: true }))
+  const first = await boot({ home })
+  await first.root.extensions.install(writeGreeter(first.folder, 'hello'))
+  const broken = await first.root.extensions.install(
+    writeGreeter(first.folder, 'never', { throws: true }),
+  )
+  assert.equal(!broken.ok && broken.restoredPrevious, true)
+  await first.stop()
+
+  // The broken source is still on disk.
+  const second = await boot({ home })
+  const summary = await second.root.extensions.ready
+  assert.equal(second.root.get('greeting'), 'hello')
+  assert.deepEqual(summary.stale, ['greeter'])
+  assert.match(summary.failed[0]?.error ?? '', /refuses to start/)
+  assert.deepEqual(
+    second.root.extensions.list().map((entry) => [entry.name, entry.state, entry.stale]),
+    [['greeter', 'active', true]],
+  )
 })
