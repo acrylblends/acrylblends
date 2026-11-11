@@ -279,7 +279,7 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsShareConfirm { border-color: var(--bf-accent); color: var(--bf-strong); background: var(--bf-accent-dim); }
 .acrylBlendsShareConfirm:disabled { opacity: .5; cursor: default; }
 .acrylBlendsShareAsk { grid-column: 1 / -1; }
-.acrylBlendsPlugPath code { font-size: 11px; color: var(--bf-text-2); overflow-wrap: anywhere; user-select: all; }
+.acrylBlendsPlugPath code, .acrylBlendsPlugWhere code { font-size: 11px; color: var(--bf-text-2); overflow-wrap: anywhere; user-select: all; }
 .acrylBlendsPlugWhere, .acrylBlendsPlugSaid { overflow-wrap: anywhere; }
 .acrylBlendsPlugSaid { color: var(--bf-ok); }
 .acrylBlendsShareChooser { grid-column: 1 / -1; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--bf-border-2); border-radius: 8px; background: var(--bf-surface-2); }

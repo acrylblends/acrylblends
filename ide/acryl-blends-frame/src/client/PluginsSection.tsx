@@ -110,7 +110,7 @@ export function PluginsSection({ loadPlugins, close }: PluginsSectionInjected & 
       const saved = await plugin.actions.save()
       const text = saved.bumped
         ? `Saved on this machine as v${saved.version}: the earlier version was already saved with other content, so this one got the next number.`
-        : saved.added ? `Saved on this machine as v${saved.version}.` : `v${saved.version} was already saved here with this same content.`
+        : saved.added ? `Saved v${saved.version}.` : `v${saved.version} was already saved here with this same content.`
       setSaid({ key: plugin.key, text })
       setLoad(current => current.status === 'ready'
         ? { status: 'ready', plugins: current.plugins.map(row => row.key === plugin.key ? { ...row, saved: { version: saved.version, path: saved.path } } : row) }
@@ -218,7 +218,11 @@ export function PluginsSection({ loadPlugins, close }: PluginsSectionInjected & 
             )}
             {(plugin.saved !== undefined || plugin.shared !== undefined) && (
               <small className="acrylBlendsPlugWhere">
-                {plugin.saved !== undefined && <span>Saved on this machine: v{plugin.saved.version}</span>}
+                {plugin.saved !== undefined && (
+                  <span>
+                    Saved on this machine: v{plugin.saved.version} · <code title="The packed copy">{plugin.saved.path}</code>
+                  </span>
+                )}
                 {plugin.saved !== undefined && plugin.shared !== undefined && ' · '}
                 {plugin.shared !== undefined && (plugin.shared.gone === true
                   ? (
