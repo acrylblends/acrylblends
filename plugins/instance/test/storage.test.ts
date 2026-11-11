@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { productInstance, stablePort } from '../index.ts'
+import { instanceEnv, productInstance, selectInstance, stablePort } from '../index.ts'
 import {
   appFolders,
   createApp,
@@ -221,4 +221,16 @@ test('a product app is an AppInstance: source is its root, data its home and the
   assert.equal(chosen.dshHome, folders.data)
   assert.equal(chosen.port.start, stablePort('shop-3f2a'))
   assert.ok(Object.isFrozen(chosen))
+})
+
+test('a child started with instanceEnv chooses the same home and start port, whatever folder it runs in', () => {
+  const chosen = productInstance(appFolders('/root', 'shop-3f2a'), 'Shop')
+  const child = selectInstance({ projectRoot: chosen.root, env: instanceEnv(chosen) })
+  assert.equal(child.home, chosen.home)
+  assert.equal(child.dshHome, chosen.dshHome)
+  assert.equal(child.port.start, chosen.port.start)
+  assert.deepEqual(Object.keys(instanceEnv(chosen)).sort(), [
+    'ACRYLBLENDS_HOME',
+    'ACRYLBLENDS_PORT',
+  ])
 })
