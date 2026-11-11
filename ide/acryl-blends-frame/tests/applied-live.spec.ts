@@ -71,6 +71,20 @@ describe('AppliedLive', () => {
     expect(applied.needsReload([join(root, 'plugins', 'timer'), join(root, 'plugins', 'timer', 'index.ts'), join(root, 'blend.yaml')])).toBe(false)
   })
 
+  it('does not load the app again for the first record of a plugin-share row with no config, whose library copy is in plugins/ (the Blank app)', () => {
+    const root = app()
+    mkdirSync(join(root, 'plugins', 'plugin-share'))
+    writeFileSync(join(root, 'plugins', 'plugin-share', 'index.ts'), 'export {}\n')
+    const plain = '# the app\nspec:\n  rows:\n    - id: extensions\n      name: extensions\n    - id: plugin-share\n      name: plugin-share\n'
+    writeFileSync(join(root, 'blend.yaml'), plain)
+    const applied = new AppliedLive(root)
+    writeFileSync(
+      join(root, 'blend.yaml'),
+      `${plain}      config:\n        pulled:\n          timer:\n            source: github:ana/timer@1.0.0\n            digest: abc\n`,
+    )
+    expect(applied.needsReload([join(root, 'blend.yaml')])).toBe(false)
+  })
+
   it('loads the app again when an agent edits a pulled plugin', () => {
     const root = app()
     const applied = new AppliedLive(root)
@@ -87,18 +101,6 @@ describe('AppliedLive', () => {
     expect(applied.needsReload([join(root, 'plugins', 'notes', 'index.ts')])).toBe(true)
     expect(applied.needsReload([join(root, 'src', 'app.ts')])).toBe(true)
     writeFileSync(join(root, 'blend.yaml'), BLEND({}, '    - name: notes\n'))
-    expect(applied.needsReload([join(root, 'blend.yaml')])).toBe(true)
-  })
-
-  it('does not load the app again for the plain row a live-installed plugin gets, but does for a row with config of its own', () => {
-    const root = app()
-    mkdirSync(join(root, 'plugins', 'hello'))
-    writeFileSync(join(root, 'plugins', 'hello', 'index.ts'), "export const name = 'hello'\nexport function apply() {}\n")
-    const applied = new AppliedLive(root)
-    // extensions starts a folder with no row; the plain row it writes for it says the same thing, so nothing running changes.
-    writeFileSync(join(root, 'blend.yaml'), BLEND({}, '    - id: hello\n      name: hello\n'))
-    expect(applied.needsReload([join(root, 'blend.yaml')])).toBe(false)
-    writeFileSync(join(root, 'blend.yaml'), BLEND({}, '    - id: hello\n      name: hello\n      config:\n        x: 1\n'))
     expect(applied.needsReload([join(root, 'blend.yaml')])).toBe(true)
   })
 

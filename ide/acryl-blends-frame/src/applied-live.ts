@@ -31,18 +31,10 @@ export interface AppDefinition {
 }
 
 /** `blend.yaml`'s text as an {@link AppDefinition}. A text that does not parse is its own definition, so any change to it loads the app again. */
-export function readDefinition(text: string, ownFolders: ReadonlySet<string> = new Set()): AppDefinition {
+export function readDefinition(text: string): AppDefinition {
   const document = parseDocument(text)
   if (document.errors.length > 0) return { app: text, pulled: {} }
   const value: unknown = document.toJS()
-  const spec = (value as { spec?: { rows?: unknown } } | null)?.spec
-  // A plain row (`id` and `name` the same, nothing else) for a folder of the app's `plugins/` says what the `extensions` row already does for a folder with no
-  // row: it starts it. Writing one (a plugin installed live gets its row) or taking it out changes no running plugin, so it is not part of what the app is made of.
-  if (spec !== undefined && Array.isArray(spec.rows))
-    spec.rows = spec.rows.filter((row: unknown) => {
-      const entry = row as { id?: unknown, name?: unknown } | null
-      return !(typeof entry?.name === 'string' && ownFolders.has(entry.name) && entry.id === entry.name && Object.keys(entry as object).length === 2)
-    })
   const rows = (value as { spec?: { rows?: unknown } } | null)?.spec?.rows
   const pulled: Record<string, string> = {}
   if (Array.isArray(rows)) {
@@ -77,14 +69,14 @@ export class AppliedLive {
 
   /** `root` is the app's folder; the state is read now, as the app's code was loaded at start. `pulledDigest` answers for a pull `blend.yaml` does not remember. */
   constructor(private readonly root: string, private readonly pulledDigest: PulledDigest = () => undefined) {
-    this.folders = pluginFolders(root)
     this.definition = this.read().app
+    this.folders = pluginFolders(root)
   }
 
   /** The app's code is being loaded again from the files as they are now: they are the new reference. */
   loaded(): void {
-    this.folders = pluginFolders(this.root)
     this.definition = this.read().app
+    this.folders = pluginFolders(this.root)
   }
 
   /**
@@ -113,7 +105,7 @@ export class AppliedLive {
 
   private read(): AppDefinition {
     const file = join(this.root, 'blend.yaml')
-    return readDefinition(existsSync(file) ? readFileSync(file, 'utf8') : '', pluginFolders(this.root))
+    return readDefinition(existsSync(file) ? readFileSync(file, 'utf8') : '')
   }
 }
 
