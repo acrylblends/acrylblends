@@ -237,7 +237,7 @@ export const ghRepositoryCheck: RepositoryCheck = async (url) => {
 /** The share records, each checked once: a repository GitHub says is gone is marked so, and the row offers a new share. */
 export async function checkedShares(records: Readonly<Record<string, SharedPluginView>>, check: RepositoryCheck): Promise<Record<string, SharedPluginView>> {
   const entries = await Promise.all(Object.entries(records).map(async ([name, shared]): Promise<[string, SharedPluginView]> =>
-    [name, (await check(shared.url)) === false ? { url: shared.url, version: shared.version, gone: true } : shared]))
+    [name, (await check(shared.url)) === false ? { url: shared.url, version: shared.version, gone: true, ...(shared.registry === true ? { registry: true } : {}) } : shared]))
   return Object.fromEntries(entries)
 }
 
@@ -457,8 +457,8 @@ export async function readSharedRecords(file: string | undefined): Promise<Reado
     const records: Record<string, SharedPluginView> = {}
     for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
       if (value === null || typeof value !== 'object') continue
-      const { url, version } = value as { url?: unknown; version?: unknown }
-      if (typeof url === 'string' && typeof version === 'string') records[name] = { url, version }
+      const { url, version, registry } = value as { url?: unknown; version?: unknown; registry?: unknown }
+      if (typeof url === 'string' && typeof version === 'string') records[name] = { url, version, ...(registry === true ? { registry: true } : {}) }
     }
     return records
   } catch {
@@ -543,6 +543,14 @@ export interface SharePorts {
 
 export const githubSharePorts = (): SharePorts => ({ host: githubCli(), git: gitCli() })
 
+/**
+ * The hub labels every release with the topics catalogs find a plugin by, and `cordis-plugin` is the one the registry's sync lists a public repository
+ * by. A share that was not asked to go to the registry must not put the repository there, so its host takes no topics; a registry share passes them on.
+ */
+export function listedOnlyWhenAsked(host: RepositoryHostPort, listed: boolean): RepositoryHostPort {
+  return { ...host, addTopics: (owner, repo, topics) => { if (listed) host.addTopics(owner, repo, topics) } }
+}
+
 /** A completed share: where it went. */
 export type ShareAppPluginResult = SharedPluginView & { readonly owner: string; readonly repo: string; readonly tag: string }
 
@@ -550,10 +558,13 @@ export type ShareAppPluginResult = SharedPluginView & { readonly owner: string; 
  * What sharing one local plugin would do, read without sending anything: it packages the plugin under the app's home and asks the host who is
  * signed in, whether the repository exists and whether this version is released there (then the plan releases the next patch).
  * @param options - the repository owner (the signed-in account when absent), the visibility the person asked for (private when absent: a share is
- *   public only when the person chose it, because anyone can then read and pull it) and the license of a public share (MIT when absent; the plan names it).
+ *   public only when the person chose it, because anyone can then read and pull it), the license of a public share (MIT when absent; the plan names it)
+ *   and whether the public registry lists it (`registry`: the share sets the `cordis-plugin` topic, which the registry's hourly sync finds).
  */
-export async function planAppPluginShare(root: string, home: string, name: string, options: { readonly owner?: string; readonly visibility?: ShareVisibility; readonly license?: string }, ports: SharePorts): Promise<SharePlan> {
-  const visibility: ShareVisibility = options.visibility ?? 'private'
+export async function planAppPluginShare(root: string, home: string, name: string, options: { readonly owner?: string; readonly visibility?: ShareVisibility; readonly license?: string; readonly registry?: boolean }, ports: SharePorts): Promise<SharePlan> {
+  // The registry lists public repositories only, so a registry share is a public one.
+  const registry = options.registry === true
+  const visibility: ShareVisibility = registry ? 'public' : options.visibility ?? 'private'
   const license = visibility === 'public' ? (options.license ?? 'MIT') : undefined
   const dir = await packageAppPlugin(root, name, pluginPackagesOf(home), license)
   const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as { version?: unknown }
@@ -571,6 +582,7 @@ export async function planAppPluginShare(root: string, home: string, name: strin
     createsRepository: existing === undefined,
     ...(released ? { released: current } : {}),
     ...(license === undefined ? {} : { license }),
+    ...(registry ? { registry } : {}),
   }
 }
 
@@ -591,14 +603,14 @@ export async function shareAppPlugin(
   ports: SharePorts,
 ): Promise<ShareAppPluginResult> {
   // The visibility is the one the person confirmed: the plan is made again with it, and a change since then still refuses below.
-  const plan = await planAppPluginShare(root, home, name, { ...options, visibility: confirmed.visibility, ...(confirmed.license === undefined ? {} : { license: confirmed.license }) }, ports)
+  const plan = await planAppPluginShare(root, home, name, { ...options, visibility: confirmed.visibility, ...(confirmed.license === undefined ? {} : { license: confirmed.license }), ...(confirmed.registry === true ? { registry: true } : {}) }, ports)
   if (!samePlan(plan, confirmed)) throw new Error(`The share changed since you confirmed it (${plan.owner}/${plan.repo} v${plan.version}); nothing was sent. Look at it again.`)
   const dir = join(pluginPackagesOf(home), name)
   // A version is released once: the confirmed plan names the next patch, written now.
   if (plan.released !== undefined && (await bumpPackageVersion(dir)) !== plan.version) throw new Error(`${name}: the next version is not v${plan.version}; nothing was sent`)
-  const result = await sharePlugin(dir, { owner: plan.owner, repo: plan.repo, visibility: plan.visibility }, { ...ports, store: new PluginStore(storeRootOf(home)) })
+  const result = await sharePlugin(dir, { owner: plan.owner, repo: plan.repo, visibility: plan.visibility }, { ...ports, host: listedOnlyWhenAsked(ports.host, plan.registry === true), store: new PluginStore(storeRootOf(home)) })
   if (result.status === 'refused') throw new Error(result.reason)
   // Only a completed share is remembered: the hub prepares the package.json repository before its guards, so that field alone does not prove a release.
-  await recordShare(join(home, 'shared-plugins.json'), name, { url: result.url, version: result.version })
-  return { url: result.url, version: result.version, owner: result.owner, repo: result.repo, tag: result.tag }
+  await recordShare(join(home, 'shared-plugins.json'), name, { url: result.url, version: result.version, ...(plan.registry === true ? { registry: true } : {}) })
+  return { url: result.url, version: result.version, owner: result.owner, repo: result.repo, tag: result.tag, ...(plan.registry === true ? { registry: true } : {}) }
 }

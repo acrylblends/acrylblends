@@ -256,6 +256,12 @@ export const FRAME_PLUGINS_SHARE_PLAN_PATH = `${FRAME_API_PREFIX}/plugins/share-
 export const FRAME_PLUGINS_SHARE_PATH = `${FRAME_API_PREFIX}/plugins/share`
 /** POST `{ name }`: keep a packed copy of this local plugin on this machine (the app's plugin store); nothing leaves the machine. */
 export const FRAME_PLUGINS_SAVE_PATH = `${FRAME_API_PREFIX}/plugins/save`
+/** GET: the public plugin registry (cordisplugins.github.io), each entry marked when this app already has it; read fresh by the Host, never by the page. */
+export const FRAME_PLUGINS_REGISTRY_PATH = `${FRAME_API_PREFIX}/plugins/registry`
+/** GET: whether this computer can share to GitHub (the helper program is installed and signed in), read before the person is asked anything. */
+export const FRAME_PLUGINS_GITHUB_PATH = `${FRAME_API_PREFIX}/plugins/github`
+/** POST `{ source }`: pull one released plugin (`github:<owner>/<repo>@<version>`) into the running app, through the app's plugin-share checks. */
+export const FRAME_PLUGINS_PULL_PATH = `${FRAME_API_PREFIX}/plugins/pull`
 
 /** A packed copy of a plugin kept on this machine: its version and where the tarball is. */
 export interface SavedPluginView {
@@ -276,6 +282,8 @@ export interface SharedPluginView {
   readonly version: string
   /** GitHub says the repository no longer exists (deleted or renamed): the row shows it gone and offers a new share. */
   readonly gone?: boolean
+  /** It was shared to the public registry (the `cordis-plugin` topic is set), not only as a public repository. */
+  readonly registry?: boolean
 }
 
 export type ShareVisibility = 'private' | 'public'
@@ -295,6 +303,8 @@ export interface SharePlan {
   readonly released?: string
   /** The license a public share is offered under, as an SPDX id (MIT unless the app says otherwise); a private share has none. */
   readonly license?: string
+  /** The public registry (cordisplugins.github.io) lists it: the share sets the `cordis-plugin` topic. Only a public share can be listed. */
+  readonly registry?: boolean
 }
 
 const GITHUB_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
@@ -302,12 +312,14 @@ const GITHUB_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
 /** @throws when the value is not a share plan. */
 export function parseSharePlan(value: unknown): SharePlan {
   if (!isRecord(value)) throw new Error('share plan: not a plan')
-  const { owner, repo, version, visibility, createsRepository, released, license } = value
+  const { owner, repo, version, visibility, createsRepository, released, license, registry } = value
   if (typeof owner !== 'string' || !GITHUB_NAME.test(owner) || typeof repo !== 'string' || !GITHUB_NAME.test(repo)) throw new Error('share plan: repository')
   if (typeof version !== 'string' || version === '' || (released !== undefined && (typeof released !== 'string' || released === ''))) throw new Error('share plan: version')
   if ((visibility !== 'private' && visibility !== 'public') || typeof createsRepository !== 'boolean') throw new Error('share plan: visibility')
   if (license !== undefined && (typeof license !== 'string' || !/^[A-Za-z0-9.+-]+$/u.test(license))) throw new Error('share plan: license')
-  return { owner, repo, version, visibility, createsRepository, ...(released === undefined ? {} : { released }), ...(license === undefined ? {} : { license }) }
+  if (registry !== undefined && typeof registry !== 'boolean') throw new Error('share plan: registry')
+  if (registry === true && visibility !== 'public') throw new Error('share plan: only a public share can be listed in the registry')
+  return { owner, repo, version, visibility, createsRepository, ...(released === undefined ? {} : { released }), ...(license === undefined ? {} : { license }), ...(registry === true ? { registry } : {}) }
 }
 
 /** @throws when the value is not what a save answers. */
@@ -320,7 +332,7 @@ export function parseSavedPlugin(value: unknown): SavedPluginResult {
 /** The same plan: what the person confirmed is what would be published now. */
 export function samePlan(a: SharePlan, b: SharePlan): boolean {
   return a.owner === b.owner && a.repo === b.repo && a.version === b.version && a.visibility === b.visibility
-    && a.createsRepository === b.createsRepository && a.released === b.released && a.license === b.license
+    && a.createsRepository === b.createsRepository && a.released === b.released && a.license === b.license && (a.registry === true) === (b.registry === true)
 }
 
 /**
@@ -391,7 +403,7 @@ export function parseAppPluginsView(value: unknown): AppPluginsView {
         ...(entry.unsaved === true ? { unsaved: true } : {}),
         ...(typeof entry.version === 'string' ? { version: entry.version } : {}),
         ...(isRecord(entry.shared) && typeof entry.shared.url === 'string' && typeof entry.shared.version === 'string'
-          ? { shared: { url: entry.shared.url, version: entry.shared.version, ...(entry.shared.gone === true ? { gone: true } : {}) } }
+          ? { shared: { url: entry.shared.url, version: entry.shared.version, ...(entry.shared.gone === true ? { gone: true } : {}), ...(entry.shared.registry === true ? { registry: true } : {}) } }
           : {}),
         ...(isRecord(entry.saved) && typeof entry.saved.version === 'string' && typeof entry.saved.path === 'string'
           ? { saved: { version: entry.saved.version, path: entry.saved.path } }
@@ -553,4 +565,81 @@ export function parseAppReloadView(value: unknown): AppReloadView {
   if (typeof generation !== 'number' || !Number.isInteger(generation) || generation < 0) throw new Error('app reload: generation')
   if (error !== null && typeof error !== 'string') throw new Error('app reload: error')
   return { seq, generation, error }
+}
+
+/** What a plugin of the registry offers, as the registry's index lists it (`https://cordisplugins.github.io/registry/index.json`, formatVersion 1). */
+export interface RegistryEntryView {
+  /** The plugin's name; a scoped name keeps its scope. */
+  readonly name: string
+  readonly description: string
+  /** The GitHub account or organization that released it. */
+  readonly owner: string
+  /** The repository's address. */
+  readonly url: string
+  readonly version: string
+  /** The day of the release (`YYYY-MM-DD`), when the index says. */
+  readonly published?: string
+  /** Where it runs: `ACRYL` (needs an ACRYL service), `Both`, or `DSH stock` (a Harness plugin, which an app of this kind cannot run). */
+  readonly compatibility: string
+  /** The source a pull takes: `github:<owner>/<repo>@<version>`. */
+  readonly source: string
+  /** This app already has a plugin of this name or pulled from this source. */
+  readonly installed: boolean
+  /** The account the person is signed in to GitHub with (or shares to) released it. */
+  readonly mine: boolean
+}
+
+/** The registry as the Host read it: its entries, or why they could not be read (offline, rate limited, the site changed). */
+export type RegistryView =
+  | { readonly status: 'ready'; readonly entries: readonly RegistryEntryView[]; readonly readAt: string }
+  | { readonly status: 'unavailable'; readonly message: string }
+
+/** @throws when the value is not a registry view. */
+export function parseRegistryView(value: unknown): RegistryView {
+  if (!isRecord(value)) throw new Error('registry: not a view')
+  if (value.status === 'unavailable') {
+    if (typeof value.message !== 'string') throw new Error('registry: message')
+    return { status: 'unavailable', message: value.message }
+  }
+  if (value.status !== 'ready' || !Array.isArray(value.entries) || typeof value.readAt !== 'string') throw new Error('registry: not a view')
+  const entries = value.entries.map((entry: unknown): RegistryEntryView => {
+    if (!isRecord(entry)) throw new Error('registry: entry')
+    const { name, description, owner, url, version, published, compatibility, source, installed, mine } = entry
+    if (typeof name !== 'string' || typeof description !== 'string' || typeof owner !== 'string' || typeof url !== 'string' || typeof version !== 'string'
+      || typeof compatibility !== 'string' || typeof source !== 'string' || typeof installed !== 'boolean' || typeof mine !== 'boolean') throw new Error('registry: entry')
+    return { name, description, owner, url, version, ...(typeof published === 'string' ? { published } : {}), compatibility, source, installed, mine }
+  })
+  return { status: 'ready', entries, readAt: value.readAt }
+}
+
+/** What a pull did: the plugin now running, or why it was refused (nothing changed then). */
+export interface PulledPluginView {
+  readonly name: string
+  readonly version: string
+  readonly action: 'installed' | 'updated' | 'unchanged'
+  readonly state: string
+}
+
+/** @throws when the value is not what a pull answers. */
+export function parsePulledPlugin(value: unknown): PulledPluginView {
+  if (!isRecord(value) || typeof value.name !== 'string' || typeof value.version !== 'string' || typeof value.state !== 'string'
+    || (value.action !== 'installed' && value.action !== 'updated' && value.action !== 'unchanged')) throw new Error('pull: not a pulled plugin')
+  return { name: value.name, version: value.version, action: value.action, state: value.state }
+}
+
+/** Whether the person can share to GitHub now, and when not, the single thing to do about it. */
+export type GithubReadiness =
+  | { readonly status: 'ready'; readonly account: string }
+  | { readonly status: 'signed-out'; readonly say: string; readonly command: string }
+  | { readonly status: 'missing'; readonly say: string; readonly link: string }
+  | { readonly status: 'unavailable'; readonly say: string }
+
+/** @throws when the value is not a GitHub readiness. */
+export function parseGithubReadiness(value: unknown): GithubReadiness {
+  if (!isRecord(value)) throw new Error('github: not a readiness')
+  if (value.status === 'ready' && typeof value.account === 'string') return { status: 'ready', account: value.account }
+  if (value.status === 'signed-out' && typeof value.say === 'string' && typeof value.command === 'string') return { status: 'signed-out', say: value.say, command: value.command }
+  if (value.status === 'missing' && typeof value.say === 'string' && typeof value.link === 'string') return { status: 'missing', say: value.say, link: value.link }
+  if (value.status === 'unavailable' && typeof value.say === 'string') return { status: 'unavailable', say: value.say }
+  throw new Error('github: not a readiness')
 }

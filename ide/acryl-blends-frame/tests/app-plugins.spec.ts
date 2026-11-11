@@ -7,7 +7,7 @@ import {
   insideApp, pluginPackageManifest, pluginPackagesOf, readAppPlugins, readSharedRecords, recordShare, saveAppPlugin, setMadeOn, setRowOn, shareAppPlugin, switchAppPlugin,
   type SharePorts,
 } from '../src/app-plugins.ts'
-import { appPluginRow, createAppPluginsApi, filterPlugins, framePluginRow, madeWhen, pullCommand, shareQuestion } from '../src/client/plugins-navigator.ts'
+import { appPluginRow, createAppPluginsApi, filterPlugins, framePluginRow, madeWhen, pullCommand, shareSentence } from '../src/client/plugins-navigator.ts'
 import { feedbackPlace, feedbackTask } from '../src/client/feedback.ts'
 import { frameRoutes } from '../src/index.ts'
 import { parseAppPluginsView, parseFeedbackView, parseSharePlan, type SharePlan } from '../src/contract.ts'
@@ -142,8 +142,8 @@ describe('sharing a local plugin', () => {
   })
 
   it('asks a question naming the repository, whether it is created, the version and who can see it', () => {
-    expect(shareQuestion(plan)).toBe('Create repository tester/hello-share on GitHub and publish v0.1.0? It will be private.')
-    expect(shareQuestion({ ...plan, createsRepository: false, version: '0.1.1', released: '0.1.0', visibility: 'public' }))
+    expect(shareSentence(plan)).toBe('Create repository tester/hello-share on GitHub and publish v0.1.0? It will be private.')
+    expect(shareSentence({ ...plan, createsRepository: false, version: '0.1.1', released: '0.1.0', visibility: 'public' }))
       .toBe('Publish v0.1.1 to tester/hello-share on GitHub? v0.1.0 is released there, so this is the next version. It will be public, under the MIT license: anyone can read it and pull it into their own app.')
     expect(parseSharePlan(JSON.parse(JSON.stringify(plan)))).toEqual(plan)
     expect(() => parseSharePlan({ ...plan, owner: '../x' })).toThrow('repository')
@@ -301,6 +301,9 @@ describe('sharing a local plugin', () => {
         planShare: async () => plan,
         share: async (_name, confirmed) => { shares.push(confirmed); return { ...where, owner: 'tester', repo: 'hello-share', tag: 'v0.1.0' } },
         save: () => Promise.reject(new Error('not asked')),
+        registry: () => Promise.reject(new Error('not asked')),
+        pull: () => Promise.reject(new Error('not asked')),
+        github: () => Promise.reject(new Error('not asked')),
       },
     })
     const post = (path: string, body: unknown) => app.fetch(new Request(`http://127.0.0.1:43120${path}`, {
