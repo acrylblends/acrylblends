@@ -90,6 +90,18 @@ describe('AppliedLive', () => {
     expect(applied.needsReload([join(root, 'blend.yaml')])).toBe(true)
   })
 
+  it('does not load the app again for the plain row a live-installed plugin gets, but does for a row with config of its own', () => {
+    const root = app()
+    mkdirSync(join(root, 'plugins', 'hello'))
+    writeFileSync(join(root, 'plugins', 'hello', 'index.ts'), "export const name = 'hello'\nexport function apply() {}\n")
+    const applied = new AppliedLive(root)
+    // extensions starts a folder with no row; the plain row it writes for it says the same thing, so nothing running changes.
+    writeFileSync(join(root, 'blend.yaml'), BLEND({}, '    - id: hello\n      name: hello\n'))
+    expect(applied.needsReload([join(root, 'blend.yaml')])).toBe(false)
+    writeFileSync(join(root, 'blend.yaml'), BLEND({}, '    - id: hello\n      name: hello\n      config:\n        x: 1\n'))
+    expect(applied.needsReload([join(root, 'blend.yaml')])).toBe(true)
+  })
+
   it('does not load the app again for a folder that came and went, but does for one the app was loaded with', () => {
     const root = app()
     mkdirSync(join(root, 'plugins', 'board'))
