@@ -282,12 +282,18 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
           {[...counts].map(([phase, count]) => (
             <span key={phase}><span style={{ color: PHASE_COLOR[phase as NodePhase] }}>●</span> {phase} ({count})</span>
           ))}
-          <span className="acrylBlendsGraphDim">{fullscreen ? 'Scroll to zoom, drag to move, Esc to leave full screen' : 'Ctrl or Cmd + scroll to zoom, drag to move'}</span>
+          <span className="acrylBlendsGraphDim">{fullscreen ? 'Scroll or use + and - to zoom, drag to move, Esc to leave full screen' : 'Use + and - to zoom (or Ctrl or Cmd + scroll), drag to move'}</span>
         </div>
         {problem !== undefined && live !== 'lost' && <p className="acrylBlendsNote" data-error>{problem}</p>}
       </div>
       <div className="acrylBlendsGraphBody">
-        <div className="acrylBlendsGraphCanvas" ref={holder} aria-label="Plugin graph" />
+        <div className="acrylBlendsGraphStage">
+          <div className="acrylBlendsGraphCanvas" ref={holder} aria-label="Plugin graph" />
+          <div className="acrylBlendsGraphZoom" role="group" aria-label="Zoom">
+            <button type="button" className="acrylBlendsGraphButton" aria-label="Zoom in" title="Zoom in" onClick={() => { canvas.current?.zoomBy(1.4) }}>+</button>
+            <button type="button" className="acrylBlendsGraphButton" aria-label="Zoom out" title="Zoom out" onClick={() => { canvas.current?.zoomBy(1 / 1.4) }}>&minus;</button>
+          </div>
+        </div>
         <aside className="acrylBlendsGraphSide">
           {chosen !== undefined && relations !== undefined && !cardOpen && (
             <button type="button" className="acrylBlendsGraphButton acrylBlendsGraphCardTab" onClick={() => { setCardOpen(true) }} title="Show the details of the chosen plugin">Details: {chosen.node.name}</button>

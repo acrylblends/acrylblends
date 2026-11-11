@@ -22,6 +22,9 @@ const CSS = `
 .acrylBlendsGraphBody { position: relative; display: flex; flex-direction: column; gap: 10px; flex: 1; }
 .acrylBlendsGraphCanvas { width: 100%; height: max(400px, calc(var(--bf-pane-h, 800px) - 400px)); min-width: 0; border: 1px solid var(--bf-border-2); border-radius: 8px; background: var(--bf-bg); }
 .acrylBlendsGraphSide { display: contents; font-size: 12px; }
+.acrylBlendsGraphStage { position: relative; min-width: 0; }
+.acrylBlendsGraphZoom { position: absolute; left: 10px; bottom: 10px; z-index: 2; display: flex; flex-direction: column; gap: 4px; }
+.acrylBlendsGraphZoom .acrylBlendsGraphButton { width: 30px; height: 30px; padding: 0; font-size: 18px; line-height: 1; background: var(--bf-surface); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
 .acrylBlendsGraphCard, .acrylBlendsGraphStrip { border: 1px solid var(--bf-border-2); border-radius: 8px; padding: 10px; background: var(--bf-surface); overflow: auto; font-size: 12px; }
 .acrylBlendsGraphCard { position: absolute; top: 8px; right: 8px; width: 250px; max-height: 384px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
 .acrylBlendsGraphStrip { max-height: 140px; }
@@ -47,6 +50,9 @@ const CSS = `
 /* Full screen: the picture is the window, and everything else lies over it. */
 .acrylBlendsGraph[data-fullscreen] { position: fixed; inset: 0; z-index: 2000; min-height: 0; gap: 0; background: var(--bf-bg); color: var(--bf-text); padding: 0; margin: 0; }
 .acrylBlendsGraph[data-fullscreen] .acrylBlendsGraphBody { position: absolute; inset: 0; display: block; gap: 0; }
+.acrylBlendsGraph[data-fullscreen] .acrylBlendsGraphStage { display: contents; }
+.acrylBlendsGraph[data-fullscreen] .acrylBlendsGraphZoom { position: absolute; left: 14px; bottom: 56px; }
+.acrylBlendsGraph[data-fullscreen][data-strip="open"] .acrylBlendsGraphZoom { bottom: 148px; }
 .acrylBlendsGraph[data-fullscreen] .acrylBlendsGraphCanvas { position: absolute; inset: 0; width: auto; height: auto; border: 0; border-radius: 0; }
 .acrylBlendsGraph[data-fullscreen] .acrylBlendsGraphChrome { position: absolute; top: 8px; left: 8px; z-index: 2; max-width: calc(100% - 16px); padding: 8px 10px; border: 1px solid var(--bf-border-2); border-radius: 8px; background: color-mix(in srgb, var(--bf-surface) 92%, transparent); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
 .acrylBlendsGraph[data-fullscreen][data-card="open"] .acrylBlendsGraphChrome { max-width: calc(100% - 290px); }

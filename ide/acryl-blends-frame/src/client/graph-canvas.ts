@@ -211,6 +211,16 @@ export class GraphCanvas {
     this.cy.fit(undefined, 40)
   }
 
+  /** The zoom buttons: one step in or out around the middle of the picture (not past the limits), 1.4 times each way. */
+  zoomBy(factor: number): void {
+    const level = Math.min(this.cy.maxZoom(), Math.max(this.cy.minZoom(), this.cy.zoom() * factor))
+    this.cy.zoom({ level, renderedPosition: { x: this.cy.width() / 2, y: this.cy.height() / 2 } })
+  }
+
+  zoomLevel(): number {
+    return this.cy.zoom()
+  }
+
   /** The box changed size (the view went full screen, or came back): Cytoscape measures it again. Zoom, position and selection stay as they are. */
   resize(): void {
     this.cy.resize()
