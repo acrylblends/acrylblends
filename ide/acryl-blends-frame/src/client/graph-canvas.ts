@@ -142,6 +142,8 @@ export class GraphCanvas {
   private readonly cy: Core
   private laidOut = false
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
+  private onWheel: ((event: WheelEvent) => void) | undefined
+  private wheelTarget: HTMLElement | undefined
 
   constructor(container: HTMLElement | null, palette: Palette, private readonly onSelect: (id: string | undefined) => void = () => {}) {
     this.cy = cytoscape({
@@ -150,8 +152,20 @@ export class GraphCanvas {
       wheelSensitivity: 0.2,
       minZoom: 0.1,
       maxZoom: 3,
+      // A plain scroll over the picture scrolls the pane it is in; Ctrl or Cmd with the wheel (and a trackpad pinch, which sends Ctrl) zooms it.
+      userZoomingEnabled: false,
       style: styleOf(palette),
     })
+    if (container !== null) {
+      this.onWheel = (event: WheelEvent): void => {
+        if (!event.ctrlKey && !event.metaKey) return
+        event.preventDefault()
+        const box = container.getBoundingClientRect()
+        this.cy.zoom({ level: this.cy.zoom() * Math.exp(-event.deltaY * 0.01), renderedPosition: { x: event.clientX - box.left, y: event.clientY - box.top } })
+      }
+      this.wheelTarget = container
+      container.addEventListener('wheel', this.onWheel, { passive: false })
+    }
     this.cy.on('tap', 'node', (event) => { this.onSelect(String(event.target.id())) })
     this.cy.on('tap', (event) => { if (event.target === this.cy) this.onSelect(undefined) })
   }
@@ -245,6 +259,7 @@ export class GraphCanvas {
   destroy(): void {
     for (const timer of this.timers) clearTimeout(timer)
     this.timers.clear()
+    if (this.wheelTarget !== undefined && this.onWheel !== undefined) this.wheelTarget.removeEventListener('wheel', this.onWheel)
     this.cy.destroy()
   }
 }

@@ -72,9 +72,12 @@ export function inspectCordisContext(ctx: Context, plane: string, sourceOf: Sour
     known.add(uid)
     const parent = fiber.parent.fiber
     const parentUid = parent === fiber ? null : (parent.uid ?? null)
-    const entryId = loader?.locate?.(fiber) ?? null
+    // A fiber inside another plugin's entry (the plugins an `include` row composes) inherits that entry; it is not the row's own, so it names no module of its
+    // own and its code is found by its name instead.
+    const ownsEntry = fiber.entry !== undefined && (parent === fiber || parent.entry !== fiber.entry)
+    const entryId = ownsEntry ? (loader?.locate?.(fiber) ?? null) : null
     if (entryId !== null) uidByEntryId.set(entryId, uid)
-    const moduleName = fiber.entry?.options.name ?? null
+    const moduleName = ownsEntry ? (fiber.entry?.options.name ?? null) : null
     const source = uid === 0 ? undefined : sourceOf(moduleName, fiber.name)
     nodes.push({
       uid,

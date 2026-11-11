@@ -103,6 +103,7 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
         await new Promise<void>(done => setTimeout(done, RETRY_MS))
         after = stopped ? 0 : await read()
       }
+      if (!stopped && after !== undefined) setLive('live')
       while (!stopped && after !== undefined) {
         try {
           const answer = await api.events(after, controller.signal)
@@ -179,6 +180,9 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
     waiting.current.clear()
   }, [elements])
 
+  // Another set of planes is another picture: it fits the box (after the update above has laid it out).
+  useEffect(() => { canvas.current?.fit() }, [plane])
+
   useEffect(() => {
     const drawn = canvas.current
     if (drawn === null) return
@@ -195,6 +199,11 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
   }, [host, local])
 
   const chosen = nodeOf(selected)
+  // A selected plugin that is gone (its fiber was replaced when the app reloaded) is no longer selected, so the filter shows again.
+  useEffect(() => {
+    if (selected === undefined || nodeOf(selected) !== undefined) return
+    if (selected.startsWith('h-') ? host !== undefined : local !== undefined) setSelected(undefined)
+  }, [selected, nodeOf, host, local])
   const relations = chosen === undefined ? undefined : relationsOf(chosen.snapshot, chosen.node.uid)
   const prefixOfSelected = selected === undefined ? 'h-' : selected.slice(0, 2)
   const counts = phaseCounts([plane !== 'client' ? host : undefined, plane !== 'host' ? local : undefined])
@@ -244,6 +253,7 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
         {[...counts].map(([phase, count]) => (
           <span key={phase}><span style={{ color: PHASE_COLOR[phase as NodePhase] }}>●</span> {phase} ({count})</span>
         ))}
+        <span className="acrylBlendsGraphDim">Ctrl or Cmd + scroll to zoom, drag to move</span>
       </div>
       {problem !== undefined && <p className="acrylBlendsNote" data-error>{problem}</p>}
       <div className="acrylBlendsGraphBody">

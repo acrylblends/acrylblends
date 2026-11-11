@@ -18,11 +18,13 @@ const CSS = `
 .acrylBlendsGraphToggle { display: inline-flex; align-items: center; gap: 4px; color: var(--bf-text-2); }
 .acrylBlendsGraphSearch { min-width: 170px; max-width: 240px; }
 .acrylBlendsGraphLegend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--bf-text-2); }
-.acrylBlendsGraphBody { display: flex; gap: 10px; flex: 1; min-height: 440px; align-items: stretch; }
-.acrylBlendsGraphCanvas { flex: 1; min-width: 0; min-height: 440px; border: 1px solid var(--bf-border-2); border-radius: 8px; background: var(--bf-bg); }
-.acrylBlendsGraphSide { width: 290px; display: flex; flex-direction: column; gap: 8px; min-height: 0; font-size: 12px; }
-.acrylBlendsGraphCard, .acrylBlendsGraphStrip { border: 1px solid var(--bf-border-2); border-radius: 8px; padding: 10px; background: var(--bf-surface); overflow: auto; max-height: 340px; }
-.acrylBlendsGraphStrip { flex: 1; min-height: 120px; }
+.acrylBlendsGraphBody { position: relative; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.acrylBlendsGraphCanvas { width: 100%; height: 400px; min-width: 0; border: 1px solid var(--bf-border-2); border-radius: 8px; background: var(--bf-bg); }
+.acrylBlendsGraphSide { display: contents; font-size: 12px; }
+.acrylBlendsGraphCard, .acrylBlendsGraphStrip { border: 1px solid var(--bf-border-2); border-radius: 8px; padding: 10px; background: var(--bf-surface); overflow: auto; font-size: 12px; }
+.acrylBlendsGraphCard { position: absolute; top: 8px; right: 8px; width: 250px; max-height: 384px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+.acrylBlendsGraphStrip { max-height: 140px; }
+.acrylBlendsGraphStrip { min-height: 120px; }
 .acrylBlendsGraphCard b { color: var(--bf-strong); word-break: break-word; }
 .acrylBlendsGraphCard dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 8px 0; }
 .acrylBlendsGraphCard dt { color: var(--bf-dim); }
@@ -39,7 +41,6 @@ const CSS = `
 .acrylBlendsGraphStrip li[data-pulse="up"] { list-style-color: var(--bf-ok); }
 .acrylBlendsGraphStrip li[data-pulse="error"] .acrylBlendsGraphLink { color: var(--bf-error); }
 .acrylBlendsGraphStrip li[data-pulse="down"] .acrylBlendsGraphLink { color: var(--bf-dim); }
-@media (max-width: 900px) { .acrylBlendsGraphBody { flex-direction: column; } .acrylBlendsGraphSide { width: auto; } }
 `
 
 /** Add the styles once; returns the removal. */
