@@ -108,7 +108,7 @@ export function apply(ctx: ClientContext): void {
     branchChats,
     tabs,
     branch: checkedOut,
-    appRoot: () => { const current = frameState.getSnapshot(); return current.status === 'ready' ? current.state.appRoot : undefined },
+    appRoot: () => { const current = frameState.getSnapshot(); return current.status === 'ready' ? (current.state.chatRoot ?? current.state.appRoot) : undefined },
     // A chat tab of the strip that is showing on the checked-out branch asks for its own chat to be the one on screen.
     preferred: () => {
       const strip = tabs.getSnapshot()

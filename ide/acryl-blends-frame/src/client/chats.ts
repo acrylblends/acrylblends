@@ -167,7 +167,7 @@ export interface ChatsDeps {
   readonly branchChats?: BranchChatsStore
   /** The checked-out branch; undefined outside a repository (no branch to keep a chat for). */
   readonly branch?: () => string | undefined
-  /** The app's folder, where a chat made by the frame works. */
+  /** The folder a chat made by the frame works in: the app's stable chat folder (`chatRoot`), else its folder. */
   readonly appRoot?: () => string | undefined
   /** The chat the strip's active tab asks for on the checked-out branch, if it is a tab of one. */
   readonly preferred?: () => string | undefined

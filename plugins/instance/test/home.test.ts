@@ -6,13 +6,25 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { acrylRoot, appDataHome, appHomes, appIdOf, migrateOldHome, readAppId } from '../home.ts'
+import {
+  acrylRoot,
+  appDataHome,
+  appHomes,
+  appIdOf,
+  chatFolder,
+  chatKeyOf,
+  migrateOldHome,
+  moveChats,
+  readAppId,
+} from '../home.ts'
 
 const scratch = mkdtempSync(join(tmpdir(), 'instance-home-'))
 after(() => rmSync(scratch, { recursive: true, force: true }))
@@ -157,4 +169,58 @@ test('migration: an older .acrylblends.old is not overwritten', () => {
   const result = migrateOldHome(dir, data)
   assert.equal(result.status === 'moved' && result.kept.endsWith('.acrylblends.old-2'), true)
   assert.equal(readFileSync(join(dir, '.acrylblends.old', 'previous.txt'), 'utf8'), 'earlier')
+})
+
+test('chats: the folder they work in is a link under the app id, pointed at the folder again after the folder moves', () => {
+  const dir = appFolder()
+  const first = chatFolder(dir, 'linux', env, env.HOME)
+  const id = appIdOf(dir)
+  assert.equal(first, join(env.ACRYL_HOME, 'apps', id, 'source'))
+  assert.equal(realpathSync(first), realpathSync(dir))
+  assert.equal(chatFolder(dir, 'linux', env, env.HOME), first)
+
+  const moved = join(scratch, 'elsewhere', 'renamed-shop')
+  mkdirSync(join(moved, '..'), { recursive: true })
+  renameSync(dir, moved)
+  // The id travels with the folder, the chat folder keeps its name, and now leads to the new place.
+  assert.equal(chatFolder(moved, 'linux', env, env.HOME), first)
+  assert.equal(realpathSync(first), realpathSync(moved))
+})
+
+test('chats: an installed app, whose source is already the folder under its id, keeps it', () => {
+  const dir = appFolder()
+  const id = appIdOf(dir)
+  const source = join(env.ACRYL_HOME, 'apps', id, 'source')
+  mkdirSync(join(source, '..'), { recursive: true })
+  renameSync(dir, source)
+  assert.equal(chatFolder(source, 'linux', env, env.HOME), source)
+})
+
+test('chats: filed under the app folder before, they are renamed to the chat folder once, with their workspace and branch chats', () => {
+  const data = join(scratch, 'data-of-old-app')
+  const from = '/Users/a/_projects/shop'
+  const to = '/Users/a/.acryl/apps/shop-1ec5/source'
+  write(join(data, 'sessions', chatKeyOf(from), 'session-1', 'log.jsonl'), '{}\n')
+  write(
+    join(data, 'storages', 'workspace.json'),
+    JSON.stringify({ tables: { workspaces: { w1: { path: from, sessionIds: ['session-1'] }, w2: { path: '/elsewhere' } } } }),
+  )
+  write(
+    join(data, 'frame', 'branch-chats.json'),
+    JSON.stringify({ roots: { [from]: { 'session-1': 'main' } }, open: { [from]: ['session-1'] } }),
+  )
+  assert.deepEqual(moveChats(data, from, to), { sessions: true, workspaces: 1, branchChats: true })
+  assert.equal(existsSync(join(data, 'sessions', chatKeyOf(from))), false)
+  assert.equal(existsSync(join(data, 'sessions', chatKeyOf(to), 'session-1', 'log.jsonl')), true)
+  const workspaces = JSON.parse(readFileSync(join(data, 'storages', 'workspace.json'), 'utf8')).tables.workspaces
+  assert.deepEqual([workspaces.w1.path, workspaces.w1.sessionIds, workspaces.w2.path], [to, ['session-1'], '/elsewhere'])
+  const chats = JSON.parse(readFileSync(join(data, 'frame', 'branch-chats.json'), 'utf8'))
+  assert.deepEqual([Object.keys(chats.roots), Object.keys(chats.open)], [[to], [to]])
+  // A second run finds nothing under the old folder and changes nothing.
+  assert.deepEqual(moveChats(data, from, to), { sessions: false, workspaces: 0, branchChats: false })
+})
+
+test('chats: the folder name is the one DSH gives (separators become one dash, other characters ~XXXX)', () => {
+  assert.equal(chatKeyOf('/Users/a/_projects/p11_acr/shop'), '--Users-a-_projects-p11_acr-shop--')
+  assert.equal(chatKeyOf('/Users/a/My Shop'), '--Users-a-My~0020Shop--')
 })

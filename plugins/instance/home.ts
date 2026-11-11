@@ -16,8 +16,12 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
@@ -257,4 +261,131 @@ export function migrateOldHome(
     kept,
     files: [...inventory(dataHome).keys()].filter((p) => !p.endsWith('/')).length,
   }
+}
+
+/** The folder an app's chats work in and are filed under: `<root>/apps/<id>/source`. */
+export const SOURCE_DIR = 'source'
+
+/**
+ * The folder the engine files an app's chats under. The engine keys a chat by the folder it works in (its workspace path, its session folder), so an app whose
+ * chats worked in its own folder lost them when the folder moved. A folder app's chats work in `~/.acryl/apps/<id>/source` instead, a link to the folder
+ * that is pointed at the folder again at every start: the key is the id, and a moved app keeps its chats. An installed app's source already is that folder.
+ * When the link cannot be made (a file of that name, a platform that refuses), the app folder itself is the answer, as before.
+ */
+export function chatFolder(
+  appRoot: string,
+  platform: NodeJS.Platform = process.platform,
+  env: Env = process.env,
+  home: string = personHome(env, platform),
+): string {
+  const folder = resolve(appRoot)
+  const link = pathOf(platform).join(appHomes(folder, platform, env, home).data, '..', SOURCE_DIR)
+  const where = pathOf(platform).normalize(link)
+  try {
+    if (existsSync(where) || isLink(where)) {
+      if (isLink(where)) {
+        if (resolve(readlinkSync(where)) === realpathSync(folder)) return where
+        unlinkSync(where)
+      } else return realpathSync(where) === realpathSync(folder) ? where : folder
+    }
+    mkdirSync(pathOf(platform).dirname(where), { recursive: true })
+    symlinkSync(realpathSync(folder), where, platform === 'win32' ? 'junction' : 'dir')
+    return where
+  } catch {
+    return folder
+  }
+}
+
+const isLink = (path: string): boolean => {
+  try {
+    return lstatSync(path).isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * DSH's folder for the chats of one working folder (`dsh-session-persistence-jsonl`, `projectKey`): separators become one dash, safe characters stay, the
+ * rest is `~XXXX`, between two dashes pairs, cut to 251. Copied so a chat folder can be renamed with the app's; keep it in step with that function.
+ */
+export function chatKeyOf(folder: string): string {
+  let readable = ''
+  let separatorRun = false
+  for (let i = 0; i < folder.length; i += 1) {
+    const code = folder.charCodeAt(i)
+    const character = String.fromCharCode(code)
+    if (character === '/' || character === '\\' || character === ':') {
+      if (!separatorRun) readable += '-'
+      separatorRun = true
+    } else if (character !== '~' && /^[A-Za-z0-9._-]$/u.test(character)) {
+      readable += character
+      separatorRun = false
+    } else {
+      readable += `~${code.toString(16).toUpperCase().padStart(4, '0')}`
+      separatorRun = false
+    }
+  }
+  return `--${(readable.replace(/^-+/u, '') || 'root').slice(0, 251)}--`
+}
+
+/** What {@link moveChats} changed: how many of the three places that name a chat folder were rewritten. */
+export interface ChatMove {
+  readonly sessions: boolean
+  readonly workspaces: number
+  readonly branchChats: boolean
+}
+
+function rewriteJson(file: string, change: (value: unknown) => boolean): boolean {
+  if (!existsSync(file)) return false
+  let value: unknown
+  try {
+    value = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    return false
+  }
+  if (!change(value)) return false
+  const temporary = `${file}.${String(process.pid)}.tmp`
+  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`)
+  renameSync(temporary, file)
+  return true
+}
+
+/**
+ * Make the chats an app filed under one folder belong to another, once: the session folder is renamed, the workspace the engine registered keeps its id and its
+ * chats under the new path, and the frame's branch chats move to the new key. For an app whose chats were filed under its own folder (before `chatFolder`).
+ * Nothing is overwritten: a session folder already at the new key is left alone, and an app with no chat under `from` changes nothing. Run before the engine starts.
+ */
+export function moveChats(dataHome: string, from: string, to: string): ChatMove {
+  const none: ChatMove = { sessions: false, workspaces: 0, branchChats: false }
+  if (from === to) return none
+  let sessions = false
+  const oldKey = join(dataHome, 'sessions', chatKeyOf(from))
+  const newKey = join(dataHome, 'sessions', chatKeyOf(to))
+  if (existsSync(oldKey) && !existsSync(newKey)) {
+    renameSync(oldKey, newKey)
+    sessions = true
+  }
+  let workspaces = 0
+  rewriteJson(join(dataHome, 'storages', 'workspace.json'), (value) => {
+    const table = (value as { tables?: { workspaces?: Record<string, { path?: unknown }> } } | null)
+      ?.tables?.workspaces
+    for (const entry of Object.values(table ?? {}))
+      if (entry.path === from) {
+        entry.path = to
+        workspaces += 1
+      }
+    return workspaces > 0
+  })
+  const branchChats = rewriteJson(join(dataHome, 'frame', 'branch-chats.json'), (value) => {
+    const file = value as { roots?: Record<string, unknown>; open?: Record<string, unknown> } | null
+    let changed = false
+    for (const table of [file?.roots, file?.open])
+      if (table !== undefined && Object.hasOwn(table, from) && !Object.hasOwn(table, to)) {
+        table[to] = table[from]
+        delete table[from]
+        changed = true
+      }
+    return changed
+  })
+  return { sessions, workspaces, branchChats }
 }
