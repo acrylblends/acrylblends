@@ -18,6 +18,7 @@
     "verify:workflows": "node scripts/verify-workflows.mjs",
     "verify:scaffolder": "node scripts/verify-scaffolder.mjs",
     "verify:core-boundary": "node scripts/verify-core-boundary.mjs",
+    "try": "node scripts/try-from-checkout.mjs",
     "verify:ide-host": "node --import ./scripts/workspace-source.mjs scripts/verify-ide-host.mjs",
     "verify:frame-publish": "node --import ./scripts/workspace-source.mjs scripts/verify-frame-publish.mjs",
     "verify:ide-template": "node --import ./scripts/workspace-source.mjs scripts/verify-ide-template.mjs blank",
