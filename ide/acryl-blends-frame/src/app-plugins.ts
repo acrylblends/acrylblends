@@ -6,7 +6,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative } from 'node:path'
 import { createRequire } from 'node:module'
@@ -254,12 +254,27 @@ export function insideApp(root: string, file: string): string | undefined {
   return rel.split('\\').join('/')
 }
 
-/** The plugin's own folder in `plugins/` with its entry file, else undefined. */
+/** The files a plugin's code starts in, first match wins: the entry beside its package.json, then `src/`, then what package.json names, then the README. */
+function mainFileOf(folder: string): string | undefined {
+  const entries = [...ENTRIES, ...ENTRIES.map(file => join('src', file))]
+  const named: string[] = []
+  try {
+    const manifest = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')) as { main?: unknown; exports?: unknown }
+    if (typeof manifest.main === 'string') named.push(manifest.main)
+    const dot = typeof manifest.exports === 'object' && manifest.exports !== null ? (manifest.exports as Record<string, unknown>)['.'] : manifest.exports
+    if (typeof dot === 'string') named.push(dot)
+  } catch {
+    // No package.json, or not JSON: the entry names above decide.
+  }
+  return [...entries, ...named, 'README.md'].find(file => existsSync(join(folder, file)))
+}
+
+/** The plugin's own folder in `plugins/` with the file its code starts in, else undefined. */
 function ownLocation(root: string, name: string): PluginLocation | undefined {
   const folder = join(root, 'plugins', name)
   if (!existsSync(folder)) return undefined
-  const entry = ENTRIES.find(file => existsSync(join(folder, file)))
-  return { folder, ...(entry === undefined ? {} : { main: `plugins/${name}/${entry}` }) }
+  const entry = mainFileOf(folder)
+  return { folder, ...(entry === undefined ? {} : { main: `plugins/${name}/${entry.replace(/^\.\//u, '').split('\\').join('/')}` }) }
 }
 
 /** Where a plugin of `blend.yaml` or the frame has its code: a folder of the app's `plugins/`, else the package the app installed (read-only). */

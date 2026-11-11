@@ -213,7 +213,7 @@ export function PluginsSection({ loadPlugins, close }: PluginsSectionInjected & 
                 <code title="Where this plugin's code is">{plugin.folder}</code>
                 {' '}
                 <button type="button" className="acrylBlendsShareButton" onClick={() => { void copy(plugin, plugin.folder ?? '', 'the folder path') }}>Copy path</button>
-                {plugin.actions?.viewSource === undefined && ' · its files are outside this app, so they are not in the Files tab'}
+                {plugin.actions?.viewSource === undefined && ' · no file of it to open here'}
               </small>
             )}
             {(plugin.saved !== undefined || plugin.shared !== undefined) && (
