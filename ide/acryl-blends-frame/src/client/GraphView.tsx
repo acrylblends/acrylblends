@@ -64,7 +64,7 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
   const [copied, setCopied] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [cardOpen, setCardOpen] = useState(true)
-  const [stripOpen, setStripOpen] = useState(true)
+  const [stripOpen, setStripOpen] = useState(false)
 
   useEffect(() => installGraphStyles(), [])
 
@@ -165,24 +165,28 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
   // Another set of planes is another picture: it fits the box (after the update above has laid it out).
   useEffect(() => { canvas.current?.fit() }, [plane])
 
-  // The box changes size when the picture goes full screen or the Settings window does: it measures again, and keeps its zoom, place and selection.
+  // The box changes size when the picture goes full screen or the Settings window does: it measures again and fits the new box (a picture placed for the
+  // old size would sit half outside the new one); the selection stays. The first report is the box as it is made, not a change.
   useEffect(() => {
     const element = holder.current
     if (element === null || typeof ResizeObserver === 'undefined') return undefined
-    const observer = new ResizeObserver(() => { canvas.current?.resize() })
+    let first = true
+    let frame: number | undefined
+    const observer = new ResizeObserver(() => {
+      if (first) { first = false; return }
+      if (frame !== undefined) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => { canvas.current?.resize(); canvas.current?.fit() })
+    })
     observer.observe(element)
-    return () => { observer.disconnect() }
+    return () => {
+      observer.disconnect()
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    }
   }, [])
 
-  // Full screen: the window is the picture's, so a plain scroll zooms it; it fits the new box once the new size is laid out; Esc leaves (and is not
+  // Full screen: the window is the picture's, so a plain scroll zooms it (the new box is fitted by the size observer above); Esc leaves (and is not
   // passed on, so the Settings window under it stays open for the next Esc).
-  const firstFullscreen = useRef(true)
-  useEffect(() => {
-    canvas.current?.setPlainZoom(fullscreen)
-    if (firstFullscreen.current) { firstFullscreen.current = false; return undefined }
-    const frame = requestAnimationFrame(() => { canvas.current?.resize(); canvas.current?.fit() })
-    return () => { cancelAnimationFrame(frame) }
-  }, [fullscreen])
+  useEffect(() => { canvas.current?.setPlainZoom(fullscreen) }, [fullscreen])
   useEffect(() => {
     if (!fullscreen) return undefined
     const leave = (event: KeyboardEvent): void => {
@@ -194,6 +198,14 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
     window.addEventListener('keydown', leave, true)
     return () => { window.removeEventListener('keydown', leave, true) }
   }, [fullscreen])
+
+  // The strip starts folded (the picture gets the room); the first change that happens unfolds it once, so a live change is seen without a click.
+  const unfolded = useRef(false)
+  useEffect(() => {
+    if (strip.length === 0 || unfolded.current) return
+    unfolded.current = true
+    setStripOpen(true)
+  }, [strip.length])
 
   // Choosing another plugin shows its card again, also after the card was folded away.
   useEffect(() => { if (selected !== undefined) setCardOpen(true) }, [selected])
@@ -240,39 +252,39 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
   return (
     <div className="acrylBlendsGraph" ref={root} data-fullscreen={fullscreen ? '' : undefined} data-card={chosen !== undefined && cardOpen ? 'open' : 'closed'} data-strip={stripOpen ? 'open' : 'closed'}>
       <div className="acrylBlendsGraphChrome">
-      <div className="acrylBlendsGraphBar">
-        <strong>Cordis plugin graph</strong>
-        <span className="acrylBlendsGraphCount">{nodeCount} fibers · {edgeCount} relations</span>
-        <span className="acrylBlendsGraphLive" data-live={live} role="status" title={live === 'live' ? 'Changes arrive as they happen' : live === 'lost' ? LOST_TEXT : 'Connecting'}>
-          {live === 'live' ? 'live' : live === 'lost' ? LOST_TEXT : 'connecting'}
-        </span>
-        {client !== undefined && (
-          <span className="acrylBlendsGraphPlanes" role="group" aria-label="Which plugins">
-            {(['host', 'client', 'both'] as const).map(candidate => (
-              <button key={candidate} type="button" aria-pressed={plane === candidate} onClick={() => { setPlane(candidate); setSelected(undefined) }}>{PLANE_LABEL[candidate]}</button>
-            ))}
+        <div className="acrylBlendsGraphBar">
+          <strong>Cordis plugin graph</strong>
+          <span className="acrylBlendsGraphCount">{nodeCount} fibers · {edgeCount} relations</span>
+          <span className="acrylBlendsGraphLive" data-live={live} role="status" title={live === 'live' ? 'Changes arrive as they happen' : live === 'lost' ? LOST_TEXT : 'Connecting'}>
+            {live === 'live' ? 'live' : live === 'lost' ? LOST_TEXT : 'connecting'}
           </span>
-        )}
-        <button type="button" className="acrylBlendsGraphButton" onClick={() => { refreshHost.current(); refreshClient.current() }}>Recapture</button>
-        <button type="button" className="acrylBlendsGraphButton" onClick={() => { canvas.current?.fit() }}>Fit</button>
-        <button type="button" className="acrylBlendsGraphButton" aria-pressed={fullscreen} title={fullscreen ? 'Back to the Settings window (Esc)' : 'Fill the whole window with the graph'} onClick={() => { setFullscreen(current => !current) }}>{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
-      </div>
-      <div className="acrylBlendsGraphBar">
-        {EDGE_KINDS.map(kind => (
-          <label key={kind} className="acrylBlendsGraphToggle">
-            <input type="checkbox" checked={filter[kind]} onChange={(event) => { setFilter(current => ({ ...current, [kind]: event.target.checked })) }} />
-            <span style={{ color: EDGE_COLOR[kind] }}>■</span> {EDGE_LABEL[kind]}
-          </label>
-        ))}
-        <input className="acrylBlendsSearch acrylBlendsGraphSearch" type="search" aria-label="Filter plugins" placeholder="filter by name / module" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(undefined) }} />
-      </div>
-      <div className="acrylBlendsGraphLegend">
-        {[...counts].map(([phase, count]) => (
-          <span key={phase}><span style={{ color: PHASE_COLOR[phase as NodePhase] }}>●</span> {phase} ({count})</span>
-        ))}
-        <span className="acrylBlendsGraphDim">{fullscreen ? 'Scroll to zoom, drag to move, Esc to leave full screen' : 'Ctrl or Cmd + scroll to zoom, drag to move'}</span>
-      </div>
-      {problem !== undefined && live !== 'lost' && <p className="acrylBlendsNote" data-error>{problem}</p>}
+          {client !== undefined && (
+            <span className="acrylBlendsGraphPlanes" role="group" aria-label="Which plugins">
+              {(['host', 'client', 'both'] as const).map(candidate => (
+                <button key={candidate} type="button" aria-pressed={plane === candidate} onClick={() => { setPlane(candidate); setSelected(undefined) }}>{PLANE_LABEL[candidate]}</button>
+              ))}
+            </span>
+          )}
+          <button type="button" className="acrylBlendsGraphButton" onClick={() => { refreshHost.current(); refreshClient.current() }}>Recapture</button>
+          <button type="button" className="acrylBlendsGraphButton" onClick={() => { canvas.current?.fit() }}>Fit</button>
+          <button type="button" className="acrylBlendsGraphButton" aria-pressed={fullscreen} title={fullscreen ? 'Back to the Settings window (Esc)' : 'Fill the whole window with the graph'} onClick={() => { setFullscreen(current => !current) }}>{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
+        </div>
+        <div className="acrylBlendsGraphBar">
+          {EDGE_KINDS.map(kind => (
+            <label key={kind} className="acrylBlendsGraphToggle">
+              <input type="checkbox" checked={filter[kind]} onChange={(event) => { setFilter(current => ({ ...current, [kind]: event.target.checked })) }} />
+              <span style={{ color: EDGE_COLOR[kind] }}>■</span> {EDGE_LABEL[kind]}
+            </label>
+          ))}
+          <input className="acrylBlendsSearch acrylBlendsGraphSearch" type="search" aria-label="Filter plugins" placeholder="filter by name / module" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(undefined) }} />
+        </div>
+        <div className="acrylBlendsGraphLegend">
+          {[...counts].map(([phase, count]) => (
+            <span key={phase}><span style={{ color: PHASE_COLOR[phase as NodePhase] }}>●</span> {phase} ({count})</span>
+          ))}
+          <span className="acrylBlendsGraphDim">{fullscreen ? 'Scroll to zoom, drag to move, Esc to leave full screen' : 'Ctrl or Cmd + scroll to zoom, drag to move'}</span>
+        </div>
+        {problem !== undefined && live !== 'lost' && <p className="acrylBlendsNote" data-error>{problem}</p>}
       </div>
       <div className="acrylBlendsGraphBody">
         <div className="acrylBlendsGraphCanvas" ref={holder} aria-label="Plugin graph" />
