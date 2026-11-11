@@ -4,7 +4,7 @@
   "dshVersion": "0.2.0-rc.2",
   "packages": {
     "acryl-ui": { "name": "ui", "version": "0.3.0" },
-    "dsh-client-ui-brand-acryl": { "name": "brand-client", "version": "0.1.0" },
+    "dsh-client-ui-brand-acryl": { "name": "brand-client", "version": "0.1.1" },
     "acryl-app-shell": { "name": "app-shell", "version": "0.1.0" },
     "acryl-workspace": { "name": "workspace", "version": "0.1.0" },
     "acryl-settings": { "name": "settings", "version": "0.1.0" },
@@ -17,7 +17,7 @@
     "acryl-web": { "name": "web", "version": "0.1.0" },
     "acryl-system-prompt": { "name": "system-prompt", "version": "0.1.0" },
     "acryl-app-context": { "name": "app-context", "version": "0.1.0" },
-    "acryl-versions": { "name": "versions", "version": "0.1.0" },
-    "acryl-blends-frame": { "name": "blends-frame", "version": "0.1.1" }
+    "acryl-versions": { "name": "versions", "version": "0.1.1" },
+    "acryl-blends-frame": { "name": "blends-frame", "version": "0.1.2" }
   }
 }
