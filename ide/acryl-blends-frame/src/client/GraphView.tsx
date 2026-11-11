@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { EdgeKind, GraphEvent, GraphNode, GraphSnapshot, NodePhase } from '../graph-contract.ts'
 import type { GraphApi } from './graph-api.ts'
 import { EDGE_COLOR, GraphCanvas, PHASE_COLOR, nodeId, readPalette, toElements, type EdgeFilter, type PulseKind } from './graph-canvas.ts'
+import { LOST_TEXT, runLink, type Live } from './graph-link.ts'
 import { eventLine, phaseCounts, pulseOf, relationsOf } from './graph-model.ts'
 import { installGraphStyles } from './graph-styles.ts'
 
@@ -33,7 +34,6 @@ const EDGE_KINDS: readonly EdgeKind[] = ['inject', 'provider', 'nesting']
 const EDGE_LABEL: Record<EdgeKind, string> = { inject: 'requires (inject)', provider: 'provides to', nesting: 'nested in (Loader tree)' }
 const STRIP_LENGTH = 40
 const REFRESH_DELAY_MS = 150
-const RETRY_MS = 3000
 
 interface StripEntry {
   readonly key: string
@@ -43,8 +43,6 @@ interface StripEntry {
   readonly text: string
   readonly pulse: PulseKind
 }
-
-type Live = 'connecting' | 'live' | 'lost'
 
 const prefixOf = (plane: 'host' | 'client'): string => (plane === 'host' ? 'h-' : 'c-')
 
@@ -64,6 +62,9 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
   const [selected, setSelected] = useState<string | undefined>(undefined)
   const [strip, setStrip] = useState<readonly StripEntry[]>([])
   const [copied, setCopied] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [cardOpen, setCardOpen] = useState(true)
+  const [stripOpen, setStripOpen] = useState(true)
 
   useEffect(() => installGraphStyles(), [])
 
@@ -74,56 +75,37 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
     setStrip(current => [{ key: `${from}:${String(event.seq ?? at)}:${String(current.length)}`, at, plane: from, uid: event.uid, text: eventLine(event), pulse }, ...current].slice(0, STRIP_LENGTH))
   }, [])
 
-  // The Host's graph, and its fiber events: asked for once, then a request that the Host answers when a fiber changes.
+  // The Host's graph, and its fiber events: read once, then a request that the Host answers when a fiber changes. When the Host stops answering the view
+  // says so and reads the graph again until it answers (see graph-link.ts).
   const refreshHost = useRef<() => void>(() => {})
   useEffect(() => {
-    let stopped = false
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
-    const read = async (): Promise<number | undefined> => {
-      try {
-        const view = await api.read()
-        if (stopped) return undefined
-        setHost(view.snapshot)
-        setProblem(undefined)
-        return view.seq
-      } catch (cause) {
-        if (!stopped) setProblem(cause instanceof Error ? cause.message : 'The plugin graph could not be read.')
-        return undefined
-      }
-    }
     refreshHost.current = () => {
       if (timer !== undefined) clearTimeout(timer)
-      timer = setTimeout(() => { void read() }, REFRESH_DELAY_MS)
-    }
-    const listen = async (): Promise<void> => {
-      let after = await read()
-      while (!stopped && after === undefined) {
-        setLive('lost')
-        await new Promise<void>(done => setTimeout(done, RETRY_MS))
-        after = stopped ? 0 : await read()
-      }
-      if (!stopped && after !== undefined) setLive('live')
-      while (!stopped && after !== undefined) {
-        try {
-          const answer = await api.events(after, controller.signal)
-          if (stopped) return
-          after = answer.seq
-          setLive('live')
-          if (answer.events.length > 0) {
-            for (const event of answer.events) note('host', event)
-            refreshHost.current()
+      timer = setTimeout(() => {
+        void (async () => {
+          try {
+            const view = await api.read()
+            if (controller.signal.aborted) return
+            setHost(view.snapshot)
+            setProblem(undefined)
+          } catch (cause) {
+            // A connection that is down is the link's to report (the badge); anything else the Host said is shown as it said it.
+            if (!controller.signal.aborted && !(cause instanceof TypeError)) setProblem(cause instanceof Error ? cause.message : 'The plugin graph could not be read.')
           }
-        } catch {
-          if (stopped) return
-          setLive('lost')
-          await new Promise<void>(done => setTimeout(done, RETRY_MS))
-        }
-      }
+        })()
+      }, REFRESH_DELAY_MS)
     }
-    void listen()
+    void runLink(api, {
+      onLive: setLive,
+      onSnapshot: (snapshot) => { setHost(snapshot); setProblem(undefined) },
+      onEvents: (events) => {
+        for (const event of events) note('host', event)
+        refreshHost.current()
+      },
+    }, controller.signal)
     return () => {
-      stopped = true
       controller.abort()
       if (timer !== undefined) clearTimeout(timer)
     }
@@ -183,6 +165,39 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
   // Another set of planes is another picture: it fits the box (after the update above has laid it out).
   useEffect(() => { canvas.current?.fit() }, [plane])
 
+  // The box changes size when the picture goes full screen or the Settings window does: it measures again, and keeps its zoom, place and selection.
+  useEffect(() => {
+    const element = holder.current
+    if (element === null || typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(() => { canvas.current?.resize() })
+    observer.observe(element)
+    return () => { observer.disconnect() }
+  }, [])
+
+  // Full screen: the window is the picture's, so a plain scroll zooms it; it fits the new box once the new size is laid out; Esc leaves (and is not
+  // passed on, so the Settings window under it stays open for the next Esc).
+  const firstFullscreen = useRef(true)
+  useEffect(() => {
+    canvas.current?.setPlainZoom(fullscreen)
+    if (firstFullscreen.current) { firstFullscreen.current = false; return undefined }
+    const frame = requestAnimationFrame(() => { canvas.current?.resize(); canvas.current?.fit() })
+    return () => { cancelAnimationFrame(frame) }
+  }, [fullscreen])
+  useEffect(() => {
+    if (!fullscreen) return undefined
+    const leave = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.stopImmediatePropagation()
+      event.preventDefault()
+      setFullscreen(false)
+    }
+    window.addEventListener('keydown', leave, true)
+    return () => { window.removeEventListener('keydown', leave, true) }
+  }, [fullscreen])
+
+  // Choosing another plugin shows its card again, also after the card was folded away.
+  useEffect(() => { if (selected !== undefined) setCardOpen(true) }, [selected])
+
   useEffect(() => {
     const drawn = canvas.current
     if (drawn === null) return
@@ -223,12 +238,13 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
   }
 
   return (
-    <div className="acrylBlendsGraph" ref={root}>
+    <div className="acrylBlendsGraph" ref={root} data-fullscreen={fullscreen ? '' : undefined} data-card={chosen !== undefined && cardOpen ? 'open' : 'closed'} data-strip={stripOpen ? 'open' : 'closed'}>
+      <div className="acrylBlendsGraphChrome">
       <div className="acrylBlendsGraphBar">
         <strong>Cordis plugin graph</strong>
         <span className="acrylBlendsGraphCount">{nodeCount} fibers · {edgeCount} relations</span>
-        <span className="acrylBlendsGraphLive" data-live={live} title={live === 'live' ? 'Changes arrive as they happen' : live === 'lost' ? 'The app is not answering; trying again' : 'Connecting'}>
-          {live === 'live' ? 'live' : live === 'lost' ? 'reconnecting' : 'connecting'}
+        <span className="acrylBlendsGraphLive" data-live={live} role="status" title={live === 'live' ? 'Changes arrive as they happen' : live === 'lost' ? LOST_TEXT : 'Connecting'}>
+          {live === 'live' ? 'live' : live === 'lost' ? LOST_TEXT : 'connecting'}
         </span>
         {client !== undefined && (
           <span className="acrylBlendsGraphPlanes" role="group" aria-label="Which plugins">
@@ -239,6 +255,7 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
         )}
         <button type="button" className="acrylBlendsGraphButton" onClick={() => { refreshHost.current(); refreshClient.current() }}>Recapture</button>
         <button type="button" className="acrylBlendsGraphButton" onClick={() => { canvas.current?.fit() }}>Fit</button>
+        <button type="button" className="acrylBlendsGraphButton" aria-pressed={fullscreen} title={fullscreen ? 'Back to the Settings window (Esc)' : 'Fill the whole window with the graph'} onClick={() => { setFullscreen(current => !current) }}>{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
       </div>
       <div className="acrylBlendsGraphBar">
         {EDGE_KINDS.map(kind => (
@@ -253,15 +270,22 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
         {[...counts].map(([phase, count]) => (
           <span key={phase}><span style={{ color: PHASE_COLOR[phase as NodePhase] }}>●</span> {phase} ({count})</span>
         ))}
-        <span className="acrylBlendsGraphDim">Ctrl or Cmd + scroll to zoom, drag to move</span>
+        <span className="acrylBlendsGraphDim">{fullscreen ? 'Scroll to zoom, drag to move, Esc to leave full screen' : 'Ctrl or Cmd + scroll to zoom, drag to move'}</span>
       </div>
-      {problem !== undefined && <p className="acrylBlendsNote" data-error>{problem}</p>}
+      {problem !== undefined && live !== 'lost' && <p className="acrylBlendsNote" data-error>{problem}</p>}
+      </div>
       <div className="acrylBlendsGraphBody">
         <div className="acrylBlendsGraphCanvas" ref={holder} aria-label="Plugin graph" />
         <aside className="acrylBlendsGraphSide">
-          {chosen !== undefined && relations !== undefined && (
+          {chosen !== undefined && relations !== undefined && !cardOpen && (
+            <button type="button" className="acrylBlendsGraphButton acrylBlendsGraphCardTab" onClick={() => { setCardOpen(true) }} title="Show the details of the chosen plugin">Details: {chosen.node.name}</button>
+          )}
+          {chosen !== undefined && relations !== undefined && cardOpen && (
             <div className="acrylBlendsGraphCard" aria-label={`Plugin ${chosen.node.name}`}>
-              <b>{chosen.node.name}</b>
+              <div className="acrylBlendsGraphCardHead">
+                <b>{chosen.node.name}</b>
+                <button type="button" className="acrylBlendsGraphButton" onClick={() => { setCardOpen(false) }} title="Fold the details away; the plugin stays chosen">Hide</button>
+              </div>
               <dl>
                 <dt>uid</dt><dd>{chosen.node.uid}</dd>
                 <dt>phase</dt><dd><span style={{ color: PHASE_COLOR[chosen.node.phase] }}>●</span> {chosen.node.phase}{chosen.node.enabled ? '' : ' (row off)'}</dd>
@@ -325,8 +349,12 @@ export function GraphView({ api, client, openSource }: GraphViewInjected) {
             </div>
           )}
           <div className="acrylBlendsGraphStrip" aria-label="Changes as they happen">
-            <h4>changes, as they happen</h4>
-            {strip.length === 0
+            <button type="button" className="acrylBlendsGraphStripHead" aria-expanded={stripOpen} onClick={() => { setStripOpen(current => !current) }}>
+              <span aria-hidden="true">{stripOpen ? '▾' : '▸'}</span> changes, as they happen{strip.length > 0 ? ` (${String(strip.length)})` : ''}
+            </button>
+            {!stripOpen
+              ? null
+              : strip.length === 0
               ? <span className="acrylBlendsGraphDim">Nothing has changed since this opened. Switch a plugin off in the list, or ask the agent for one, and it shows here.</span>
               : (
                 <ul>

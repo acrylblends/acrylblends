@@ -325,6 +325,10 @@ button.acrylBlendsFrow:hover { background: var(--bf-surface-2); }
 .acrylBlendsDialog > :not(.acrylBlendsDialogClose) { flex: 1; min-height: 0; }
 .acrylBlendsDialogClose { position: absolute; top: 8px; right: 10px; z-index: 2; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--bf-dim); font-size: 18px; cursor: pointer; }
 .acrylBlendsDialogClose:hover { background: var(--bf-surface-2); color: var(--bf-strong); }
+/* DSH's Settings window, full screen (the expand button in its header marks the body). The panel is DSH's: only its size changes, and what is inside it follows. */
+.acrylBlendsSettingsExpand { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+.acrylBlendsSettingsExpand:hover { background: rgb(127 127 127 / 16%); }
+body[data-bf-settings-full] [data-shortcut-modal="settings"] { width: calc(100vw - 24px); max-width: none; height: calc(100vh - 2 * max(12px, var(--dsh-frame-overlay-top, 12px))); }
 .acrylBlendsOverlay { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
 .acrylBlendsOverlay > * { pointer-events: auto; }
 `

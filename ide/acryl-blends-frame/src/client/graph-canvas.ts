@@ -143,6 +143,7 @@ export class GraphCanvas {
   private laidOut = false
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
   private onWheel: ((event: WheelEvent) => void) | undefined
+  private plainZoom = false
   private wheelTarget: HTMLElement | undefined
 
   constructor(container: HTMLElement | null, palette: Palette, private readonly onSelect: (id: string | undefined) => void = () => {}) {
@@ -158,7 +159,7 @@ export class GraphCanvas {
     })
     if (container !== null) {
       this.onWheel = (event: WheelEvent): void => {
-        if (!event.ctrlKey && !event.metaKey) return
+        if (!this.plainZoom && !event.ctrlKey && !event.metaKey) return
         event.preventDefault()
         const box = container.getBoundingClientRect()
         this.cy.zoom({ level: this.cy.zoom() * Math.exp(-event.deltaY * 0.01), renderedPosition: { x: event.clientX - box.left, y: event.clientY - box.top } })
@@ -208,6 +209,16 @@ export class GraphCanvas {
 
   fit(): void {
     this.cy.fit(undefined, 40)
+  }
+
+  /** The box changed size (the view went full screen, or came back): Cytoscape measures it again. Zoom, position and selection stay as they are. */
+  resize(): void {
+    this.cy.resize()
+  }
+
+  /** Whether a plain scroll zooms. Off where the picture sits in a pane that scrolls (there Ctrl or Cmd is needed); on when it fills the window. */
+  setPlainZoom(on: boolean): void {
+    this.plainZoom = on
   }
 
   /** Flash one node (a fiber just changed). A node that is not in the picture is left alone. */

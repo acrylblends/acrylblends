@@ -34,6 +34,7 @@ import { PluginsSection } from './PluginsSection.tsx'
 import { createRegistryApi } from './registry-api.ts'
 import { SelectionChip, type SelectionChipInjected } from './SelectionChip.tsx'
 import { SelectionStore, carriesSelection, handOffSelection } from './selection.ts'
+import { SettingsExpand } from './SettingsExpand.tsx'
 import { SettingsLauncher } from './SettingsLauncher.tsx'
 import { installFrameStyles } from './styles.ts'
 import { inspectCordisContext } from '../graph-inspect.ts'
@@ -246,6 +247,8 @@ export function apply(ctx: ClientContext): void {
     return () => { window.removeEventListener('keydown', quickOpen, true) }
   }, 'acryl-blends-frame: quick open')
   ctx.slots.inject('settings.launcher', () => ctx.slots.register({ name: 'settings.launcher' }, SettingsLauncher))
+  // Settings' header: a button that makes the window fill the browser window (DSH's list slot, between "Open configuration file" and the close button).
+  ctx.slots.inject('settings.action', () => ctx.slots.register({ name: 'settings.action', id: 'blends-expand', order: 20 }, SettingsExpand))
   ctx.effect(() => {
     const presenter = new DesktopThemePresenter()
     presenter.apply(ctx.theme.getTheme())
