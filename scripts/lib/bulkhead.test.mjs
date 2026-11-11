@@ -22,7 +22,6 @@ const ALLOWED = {
     "the workshop preflight checks the person's machine (pi's key in its own folder); it runs before any app exists",
   // A ratchet, not exceptions: each repeats a rule the AppInstance family owns, and app-storage.md's slices 2 and 3 (the product host on its app folders)
   // remove it. The second test fails once a file no longer needs its line, so the list only shrinks.
-  'plugins/desktop/main.ts': 'the Documents copy (app.getPath), deleted with product.ts in slice 2',
   'plugins/desktop/frame.ts':
     "frameHome repeats selectInstance's ACRYLBLENDS_HOME rule; slice 2 takes the home from the AppInstance",
   'packages/cli/src/frame-url.ts':
