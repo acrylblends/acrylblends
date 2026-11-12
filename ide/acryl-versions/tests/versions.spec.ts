@@ -325,5 +325,10 @@ describe('a remote as the person sees it', () => {
     expect(remoteAddress('ssh://git@example.com/ana/notes')).toBe('example.com/ana/notes')
     expect(remoteAddress('/srv/remotes/notes.git')).toBe('/srv/remotes/notes')
     expect(remoteAddress('file:///srv/remotes/notes.git')).toBe('/srv/remotes/notes')
+    // A Windows path keeps its drive: C: is not a URL scheme.
+    expect(remoteAddress('C:\\Users\\ana\\remotes\\notes.git')).toBe('C:\\Users\\ana\\remotes\\notes')
+    expect(remoteAddress('D:/remotes/notes')).toBe('D:/remotes/notes')
+    expect(remoteAddress('\\\\server\\share\\notes.git')).toBe('\\\\server\\share\\notes')
+    expect(remoteAddress('file:///C:/remotes/notes.git')).toBe('C:/remotes/notes')
   })
 })

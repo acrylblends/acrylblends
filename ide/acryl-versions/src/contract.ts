@@ -110,15 +110,20 @@ export function shareQuestion(plan: VersionsSharePlan): string {
 
 /**
  * A remote's address as the person may see it: the host and path, with any user name or token removed (`https://user:token@github.com/ana/notes.git`
- * and `git@github.com:ana/notes.git` both read `github.com/ana/notes`); a local path stays as it is.
+ * and `git@github.com:ana/notes.git` both read `github.com/ana/notes`); a local path stays as it is, a Windows one with its drive (`C:\\` is a path,
+ * not a URL scheme).
  */
 export function remoteAddress(url: string): string {
   const trimmed = url.trim().replace(/\.git$/, '')
+  if (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(trimmed)) return trimmed
   const scp = /^[^@/\s]+@([^:/\s]+):(.+)$/.exec(trimmed)
   if (scp !== null) return `${scp[1]}/${scp[2]}`
   try {
     const parsed = new URL(trimmed)
-    if (parsed.protocol === 'file:') return decodeURIComponent(parsed.pathname)
+    if (parsed.protocol === 'file:') {
+      const path = decodeURIComponent(parsed.pathname)
+      return /^\/[A-Za-z]:\//.test(path) ? path.slice(1) : path
+    }
     return `${parsed.host}${parsed.pathname}`.replace(/\/$/, '')
   } catch {
     return trimmed
