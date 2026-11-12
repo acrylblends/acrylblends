@@ -10,13 +10,14 @@ You need Node 22.19 or newer (Node runs the TypeScript directly, with no build s
 Nothing to install first: `npx` runs the `acrylblends` package from npm (to work on the framework itself, clone this repository, run `pnpm install && pnpm run build`, and use `node packages/cli/bin/acrylblends.js` in its place).
 
 ```sh
-npx acrylblends init my-app --agent -y
+npx acrylblends@latest init my-app -y
 cd my-app
 npm install
-npm run dev                           # prints its URL; the app's data lives in .acrylblends/
+npm run dev                           # the app in the ACRYL frame (chat, agents, branches, versions, Settings); prints its URL
+npm run desktop                       # the same in its own window
 ```
 
-`init` never writes into a directory that is not empty. `--template blank` (the default) is the smaller app and `--template agent` (or `--agent`) adds the offline agent.
+`init` never writes into a directory that is not empty. The app is made in the ACRYL frame; `--bare` makes the plain app without it. `--template blank` (the default) is the smallest app; `--template agent` (or `--agent`) adds an offline scripted agent to the app itself. Each app keeps its data in `~/.acryl/apps/<id>/`.
 
 | Template | Plugins | What it is |
 |---|---|---|

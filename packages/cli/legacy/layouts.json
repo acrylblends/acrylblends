@@ -430,6 +430,17 @@
         "notes": "fb43a1c5f3b4",
         "todo": "164274ffcf7f"
       }
+    },
+    {
+      "version": "1.4.0",
+      "layouts": {
+        "agent": "46c6eadf9230",
+        "blank": "a7e8f539ffee",
+        "chat": "d4464dfb3b04",
+        "nodejs": "a6a340b4d3a6",
+        "notes": "fb43a1c5f3b4",
+        "todo": "164274ffcf7f"
+      }
     }
   ],
   "templates": {
@@ -483,6 +494,10 @@
         "src/routes.ts"
       ],
       "ecbc84f1c1e5": [
+        "src/app.ts",
+        "src/routes.ts"
+      ],
+      "46c6eadf9230": [
         "src/app.ts",
         "src/routes.ts"
       ]

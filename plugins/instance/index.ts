@@ -8,6 +8,7 @@
  * Pure apart from `selectInstance`, which reads the given environment object. Paths are built, never checked.
  */
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import {
@@ -35,7 +36,7 @@ export interface AppInstance {
   readonly kind: AppInstanceKind
   /** Unique on this machine: seeds the port. */
   readonly id: string
-  /** Human name: the project folder's name. */
+  /** Human name: the name the app was made with (its package.json), else the project folder's name. */
   readonly name: string
   /** The project folder: its code and its `node_modules`. */
   readonly root: string
@@ -88,6 +89,18 @@ const plainName = (folder: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'app'
 
+/** The name the app was made with (`init --name`, kept as package.json's name), or undefined when it has none. */
+function declaredName(root: string): string | undefined {
+  try {
+    const name = (
+      JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { name?: unknown }
+    ).name
+    return typeof name === 'string' && name.trim() !== '' ? name.trim() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function family(input: {
   kind: AppInstanceKind
   id: string
@@ -119,7 +132,7 @@ export function projectInstance(
   platform: NodeJS.Platform = process.platform,
 ): AppInstance {
   const root = resolve(projectRoot)
-  const name = plainName(root)
+  const name = declaredName(root) ?? plainName(root)
   const folders = appHomes(root, platform, env, personHome(env, platform))
   // An app made before the data moved still has `<app>/.acrylblends`: it is moved once, here, at start. A move that fails stops the app with the old folder intact.
   const moved = migrateOldHome(root, folders.data)
@@ -168,7 +181,7 @@ export function pinnedInstance(
   return family({
     kind: 'pinned',
     id,
-    name: options.name ?? plainName(root),
+    name: options.name ?? declaredName(root) ?? plainName(root),
     root,
     home: absolute,
     port: { start: stablePort(id), scan: true },
@@ -218,7 +231,7 @@ export function selectInstance(options: {
   return withRunEnv(
     pinned
       ? pinnedInstance(pinned, {
-          name: env[NAME_ENV]?.trim() || plainName(projectRoot),
+          name: env[NAME_ENV]?.trim() || declaredName(projectRoot) || plainName(projectRoot),
           root: projectRoot,
         })
       : projectInstance(projectRoot, env),

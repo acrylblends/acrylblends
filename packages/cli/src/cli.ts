@@ -36,7 +36,8 @@ Options for init:
   --template <name>      one of the templates below (asked when not given); --agent means --template agent,
                          --no-agent means --template blank
   --name <name>          the project name (default: the directory name)
-  --desktop              also add the desktop shell: npm run desktop opens a window on the app
+  --bare                 a plain app, without the ACRYL frame (the frame, its chat and agents and npm run desktop, are the default)
+  --desktop              the frame and the desktop shell (the default; kept for older scripts)
   --install              run npm install after copying
   -y, --yes              ask nothing; use defaults (the blank template, no install)
 

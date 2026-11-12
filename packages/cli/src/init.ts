@@ -62,14 +62,14 @@ export interface InitOptions {
   name: string | undefined
   template: Template | undefined
   install: boolean | undefined
-  /** Also add the desktop shell (`add desktop`): an Electron window on the app's own server. */
+  /** In the ACRYL frame with the desktop shell (`add desktop`): the default; `--bare` makes a plain app. */
   desktop: boolean
   /** Print no "Next:" block: `create-acrylblends` runs `init` and prints its own, for the package manager it knows. */
   quietNext: boolean
   yes: boolean
 }
 
-/** Parse `init [dir] [--template t] [--agent|--no-agent] [--name n] [--install] [-y]`. `--agent` means `--template agent`, `--no-agent` means `--template blank`. */
+/** Parse `init [dir] [--template t] [--agent|--no-agent] [--name n] [--install] [--bare] [-y]`. `--agent` means `--template agent`, `--no-agent` means `--template blank`. */
 export function parseInitOptions(argv: readonly string[]): InitOptions {
   let parsed: ReturnType<typeof parse>
   try {
@@ -79,6 +79,8 @@ export function parseInitOptions(argv: readonly string[]): InitOptions {
   }
   const { values, positionals } = parsed
   if (positionals.length > 1) throw new UsageError('init takes at most one directory')
+  if (values.bare === true && values.desktop === true)
+    throw new UsageError('use --bare or --desktop, not both')
   if (values.agent && values['no-agent'])
     throw new UsageError('use --agent or --no-agent, not both')
   const named = values.template === undefined ? undefined : resolveTemplate(values.template)
@@ -98,7 +100,8 @@ export function parseInitOptions(argv: readonly string[]): InitOptions {
     name: values.name,
     template: named ?? alias,
     install: values.install,
-    desktop: values.desktop === true,
+    // The app is made in the ACRYL frame (chat, agents, Settings, the window) unless --bare: the frame is the product, a plain app is the exception.
+    desktop: values.bare !== true,
     quietNext: values['no-next'] === true,
     yes: values.yes === true,
   }
@@ -116,6 +119,7 @@ const parse = (argv: readonly string[]) =>
       'no-agent': { type: 'boolean' },
       install: { type: 'boolean' },
       desktop: { type: 'boolean' },
+      bare: { type: 'boolean' },
       'no-next': { type: 'boolean' },
       yes: { type: 'boolean', short: 'y' },
     },

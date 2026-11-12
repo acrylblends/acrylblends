@@ -27,9 +27,12 @@ on top. It is a library of Cordis plugins extracted from ACRYL, and a command th
 - **save**: commit the app, refusing secrets and public remotes for private apps
 
 ```sh
-npx acrylblends init my-app --agent -y
-cd my-app && npm install && npm run dev
+npx acrylblends@latest init my-app -y
+cd my-app && npm install && npm run dev      # the app in the ACRYL frame: chat, agents, branches, versions, Settings
+npm run desktop                               # the same in its own window
 ```
+
+`--bare` makes the plain app without the frame.
 
 Generated apps are TypeScript, run by Node 22.19 or newer with no build step, tested with `node:test`, and depend at run
 time on `@deepseek-ai/cordis` and `yaml`.

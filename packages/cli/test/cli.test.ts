@@ -358,11 +358,14 @@ describe('command line', () => {
       name: 'my-shop',
       template: 'agent',
       install: undefined,
-      desktop: false,
+      // In the frame unless --bare: the README's own command (`init my-app --agent -y`) once made a plain app nobody asked for.
+      desktop: true,
       quietNext: false,
       yes: true,
     })
     expect(parseInitOptions(['--desktop']).desktop).toBe(true)
+    expect(parseInitOptions(['--bare']).desktop).toBe(false)
+    expect(() => parseInitOptions(['--bare', '--desktop'])).toThrow(UsageError)
     expect(parseInitOptions(['--no-agent']).template).toBe('blank')
     expect(parseInitOptions(['x', '--template', 'blank']).template).toBe('blank')
     expect(parseInitOptions(['x', '--template', 'agent', '--agent']).template).toBe('agent')
@@ -383,7 +386,7 @@ describe('command line', () => {
 describe('init', () => {
   it('copies the blank template with the name filled in', async () => {
     const session = fakeIo()
-    expect(await runCli(['init', 'plain', '-y'], session.io)).toBe(0)
+    expect(await runCli(['init', 'plain', '--bare', '-y'], session.io)).toBe(0)
     const dir = join(scratch, 'plain')
     expect(manifest(dir).name).toBe('plain')
     expect(readFileSync(join(dir, 'src/routes.ts'), 'utf8')).toContain("APP_NAME = 'plain'")
@@ -473,7 +476,9 @@ describe('the desktop shell', () => {
 
   it('a plain init has no electron, and add desktop brings it later without replacing a script the app has', async () => {
     const session = fakeIo()
-    expect(await runCli(['init', 'plain-desk', '--template', 'blank', '-y'], session.io)).toBe(0)
+    expect(
+      await runCli(['init', 'plain-desk', '--template', 'blank', '--bare', '-y'], session.io),
+    ).toBe(0)
     const dir = join(scratch, 'plain-desk')
     const file = join(dir, 'package.json')
     expect(JSON.parse(readFileSync(file, 'utf8')).devDependencies.electron).toBeUndefined()

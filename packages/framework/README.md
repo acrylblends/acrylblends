@@ -397,9 +397,12 @@ plugins installed while the app runs, an agent that builds plugins, durable task
 secrets):
 
 ```sh
-npx acrylblends init my-app --agent -y
-cd my-app && npm install && npm run dev
+npx acrylblends@latest init my-app -y
+cd my-app && npm install && npm run dev      # the app in the ACRYL frame: chat, agents, branches, versions, Settings
+npm run desktop                               # the same in its own window
 ```
+
+`--bare` makes the plain app without the frame.
 
 See the [ACRYLBLENDS documentation](https://github.com/acrylblends/acrylblends/blob/main/docs/README.md) and
 [Acryl in a Cordis app](https://github.com/acrylblends/acrylblends/blob/main/docs/framework/cordis/acryl-in-a-cordis-app.md).
