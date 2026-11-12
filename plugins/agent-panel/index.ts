@@ -22,7 +22,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { clientModules } from '../acryl-node-server/src/client-modules.ts'
 import { streamSSE, type UpgradeWebSocket } from '../acryl-router/src/helpers/index.ts'
 import { Acryl, type MiddlewareHandler } from '../acryl-router/src/index.ts'
-import { loopbackAuthority } from '../acryl-router/src/middleware/index.ts'
+import { pageAuthority } from '../acryl-router/src/middleware/index.ts'
 import type {} from '../agent/index.ts'
 import type {} from '../extensions/index.ts'
 import type { ChatDriver, Driver } from './drivers.ts'
@@ -419,7 +419,7 @@ export function apply(ctx: Context, config: PanelConfig = {}): void {
     }
     const ws = new Acryl()
     const own: MiddlewareHandler = async (c, next) => {
-      const authority = loopbackAuthority(c)
+      const authority = pageAuthority(c)
       const origin = c.req.header('origin')
       const site = c.req.header('sec-fetch-site')
       if (

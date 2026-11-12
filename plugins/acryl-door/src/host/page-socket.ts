@@ -10,7 +10,7 @@
 
 import { Acryl, type MiddlewareHandler } from 'acryl-router'
 import type { UpgradeWebSocket, WSEvents } from 'acryl-router/helpers'
-import { loopbackAuthority } from 'acryl-router/middleware'
+import { pageAuthority } from 'acryl-router/middleware'
 import { parseChannelToHost, WINDOW_ID } from '../page/protocol.ts'
 import type { UiChannel } from './channel.ts'
 import { error } from './http.ts'
@@ -25,9 +25,9 @@ export interface PageSocketOptions {
   readonly heartbeatMs?: number
 }
 
-/** The upgrade request comes from this app's own page: a loopback peer on this port, and an `Origin` that is exactly this app's origin. Nothing else is read as proof. */
+/** The upgrade request comes from this app's own page: a loopback peer on this port (or the hosted app's trusted front), and an `Origin` that is exactly this app's origin. Nothing else is read as proof. */
 export const ownOrigin: MiddlewareHandler = async (c, next) => {
-  const authority = loopbackAuthority(c)
+  const authority = pageAuthority(c)
   const origin = c.req.header('origin')
   const site = c.req.header('sec-fetch-site')
   if (authority === undefined || origin === undefined || origin !== authority.origin || (site !== undefined && site !== 'same-origin')) {

@@ -13,7 +13,7 @@
 
 import type { Context, MiddlewareHandler } from 'acryl-router'
 import type { UpgradeWebSocket } from 'acryl-router/helpers'
-import { loopbackAuthority } from 'acryl-router/middleware'
+import { pageAuthority } from 'acryl-router/middleware'
 import type { ReadonlyCell } from './cell.ts'
 
 /** How often the server writes a `ping`; a page gives up on a socket that is silent for three of these. */
@@ -34,7 +34,7 @@ export interface StateSocketOptions {
 
 /** A refusal (403) unless the upgrade comes from this machine to this app, and from its own page when it comes from a page at all. */
 export function refuseStranger(c: Context): Response | undefined {
-  const authority = loopbackAuthority(c)
+  const authority = pageAuthority(c)
   if (authority === undefined) return c.json({ error: 'request authority rejected' }, 403)
   const origin = c.req.header('origin')
   const site = c.req.header('sec-fetch-site')

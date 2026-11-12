@@ -78,3 +78,50 @@ describe('loopbackOnly, callers: own-page', () => {
     expect(await status(app, 'GET', { host: `localhost:${String(PORT)}`, origin: `http://localhost:${String(PORT)}` })).toBe(403)
   })
 })
+
+describe('the trusted front of a hosted app (spec 049 M9)', () => {
+  const PUBLIC = 'https://a1b2.213-47-80-26.sslip.io'
+  const FRONT = { origin: PUBLIC, proxies: ['10.200.0.1'] }
+  const VIA_FRONT: ConnectionInfo = { remoteAddress: '10.200.0.1', localPort: PORT }
+  const viaFront = { host: 'a1b2.213-47-80-26.sslip.io' }
+
+  it('lets the app\'s own page through the front read and change, on the own-page rule too', async () => {
+    const local = guarded({ front: FRONT })
+    expect(await status(local, 'GET', viaFront, VIA_FRONT)).toBe(200)
+    expect(await status(local, 'POST', { ...viaFront, origin: PUBLIC }, VIA_FRONT)).toBe(200)
+    const own = guarded({ callers: 'own-page', front: FRONT })
+    expect(await status(own, 'POST', { ...viaFront, origin: PUBLIC, 'sec-fetch-site': 'same-origin' }, VIA_FRONT)).toBe(200)
+    expect(await status(own, 'GET', { ...viaFront, referer: `${PUBLIC}/`, 'sec-fetch-site': 'same-origin' }, VIA_FRONT)).toBe(200)
+  })
+
+  it('refuses the public origin from any other peer, another Host, another origin, null and cross-site', async () => {
+    const own = guarded({ callers: 'own-page', front: FRONT })
+    const ok = { ...viaFront, origin: PUBLIC, 'sec-fetch-site': 'same-origin' }
+    expect(await status(own, 'POST', ok, { remoteAddress: '10.200.0.2', localPort: PORT })).toBe(403)
+    expect(await status(own, 'POST', ok, {})).toBe(403)
+    expect(await status(own, 'POST', { ...ok, host: 'other.213-47-80-26.sslip.io' }, VIA_FRONT)).toBe(403)
+    expect(await status(own, 'POST', { ...ok, origin: 'https://other.213-47-80-26.sslip.io' }, VIA_FRONT)).toBe(403)
+    expect(await status(own, 'POST', { ...ok, origin: 'null' }, VIA_FRONT)).toBe(403)
+    expect(await status(own, 'POST', { ...ok, origin: PUBLIC.replace('https:', 'http:') }, VIA_FRONT)).toBe(403)
+    expect(await status(own, 'GET', { ...viaFront, 'sec-fetch-site': 'cross-site' }, VIA_FRONT)).toBe(403)
+    expect(await status(guarded({ front: FRONT }), 'POST', { ...viaFront, origin: 'https://evil.test' }, VIA_FRONT)).toBe(403)
+  })
+
+  it('without a front, the proxy peer is a stranger and loopback is unchanged', async () => {
+    const app = guarded({ front: undefined })
+    expect(await status(app, 'GET', viaFront, VIA_FRONT)).toBe(403)
+    expect(await status(app, 'POST', { origin: SELF })).toBe(200)
+    expect(await status(guarded({ front: FRONT }), 'POST', { origin: SELF })).toBe(200)
+  })
+
+  it('reads the front from the environment only when both values are present and valid', async () => {
+    const { trustedFrontFromEnv } = await import('../src/middleware/index.ts')
+    expect(trustedFrontFromEnv({ ACRYL_PUBLIC_ORIGIN: PUBLIC, ACRYL_TRUSTED_PROXY: '10.200.0.1, ::ffff:10.200.0.9' }))
+      .toEqual({ origin: PUBLIC, proxies: ['10.200.0.1', '10.200.0.9'] })
+    expect(trustedFrontFromEnv({})).toBeUndefined()
+    expect(trustedFrontFromEnv({ ACRYL_PUBLIC_ORIGIN: PUBLIC })).toBeUndefined()
+    expect(trustedFrontFromEnv({ ACRYL_PUBLIC_ORIGIN: `${PUBLIC}/app`, ACRYL_TRUSTED_PROXY: '10.200.0.1' })).toBeUndefined()
+    expect(trustedFrontFromEnv({ ACRYL_PUBLIC_ORIGIN: 'ftp://x.test', ACRYL_TRUSTED_PROXY: '10.200.0.1' })).toBeUndefined()
+    expect(trustedFrontFromEnv({ ACRYL_PUBLIC_ORIGIN: PUBLIC, ACRYL_TRUSTED_PROXY: '10.200.0.0/16' })).toBeUndefined()
+  })
+})
