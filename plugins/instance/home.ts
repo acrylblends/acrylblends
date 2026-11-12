@@ -218,8 +218,17 @@ export type MigrationResult =
 export function migrateOldHome(
   appRoot: string,
   dataHome: string,
-  copy: (from: string, to: string) => void = (from, to) =>
-    cpSync(from, to, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true }),
+  copy: (from: string, to: string) => void = (from, to) => {
+    // Entry by entry into the empty data folder: on Linux cpSync refuses a target folder that exists (EEXIST) even when it is empty, while
+    // nothing inside may ever be overwritten either way.
+    for (const entry of readdirSync(from))
+      cpSync(join(from, entry), join(to, entry), {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+        verbatimSymlinks: true,
+      })
+  },
 ): MigrationResult {
   const old = join(appRoot, OLD_HOME_DIR)
   if (!existsSync(old) || !lstatSync(old).isDirectory()) return { status: 'none' }
