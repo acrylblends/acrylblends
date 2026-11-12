@@ -557,7 +557,8 @@ export async function runCreate(argv: readonly string[], io: Io = processIo()): 
         name,
         '--yes',
         '--no-next',
-        ...(options.desktop ? ['--desktop'] : []),
+        // init frames the app by default: the plain app is asked for by name.
+        ...(options.desktop ? ['--desktop'] : ['--bare']),
       ],
       io.cwd,
     )

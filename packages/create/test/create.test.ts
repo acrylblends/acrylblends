@@ -207,6 +207,7 @@ describe('create', () => {
     const bare = fakeIo()
     expect(await runCreate(['plain', 'agent', '--bare', '--no-install'], bare.io)).toBe(0)
     expect(bare.runs[0]?.args).not.toContain('--desktop')
+    expect(bare.runs[0]?.args).toContain('--bare')
   })
 
   it('a name on the command line asks nothing, even with a terminal; the app is installed and started', async () => {

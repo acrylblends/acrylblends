@@ -66,7 +66,12 @@ try {
 
   for (const template of ['nodejs', 'notes', 'chat', 'acryl-app']) {
     const app = join(scratch, `app-${template}`)
-    run(bin('create-acrylblends'), [app, '--template', template, '-y'], scratch)
+    // Only the files (the plain app): the tarball is installed next, as acrylblends may not be published yet.
+    run(
+      bin('create-acrylblends'),
+      [app, '--template', template, '--bare', '--no-install', '--no-start', '-y'],
+      scratch,
+    )
     // The new app asks for the version of acrylblends it was made with, which may not be published yet: install the tarball (npm then records it).
     run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], app)
     run('npm', ['test'], app, { ACRYL_DOOR: 'off' })
@@ -193,7 +198,7 @@ console.log('ws-check: ok')
   const pulled = join(scratch, 'app-pulled')
   run(
     bin('create-acrylblends'),
-    [pulled, '--from', 'acrylblends.chat', '--registry', registry, '-y'],
+    [pulled, '--from', 'acrylblends.chat', '--registry', registry, '--bare', '-y'],
     scratch,
   )
   run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], pulled)
@@ -228,7 +233,7 @@ console.log('ws-check: ok')
   )
   // A relative path in a row of blend.yaml (`migrations: migrations`) is read from the app's folder: `add db` mounts the provider, the row gets its config, and the app's own tests boot it.
   const dbApp = join(scratch, 'app-db')
-  run(bin('acrylblends'), ['init', dbApp, '--template', 'blank', '-y'], scratch)
+  run(bin('acrylblends'), ['init', dbApp, '--template', 'blank', '--bare', '-y'], scratch)
   run(bin('acrylblends'), ['add', 'db'], dbApp)
   mkdirSync(join(dbApp, 'migrations'))
   writeFileSync(
