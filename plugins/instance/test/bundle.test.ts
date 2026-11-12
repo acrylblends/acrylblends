@@ -172,7 +172,17 @@ function assertBundleFirst(result: ReturnType<typeof run>): void {
   )
 }
 
-test('the framework resolves from the bundle first, even for a package of the person’s that carries its own acrylblends and @deepseek-ai/cordis', () => {
+/**
+ * Node 22 runs `require` through `registerHooks` but not `require.resolve` (22.23.5 measured; 24 runs both). The overlay only ever runs in a desktop
+ * product's frame host, on Electron's Node 24, so the claim is tested where it holds.
+ */
+const HOOKED_REQUIRE_RESOLVE = Number(process.versions.node.split('.')[0]) >= 24
+
+test('the framework resolves from the bundle first, even for a package of the person’s that carries its own acrylblends and @deepseek-ai/cordis', {
+  skip: HOOKED_REQUIRE_RESOLVE
+    ? false
+    : 'Node 22 does not run require.resolve through registerHooks; a product host runs Node 24',
+}, () => {
   // The person's src runs (not the bundle's copy), its framework plugin and its framework come from the bundle although the source has stale copies of
   // both, its own package comes from the source, and a package only the bundle has serves it. require, require.resolve and import.meta.resolve agree.
   assertBundleFirst(run(process.execPath))

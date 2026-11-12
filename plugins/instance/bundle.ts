@@ -8,7 +8,7 @@
  * `@deepseek-ai/cordis` still gets the bundle's, because two framework copies in one process break it (the `matchedRoutes` 500). Any other package
  * resolves as Node resolves it, from the source's own `node_modules` (what the person added), with the bundle's as the fallback.
  *
- * `NODE_PATH` does not reach ESM; the seam is `registerHooks`, which covers `import`, `require` and `require.resolve` alike. `bundle-overlay.ts`
+ * `NODE_PATH` does not reach ESM; the seam is `registerHooks`, which covers `import`, `require` and (from Node 24, the frame host's Electron Node) `require.resolve` alike. `bundle-overlay.ts`
  * registers it, first, in a product's frame host. Pure apart from `readProduct`.
  */
 import { readFileSync, realpathSync } from 'node:fs'
