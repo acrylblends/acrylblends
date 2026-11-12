@@ -5,6 +5,7 @@
 // door) is the template gate; this one is the composition.
 //
 //   node --import ./scripts/workspace-source.mjs scripts/verify-ide-host.mjs [--keep]
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

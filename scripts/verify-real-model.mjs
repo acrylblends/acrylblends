@@ -8,6 +8,7 @@
  * it in a throwaway home on a free port, asks for a plugin in plain words, and requires the route to answer. The key stays in the
  * environment: it is never printed or written to a file.
  */
+import './lib/scratch-home.mjs'
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

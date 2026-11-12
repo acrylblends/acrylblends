@@ -3,6 +3,7 @@
 // In a fresh agent app with the panel, a real (headless) Chrome opens the page and the message is sent from the panel, the way a person sends it. The agent builds a Notes page as a
 // plugin, installs it, and then checks its own work in the SAME run through the door: it opens /notes, types a note, saves it and looks. The gate reads what the door audited
 // (.acryl/audit/ui-control.jsonl) and fails unless the agent looked at and used the page it had just built. Its output is the record of the run.
+import './lib/scratch-home.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -50,7 +51,7 @@ let server
 let browser
 try {
   const app = join(scratch, 'app')
-  run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
+  run(process.execPath, [cli, 'init', app, '--template', 'agent', '--bare', '-y'], scratch)
   run('npm', ['install', '--no-audit', '--no-fund'], app)
   const port = await freePort()
   server = startGroup('npm', ['start'], {

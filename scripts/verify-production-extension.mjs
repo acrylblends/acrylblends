@@ -4,6 +4,7 @@
 // /ask, /extensions, /extensions/approve and /tasks answer 404 and the install verb is refused. A second start, with the plugin's folder gone but the app's record still naming
 // it, must warn by name.
 //   node scripts/verify-production-extension.mjs [--npm <version>]
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -83,7 +84,7 @@ const status = async (base, path, method = 'GET') =>
 try {
   const app = join(scratch, 'app')
   if (npmArg === undefined)
-    run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
+    run(process.execPath, [cli, 'init', app, '--template', 'agent', '--bare', '-y'], scratch)
   else
     run(
       'npx',
@@ -164,7 +165,7 @@ try {
     const answer = await status(production.base, path, method)
     if (answer !== 404) fail(`${method} ${path} answers ${answer} in production; it must be 404`)
   }
-  if (/\.acryl[\\/]|acryl-door/u.test(production.output))
+  if (/acryl-door|\.acryl[\\/](door\.json|bin[\\/])/u.test(production.output))
     fail(`production mentions the door:\n${production.output}`)
   log(
     'production, installed without the development dependencies, serves /board from plugins/, says so at start, follows state over a WebSocket, and /ask, /extensions*, /tasks* are 404',

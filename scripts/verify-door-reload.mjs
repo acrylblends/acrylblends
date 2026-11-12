@@ -7,6 +7,7 @@
 // reloading it (the door reloads the open pages and answers once they are back); a change the plugin system does not know about is picked up by `act reload`; `act navigate --path`
 // goes to another page of the app and refuses a path that would leave it. The door's script AND the agent panel's script reach every page an agent can build: a plugin installed
 // while the app runs, one loaded at boot from plugins/, and one mounted as a row of blend.yaml ahead of both. Offline: no model, no key.
+import './lib/scratch-home.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -68,7 +69,7 @@ let browser
 try {
   const app = join(scratch, 'app')
   if (npmArg === undefined)
-    run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
+    run(process.execPath, [cli, 'init', app, '--template', 'agent', '--bare', '-y'], scratch)
   else
     run(
       'npx',

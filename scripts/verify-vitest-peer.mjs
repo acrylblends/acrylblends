@@ -5,6 +5,7 @@
 //   node scripts/verify-vitest-peer.mjs
 // From the packed tarball: (1) the package declares no vitest, as a dependency or a peer; (2) a project that depends on it and installs for production has no vitest in its closure; (3) a
 // provider author's project, with vitest as its own dev dependency, still runs the kv conformance suite through `acrylblends/kv/conformance` under pnpm.
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import {
   existsSync,

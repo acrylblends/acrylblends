@@ -4,6 +4,7 @@
 //   node scripts/verify-create-npm.mjs
 // The two packed tarballs are installed into a scratch folder, the `create-acrylblends` command they provide is run the way npm runs it, and the app it makes must
 // exist with its manifest, the agent template's files and a package.json that names the framework. Nothing is fetched from the registry for acrylblends or create.
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import {
   existsSync,

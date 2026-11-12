@@ -13,6 +13,7 @@
 // - neither panel shows the other's question; B's GET /run replays only B's run, B cannot read A's run with A's token, and B's Stop did not stop A's run;
 // - B's ask was not refused while A's run went (each visitor has their own run).
 // Screenshots of both pages at 1440x900 go to --shots when it is given.
+import './lib/scratch-home.mjs'
 import { spawn } from 'node:child_process'
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -135,7 +136,18 @@ async function startApp(scratch) {
   const cli = join(root, 'packages', 'cli', 'bin', 'acrylblends.js')
   const init = spawn(
     process.execPath,
-    [cli, 'init', app, '--name', 'team-board', '--template', 'agent', '--yes', '--no-next'],
+    [
+      cli,
+      'init',
+      app,
+      '--name',
+      'team-board',
+      '--template',
+      'agent',
+      '--bare',
+      '--yes',
+      '--no-next',
+    ],
     { stdio: 'inherit' },
   )
   if ((await new Promise((done) => init.on('exit', done))) !== 0) fail('init failed')

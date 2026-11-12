@@ -10,6 +10,7 @@
 // Then a frame app (`init --template blank --desktop` with this checkout's frame packages): `npm run desktop` starts the frame host and its window shows the
 // whole frame (the left panel, the right panel, Settings and the app's page in the canvas, through the window's DevTools port); closing it frees the host's port.
 // With `npm run dev` running, the window attaches to that frame instead and closing it leaves the host running. DESKTOP_FRAME_SHOTS=<dir> keeps screenshots.
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -51,7 +52,22 @@ if (
 const scratch = mkdtempSync(join(tmpdir(), 'desktop-door-'))
 // The first app is the desktop shell on the framework alone (`none`: init --desktop would otherwise install the published frame); the frame part below
 // sets this checkout's frame packages instead.
-const env = { ...process.env, npm_config_loglevel: 'error', ACRYLBLENDS_FRAME_PACKAGES: 'none' }
+// scratch-home.mjs keeps every app this gate starts out of the person's own ~/.acryl: an app's data is <ACRYL_HOME>/apps/<id>/data.
+const acrylHome = process.env.ACRYL_HOME
+const env = {
+  ...process.env,
+  npm_config_loglevel: 'error',
+  ACRYLBLENDS_FRAME_PACKAGES: 'none',
+}
+/** An app's data folder under this gate's ACRYL_HOME, from the id in its `.acryl/app.json`; undefined until the app has started once. */
+function dataOf(appRoot) {
+  try {
+    const { id } = JSON.parse(readFileSync(join(appRoot, '.acryl', 'app.json'), 'utf8'))
+    return typeof id === 'string' ? join(acrylHome, 'apps', id, 'data') : undefined
+  } catch {
+    return undefined
+  }
+}
 delete env.ACRYL_DOOR
 // npm is a .cmd file on Windows: it needs the shell.
 const isWindows = process.platform === 'win32'
@@ -663,7 +679,10 @@ try {
     if (!devUrl) fail(`npm run dev did not serve the frame:\n${dev.output.slice(-3000)}`)
     if (
       !(await until(
-        async () => existsSync(join(frameApp, '.acrylblends', 'frame-url.json')),
+        async () => {
+          const data = dataOf(frameApp)
+          return data !== undefined && existsSync(join(data, 'frame-url.json'))
+        },
         30_000,
         200,
       ))

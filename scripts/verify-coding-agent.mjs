@@ -7,6 +7,7 @@
 // Each agent gets its own fresh app, a scratch HOME and a PATH that holds only node, npm and npx (as links) plus the folder of that agent's own program,
 // so no global `acryl` or `acrylblends` can reach the owner's real apps. `pi` is driven with DeepSeek: the key is read from
 // ~/.secure-storage/llmproviders/deepseek/deepseek.json into that one process's environment and is never printed. Exit code 0 when every agent passed.
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import {
   chmodSync,

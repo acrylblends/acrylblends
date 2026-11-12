@@ -4,6 +4,7 @@
 // vendor, the frame or a DSH agent package. Each offending import is named with its file and line. Needs the network for the install.
 //
 //   node scripts/verify-core-boundary.mjs [--keep]
+import './lib/scratch-home.mjs'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -19,10 +20,14 @@ const log = (message) => console.log(`verify-core-boundary: ${message}`)
 
 let failed = false
 try {
-  execFileSync(process.execPath, [cli, 'init', app, '--template', 'blank', '--yes', '--install'], {
-    stdio: ['ignore', 'ignore', 'inherit'],
-    env: { ...process.env, HOME: scratch, ACRYL_HOME: join(scratch, '.acryl') },
-  })
+  execFileSync(
+    process.execPath,
+    [cli, 'init', app, '--template', 'blank', '--bare', '--yes', '--install'],
+    {
+      stdio: ['ignore', 'ignore', 'inherit'],
+      env: { ...process.env, HOME: scratch, ACRYL_HOME: join(scratch, '.acryl') },
+    },
+  )
   const dependencies = Object.keys(
     JSON.parse(readFileSync(join(app, 'package.json'), 'utf8')).dependencies ?? {},
   )

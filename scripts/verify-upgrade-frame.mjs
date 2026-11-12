@@ -8,6 +8,7 @@
 // template's own files and none of the app's code or blend.yaml. Releases before 0.7.8 wrote an entry module importing './plugins/...' that cannot start,
 // so their apps are built with that main.ts and the gate asserts the precise report instead of a frame. The oldest release whose layout can be carried
 // forward per template is installed and booted (the frame page and /app answer), and the newest agent layout is upgraded and then runs the full page gate.
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import {
   existsSync,
@@ -102,7 +103,7 @@ function fixture(name, template, files, broken) {
   delete initEnv.ACRYLBLENDS_FRAME_PACKAGES
   spawnSync(
     process.execPath,
-    [cli, 'init', app, '--name', name, '--template', template, '--yes', '--no-next'],
+    [cli, 'init', app, '--name', name, '--template', template, '--bare', '--yes', '--no-next'],
     { cwd: scratch, encoding: 'utf8', env: initEnv },
   )
   if (!existsSync(join(app, 'blend.yaml'))) fail(`${name}: init did not scaffold the fixture`)

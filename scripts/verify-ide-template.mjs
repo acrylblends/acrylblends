@@ -16,6 +16,7 @@
 // 5. It all stops and is removed; --keep leaves the scratch folder for a look.
 //
 // The template's page and the text it must show come from PAGES below; a template without an entry fails rather than skipping the canvas check.
+import './lib/scratch-home.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import {
   existsSync,
@@ -878,7 +879,9 @@ async function checkFramedPull(app, origin, jar) {
     !names.includes('gate-two') ||
     (online && !names.includes('acrylblends-pomodoro'))
   )
-    fail(`plugin list in the frame does not name the pulls:\n${listed.stdout}${listed.stderr}`)
+    fail(
+      `plugin list in the frame does not name the pulls:\n${listed.stdout}${listed.stderr}${reported()}`,
+    )
   if (online) {
     const pomodoro = plugins.find((plugin) => plugin.name === 'acrylblends-pomodoro')
     if (pomodoro?.pulledFrom !== POMODORO || pomodoro.author !== 'inboxxobni')

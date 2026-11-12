@@ -2,6 +2,7 @@
 // Usage: node scripts/verify-inapp-agent.mjs   A manual gate: it calls a real model (DeepSeek), so it is not part of `pnpm run check`.
 // The app's OWN agent (the panel's built-in `agent` driver, not Codex or Claude) with a real model through the openai plugin: it must find the door's verbs among its tools (`door_look`,
 // `door_act`) and use them on the open page. The DeepSeek key is read from the usual place into the server's environment only; it is never printed and never written into the app.
+import './lib/scratch-home.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'

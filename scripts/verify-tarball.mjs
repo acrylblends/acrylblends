@@ -7,6 +7,7 @@
 //    English words that contain it (honor, honour and their forms) are not hits. The name is built from character codes so this file does not carry it either.
 // 2. No test file of a vendored plugin is shipped (`*.test.*`, `*.spec.*`, `*.case.ts`, a `test` or `tests` folder under `plugins/`): apps never receive them.
 // Prints each package's packed and unpacked size and file count.
+import './lib/scratch-home.mjs'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'

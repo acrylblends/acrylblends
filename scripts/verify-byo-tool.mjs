@@ -4,6 +4,7 @@
 // the consumer of the port keeps working across the swap (pending while no provider exists, active again after), in the same process, and the swap survives a restart.
 //
 //   node scripts/verify-byo-tool.mjs [path to the guide]
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -76,7 +77,7 @@ const run = (command, args, cwd) => {
 let server
 try {
   const app = join(scratch, 'app')
-  run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
+  run(process.execPath, [cli, 'init', app, '--template', 'agent', '--bare', '-y'], scratch)
   run('npm', ['install', '--no-audit', '--no-fund'], app)
   // `npx acrylblends add ...` is this checkout's command in the scratch app.
   run(process.execPath, [cli, 'add', 'kv', '--suite'], app)

@@ -2,6 +2,7 @@
 // Usage: node scripts/verify-agent-panel.mjs [--driver claude|codex|pi|acp:dsh]   (default: the app's own scripted agent)
 // The gate of spec 049 slice 14: in a fresh agent app with the panel added, a real (headless) Chrome opens the page, the message "create route hello /hello Hello" is sent from the
 // panel, the agent builds the feature, the page reloads, and /hello answers Hello, in the same process (no restart). Uses the app's offline scripted agent: no key, no network.
+import './lib/scratch-home.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -68,7 +69,7 @@ let server
 let browser
 try {
   const app = join(scratch, 'app')
-  run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
+  run(process.execPath, [cli, 'init', app, '--template', 'agent', '--bare', '-y'], scratch)
   // `add` mounts the panel (and driver-acp) itself: the rows in blend.yaml and the entries in the registry of src/app.ts.
   if (acp) run(process.execPath, [cli, 'add', 'driver-acp'], app)
   run('npm', ['install', '--no-audit', '--no-fund'], app)

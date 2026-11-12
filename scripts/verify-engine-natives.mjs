@@ -5,6 +5,7 @@
  * the image library resizes a picture, the foreign-function library calls into the C runtime, the ripgrep binary finds a word, and the addon loader finds
  * the build for this OS. One line per package: ok, or the error.
  */
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'

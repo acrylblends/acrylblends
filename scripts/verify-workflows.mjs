@@ -3,6 +3,7 @@
 // cannot make for us: actionlint reads `${{ ... }}` expressions, but a GitHub expression written with single braces (`${ matrix.template }`) is plain text
 // to it and reaches bash, where it dies as "bad substitution" - run 41518339598 on 2e779c3a shipped exactly that in three run scripts and all 17 frame
 // jobs failed (2026-11-02). Both checks run before a push.
+import './lib/scratch-home.mjs'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'

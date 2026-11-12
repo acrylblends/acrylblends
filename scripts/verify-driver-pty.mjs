@@ -4,6 +4,7 @@
 // the page reloads by itself and re-attaches to the same terminal, /hello answers, and the app was not restarted. Then Stop ends the program. No key, no network.
 //
 //   node scripts/verify-driver-pty.mjs
+import './lib/scratch-home.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -65,7 +66,7 @@ let server
 let browser
 try {
   const app = join(scratch, 'app')
-  run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
+  run(process.execPath, [cli, 'init', app, '--template', 'agent', '--bare', '-y'], scratch)
   // `add` mounts both itself (the rows and the registry); the gate only gives the driver its scripted program.
   run(process.execPath, [cli, 'add', 'driver-pty'], app)
   writeFileSync(join(app, 'agent-script.mjs'), AGENT)

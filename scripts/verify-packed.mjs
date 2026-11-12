@@ -4,6 +4,7 @@
 // repository's own command line; this one runs the installed one, so a file the package leaves out, or an import that is only right inside the repository, fails here.
 //
 //   node scripts/verify-packed.mjs
+import './lib/scratch-home.mjs'
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
@@ -73,7 +74,7 @@ try {
     log(`${template}: made by the installed command, its tests and type-check pass`)
   }
   const blank = join(scratch, 'app-blank')
-  run(bin('acrylblends'), ['init', blank, '--template', 'todo', '-y'], scratch)
+  run(bin('acrylblends'), ['init', blank, '--template', 'todo', '--bare', '-y'], scratch)
   run('npm', ['install', '--no-audit', '--no-fund'], blank)
   run('npm', ['test'], blank, { ACRYL_DOOR: 'off' })
   log('todo: made by the installed command, its tests pass')
@@ -132,7 +133,7 @@ console.log('ws-check: ok')
   )
   // The agent panel and the PTY driver, added by the installed command: copied, installed (node-pty from the registry) and type-checked.
   const agentApp = join(scratch, 'app-agent')
-  run(bin('acrylblends'), ['init', agentApp, '--template', 'agent', '-y'], scratch)
+  run(bin('acrylblends'), ['init', agentApp, '--template', 'agent', '--bare', '-y'], scratch)
   run(bin('acrylblends'), ['add', 'driver-pty'], agentApp)
   run('npm', ['install', '--no-audit', '--no-fund', tarball('acrylblends-')], agentApp)
   run('npm', ['run', 'check'], agentApp)

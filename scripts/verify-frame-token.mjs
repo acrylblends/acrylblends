@@ -6,6 +6,7 @@
 //   node scripts/verify-frame-token.mjs ~/acryl-workshop/my-app
 //
 // It boots the app twice (npm run dev, the address the launcher prints), and never uses a fixed port: the app's own stable port is the point.
+import './lib/scratch-home.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { readFileSync, statSync, writeSync } from 'node:fs'
 import { createRequire } from 'node:module'

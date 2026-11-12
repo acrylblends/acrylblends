@@ -7,6 +7,7 @@
 //   node scripts/verify-pty-agents.mjs [--version 0.10.0] [--agent claude,codex,pi] [--out folder]
 //
 // pi is driven with DeepSeek: its key is read from ~/.secure-storage/llmproviders/deepseek/deepseek.json into the app's environment and never printed or written.
+import './lib/scratch-home.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import {
   chmodSync,

@@ -6,6 +6,7 @@
 //   node scripts/verify-desktop.mjs [screenshot.png]
 //
 // Electron's binary comes from ELECTRON_CACHE (default: the platform's electron cache), so a cached download is reused.
+import './lib/scratch-home.mjs'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
   existsSync,
@@ -82,6 +83,10 @@ try {
         'app',
         '--template',
         'nodejs',
+        // Only the files: the framework is installed next, from the tarball or the version named.
+        '--bare',
+        '--no-install',
+        '--no-start',
         '-y',
       ],
       scratch,

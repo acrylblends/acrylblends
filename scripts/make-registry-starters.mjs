@@ -80,7 +80,7 @@ try {
         starter.id.split('.')[1],
         '-y',
         '--no-next',
-        ...(starter.desktop ? ['--desktop'] : []),
+        ...(starter.desktop ? ['--desktop'] : ['--bare']),
       ],
       { encoding: 'utf8' },
     )

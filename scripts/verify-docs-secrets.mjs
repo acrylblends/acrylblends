@@ -8,6 +8,7 @@
  *   node scripts/verify-docs-secrets.mjs
  */
 
+import './lib/scratch-home.mjs'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'

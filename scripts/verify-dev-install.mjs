@@ -6,6 +6,7 @@
 // In a fresh agent app started with `npm run dev`: a plugin is installed live, then its source is changed and reloaded. The app must answer the plugin's page after the install and
 // the reload without a restart and with its door up (the watcher takes the deletion of a staged copy for a change and restarts, and each start stages and prunes again: a loop);
 // a change of the app's own source then restarts it exactly once, and the plugin is back from its staged copy.
+import './lib/scratch-home.mjs'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -55,7 +56,7 @@ let server
 try {
   const app = join(scratch, 'app')
   if (npmArg === undefined)
-    run(process.execPath, [cli, 'init', app, '--template', 'agent', '-y'], scratch)
+    run(process.execPath, [cli, 'init', app, '--template', 'agent', '--bare', '-y'], scratch)
   else
     run(
       'npx',

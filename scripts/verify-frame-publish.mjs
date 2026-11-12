@@ -6,6 +6,7 @@
 //   node --import ./scripts/workspace-source.mjs scripts/verify-frame-publish.mjs [--skip-tests] [--only <short>] [--keep]
 //
 // The package names come from frame/packages.json, one `scope` value plus each folder's short name, so a naming decision is a one-line change there.
+import './lib/scratch-home.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import {
   cpSync,

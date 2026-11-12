@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import './lib/scratch-home.mjs'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
   existsSync,
@@ -155,13 +156,15 @@ try {
   const expected = [...Object.keys(TEMPLATES), 'nodejs', 'notes', 'chat'].sort()
   if (present.join(',') !== expected.join(',')) fail(`unexpected templates: ${present.join(', ')}`)
 
+  // The plain templates: init makes the app in the frame unless --bare (a flag set with --desktop keeps the frame).
+  const withBare = (flags) => (flags.includes('--desktop') ? flags : [...flags, '--bare'])
   for (const [template, flags] of Object.entries(TEMPLATES)) {
     const dir = join(scratch, template)
     const name = `verify-${template}`
-    capture(process.execPath, [cli, 'init', dir, '--name', name, '--yes', ...flags])
+    capture(process.execPath, [cli, 'init', dir, '--name', name, '--yes', ...withBare(flags)])
     if (!existsSync(join(dir, 'src', 'app.ts'))) fail(`${template}: init wrote no app`)
 
-    const again = spawn(process.execPath, [cli, 'init', dir, '--yes', ...flags], {
+    const again = spawn(process.execPath, [cli, 'init', dir, '--yes', ...withBare(flags)], {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let refusal = ''
@@ -374,6 +377,7 @@ try {
           cli,
           'init',
           other,
+          '--bare',
           '--name',
           'verify-other',
           '--yes',
@@ -475,6 +479,7 @@ try {
     cli,
     'init',
     blended,
+    '--bare',
     '--name',
     'verify-blend',
     '--yes',
@@ -569,6 +574,7 @@ spec:
     cli,
     'init',
     grown,
+    '--bare',
     '--name',
     'verify-grown',
     '--yes',
@@ -593,6 +599,7 @@ spec:
     cli,
     'init',
     withDb,
+    '--bare',
     '--name',
     'verify-db',
     '--yes',
@@ -656,6 +663,7 @@ spec:
     cli,
     'init',
     withKv,
+    '--bare',
     '--name',
     'verify-kv',
     '--yes',
@@ -771,6 +779,10 @@ spec:
         notes,
         '--template',
         kind,
+        // Only the files: this checkout's packed framework is installed next, not the release on npm.
+        '--bare',
+        '--no-install',
+        '--no-start',
         '-y',
       ],
       { cwd: scratch },
