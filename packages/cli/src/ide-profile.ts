@@ -8,6 +8,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { PNPM_WORKSPACE_FILE, withFramePnpmSettings } from './pnpm-settings.ts'
 
 /** One package the frame mounts, with the spec the app installs it by (a range, or `file:` for a local checkout). */
 export interface IdeProfilePackage {
@@ -570,10 +571,11 @@ function hostScriptOf(profile: string, frameModule: string): string {
     '  const entries = Array.isArray(error?.entries) ? error.entries : []',
     '  const failures = entries.filter(({ outcome }) => outcome?.kind === "failed")',
     '  console.error(`acrylblends host: startup failed (${String(failures.length)} row(s))`)',
-    '  for (const { entry, outcome } of failures) {',
+    '  // Each entry is the boot report of one row: { id, module, required, fiberState, outcome }.',
+    '  for (const { id, module, outcome } of failures) {',
     '    const cause = outcome.error',
     '    const detail = cause instanceof Error ? cause.stack ?? cause.message : String(cause)',
-    '    console.error(`- ${entry.id} (${entry.options?.name ?? "?"}): ${detail}`)',
+    '    console.error(`- ${String(id)} (${String(module)}): ${detail}`)',
     '  }',
     '  const cause = error?.cause',
     '  if (failures.length === 0 && cause !== undefined) console.error(cause instanceof Error ? cause.stack ?? cause.message : String(cause))',
@@ -880,6 +882,8 @@ export interface IdeProfileWritePlan {
   readonly manifestChanged: boolean
   /** Client rows the app's host script did not name yet, which the write adds. */
   readonly clientRowsAdded: readonly string[]
+  /** `pnpm-workspace.yaml` with the frame's pnpm settings merged in, or undefined when it already has them (a merge: the app owns that file too). */
+  readonly pnpmWorkspace: string | undefined
 }
 
 /** The door is app source, not a registry package: the row exists when the app carries it, and nothing fails when it does not. */
@@ -917,7 +921,18 @@ export function planIdeProfileWrite(root: string, input: IdeProfileInput): IdePr
       state: GENERATED_MARKER.test(firstLine) ? ('update' as const) : ('conflict' as const),
     }
   })
-  return { plan, files, manifestChanged: existing !== plan.packageJson, clientRowsAdded }
+  const workspaceFile = join(root, PNPM_WORKSPACE_FILE)
+  const workspaceBefore = existsSync(workspaceFile)
+    ? readFileSync(workspaceFile, 'utf8')
+    : undefined
+  const workspaceAfter = withFramePnpmSettings(workspaceBefore)
+  return {
+    plan,
+    files,
+    manifestChanged: existing !== plan.packageJson,
+    clientRowsAdded,
+    pnpmWorkspace: workspaceAfter === workspaceBefore ? undefined : workspaceAfter,
+  }
 }
 
 /** Write a plan made by {@link planIdeProfileWrite}: only the files whose bytes differ, and `package.json` only when the merge changes it. */
@@ -938,6 +953,10 @@ export function writeIdeProfilePlan(root: string, planned: IdeProfileWritePlan):
     writeFileSync(join(root, 'package.json'), planned.plan.packageJson)
     written.push('package.json')
   } else unchanged.push('package.json')
+  if (planned.pnpmWorkspace !== undefined) {
+    writeFileSync(join(root, PNPM_WORKSPACE_FILE), planned.pnpmWorkspace)
+    written.push(PNPM_WORKSPACE_FILE)
+  } else unchanged.push(PNPM_WORKSPACE_FILE)
   return { written, unchanged }
 }
 

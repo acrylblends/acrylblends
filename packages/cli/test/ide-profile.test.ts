@@ -222,6 +222,7 @@ test('applying twice changes nothing the second time', () => {
     'cordis.patch.yml',
     'cordis.yml',
     'package.json',
+    'pnpm-workspace.yaml',
     'scripts/ide-host.mjs',
   ])
   const bytes = [
@@ -229,6 +230,7 @@ test('applying twice changes nothing the second time', () => {
     'cordis.patch.yml',
     'cordis.yml',
     'package.json',
+    'pnpm-workspace.yaml',
     'scripts/ide-host.mjs',
   ].map((file) => readFileSync(join(root, file), 'utf8'))
   const second = applyIdeProfile(root, input)
@@ -238,6 +240,7 @@ test('applying twice changes nothing the second time', () => {
     'cordis.patch.yml',
     'cordis.yml',
     'package.json',
+    'pnpm-workspace.yaml',
     'scripts/ide-host.mjs',
   ])
   assert.deepEqual(
@@ -247,6 +250,7 @@ test('applying twice changes nothing the second time', () => {
       'cordis.patch.yml',
       'cordis.yml',
       'package.json',
+      'pnpm-workspace.yaml',
       'scripts/ide-host.mjs',
     ].map((file) => readFileSync(join(root, file), 'utf8')),
   )

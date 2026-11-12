@@ -2,22 +2,80 @@
   "//": "The names and versions the frame's packages publish under, and the DSH release they are built against. The CLI ships this file (an app made with init --desktop installs these names and versions), and verify-frame-publish packs exactly these packages: the closure of the frame's rows, nothing else. The owner's naming decision is the `scope` value and the short names; the owner confirmed these names on 2026-11-05, so a rename after the first publish is a new package on npm. A version must equal its package folder's package.json version (the CLI tests check it).",
   "scope": "@acrylblends",
   "dshVersion": "0.2.0-rc.2",
+  "pnpm": {
+    "//": "An app in the frame installed with pnpm: these build scripts run, as they do under npm (packages/cli/src/pnpm-settings.ts). Found by installing a framed app with pnpm 12: dsh-subprocess-local builds its spawn helper, node-pty and koffi their native parts.",
+    "allowBuilds": [
+      "@deepseek-ai/dsh-subprocess-local",
+      "@google/genai",
+      "koffi",
+      "node-pty",
+      "protobufjs"
+    ]
+  },
   "packages": {
-    "acryl-ui": { "name": "ui", "version": "0.3.0" },
-    "dsh-client-ui-brand-acryl": { "name": "brand-client", "version": "0.1.1" },
-    "acryl-app-shell": { "name": "app-shell", "version": "0.1.0" },
-    "acryl-workspace": { "name": "workspace", "version": "0.1.0" },
-    "acryl-settings": { "name": "settings", "version": "0.1.0" },
-    "acryl-sign-in": { "name": "sign-in", "version": "0.1.0" },
-    "acryl-control": { "name": "control", "version": "0.2.5" },
-    "acryl-diagnostics": { "name": "diagnostics", "version": "0.1.0" },
-    "acryl-plugin-admin": { "name": "plugin-admin", "version": "0.1.0" },
-    "acryl-support": { "name": "support", "version": "0.1.0" },
-    "acryl-loopback-http": { "name": "loopback-http", "version": "0.1.0" },
-    "acryl-web": { "name": "web", "version": "0.1.0" },
-    "acryl-system-prompt": { "name": "system-prompt", "version": "0.1.0" },
-    "acryl-app-context": { "name": "app-context", "version": "0.1.0" },
-    "acryl-versions": { "name": "versions", "version": "0.1.1" },
-    "acryl-blends-frame": { "name": "blends-frame", "version": "0.1.2" }
+    "acryl-ui": {
+      "name": "ui",
+      "version": "0.3.0"
+    },
+    "dsh-client-ui-brand-acryl": {
+      "name": "brand-client",
+      "version": "0.1.1"
+    },
+    "acryl-app-shell": {
+      "name": "app-shell",
+      "version": "0.1.0"
+    },
+    "acryl-workspace": {
+      "name": "workspace",
+      "version": "0.1.0"
+    },
+    "acryl-settings": {
+      "name": "settings",
+      "version": "0.1.0"
+    },
+    "acryl-sign-in": {
+      "name": "sign-in",
+      "version": "0.1.0"
+    },
+    "acryl-control": {
+      "name": "control",
+      "version": "0.2.5"
+    },
+    "acryl-diagnostics": {
+      "name": "diagnostics",
+      "version": "0.1.0"
+    },
+    "acryl-plugin-admin": {
+      "name": "plugin-admin",
+      "version": "0.1.0"
+    },
+    "acryl-support": {
+      "name": "support",
+      "version": "0.1.0"
+    },
+    "acryl-loopback-http": {
+      "name": "loopback-http",
+      "version": "0.1.0"
+    },
+    "acryl-web": {
+      "name": "web",
+      "version": "0.1.0"
+    },
+    "acryl-system-prompt": {
+      "name": "system-prompt",
+      "version": "0.1.0"
+    },
+    "acryl-app-context": {
+      "name": "app-context",
+      "version": "0.1.0"
+    },
+    "acryl-versions": {
+      "name": "versions",
+      "version": "0.1.1"
+    },
+    "acryl-blends-frame": {
+      "name": "blends-frame",
+      "version": "0.1.2"
+    }
   }
 }
