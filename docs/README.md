@@ -74,6 +74,8 @@ generated Blend app the same names are the vendored plugin source in `plugins/ac
 - [Release notes 1.0.10](release-notes/1.0.10.md) - a production install no longer carries vitest (the optional peer for the conformance suites is gone)
 - [Release notes 1.1.0](release-notes/1.1.0.md) - a page follows its state over one WebSocket (`watch` of `/api/state/client.js`), so windows no longer use up the browser's six connections
 - [Release notes 1.2.0](release-notes/1.2.0.md) - a new app is a repository of plugin folders with snapshots; `create --from` makes a blueprint your own (name, lock, first commit); `init --desktop` installs the ACRYL frame from npm, one framework copy
+- [Release notes acrylblends 1.5.3](release-notes/acrylblends-1.5.3.md) - a new app's first run connects a model with Settings > Models in front of the person, and shows no preview notice (`@acrylblends/sign-in` 0.1.1)
+- [Release notes create-acrylblends 1.5.3](release-notes/create-1.5.3.md) - asks for acrylblends 1.5.3
 - [Release notes acrylblends 1.5.2](release-notes/acrylblends-1.5.2.md) - an app can run behind a hosting front such as a WebBoxes.ai box (`ACRYL_PUBLIC_ORIGIN`, `ACRYL_TRUSTED_PROXY`, `ACRYLBLENDS_HOST`)
 - [Release notes create-acrylblends 1.5.2](release-notes/create-1.5.2.md) - asks for acrylblends 1.5.2
 - [Release notes acrylblends 1.5.1](release-notes/acrylblends-1.5.1.md) - pnpm installs and runs an app in the frame (`pnpm-workspace.yaml` written by init and upgrade); an app made with 1.4 starts on Linux with Node 22 and later
