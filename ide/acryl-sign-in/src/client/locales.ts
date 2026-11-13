@@ -5,6 +5,7 @@ export type SignInLocaleKey =
   | 'claude' | 'claudeVia' | 'chatgpt' | 'chatgptVia' | 'deepseek' | 'deepseekVia'
   | 'browserTitle' | 'browserText' | 'openPage' | 'copyLink' | 'copied' | 'working' | 'continue' | 'cancel'
   | 'failed' | 'tryAgain' | 'done' | 'unavailable'
+  | 'connectTitle' | 'connectIntro' | 'connectSettingsText' | 'connectSettingsAction' | 'connectLater'
 
 export const en: Record<SignInLocaleKey, string> = {
   heading: 'Sign in with an account',
@@ -32,6 +33,11 @@ export const en: Record<SignInLocaleKey, string> = {
   tryAgain: 'Try again',
   done: 'Signed in. New chats use this provider when the current default cannot answer.',
   unavailable: 'Account sign-in is not available right now.',
+  connectTitle: 'Connect a model to get started',
+  connectIntro: 'ACRYL needs a model to work with. DeepSeek is the default: paste its API key below. Or pick another provider, add your own model API, or sign in with an account.',
+  connectSettingsText: 'Settings > Models has more providers and every option; you can change all of this there at any time.',
+  connectSettingsAction: 'More providers in Settings',
+  connectLater: 'Later',
 }
 
 export const zh: Record<SignInLocaleKey, string> = {
@@ -60,4 +66,9 @@ export const zh: Record<SignInLocaleKey, string> = {
   tryAgain: '重试',
   done: '已登录。当前默认模型不可用时，新对话将使用此提供方。',
   unavailable: '当前无法使用账号登录。',
+  connectTitle: '连接模型以开始使用',
+  connectIntro: 'ACRYL 需要一个模型才能工作。默认使用 DeepSeek：在下方粘贴其 API 密钥。也可以选择其他提供方、添加自己的模型 API，或使用账号登录。',
+  connectSettingsText: '设置 > 模型里有更多提供方和全部选项，之后可随时在那里更改。',
+  connectSettingsAction: '在设置中查看更多提供方',
+  connectLater: '稍后',
 }

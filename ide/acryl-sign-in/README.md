@@ -1,6 +1,6 @@
 # acryl-sign-in
 
-Ported as source from ACRYL (`plugins/acryl-sign-in`, 37f4dd9c) for the IDE port, slice 5
+Ported as source from ACRYL (`plugins/acryl-sign-in`, 3c7e855c; first ported at 37f4dd9c, re-ported 2026-11-13) for the IDE port, slice 5
 ([plan](../../docs/plans/ide-port.md)); provenance in [`provenance.json`](provenance.json). The original suite runs
 unchanged: `pnpm test` in this folder.
 
